@@ -48,20 +48,7 @@ export GARUDA_TELEMETRY_ENABLED=false
 License
 Apache 2.0
 
-text
 
----
-
-## Your Next Action
-
-1. **Create README.md** in the repo root with the content above.
-2. **Commit and push:**
-
-```bash
-git add README.md
-git commit -m "docs: add README"
-git push origin main
-Set up repository description and topics on GitHub:
 
 Description: "Truth maintenance system for AI agents — shared memory, lineage, and contradiction detection"
 
