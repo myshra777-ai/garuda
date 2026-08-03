@@ -3,6 +3,8 @@ package auth
 import (
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestJWTGenerationAndValidation(t *testing.T) {
@@ -12,12 +14,12 @@ func TestJWTGenerationAndValidation(t *testing.T) {
 	}
 
 	actor := "alice@company.com"
-	token, err := config.GenerateToken(actor)
+	token, err := config.GenerateToken(actor, uuid.Nil)
 	if err != nil {
 		t.Fatalf("failed to generate token: %v", err)
 	}
 
-	validatedActor, err := config.ValidateToken(token)
+	validatedActor, _, err := config.ValidateToken(token)
 	if err != nil {
 		t.Fatalf("failed to validate token: %v", err)
 	}
@@ -33,12 +35,12 @@ func TestRefreshToken(t *testing.T) {
 	}
 
 	actor := "alice@company.com"
-	refreshToken, err := config.GenerateRefreshToken(actor)
+	refreshToken, err := config.GenerateRefreshToken(actor, uuid.Nil)
 	if err != nil {
 		t.Fatalf("failed to generate refresh token: %v", err)
 	}
 
-	validatedActor, err := config.ValidateRefreshToken(refreshToken)
+	validatedActor, _, err := config.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		t.Fatalf("failed to validate refresh token: %v", err)
 	}
@@ -56,7 +58,7 @@ func TestInvalidToken(t *testing.T) {
 	// Tampered token
 	invalidToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
 
-	_, err = config.ValidateToken(invalidToken)
+	_, _, err = config.ValidateToken(invalidToken)
 	if err == nil {
 		t.Error("expected error for invalid token, got nil")
 	}

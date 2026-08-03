@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/techtaytor/garuda/internal/types"
+	"github.com/myshra777-ai/garuda/internal/types"
 )
 
 // AuthService handles user authentication and session management.

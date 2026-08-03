@@ -8,12 +8,12 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/techtaytor/garuda/internal/api"
-	"github.com/techtaytor/garuda/internal/auth"
-	"github.com/techtaytor/garuda/internal/engine"
-	"github.com/techtaytor/garuda/internal/lineage"
-	"github.com/techtaytor/garuda/internal/store"
-	"github.com/techtaytor/garuda/internal/telemetry"
+	"github.com/myshra777-ai/garuda/internal/api"
+	"github.com/myshra777-ai/garuda/internal/auth"
+	"github.com/myshra777-ai/garuda/internal/engine"
+	"github.com/myshra777-ai/garuda/internal/lineage"
+	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/telemetry"
 )
 
 func main() {
@@ -64,12 +64,13 @@ func main() {
 
 	// Lineage Core Graph & Engine Instances
 	_ = lineage.NewGraph(1000)
-	_ = engine.NewLineageEngine(dbStore)
-	_ = engine.NewContradictionEngine(dbStore)
+	lineageEngine := engine.NewLineageEngine(dbStore)
+	contradictionEngine := engine.NewContradictionEngine(dbStore)
+	_ = lineageEngine
 
 	// App Services
 	authService := auth.NewAuthService(dbStore, jwtConfig)
-	server := api.NewServer(dbStore, authService, jwtConfig)
+	server := api.NewServer(dbStore, authService, jwtConfig, contradictionEngine, lineageEngine)
 
 	// 6. Security & Traffic Controls
 	rateLimiter := api.NewRateLimiter(100, time.Minute, 1000)
@@ -77,13 +78,27 @@ func main() {
 	// 7. Routing & Multiplexing
 	mux := http.NewServeMux()
 
-	// Unprotected System Endpoints
+	// Unprotected endpoints
 	mux.HandleFunc("GET /health", server.HandleHealth)
-	mux.HandleFunc("GET /debug/token", server.HandleDebugToken)
+	mux.HandleFunc("GET /debug/token", server.HandleDebugToken) // guarded internally
 
-	// Protected V4 Telemetry-Instrumented Core Endpoints
-	mux.HandleFunc("POST /api/v1/decisions/submit", server.HandleSubmitDecision)
-	mux.HandleFunc("POST /api/v1/agents/warmup", server.HandleWarmup)
+	// Protected endpoints
+	mux.HandleFunc("POST /api/v1/decisions/submit", server.HandleProposeDecision)
+	mux.HandleFunc("GET /api/v1/decisions/{id}/lineage", server.HandleDecisionLineage)
+	mux.HandleFunc("POST /api/v1/agents/warmup", server.HandleAgentWarmup)
+
+	// Protected agent checkpoint endpoints
+	mux.HandleFunc("POST /api/v1/agents/checkpoint", server.HandleAgentCheckpoint)
+	mux.HandleFunc("GET /api/v1/agents/checkpoint/{id}", server.HandleGetAgentCheckpoint)
+	mux.HandleFunc("POST /api/v1/agents/resume", server.HandleAgentResume)
+	mux.HandleFunc("POST /api/v1/agents/handoff", server.HandleAgentHandoff)
+
+	// Budget & Metering endpoints
+	mux.HandleFunc("GET /api/v1/budget", server.HandleGetBudget)
+	mux.HandleFunc("POST /api/v1/budget/consume", server.HandleConsumeBudget)
+
+	// Verification & Cryptographic Attestation Route
+	mux.HandleFunc("GET /api/v1/evidence/verify/{id}", server.HandleVerifyDecision)
 
 	// 8. Middleware Pipeline Construction
 	// Order of execution: Recovery -> Logging -> RequestID -> Auth Authentication -> Rate Limiting -> CORS -> Handler

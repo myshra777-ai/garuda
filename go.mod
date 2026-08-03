@@ -1,4 +1,4 @@
-module github.com/techtaytor/garuda
+module github.com/myshra777-ai/garuda
 
 go 1.25.0
 

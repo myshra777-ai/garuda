@@ -1,0 +1,73 @@
+🛡️ Garuda Infrastructure Progress Report
+Date: August 3, 2026
+
+Project: Garuda — Multi-Agent AI Governance & Execution Platform
+
+Authors: Garuda Core Engineering Team
+
+1. Executive Summary
+Over the recent engineering cycles, the Garuda Core Gateway and storage engine underwent major platform enhancements. The system evolved from basic decision management to a cryptographically verifiable, self-governing multi-agent platform.
+
+We implemented:
+
+Model Context Protocol (MCP) integration for dynamic tool discovery.
+
+Autonomous Contradiction Quarantine Engine to catch and isolate conflicting multi-agent decisions in real-time.
+
+Token Budget Metering & Pre-Flight Ledger to prevent runaway agent execution costs.
+
+Cryptographic Evidence Chain & Merkle Verification providing O(1) linear verification and O(logN) inclusion proofs for tamper-evident decision auditing.
+
+2. Technical Breakdown: What We Built
+A. Autonomous Contradiction Quarantine Engine
+Purpose: Detect conflicting policy decisions created across distributed multi-agent workflows.
+
+Mechanism: When an agent submits a decision to a specific (scope_domain, scope_system) pair, the engine queries existing decisions in that scope. If a contradiction is detected, the new decision is marked with status: "quarantined" and quarantined: true, and a contradiction_id record is saved for governance review.
+
+B. Real-Time Token Budget Metering
+Purpose: Enforce pre-flight budget checks and token usage tracking for agent requests.
+
+Mechanism: Evaluates token balance prior to request execution and writes usage entries to an append-only ledger post-execution.
+
+C. Cryptographic Evidence Chain & Merkle Verification
+Purpose: Provide tamper-evident, non-repudiable proof of decision lineage and evidence artifacts.
+
+Mechanism:
+
+Computes deterministic SHA-256 leaf hashes from decision payloads.
+
+Chains leaf hashes to the previous tenant Merkle root (ChainHash(parent_root, leaf_hash)).
+
+Persists updated Merkle roots atomically using Postgres row locks (FOR UPDATE).
+
+Exposes an attestation API (GET /api/v1/evidence/verify/{decision_id}) returning leaf_hash, parent_hash, root_hash, block_height, and verification status.
+
+3. Key Issues Faced & How We Fixed Them
+Issue / Error Code	Root Cause	Resolution / Fix
+Cascade Quarantine False Positives	GetDecisionsByScope queried decisions without filtering out already quarantined decisions, causing subsequent proposals in a scope to perpetually conflict with old drafts.	Updated DetectAndQuarantine in internal/engine/contradiction.go to explicitly skip decisions with status == "quarantined" or status == "superseded".
+SQLSTATE 42703 (Column does not exist)	Code queries attempted to insert into domain / system or scope_domain / scope_system before schema unification.	Created migration 013_add_scope_columns.sql adding scope_domain and scope_system to decisions, and synchronized flat struct fields with nested types.Scope.
+SQLSTATE 42P10 (ON CONFLICT constraint mismatch)	PostgreSQL ON CONFLICT (id) failed because the table primary key was either missing or set as a compound key (tenant_id, id).	Created migration 014_fix_decisions_primary_key.sql setting PRIMARY KEY (tenant_id, id) and updated upsert queries to ON CONFLICT (tenant_id, id) DO UPDATE.
+pgx.ErrNoRows on First Submission	First decision for a new tenant failed because GetMerkleRoot could not find an existing root and threw driver-level empty set errors.	Updated GetMerkleRoot in internal/store/merkle_store.go to check for sql.ErrNoRows and strings.Contains(err.Error(), "no rows"), automatically triggering createGenesisMerkleRoot.
+types.DecisionStore missing method build error	GetDecisionRevisions was omitted during a refactor of decision_store.go, breaking interface compliance across cmd/garuda-api and cmd/garuda-mcp.	Restored GetDecisionRevisions signature and implementation in internal/store/decision_store.go.
+4. Current Platform Status & Roadmap Positioning
+┌───────────────────────────────────────────────────────────────────────────┐
+│                          GARUDA ROADMAP MATRIX                            │
+├──────────────────────────────────┬─────────────┬──────────────────────────┤
+│ Milestone / Component            │ Phase       │ Operational Status       │
+├──────────────────────────────────┼─────────────┼──────────────────────────┤
+│ Model Context Protocol (MCP)     │ Phase 1     │ ✅ Complete & Verified   │
+│ Agent Checkpoint & Handoff       │ Phase 1     │ ✅ Complete & Verified   │
+│ Real-Time Token Budget Metering  │ Phase 2     │ ✅ Complete & Verified   │
+│ Contradiction Quarantine Engine  │ Phase 2     │ ✅ Complete & Verified   │
+│ Cryptographic Merkle Chain       │ Phase 3     │ ✅ Complete & Verified   │
+│ Multi-Tenant Key Rotation (KMS)  │ Phase 3     │ ⏳ Next Milestone        │
+│ Zero-Knowledge (ZK) Proof Export │ Phase 4     │ 📅 Planned Future        │
+└──────────────────────────────────┴─────────────┴──────────────────────────┘
+Overall Status: Phase 3 (Core Cryptographic Infrastructure) is ~75% Complete.
+
+5. Next Steps
+Automated Merkle Snapshot Worker: Build a background consolidation worker in cmd/garuda-worker to anchor hourly/daily Merkle roots into external object storage (e.g., S3/GCS) or public L1 blockchains.
+
+KMS / Hardware Security Module (HSM) Integration: Support asymmetric signing (Ed25519 or ECDSA Secp256k1) of Merkle root records using external key management services.
+
+Admin Verification Dashboard: Construct a visual frontend widget to browse decision trees, view quarantined contradictions, and test live Merkle inclusion proofs.

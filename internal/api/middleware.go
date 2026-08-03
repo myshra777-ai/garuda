@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/techtaytor/garuda/internal/auth"
+	"github.com/myshra777-ai/garuda/internal/auth"
 )
 
 type contextKey string
@@ -76,7 +76,7 @@ func WithAuth(jwtConfig *auth.JWTConfig) func(http.Handler) http.Handler {
 			tokenStr := authHeader[7:]
 
 			// 2. Execute cryptographic token parsing and verification
-			actor, err := jwtConfig.ValidateToken(tokenStr)
+			actor, tenantID, err := jwtConfig.ValidateToken(tokenStr)
 			if err != nil {
 				slog.Warn("unauthorized structural access target block", "error", err, "path", r.URL.Path)
 				w.Header().Set("Content-Type", "application/json")
@@ -85,8 +85,8 @@ func WithAuth(jwtConfig *auth.JWTConfig) func(http.Handler) http.Handler {
 				return
 			}
 
-			// 3. Set actor in context
-			ctx := context.WithValue(r.Context(), "actor", actor)
+			// 3. Set actor/tenant in context
+			ctx := auth.ContextWithActorAndTenant(r.Context(), actor, tenantID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

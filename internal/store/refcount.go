@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/techtaytor/garuda/internal/types"
+	"github.com/myshra777-ai/garuda/internal/types"
 )
 
 type RefCountManager struct {

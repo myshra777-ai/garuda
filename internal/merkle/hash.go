@@ -1,0 +1,40 @@
+package merkle
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"strings"
+
+	"github.com/google/uuid"
+)
+
+// HashDecision computes deterministic SHA-256 digest of decision contents.
+func HashDecision(decisionID uuid.UUID, title, status, scopeDomain, scopeSystem, owner string, evidenceIDs []string) string {
+	payload := map[string]interface{}{
+		"id":           decisionID.String(),
+		"title":        title,
+		"status":       status,
+		"scope_domain": scopeDomain,
+		"scope_system": scopeSystem,
+		"owner":        owner,
+		"evidence_ids": strings.Join(evidenceIDs, ","),
+	}
+
+	bytes, _ := json.Marshal(payload)
+	hash := sha256.Sum256(bytes)
+	return hex.EncodeToString(hash[:])
+}
+
+// ChainHash computes SHA256(parentHash + decisionHash)
+func ChainHash(parentHash, decisionHash string) string {
+	combined := parentHash + decisionHash
+	hash := sha256.Sum256([]byte(combined))
+	return hex.EncodeToString(hash[:])
+}
+
+// VerifyChain verify whether leaf hash accurately chains into parent hash
+func VerifyChain(parentHash, decisionHash, expectedRoot string) bool {
+	computed := ChainHash(parentHash, decisionHash)
+	return computed == expectedRoot
+}

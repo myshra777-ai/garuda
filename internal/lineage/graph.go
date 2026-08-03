@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// EdgeType defines the relationship between two decisions.
+// EdgeType defines the structural relationship classifications between node decisions.
 type EdgeType int
 
 const (
@@ -23,22 +23,23 @@ func (et EdgeType) String() string {
 	return "supersedes"
 }
 
-// Edge represents a directed relationship between two decisions.
+// Edge represents a directed relationship mapping within the internal DAG.
 type Edge struct {
 	From uuid.UUID
 	To   uuid.UUID
 	Type EdgeType
 }
 
-// Graph is a thread-safe, bounded in-memory DAG.
+// Graph acts as a thread-safe, bounded in-memory Directed Acyclic Graph tracking decision evolution.
 type Graph struct {
-	mu          sync.RWMutex
-	out         map[uuid.UUID][]Edge
-	in          map[uuid.UUID][]Edge
-	maxNodes    int
-	nodeCount   int
+	mu        sync.RWMutex
+	out       map[uuid.UUID][]Edge
+	in        map[uuid.UUID][]Edge
+	maxNodes  int
+	nodeCount int
 }
 
+// NewGraph initializes a bounded, runtime-safe lineage graph configuration.
 func NewGraph(maxNodes int) *Graph {
 	return &Graph{
 		out:       make(map[uuid.UUID][]Edge),
@@ -48,6 +49,40 @@ func NewGraph(maxNodes int) *Graph {
 	}
 }
 
+// GetSupersedingChain resolves and returns a sequential slice of UUIDs representing the lineage chain that supersedes the target node.
+func (g *Graph) GetSupersedingChain(id uuid.UUID) []uuid.UUID {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	chain := []uuid.UUID{id}
+	current := id
+
+	for {
+		var next uuid.UUID
+		found := false
+
+		// Trace incoming EdgeSupersedes arrows to discover what supersedes the current item
+		for _, edge := range g.in[current] {
+			if edge.Type == EdgeSupersedes {
+				next = edge.From
+				found = true
+				break
+			}
+		}
+
+		// Break execution loop if terminal lineage leaf or zero‑value identifier is encountered
+		if !found || next == uuid.Nil {
+			break
+		}
+
+		chain = append(chain, next)
+		current = next
+	}
+
+	return chain
+}
+
+// AddEdge maps a clean dependency or version link across nodes while running safety checks against cyclical paths.
 func (g *Graph) AddEdge(from, to uuid.UUID, etype EdgeType) error {
 	if from == to {
 		return errors.New("self‑edge is not allowed")
@@ -60,7 +95,7 @@ func (g *Graph) AddEdge(from, to uuid.UUID, etype EdgeType) error {
 		return nil
 	}
 
-	// Calculate unique nodes after adding this edge
+	// Calculate unique nodes after tracking prospective assignments
 	nodeSet := make(map[uuid.UUID]bool)
 	for fromID := range g.out {
 		nodeSet[fromID] = true
@@ -83,7 +118,6 @@ func (g *Graph) AddEdge(from, to uuid.UUID, etype EdgeType) error {
 	g.in[to] = append(g.in[to], Edge{From: from, To: to, Type: etype})
 
 	g.nodeCount = len(nodeSet)
-
 	return nil
 }
 
@@ -116,6 +150,7 @@ func (g *Graph) dfs(current, target uuid.UUID, visited map[uuid.UUID]bool) bool 
 	return false
 }
 
+// GetChildren extracts dependencies linking backwards targeting the node slice.
 func (g *Graph) GetChildren(id uuid.UUID) []uuid.UUID {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -129,6 +164,7 @@ func (g *Graph) GetChildren(id uuid.UUID) []uuid.UUID {
 	return children
 }
 
+// GetParents targets decisions directly upstream linked via active execution states.
 func (g *Graph) GetParents(id uuid.UUID) []uuid.UUID {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -142,6 +178,7 @@ func (g *Graph) GetParents(id uuid.UUID) []uuid.UUID {
 	return parents
 }
 
+// GetImpactSet runs a cascading down-graph traversal evaluating full systemic implications for invalidations.
 func (g *Graph) GetImpactSet(id uuid.UUID) []uuid.UUID {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -153,7 +190,7 @@ func (g *Graph) GetImpactSet(id uuid.UUID) []uuid.UUID {
 }
 
 func (g *Graph) collectImpact(current uuid.UUID, visited map[uuid.UUID]bool, impact *[]uuid.UUID) {
-	for _, child := range g.GetChildren(current) {
+	for _, child := range g.getChildrenInternal(current) {
 		if !visited[child] {
 			visited[child] = true
 			*impact = append(*impact, child)
@@ -162,6 +199,18 @@ func (g *Graph) collectImpact(current uuid.UUID, visited map[uuid.UUID]bool, imp
 	}
 }
 
+// Unlocked internal helper to avoid re‑entrant read deadlock scenarios within structural recursion paths
+func (g *Graph) getChildrenInternal(id uuid.UUID) []uuid.UUID {
+	var children []uuid.UUID
+	for _, edge := range g.in[id] {
+		if edge.Type == EdgeDependsOn {
+			children = append(children, edge.From)
+		}
+	}
+	return children
+}
+
+// RemoveDecision detaches node elements and rebuilds tracking offsets cleanly.
 func (g *Graph) RemoveDecision(id uuid.UUID) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -202,6 +251,7 @@ func (g *Graph) overlapCount() int {
 	return count
 }
 
+// ValidateIntegrity processes depth-first topology runs checking for architectural graph safety.
 func (g *Graph) ValidateIntegrity() error {
 	g.mu.RLock()
 	defer g.mu.RUnlock()

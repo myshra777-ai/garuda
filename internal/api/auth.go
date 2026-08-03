@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/techtaytor/garuda/internal/auth"
+	"github.com/myshra777-ai/garuda/internal/auth"
 )
 
 // SignUpRequest represents the signup request body.

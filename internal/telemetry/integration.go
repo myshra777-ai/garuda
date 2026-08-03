@@ -5,118 +5,118 @@ import (
 	"time"
 )
 
-// TelemetryCollector is a global instance.
-var Collector *Collector
+// Global unexported pointer instance tracking the telemetry collection runtime.
+var globalCollector *Collector
 
-// InitTelemetry initializes the global telemetry collector.
+// InitTelemetry initializes the global telemetry collector instance.
 func InitTelemetry(cfg *Config) {
-	Collector = NewCollector(cfg)
+	globalCollector = NewCollector(cfg)
 }
 
-// ShutdownTelemetry shuts down the global collector.
+// ShutdownTelemetry drains remaining data buffers and gracefully shuts down the telemetry loop.
 func ShutdownTelemetry(ctx context.Context) error {
-	if Collector == nil {
+	if globalCollector == nil {
 		return nil
 	}
-	return Collector.Shutdown(ctx)
+	return globalCollector.Shutdown(ctx)
 }
 
 // ============================================================
 // Handler Wrappers
 // ============================================================
 
-// RecordDecisionProposed records a decision proposal.
+// RecordDecisionProposed tracks an incoming proposed architectural decision path.
 func RecordDecisionProposed(reused bool) {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordDecision("proposed", reused)
+	globalCollector.RecordDecision("proposed", reused)
 }
 
-// RecordDecisionRejected records a rejected decision.
+// RecordDecisionRejected records a structural decision evaluation failure.
 func RecordDecisionRejected() {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordDecision("rejected", false)
+	globalCollector.RecordDecision("rejected", false)
 }
 
-// RecordDecisionStale records a decision marked stale.
+// RecordDecisionStale flags when a historic governance decision falls out of compliance context.
 func RecordDecisionStale() {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordDecision("stale", false)
+	globalCollector.RecordDecision("stale", false)
 }
 
-// RecordContradictionDetected records a contradiction detection.
+// RecordContradictionDetected signals when conflicting operational rules intersect.
 func RecordContradictionDetected() {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordContradiction("detected")
+	globalCollector.RecordContradiction("detected")
 }
 
-// RecordContradictionResolved records a resolved contradiction.
+// RecordContradictionResolved logs the successful mitigation of an operational contradiction.
 func RecordContradictionResolved() {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordContradiction("resolved")
+	globalCollector.RecordContradiction("resolved")
 }
 
-// RecordContradictionFalsePositive records a false positive contradiction.
+// RecordContradictionFalsePositive logs when an automated warning check evaluates as clean.
 func RecordContradictionFalsePositive() {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordContradiction("false_positive")
+	globalCollector.RecordContradiction("false_positive")
 }
 
-// RecordColdStartLatency records cold start latency.
+// RecordColdStartLatency records execution latency spikes on fresh container spin-ups.
 func RecordColdStartLatency(d time.Duration) {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordLatency("cold_start", d)
+	globalCollector.RecordLatency("cold_start", d)
 }
 
-// RecordWarmStartLatency records warm start latency.
+// RecordWarmStartLatency records execution latency windows for cached engine instances.
 func RecordWarmStartLatency(d time.Duration) {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordLatency("warm_start", d)
+	globalCollector.RecordLatency("warm_start", d)
 }
 
-// RecordAPILatency records API call latency.
+// RecordAPILatency measures standard end-to-end network handler response timelines.
 func RecordAPILatency(d time.Duration) {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordLatency("api", d)
+	globalCollector.RecordLatency("api", d)
 }
 
-// RecordCostSaving records token and cost savings.
+// RecordCostSaving evaluates token budget efficiencies against targeted model types.
 func RecordCostSaving(tokens int64, model string) {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordCostSaving(tokens, model)
+	globalCollector.RecordCostSaving(tokens, model)
 }
 
-// RecordFeatureUsage records a feature being used.
+// RecordFeatureUsage increments tracking counters on internal system functions.
 func RecordFeatureUsage(feature string) {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordFeatureUsage(feature)
+	globalCollector.RecordFeatureUsage(feature)
 }
 
-// RecordError records an error.
+// RecordError pipes internal exception tracking out to telemetry ingestion loops.
 func RecordError(errType, errMsg string) {
-	if Collector == nil {
+	if globalCollector == nil {
 		return
 	}
-	Collector.RecordError(errType, errMsg)
+	globalCollector.RecordError(errType, errMsg)
 }

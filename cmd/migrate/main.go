@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/techtaytor/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/store"
 )
 
 func main() {

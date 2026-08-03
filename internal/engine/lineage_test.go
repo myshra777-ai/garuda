@@ -1,58 +1,84 @@
 package engine
 
 import (
+	"context"
 	"testing"
-	"time"
 
-	"github.com/techtaytor/garuda/internal/lineage"
-	"github.com/techtaytor/garuda/internal/types"
+	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/types"
 )
 
-func TestRegisterDecision(t *testing.T) {
-	reg := registry.NewRegistry(100)
-	graph := lineage.NewGraph(100)
-	engine := NewLineageEngine(reg, graph)
+type stubDecisionStore struct {
+	decisions map[uuid.UUID]*types.Decision
+}
 
-	// Create a decision with DRAFT status
-	rec := &registry.DecisionRecord{
-		ID:         "D-001",
-		Decision:   "Use PostgreSQL for financial records",
-		Scope:      registry.Scope{Domain: "infrastructure", System: "database"},
-		Status:     registry.StatusDraft,
-		Owner:      "alice@company.com",
-		Approvers:  []string{"bob@company.com"},
-		Confidence: 0.9,
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
-	}
+func (s *stubDecisionStore) GetDecision(ctx context.Context, tenantID, decisionID uuid.UUID) (*types.Decision, error) {
+	return s.decisions[decisionID], nil
+}
 
-	// Append to registry (works because status is DRAFT)
-	if err := reg.Append(rec, "alice@company.com"); err != nil {
-		t.Fatalf("failed to append to registry: %v", err)
-	}
+func (s *stubDecisionStore) SaveDecision(ctx context.Context, d *types.Decision) error {
+	return nil
+}
 
-	// Transition through the legal path: DRAFT → REVIEW → APPROVED → CANONICAL
-	if err := reg.Transition("D-001", registry.StatusReview, "alice@company.com"); err != nil {
-		t.Fatalf("failed to transition to REVIEW: %v", err)
-	}
-	if err := reg.Transition("D-001", registry.StatusApproved, "alice@company.com"); err != nil {
-		t.Fatalf("failed to transition to APPROVED: %v", err)
-	}
-	if err := reg.Transition("D-001", registry.StatusCanonical, "alice@company.com"); err != nil {
-		t.Fatalf("failed to transition to CANONICAL: %v", err)
-	}
+func (s *stubDecisionStore) GetDecisionsByScope(ctx context.Context, tenantID uuid.UUID, domain, system string) ([]*types.Decision, error) {
+	return nil, nil
+}
 
-	// Now register in lineage (works because status is CANONICAL)
-	if err := engine.RegisterDecision("D-001"); err != nil {
-		t.Fatalf("failed to register lineage: %v", err)
-	}
+func (s *stubDecisionStore) GetDecisionRevisions(ctx context.Context, tenantID, decisionID uuid.UUID) ([]types.DecisionRevision, error) {
+	return nil, nil
+}
 
-	// Verify it was added
-	lineage, err := engine.GetDecisionLineage("D-001")
+func (s *stubDecisionStore) ListDecisions(ctx context.Context, tenantID uuid.UUID, scope types.Scope, statuses []types.DecisionStatus) ([]*types.Decision, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) IngestEvidence(ctx context.Context, tenantID uuid.UUID, evidence []types.Evidence) error {
+	return nil
+}
+
+func (s *stubDecisionStore) ConsumeBudget(ctx context.Context, tenantID uuid.UUID, tokens int) error {
+	return nil
+}
+
+func (s *stubDecisionStore) ListDecisionsByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*types.Decision, error) {
+	var children []*types.Decision
+	for _, d := range s.decisions {
+		if d.ParentID != nil && *d.ParentID == parentID {
+			children = append(children, d)
+		}
+	}
+	return children, nil
+}
+
+func (s *stubDecisionStore) ListByScope(ctx context.Context, tenantID uuid.UUID, scope types.Scope, statuses []types.DecisionStatus) ([]*types.Decision, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) ListContradictions(ctx context.Context, tenantID uuid.UUID, resolved bool) ([]types.Contradiction, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) GetContradiction(ctx context.Context, tenantID, id uuid.UUID) (*types.Contradiction, error) {
+	return nil, nil
+}
+
+func TestGetDecisionLineageIncludesParentAndChildren(t *testing.T) {
+	parentID := uuid.New()
+	childID := uuid.New()
+	store := &stubDecisionStore{decisions: map[uuid.UUID]*types.Decision{
+		parentID: {ID: parentID, Status: types.StatusCanonical},
+		childID:  {ID: childID, ParentID: &parentID, Status: types.StatusCanonical},
+	}}
+
+	engine := NewLineageEngine(store)
+	lineage, err := engine.GetDecisionLineage(context.Background(), uuid.Nil, childID)
 	if err != nil {
-		t.Fatalf("failed to get lineage: %v", err)
+		t.Fatalf("GetDecisionLineage returned error: %v", err)
 	}
-	if lineage.DecisionID != "D-001" {
-		t.Errorf("expected D-001, got %s", lineage.DecisionID)
+	if lineage.Parent == nil || lineage.Parent.ID != parentID {
+		t.Fatalf("expected parent %s, got %+v", parentID, lineage.Parent)
+	}
+	if len(lineage.Children) != 0 {
+		t.Fatalf("expected no direct children for lineage root, got %d", len(lineage.Children))
 	}
 }

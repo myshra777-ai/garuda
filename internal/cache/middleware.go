@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/techtaytor/garuda/internal/store"
-	"github.com/techtaytor/garuda/internal/types"
+	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/types"
 )
 
 // CachedDecisionStore wraps a PostgreSQL store with Redis caching.

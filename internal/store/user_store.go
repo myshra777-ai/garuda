@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/techtaytor/garuda/internal/auth"
+	"github.com/myshra777-ai/garuda/internal/auth"
 )
 
 func (s *PostgresStore) CreateUser(ctx context.Context, user *auth.User) error {
