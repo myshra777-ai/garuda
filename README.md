@@ -20,11 +20,6 @@ Garuda gives AI agents shared memory, decision lineage, contradiction detection,
 ```markdown
 # 🛡️ Garuda — Organizational Intelligence Runtime
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go)](https://go.dev/)
-[![Architecture](https://img.shields.io/badge/Specification-GAS_v1.0-orange)](docs/GAS_Roadmap.md)
-[![Status](https://img.shields.io/badge/Status-Phase_3_Active-green)](#-current-status--roadmap)
-
 **Garuda** is an **Organizational Intelligence Runtime** that separates persistent organizational knowledge, reasoning, and governance from interchangeable foundation models.
 
 It operates as a **persistent, append-only semantic substrate** beneath models, applications, and multi-agent systems—ensuring every decision, evidence artifact, and policy action is **cryptographically verifiable, explainable, and non-repudiable**.
