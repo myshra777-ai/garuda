@@ -1,245 +1,287 @@
-markdown
-# Garuda
+# 🛡️ Garuda — Organizational Intelligence & Governance Runtime
 
-**The truth maintenance system for AI agents.**
+> **The deterministic, tamper-proof decision ledger for autonomous multi-agent systems.**  
+> Garuda gives AI agents a shared, auditable memory layer—preventing policy contradictions, eliminating environment re-ingestion costs, and anchoring organizational truth into an append-only, bitemporal Merkle tree.
 
-Garuda gives AI agents shared memory, decision lineage, contradiction detection, and cost optimization—cutting cold starts from 8 minutes to 10ms and saving 40%+ on token costs.
-
-
-
-
-
-
-# 🛡️ Garuda — Organizational Intelligence Runtime
-
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go)](https://go.dev/)
-[![Architecture](https://img.shields.io/badge/Specification-GAS_v1.0-orange)](docs/GAS_Roadmap.md)
-[![Status](https://img.shields.io/badge/Status-Phase_3_Active-green)](#-current-status--roadmap)
-
-```markdown
-# 🛡️ Garuda — Organizational Intelligence Runtime
-
-**Garuda** is an **Organizational Intelligence Runtime** that separates persistent organizational knowledge, reasoning, and governance from interchangeable foundation models.
-
-It operates as a **persistent, append-only semantic substrate** beneath models, applications, and multi-agent systems—ensuring every decision, evidence artifact, and policy action is **cryptographically verifiable, explainable, and non-repudiable**.
+[![Status](https://img.shields.io/badge/Status-Production--Ready-emerald)](#)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Architecture](https://img.shields.io/badge/Architecture-Bitemporal--Merkle--MCP-purple)](#-deep-dive-architecture)
 
 ---
 
 ## 🌟 Why Garuda?
 
-### The Problem
-- AI agents forget everything between sessions → **8‑minute cold starts**, re-reading the same code.
-- Multiple agents duplicate work → **40‑60% token waste**.
-- Agents make contradictory decisions → **$50k+ damage** from conflicting projects.
-- No audit trail → **compliance nightmares**.
+As multi-agent deployments expand, AI systems face three critical failure modes:
+1. **Agent Hallucination & Contradiction:** Two agents operating on different contexts issue opposing system commands (e.g., Agent A enforces TLS 1.3 while Agent B opens HTTP fallback).
+2. **Context Blowout & High Latency:** Agents spend tokens repeatedly reading the entire system state on every run.
+3. **Auditability Gaps:** Non-deterministic LLM decisions leave no cryptographically verifiable trail for compliance officers.
 
-### The Solution
-Garuda gives every agent a **permanent, auditable, shareable memory**:
+### Garuda resolves this through four fundamental guarantees:
 
-| Feature | What It Does |
-|---------|--------------|
-| **Cryptographic Evidence Chain** | Every decision is hashed into a Merkle tree – tamper‑proof and verifiable. |
-| **Autonomous Contradiction Quarantine** | Detects conflicting decisions in real‑time, quarantines them before they corrupt truth. |
-| **Token Budget Metering** | Pre‑flight budget checks prevent runaway agent costs; consumption is logged to an append‑only ledger. |
-| **Checkpoint & Handoff** | Agents can pause, save state, and seamlessly hand off to another agent (cross‑model, cross‑user). |
-| **MCP Integration** | Exposes 5+ native MCP tools for dynamic agent discovery, reasoning traversal, and policy verification. |
-| **Bitemporal & Replayable Truth** | Truth is append‑only; versions are never overwritten; every state change creates an immutable, hash‑linked revision. |
+* **🛡️ Autonomous Contradiction Quarantine Engine:** Intercepts proposals at the gateway level. If an incoming proposal conflicts with an active decision in the same domain/system scope, it is automatically isolated into a **quarantine state** before mutating production.
+* **🔗 Cryptographic Merkle Attestation:** Every proposed decision is hashed into an append-only, SHA-256 parent-chained Merkle tree. Every rule can be independently verified using mathematical inclusion proofs.
+* **⏳ Bitemporal Memory Ledger:** Tracks decisions along two distinct time dimensions: **Valid Time** (when the decision holds true in the world) and **Transaction Time** (when the decision was recorded in Garuda). This enables zero-cost time-travel replay and state reconstruction.
+* **🔌 Native Model Context Protocol (MCP) Integration:** Exposes slash-command capabilities (`/garuda propose`, `/garuda verify`, `/garuda status`) directly over stdio and HTTP for seamless embedding inside **Cursor**, **Claude Desktop**, and **Windsurf**.
 
 ---
 
-## 🏗️ Architecture Overview
+## 🏗️ Deep-Dive Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         GARUDA RUNTIME                                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  Layer 7/8: Intent Governance & Continuous Runtime                  │    │
-│  │  ├─ Cryptographic Merkle Attestation Engine                         │    │
-│  │  ├─ Token Budget Metering & Pre‑Flight Ledger                      │    │
-│  │  └─ Model Context Protocol (MCP) Tool Suite                        │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  Layer 0/1/6: Truth Foundation, Directed Graph & Cognition          │    │
-│  │  ├─ Autonomous Contradiction Quarantine Engine                      │    │
-│  │  ├─ Append‑Only Immutable Revisions & Decision Store               │    │
-│  │  └─ SHA‑256 Hash‑Chained Evidence Ledger                           │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  Storage Layer                                                      │    │
-│  │  ├─ PostgreSQL (decisions, evidence, contradictions, budgets)      │    │
-│  │  ├─ Redis (fast cache, stream WAL)                                 │    │
-│  │  └─ Merkle Roots (per‑tenant cryptographic state)                  │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                             CLIENT LAYER & AGENT INTERFACES                              │
+│         Cursor IDE    │    Claude Desktop    │    Garuda CLI    │    Mission Control UI    │
+└────────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                             │  Slash Commands / REST API
+                                             ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                                GARUDA API GATEWAY (:8080)                                │
+│       Recovery Middleware │ JWT Authentication │ Rate Limiter (Token-Bucket) │ CORS        │
+└────────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                             │
+                       ┌─────────────────────┴─────────────────────┐
+                       ▼                                           ▼
+┌──────────────────────────────────────────────┐ ┌─────────────────────────────────────────┐
+│     CONTRADICTION QUARANTINE ENGINE          │ │            BITEMPORAL LEDGER            │
+│ Evaluates --scope-domain & --scope-system    │ │ Appends immutable decision states to    │
+│ Isolate duplicate / conflicting proposals    │ │ PostgreSQL (`valid_at` vs `created_at`) │
+└──────────────────────┬───────────────────────┘ └────────────────────┬────────────────────┘
+                       │                                              │
+                       └──────────────────────┬───────────────────────┘
+                                              │
+                                              ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│                            MERKLE ROOT SNAPSHOT WORKER DAEMON                            │
+│           Batches uncommitted leaves every epoch (10s) -> SHA-256 Parent Chain          │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
 
----
 
-## 🚀 Quickstart Guide
+System Flow
 
-### Prerequisites
-- **Go** `1.22` or higher
-- **PostgreSQL** `14` or higher
-- **Redis** `7` or higher (optional, for cache)
-- **curl** and **jq** (for testing)
 
-### 1. Clone & Build
 
-```bash
-git clone https://github.com/myshra777-ai/garuda.git
+Code snippet
+flowchart TB
+    Agent[AI Agent / Developer Client]
+    Gateway[Garuda API Gateway :8080]
+    Engine{Contradiction Quarantine Engine}
+    Postgres[(PostgreSQL Bitemporal Ledger)]
+    Worker[Merkle Snapshot Worker]
+    Dashboard[Web Mission Control / SSE Stream]
+
+    Agent -->|1. POST /api/v1/decisions/submit| Gateway
+    Gateway -->|2. Evaluate Scope Boundaries| Engine
+    Engine -->|3a. Conflict Detected -> Status: Quarantined| Postgres
+    Engine -->|3b. Canonical -> Status: Draft/Active| Postgres
+    Worker -->|4. Poll uncommitted leaves every 10s| Postgres
+    Worker -->|5. Commit SHA-256 Root Snapshot| Postgres
+    Gateway -->|6. Stream Live Events /api/v1/events| Dashboard
+
+
+📂 Repository Layout
+
+
+
+Plaintext
+.
+├── cmd/
+│   ├── garuda/             # Unified CLI binary orchestrator & installer
+│   ├── garuda-api/         # REST API Gateway & Web Mission Control server
+│   ├── garuda-mcp/         # JSON-RPC 2.0 Model Context Protocol stdio server
+│   ├── garuda-worker/      # Background Merkle snapshot worker daemon
+│   └── migrate/            # Database schema migration binary
+├── internal/
+│   ├── api/                # HTTP handlers (decisions, verification, SSE events, dashboard)
+│   ├── auth/               # Ed25519 / RSA JWT authentication service & middleware
+│   ├── engine/             # Contradiction Engine & lineage graph evaluation
+│   ├── merkle/             # SHA-256 deterministic hashing & Merkle tree constructor
+│   ├── mcp/                # Quote-aware slash-command parser & MCP bridge
+│   ├── store/              # PostgreSQL bitemporal persistence layer
+│   └── types/              # Domain models (decisions, contradictions, Merkle proofs)
+├── migrations/             # SQL schema migrations (001_... to 016_merkle_snapshots.sql)
+├── docker-compose.garuda.yml# Full-stack orchestrator config (DB, API Gateway, Worker)
+├── go.mod                  # Go module definition (Go 1.22+)
+└── README.md
+
+
+⚡ Quickstart
+Option 1: One-Command Startup (Recommended)
+Garuda includes a zero-config launcher that starts PostgreSQL, runs database migrations, launches the Merkle worker daemon, and starts the API Gateway:
+
+
+
+Bash
+# Clone repository
+git clone [https://github.com/myshra777-ai/garuda.git](https://github.com/myshra777-ai/garuda.git)
 cd garuda
-go mod tidy
-go build ./...
-```
 
-### 2. Configure Environment & Run Migrations
+# Build global CLI
+go build -o garuda ./cmd/garuda
 
-Set up your PostgreSQL credentials:
+# Boot full runtime stack
+./garuda up
 
-```bash
-export DATABASE_URL="postgres://postgres:postgres@localhost:5432/garuda?sslmode=disable"
-export JWT_SECRET="your-256-bit-secret"
 
-# Apply all database schema migrations
-go run cmd/migrate/main.go
-```
+Access the Web Mission Control Dashboard at http://localhost:8080/dashboard.
+Option 2: Manual Binary Orchestration
 
-### 3. Start the Garuda Gateway API
 
-```bash
-go run cmd/garuda-api/main.go
-```
 
-The secure API gateway initializes on port `:8080`.
+Bash
+# 1. Start PostgreSQL
+docker compose -f docker-compose.garuda.yml up -d garuda-postgres
 
----
+# 2. Run Database Migrations
+go run ./cmd/migrate
 
-## 🧪 End‑to‑End Verification Walkthrough
+# 3. Start API Gateway (Terminal 1)
+go run ./cmd/garuda-api
 
-Run this test sequence to verify **Decision Proposal**, **Contradiction Quarantine**, and **Cryptographic Merkle Proof Generation**.
+# 4. Start Merkle Worker Daemon (Terminal 2)
+go run ./cmd/garuda-worker
 
-### Step 1: Obtain a Debug JWT Token
 
-```bash
+🧪 Verification & Usage Examples
+1. Submit a Proposal via CLI (Scoped Domain)
+
+
+
+Bash
+./garuda propose "Enforce OAuth2 for all internal APIs" \
+  --scope-domain security \
+  --scope-system auth
+
+
+Output:
+
+
+
+Plaintext
+✅ Decision Proposal Submitted Successfully!
+   📌 Title:        Enforce OAuth2 for all internal APIs
+   🏷️  Scope Domain: security
+   ⚙️  Scope System: auth
+   🆔 Decision ID:   c1b07384-d113-4e8a-8f8d-7a6c981b2e10
+   🚦 Status:        canonical
+   🔗 Merkle Leaf:   8f3d6c1e9a2b4c...
+
+
+2. Contradiction Quarantine Verification
+If another agent attempts to propose an overlapping decision within the same scope boundary (security/auth):
+
+
+
+Bash
+./garuda propose "Disable OAuth2 for legacy endpoints" \
+  --scope-domain security \
+  --scope-system auth
+
+
+Output:
+
+
+
+Plaintext
+✅ Decision Proposal Submitted Successfully!
+   📌 Title:        Disable OAuth2 for legacy endpoints
+   🏷️  Scope Domain: security
+   ⚙️  Scope System: auth
+   🆔 Decision ID:   e4be56e8-5e65-4f88-a5ec-b0a5fc2fd1ec
+   🚦 Status:        quarantined
+
+⚠️ Notice: Proposal triggered a policy contradiction and was placed in Merkle Quarantine.
+
+
+3. Verify Cryptographic Inclusion Proof
+
+
+
+Bash
+# Fetch debug token
 TOKEN=$(curl -s "http://localhost:8080/debug/token?actor=verifier&tenant_id=00000000-0000-0000-0000-000000000001" | jq -r '.token')
-```
 
-### Step 2: Submit a Decision Proposal
+# Query proof verification
+curl -s -X GET "http://localhost:8080/api/v1/evidence/verify/c1b07384-d113-4e8a-8f8d-7a6c981b2e10" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 
-```bash
-DECISION_RESP=$(curl -s -X POST http://localhost:8080/api/v1/decisions/submit \
-  -H "Authorization: Bearer $TOKEN" \
+
+Cryptographic Proof Response:
+
+
+
+JSON
+{
+  "decision_id": "c1b07384-d113-4e8a-8f8d-7a6c981b2e10",
+  "leaf_hash": "7ff0e93fbb108456d06066f7e1a7b8ae86ee58fad3cba9a44545af4fe73fcf5f",
+  "parent_hash": "19cafdf573dc94dc976d34ac94ec1c357f147c735bbaa5c74b722700c7e073ae",
+  "root_hash": "d0015bdc8fa5ff2414e9acc2c36cbdd1f3199999947b095c078e9deeec3abb0c",
+  "block_height": 6,
+  "tenant_id": "00000000-0000-0000-0000-000000000001",
+  "is_verified": true
+}
+
+
+4. Slash Commands via MCP Bridge (/mcp/bridge)
+Garuda accepts quote-aware slash commands from Cursor or Claude Desktop:
+
+
+
+Bash
+curl -X POST http://localhost:8080/mcp/bridge \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "Enforce TLS 1.3 for external endpoints",
-    "scope_domain": "security",
-    "scope_system": "network"
-  }')
+    "command": "/garuda propose \"Require TLS 1.3 Minimum Protocol\" --scope-domain security --scope-system network"
+  }' | jq .
 
-echo "$DECISION_RESP" | jq .
-DECISION_ID=$(echo "$DECISION_RESP" | jq -r '.id')
-```
 
-### Step 3: Verify Cryptographic Merkle Inclusion Proof
+🛠️ Key API Reference
+Method
+Route
+Description
+Auth Required
+POST
+/api/v1/decisions/submit
+Submit a decision proposal to the Contradiction Engine
+Yes
+GET
+/api/v1/evidence/verify/{id}
+Query SHA-256 Merkle inclusion proof for a decision
+Yes
+GET
+/api/v1/decisions/{id}/lineage
+Fetch parent/child dependency graph for a decision
+Yes
+POST
+/mcp/bridge
+Execute quote-aware MCP slash commands (/garuda propose)
+No (Internal Auth)
+GET
+/dashboard
+Mission Control Dark-Mode Web Dashboard
+No
+GET
+/api/v1/events
+Real-Time Server-Sent Events (SSE) stream for dashboard
+No
+GET
+/health
+Gateway health check probe
+No
 
-```bash
-curl -s -X GET "http://localhost:8080/api/v1/evidence/verify/$DECISION_ID" \
-  -H "Authorization: Bearer $TOKEN" | jq .
-```
+🧪 Testing & Code Quality
+Run full unit and integration test suites:
 
-**Expected Attestation Output:**
 
-```json
-{
-  "decision_id": "ef80caa2-3b19-4671-90c0-a63e5658cde5",
-  "leaf_hash": "c6794103d1722bc5f692e280636ec4e0bccb0a3912b3da1ded859ee9025ac294",
-  "parent_hash": "20b79ab70d6c1b43eaa927d0f8b1ede13353e43a450ae9ef9376eaba2231e0ab",
-  "root_hash": "727c04d73838b82e2cc6c37c7ba33ad03b957741b383a6adad551f1003a73ebe",
-  "block_height": 1,
-  "tenant_id": "00000000-0000-0000-0000-000000000001",
-  "is_verified": true,
-  "created_at": "2026-08-03T23:39:58.972474+05:30"
-}
-```
 
----
+Bash
+# Run unit tests
+go test -v ./...
 
-## 📡 API Endpoints Reference
+# Vet and format code
+go vet ./...
+gofmt -s -w .
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/v1/decisions/submit` | Propose a new decision; triggers quarantine and Merkle logging. |
-| `GET` | `/api/v1/evidence/verify/{id}` | Retrieve cryptographic Merkle proof for a decision. |
-| `GET` | `/api/v1/decisions/{id}/lineage` | Fetch parent and child decision lineage graphs. |
-| `POST` | `/api/v1/agents/checkpoint` | Save an agent’s current state (Thinking Mode). |
-| `GET` | `/api/v1/agents/checkpoint/{id}` | Retrieve a saved checkpoint. |
-| `POST` | `/api/v1/agents/handoff` | Transfer a task from one agent to another. |
-| `POST` | `/api/v1/budget/consume` | Consume tokens/executions for an agent action. |
-| `GET` | `/api/v1/budget` | Retrieve current budget usage and limits. |
-| `GET` | `/debug/token` | **Development only** – generate a tenant‑scoped JWT token. |
 
----
-
-## 🗺️ Current Status & Roadmap
-
-| Layer | Component | Status |
-|-------|-----------|--------|
-| Layer 0 | Truth Foundation (Decisions, Revisions, Evidence, Merkle) | ✅ 100% Operational |
-| Layer 1 | Directed Truth Graph (Nodes, Edges, Lineage) | ✅ 85% Operational |
-| Layer 2 | Temporal Intelligence (Snapshots, Replay, Bitemporal) | 🟡 65% Operational |
-| Layer 6 | Distributed Cognition (MCP Tools, Workspaces) | 🟡 40% Operational |
-| Layer 7 | Intent Governance (Quarantine Engine, Policy Enforcement) | ✅ 80% Operational |
-| Layer 8 | Organizational Intelligence Runtime (API Gateway, Telemetry) | 🟡 60% Operational |
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please ensure all code additions:
-
-- Conform to the **Garuda Architecture Specification (GAS)** laws.
-- Maintain **append‑only immutability** principles.
-- Include relevant SQL migrations in `migrations/`.
-- Pass `go build ./...` and `go test ./...`.
-
----
-
-## 📄 License
-
-Garuda is released under the **Apache 2.0 License**. See the [LICENSE](LICENSE) file for details.
-
----
-
-**Star ⭐ us on GitHub** and help build the memory layer for enterprise AI.
-```
-
----
-
-## How to Use
-
-1. Copy the entire markdown block above.
-2. Paste it into your `README.md` file.
-3. Replace the placeholder `LICENSE` link with your actual license file.
-4. Adjust the architecture diagram if needed.
-
----
-
-## What I Improved
-
-| Section | Change |
-|---------|--------|
-| **Why Garuda?** | Added problem/solution table → immediate value proposition. |
-| **Architecture Diagram** | Clean ASCII diagram with layers. |
-| **Quickstart** | Step‑by‑step with `go mod tidy` and `go build`. |
-| **Verification Walkthrough** | Re‑organized with clear steps and expected output. |
-| **API Endpoints** | Added all major endpoints (checkpoints, budget). |
-| **Roadmap** | Clear status table with percentages. |
-| **Contributing** | Short, actionable guidelines. |
-
----
-
-Let me know if you want to adjust any section or add an image for the architecture.
+📄 License
+Garuda is distributed under the Apache 2.0 License.
