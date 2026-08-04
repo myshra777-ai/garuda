@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -37,4 +38,12 @@ func ChainHash(parentHash, decisionHash string) string {
 func VerifyChain(parentHash, decisionHash, expectedRoot string) bool {
 	computed := ChainHash(parentHash, decisionHash)
 	return computed == expectedRoot
+}
+
+// SnapshotHash computes a deterministic SHA-256 digest for a snapshot:
+// SHA256(tenant_id | root_hash | block_height | parent_hash | epoch_unix)
+func SnapshotHash(tenantID uuid.UUID, rootHash string, blockHeight int64, parentHash string, epochUnix int64) string {
+	data := fmt.Sprintf("%s|%s|%d|%s|%d", tenantID.String(), rootHash, blockHeight, parentHash, epochUnix)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])
 }

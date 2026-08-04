@@ -71,6 +71,10 @@ type Decision struct {
 	ScopeSystem      string           `json:"scope_system"`
 	MerkleHash       string           `json:"merkle_hash,omitempty"`
 	ParentMerkleHash string           `json:"parent_merkle_hash,omitempty"`
+
+	// Bitemporal fields (GAS Vol 009)
+	ValidFrom time.Time  `json:"valid_from"`         // When this decision becomes effective
+	ValidTo   *time.Time `json:"valid_to,omitempty"` // When this decision expires (NULL = indefinite)
 }
 
 // DecisionRevision snapshots an earlier version of a decision.
@@ -131,8 +135,6 @@ type TaskManifest struct {
 	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
-// DecisionStore defines the multi-tenant contract for persisting governance objects.
-
 // Checkpoint represents an agent's saved context state.
 type Checkpoint struct {
 	ID             uuid.UUID       `json:"id"`
@@ -147,6 +149,8 @@ type Checkpoint struct {
 }
 
 // DecisionStore defines the multi-tenant contract for persisting governance and context objects.
+// internal/types/types.go
+
 type DecisionStore interface {
 	GetDecision(ctx context.Context, tenantID, decisionID uuid.UUID) (*Decision, error)
 	SaveDecision(ctx context.Context, d *Decision) error
@@ -178,4 +182,14 @@ type DecisionStore interface {
 	GetMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*MerkleRoot, error)
 	AppendMerkleChain(ctx context.Context, tenantID uuid.UUID, decisionHash string) (*MerkleRoot, error)
 	AddEvidenceBlock(ctx context.Context, tenantID, decisionID uuid.UUID, payload any) (*EvidenceBlock, error)
+
+	// Merkle Snapshot Methods
+	ListAllTenants(ctx context.Context) ([]uuid.UUID, error)
+	GetLatestMerkleSnapshot(ctx context.Context, tenantID uuid.UUID) (*MerkleSnapshot, error)
+	SaveMerkleSnapshot(ctx context.Context, snap *MerkleSnapshot) error
+	ListMerkleSnapshots(ctx context.Context, tenantID uuid.UUID, limit int) ([]MerkleSnapshot, error)
+
+	// Temporal Methods
+	GetDecisionsActiveAt(ctx context.Context, tenantID uuid.UUID, at time.Time, scope Scope, statuses []DecisionStatus) ([]*Decision, error)
+	GetDecisionHistory(ctx context.Context, tenantID, decisionID uuid.UUID) ([]*Decision, error)
 }

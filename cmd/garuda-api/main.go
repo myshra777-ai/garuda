@@ -66,7 +66,6 @@ func main() {
 	_ = lineage.NewGraph(1000)
 	lineageEngine := engine.NewLineageEngine(dbStore)
 	contradictionEngine := engine.NewContradictionEngine(dbStore)
-	_ = lineageEngine
 
 	// App Services
 	authService := auth.NewAuthService(dbStore, jwtConfig)
@@ -75,46 +74,67 @@ func main() {
 	// 6. Security & Traffic Controls
 	rateLimiter := api.NewRateLimiter(100, time.Minute, 1000)
 
-	// 7. Routing & Multiplexing
-	mux := http.NewServeMux()
+	// 7. Separate Muxing for Public vs. JWT-Protected Endpoints
+	mainMux := http.NewServeMux()
+	protectedMux := http.NewServeMux()
 
-	// Unprotected endpoints
-	mux.HandleFunc("GET /health", server.HandleHealth)
-	mux.HandleFunc("GET /debug/token", server.HandleDebugToken) // guarded internally
+	// ------------------------------------------------------------------
+	// A. UNPROTECTED / PUBLIC ROUTES (Accessible via Browser & Web UI)
+	// ------------------------------------------------------------------
+	mainMux.HandleFunc("GET /health", server.HandleHealth)
+	mainMux.HandleFunc("GET /dashboard", server.HandleDashboard)
+	mainMux.HandleFunc("GET /api/v1/events", server.HandleLiveEvents) // The Web Dashboard's SSE live-update script hit /api/v1/events, which requires JWT auth.
+	mainMux.HandleFunc("GET /debug/token", server.HandleDebugToken)
+	mainMux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 
-	// Protected endpoints
-	mux.HandleFunc("POST /api/v1/decisions/submit", server.HandleProposeDecision)
-	mux.HandleFunc("GET /api/v1/decisions/{id}/lineage", server.HandleDecisionLineage)
-	mux.HandleFunc("POST /api/v1/agents/warmup", server.HandleAgentWarmup)
+	// ------------------------------------------------------------------
+	// B. PROTECTED API ROUTES (Require JWT Authorization)
+	// ------------------------------------------------------------------
+	protectedMux.HandleFunc("POST /api/v1/decisions/submit", server.HandleProposeDecision)
+	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/lineage", server.HandleDecisionLineage)
+	protectedMux.HandleFunc("POST /api/v1/agents/warmup", server.HandleAgentWarmup)
 
-	// Protected agent checkpoint endpoints
-	mux.HandleFunc("POST /api/v1/agents/checkpoint", server.HandleAgentCheckpoint)
-	mux.HandleFunc("GET /api/v1/agents/checkpoint/{id}", server.HandleGetAgentCheckpoint)
-	mux.HandleFunc("POST /api/v1/agents/resume", server.HandleAgentResume)
-	mux.HandleFunc("POST /api/v1/agents/handoff", server.HandleAgentHandoff)
+	// Agent checkpoint endpoints
+	protectedMux.HandleFunc("POST /api/v1/agents/checkpoint", server.HandleAgentCheckpoint)
+	protectedMux.HandleFunc("GET /api/v1/agents/checkpoint/{id}", server.HandleGetAgentCheckpoint)
+	protectedMux.HandleFunc("POST /api/v1/agents/resume", server.HandleAgentResume)
+	protectedMux.HandleFunc("POST /api/v1/agents/handoff", server.HandleAgentHandoff)
 
 	// Budget & Metering endpoints
-	mux.HandleFunc("GET /api/v1/budget", server.HandleGetBudget)
-	mux.HandleFunc("POST /api/v1/budget/consume", server.HandleConsumeBudget)
+	protectedMux.HandleFunc("GET /api/v1/budget", server.HandleGetBudget)
+	protectedMux.HandleFunc("POST /api/v1/budget/consume", server.HandleConsumeBudget)
 
-	// Verification & Cryptographic Attestation Route
-	mux.HandleFunc("GET /api/v1/evidence/verify/{id}", server.HandleVerifyDecision)
+	// Evidence & Verification endpoints
+	protectedMux.HandleFunc("GET /api/v1/evidence/verify/{id}", server.HandleVerifyDecision)
+	protectedMux.HandleFunc("GET /api/v1/evidence/snapshots", server.HandleListMerkleSnapshots)
 
-	// 8. Middleware Pipeline Construction
-	// Order of execution: Recovery -> Logging -> RequestID -> Auth Authentication -> Rate Limiting -> CORS -> Handler
+	// Temporal / Bitemporal routes
+	protectedMux.HandleFunc("GET /api/v1/decisions/active", server.HandleDecisionsActiveAt)
+	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/history", server.HandleDecisionHistory)
+
+	// ------------------------------------------------------------------
+	// C. ROUTE INTEGRATION & MIDDLEWARE PIPELINE
+	// ------------------------------------------------------------------
+	// Wrap protected API endpoints with the JWT Auth Middleware
+	protectedHandler := api.WithAuth(jwtConfig)(protectedMux)
+
+	// Mount protected API tree onto main multiplexer under /api/
+	mainMux.Handle("/api/", protectedHandler)
+
+	// Construct global middleware chain: Recovery -> Logging -> RequestID -> RateLimit -> CORS -> Mux
 	handler := api.WithRecovery(
 		api.WithLogging(
 			api.WithRequestID(
-				api.WithAuth(jwtConfig)(
-					api.WithRateLimit(rateLimiter)(
-						api.WithCORS([]string{"*"})(mux),
-					),
+				api.WithRateLimit(rateLimiter)(
+					api.WithCORS([]string{"*"})(mainMux),
 				),
 			),
 		),
 	)
 
-	// 9. HTTP Server Configuration
+	// 8. HTTP Server Configuration
 	httpServer := &http.Server{
 		Addr:         ":8080",
 		Handler:      handler,
@@ -123,7 +143,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// 10. Graceful Shutdown & Intercept Mechanisms
+	// 9. Graceful Shutdown & Intercept Mechanisms
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -143,7 +163,7 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// CRITICAL: Flush remaining telemetry batches before stopping the HTTP network stack
+	// Flush remaining telemetry batches before stopping network listeners
 	if err := telemetry.ShutdownTelemetry(shutdownCtx); err != nil {
 		slog.Error("Telemetry metric flush on shutdown failed", "error", err)
 	} else {

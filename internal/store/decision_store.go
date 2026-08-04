@@ -3,15 +3,17 @@ package store
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/merkle"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
-// SaveDecision inserts or updates a decision record and registers its Merkle leaf.
+// SaveDecision inserts or updates a decision record writing flat scope fields, JSONB scope, and registers its Merkle leaf.
 func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) error {
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
@@ -22,6 +24,9 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 	if d.Owner == "" {
 		d.Owner = "agent-system"
 	}
+	if d.ValidFrom.IsZero() {
+		d.ValidFrom = time.Now().UTC()
+	}
 
 	// Fallback sync between nested Scope struct and flat fields
 	if d.ScopeDomain == "" && d.Scope.Domain != "" {
@@ -29,6 +34,17 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 	}
 	if d.ScopeSystem == "" && d.Scope.System != "" {
 		d.ScopeSystem = d.Scope.System
+	}
+	if d.Scope.Domain == "" && d.ScopeDomain != "" {
+		d.Scope.Domain = d.ScopeDomain
+	}
+	if d.Scope.System == "" && d.ScopeSystem != "" {
+		d.Scope.System = d.ScopeSystem
+	}
+
+	scopeJSON, err := json.Marshal(d.Scope)
+	if err != nil {
+		return fmt.Errorf("failed to marshal scope: %w", err)
 	}
 
 	// 1. Fetch parent Merkle root for tenant (creates genesis if missing)
@@ -57,29 +73,36 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 	d.MerkleHash = decisionHash
 	d.ParentMerkleHash = parentHash
 
-	// 3. Upsert decision into PostgreSQL matching the (tenant_id, id) constraint	insertQuery := `
-	// 3. Upsert decision into PostgreSQL matching the (tenant_id, id) constraint
+	// 3. Upsert decision into PostgreSQL writing scope_domain, scope_system AND scope (JSONB)
 	insertQuery := `
 		INSERT INTO decisions (
-			id, tenant_id, title, status, scope_domain, scope_system, owner, 
-			merkle_hash, parent_merkle_hash, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+			tenant_id, id, title, status, scope_domain, scope_system, scope, owner, confidence,
+			merkle_hash, parent_merkle_hash, created_at, updated_at, approved_at, valid_from, valid_to
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW(), $12, $13, $14)
 		ON CONFLICT (tenant_id, id) DO UPDATE SET
 			title = EXCLUDED.title,
 			status = EXCLUDED.status,
 			scope_domain = EXCLUDED.scope_domain,
 			scope_system = EXCLUDED.scope_system,
+			scope = EXCLUDED.scope,
+			owner = EXCLUDED.owner,
+			confidence = EXCLUDED.confidence,
 			merkle_hash = EXCLUDED.merkle_hash,
 			parent_merkle_hash = EXCLUDED.parent_merkle_hash,
-			updated_at = NOW();
+			updated_at = NOW(),
+			approved_at = EXCLUDED.approved_at,
+			valid_from = EXCLUDED.valid_from,
+			valid_to = EXCLUDED.valid_to;
 	`
 
 	_, err = s.pool.Exec(ctx, insertQuery,
-		d.ID, d.TenantID, d.Title, d.Status, d.ScopeDomain, d.ScopeSystem, d.Owner,
-		d.MerkleHash, d.ParentMerkleHash,
+		d.TenantID, d.ID, d.Title, d.Status.String(),
+		d.ScopeDomain, d.ScopeSystem, scopeJSON, d.Owner, d.Confidence,
+		d.MerkleHash, d.ParentMerkleHash, d.ApprovedAt,
+		d.ValidFrom, d.ValidTo,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to insert decision row: %w", err)
+		return fmt.Errorf("failed to save decision: %w", err)
 	}
 
 	// 4. Append decision hash to tenant Merkle chain
@@ -91,11 +114,12 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 	return nil
 }
 
-// GetDecision retrieves a decision by tenant and ID.
+// GetDecision retrieves a decision by tenant and ID including Merkle hashes and temporal fields.
 func (s *PostgresStore) GetDecision(ctx context.Context, tenantID, decisionID uuid.UUID) (*types.Decision, error) {
 	query := `
 		SELECT id, tenant_id, title, status, scope_domain, scope_system, owner,
-		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''), created_at, updated_at
+		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''), 
+		       approved_at, valid_from, valid_to, created_at, updated_at
 		FROM decisions
 		WHERE tenant_id = $1 AND id = $2;
 	`
@@ -103,7 +127,8 @@ func (s *PostgresStore) GetDecision(ctx context.Context, tenantID, decisionID uu
 	var d types.Decision
 	err := s.pool.QueryRow(ctx, query, tenantID, decisionID).Scan(
 		&d.ID, &d.TenantID, &d.Title, &d.Status, &d.ScopeDomain, &d.ScopeSystem, &d.Owner,
-		&d.MerkleHash, &d.ParentMerkleHash, &d.CreatedAt, &d.UpdatedAt,
+		&d.MerkleHash, &d.ParentMerkleHash, &d.ApprovedAt, &d.ValidFrom, &d.ValidTo,
+		&d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get decision: %w", err)
@@ -142,11 +167,12 @@ func (s *PostgresStore) GetDecisionRevisions(ctx context.Context, tenantID, deci
 	return revisions, nil
 }
 
-// GetDecisionsByScope fetches decisions with optional domain/system filters.
+// GetDecisionsByScope fetches decisions with optional domain/system filters including temporal fields.
 func (s *PostgresStore) GetDecisionsByScope(ctx context.Context, tenantID uuid.UUID, domain, system string) ([]*types.Decision, error) {
 	query := `
 		SELECT id, tenant_id, title, status, scope_domain, scope_system, owner,
-		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''), created_at, updated_at
+		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''), 
+		       approved_at, valid_from, valid_to, created_at, updated_at
 		FROM decisions
 		WHERE tenant_id = $1
 	`
@@ -175,7 +201,8 @@ func (s *PostgresStore) GetDecisionsByScope(ctx context.Context, tenantID uuid.U
 		var d types.Decision
 		if err := rows.Scan(
 			&d.ID, &d.TenantID, &d.Title, &d.Status, &d.ScopeDomain, &d.ScopeSystem, &d.Owner,
-			&d.MerkleHash, &d.ParentMerkleHash, &d.CreatedAt, &d.UpdatedAt,
+			&d.MerkleHash, &d.ParentMerkleHash, &d.ApprovedAt, &d.ValidFrom, &d.ValidTo,
+			&d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan decision row: %w", err)
 		}
@@ -185,11 +212,12 @@ func (s *PostgresStore) GetDecisionsByScope(ctx context.Context, tenantID uuid.U
 	return decisions, nil
 }
 
-// ListDecisionsByParent fetches decisions that have a specific parent.
+// ListDecisionsByParent fetches decisions that have a specific parent including temporal fields.
 func (s *PostgresStore) ListDecisionsByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*types.Decision, error) {
 	query := `
 		SELECT id, tenant_id, title, status, scope_domain, scope_system, owner,
-		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''), created_at, updated_at
+		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''), 
+		       approved_at, valid_from, valid_to, created_at, updated_at
 		FROM decisions
 		WHERE tenant_id = $1 AND parent_id = $2
 		ORDER BY created_at DESC;
@@ -205,7 +233,8 @@ func (s *PostgresStore) ListDecisionsByParent(ctx context.Context, tenantID, par
 		var d types.Decision
 		if err := rows.Scan(
 			&d.ID, &d.TenantID, &d.Title, &d.Status, &d.ScopeDomain, &d.ScopeSystem, &d.Owner,
-			&d.MerkleHash, &d.ParentMerkleHash, &d.CreatedAt, &d.UpdatedAt,
+			&d.MerkleHash, &d.ParentMerkleHash, &d.ApprovedAt, &d.ValidFrom, &d.ValidTo,
+			&d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan decision row: %w", err)
 		}
@@ -232,6 +261,10 @@ func parseStatus(s string) types.DecisionStatus {
 		return types.StatusArchived
 	case "deprecated":
 		return types.StatusDeprecated
+	case "active":
+		return types.StatusActive
+	case "quarantined":
+		return types.StatusQuarantined
 	default:
 		return types.StatusDraft
 	}

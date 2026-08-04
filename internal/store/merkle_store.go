@@ -5,30 +5,30 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/myshra777-ai/garuda/internal/merkle"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
 // GetMerkleRoot retrieves current root hash state or initializes a genesis root if missing.
-// GetMerkleRoot retrieves current root hash state or initializes a genesis root if missing.
 func (s *PostgresStore) GetMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleRoot, error) {
 	query := `
-		SELECT tenant_id, root_hash, block_height, created_at, updated_at
-		FROM merkle_roots
-		WHERE tenant_id = $1;
-	`
+        SELECT tenant_id, root_hash, block_height, created_at, updated_at
+        FROM merkle_roots
+        WHERE tenant_id = $1;
+    `
 	var mr types.MerkleRoot
 	err := s.pool.QueryRow(ctx, query, tenantID).Scan(
 		&mr.TenantID, &mr.RootHash, &mr.BlockHeight, &mr.CreatedAt, &mr.UpdatedAt,
 	)
 	if err != nil {
-		// Catch both sql.ErrNoRows and pgx/driver empty set errors
-		if err == sql.ErrNoRows || strings.Contains(err.Error(), "no rows") {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "no rows") {
 			return s.createGenesisMerkleRoot(ctx, tenantID)
 		}
 		return nil, fmt.Errorf("failed to fetch Merkle root: %w", err)
@@ -39,10 +39,10 @@ func (s *PostgresStore) GetMerkleRoot(ctx context.Context, tenantID uuid.UUID) (
 func (s *PostgresStore) createGenesisMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleRoot, error) {
 	genesisHash := merkle.HashDecision(uuid.Nil, "GENESIS_ROOT", "active", "system", "core", "garuda", nil)
 	query := `
-		INSERT INTO merkle_roots (tenant_id, root_hash, block_height, created_at, updated_at)
-		VALUES ($1, $2, 0, NOW(), NOW())
-		ON CONFLICT (tenant_id) DO NOTHING;
-	`
+        INSERT INTO merkle_roots (tenant_id, root_hash, block_height, created_at, updated_at)
+        VALUES ($1, $2, 0, NOW(), NOW())
+        ON CONFLICT (tenant_id) DO NOTHING;
+    `
 	_, _ = s.pool.Exec(ctx, query, tenantID, genesisHash)
 
 	return &types.MerkleRoot{
@@ -60,18 +60,18 @@ func (s *PostgresStore) AppendMerkleChain(ctx context.Context, tenantID uuid.UUI
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin Merkle transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
 
-	// Lock tenant row to prevent root concurrency race condition
 	var currentRoot string
 	var currentHeight int64
 	lockQuery := `
-		SELECT root_hash, block_height FROM merkle_roots
-		WHERE tenant_id = $1 FOR UPDATE;
-	`
+        SELECT root_hash, block_height FROM merkle_roots
+        WHERE tenant_id = $1 FOR UPDATE;
+    `
 	err = tx.QueryRow(ctx, lockQuery, tenantID).Scan(&currentRoot, &currentHeight)
-	if err == sql.ErrNoRows {
-		// Initialize if missing
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) || (err != nil && strings.Contains(err.Error(), "no rows")) {
 		genHash := merkle.HashDecision(uuid.Nil, "GENESIS_ROOT", "active", "system", "core", "garuda", nil)
 		_, err = tx.Exec(ctx, `INSERT INTO merkle_roots (tenant_id, root_hash, block_height) VALUES ($1, $2, 0);`, tenantID, genHash)
 		if err != nil {
@@ -87,10 +87,10 @@ func (s *PostgresStore) AppendMerkleChain(ctx context.Context, tenantID uuid.UUI
 	newHeight := currentHeight + 1
 
 	updateQuery := `
-		UPDATE merkle_roots
-		SET root_hash = $1, block_height = $2, updated_at = NOW()
-		WHERE tenant_id = $3;
-	`
+        UPDATE merkle_roots
+        SET root_hash = $1, block_height = $2, updated_at = NOW()
+        WHERE tenant_id = $3;
+    `
 	if _, err := tx.Exec(ctx, updateQuery, newHash, newHeight, tenantID); err != nil {
 		return nil, fmt.Errorf("failed to update Merkle root: %w", err)
 	}
@@ -111,10 +111,10 @@ func (s *PostgresStore) AppendMerkleChain(ctx context.Context, tenantID uuid.UUI
 func (s *PostgresStore) AddEvidenceBlock(ctx context.Context, tenantID, decisionID uuid.UUID, payload any) (*types.EvidenceBlock, error) {
 	var prevHash string
 	queryPrev := `
-		SELECT evidence_hash FROM evidence_blocks
-		WHERE tenant_id = $1 AND decision_id = $2
-		ORDER BY created_at DESC LIMIT 1;
-	`
+        SELECT evidence_hash FROM evidence_blocks
+        WHERE tenant_id = $1 AND decision_id = $2
+        ORDER BY created_at DESC LIMIT 1;
+    `
 	err := s.pool.QueryRow(ctx, queryPrev, tenantID, decisionID).Scan(&prevHash)
 	if err != nil {
 		prevHash = "0000000000000000000000000000000000000000000000000000000000000000"
@@ -134,9 +134,9 @@ func (s *PostgresStore) AddEvidenceBlock(ctx context.Context, tenantID, decision
 	}
 
 	insertQuery := `
-		INSERT INTO evidence_blocks (id, tenant_id, decision_id, prev_hash, evidence_hash, payload, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7);
-	`
+        INSERT INTO evidence_blocks (id, tenant_id, decision_id, prev_hash, evidence_hash, payload, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7);
+    `
 	_, err = s.pool.Exec(ctx, insertQuery,
 		block.ID, block.TenantID, block.DecisionID, block.PrevHash, block.EvidenceHash, block.Payload, block.CreatedAt,
 	)
@@ -145,4 +145,130 @@ func (s *PostgresStore) AddEvidenceBlock(ctx context.Context, tenantID, decision
 	}
 
 	return block, nil
+}
+
+// ListAllTenants returns all distinct tenant IDs registered in merkle_roots (fast indexed lookup).
+func (s *PostgresStore) ListAllTenants(ctx context.Context) ([]uuid.UUID, error) {
+	query := `SELECT tenant_id FROM merkle_roots;`
+	rows, err := s.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tenants from merkle_roots: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan tenant_id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// GetLatestMerkleSnapshot retrieves the most recent snapshot for a tenant matching Schema 016.
+func (s *PostgresStore) GetLatestMerkleSnapshot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleSnapshot, error) {
+	query := `
+		SELECT id, tenant_id, root_hash, block_height,
+		       parent_snapshot_id, snapshot_hash, epoch_timestamp, created_at
+		FROM merkle_snapshots
+		WHERE tenant_id = $1
+		ORDER BY epoch_timestamp DESC
+		LIMIT 1;
+	`
+	var snap types.MerkleSnapshot
+	var parentID *uuid.UUID
+	err := s.pool.QueryRow(ctx, query, tenantID).Scan(
+		&snap.ID, &snap.TenantID, &snap.RootHash, &snap.BlockHeight,
+		&parentID, &snap.SnapshotHash, &snap.EpochTimestamp, &snap.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	snap.ParentSnapshotID = parentID
+	return &snap, nil
+}
+
+// SaveMerkleSnapshot persists a new cryptographically chained Merkle snapshot.
+func (s *PostgresStore) SaveMerkleSnapshot(ctx context.Context, snapshot *types.MerkleSnapshot) error {
+	query := `
+		INSERT INTO merkle_snapshots (
+			id,
+			tenant_id,
+			root_hash,
+			block_height,
+			parent_snapshot_id,
+			snapshot_hash,
+			epoch_timestamp,
+			created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (tenant_id, snapshot_hash) DO NOTHING;
+	`
+
+	// Pass EpochTimestamp directly as time.Time (TIMESTAMPTZ column)
+	epochTime := snapshot.EpochTimestamp
+	if epochTime.IsZero() {
+		epochTime = time.Now().UTC()
+	}
+
+	createdAt := snapshot.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+
+	_, err := s.pool.Exec(
+		ctx,
+		query,
+		snapshot.ID,
+		snapshot.TenantID,
+		snapshot.RootHash,
+		snapshot.BlockHeight,
+		snapshot.ParentSnapshotID,
+		snapshot.SnapshotHash,
+		epochTime,
+		createdAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to save merkle snapshot: %w", err)
+	}
+
+	return nil
+}
+
+// ListMerkleSnapshots returns the snapshot history for a tenant matching Schema 016.
+func (s *PostgresStore) ListMerkleSnapshots(ctx context.Context, tenantID uuid.UUID, limit int) ([]types.MerkleSnapshot, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	query := `
+		SELECT id, tenant_id, root_hash, block_height,
+		       parent_snapshot_id, snapshot_hash, epoch_timestamp, created_at
+		FROM merkle_snapshots
+		WHERE tenant_id = $1
+		ORDER BY epoch_timestamp DESC
+		LIMIT $2;
+	`
+	rows, err := s.pool.Query(ctx, query, tenantID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []types.MerkleSnapshot
+	for rows.Next() {
+		var snap types.MerkleSnapshot
+		var parentID *uuid.UUID
+		err := rows.Scan(
+			&snap.ID, &snap.TenantID, &snap.RootHash, &snap.BlockHeight,
+			&parentID, &snap.SnapshotHash, &snap.EpochTimestamp, &snap.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan merkle snapshot: %w", err)
+		}
+		snap.ParentSnapshotID = parentID
+		results = append(results, snap)
+	}
+	return results, nil
 }

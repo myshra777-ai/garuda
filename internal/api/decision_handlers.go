@@ -22,6 +22,8 @@ type DecisionProposalRequest struct {
 	ScopeSystem      string                 `json:"scope_system"`
 	EvidenceIDs      []types.EvidenceHash   `json:"evidence_ids"`
 	TemporalMetadata types.TemporalMetadata `json:"temporal_metadata"`
+	ValidFrom        *time.Time             `json:"valid_from,omitempty"`
+	ValidTo          *time.Time             `json:"valid_to,omitempty"`
 }
 
 // resolveTenantID extracts the tenant UUID from JWT context first, falling back to request body.
@@ -196,4 +198,33 @@ func (s *Server) HandleAgentWarmup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"warmed","message":"asynchronous execution agents initialized"}`))
+}
+
+// HandleSystemPromptContext returns a formatted text block containing active canonical policies
+func (s *Server) HandleSystemPromptContext(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := resolveTenantID(r, uuid.Nil)
+	if err != nil {
+		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id required")
+		return
+	}
+
+	// Fetch active canonical decisions
+	decisions, err := s.store.GetDecisionsActiveAt(r.Context(), tenantID, time.Now().UTC(), types.Scope{}, []types.DecisionStatus{types.StatusCanonical, types.StatusApproved})
+	if err != nil {
+		s.RespondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	prompt := "--- GARUDA ORGANIZATIONAL TRUTH BOOTSTRAP ---\n"
+	prompt += "The following canonical policy decisions are currently active and strictly enforced:\n\n"
+
+	for i, d := range decisions {
+		prompt += fmt.Sprintf("%d. [%s/%s] %s (ID: %s)\n", i+1, d.ScopeDomain, d.ScopeSystem, d.Title, d.ID.String())
+	}
+	prompt += "\nDo not generate plans or code that contradict these policies.\n"
+	prompt += "---------------------------------------------\n"
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(prompt))
 }

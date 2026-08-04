@@ -38,3 +38,15 @@ type EvidenceBlock struct {
 	Payload      any       `json:"payload"`
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+// MerkleSnapshot represents a historical snapshot of a tenant's Merkle root.
+type MerkleSnapshot struct {
+	ID               uuid.UUID  `json:"id"`
+	TenantID         uuid.UUID  `json:"tenant_id"`
+	RootHash         string     `json:"root_hash"`
+	BlockHeight      int64      `json:"block_height"`
+	ParentSnapshotID *uuid.UUID `json:"parent_snapshot_id,omitempty"`
+	SnapshotHash     string     `json:"snapshot_hash"`
+	EpochTimestamp   time.Time  `json:"epoch_timestamp"`
+	CreatedAt        time.Time  `json:"created_at"`
+}
