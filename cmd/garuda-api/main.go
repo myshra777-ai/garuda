@@ -163,8 +163,14 @@ func main() {
 	)
 
 	// 8. HTTP Server Configuration
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	addr := ":" + port
+
 	httpServer := &http.Server{
-		Addr:         ":8080",
+		Addr:         addr,
 		Handler:      handler,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
@@ -176,7 +182,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		slog.Info("Garuda API Secure Gateway online", "addr", ":8080")
+		slog.Info("Garuda API Secure Gateway online", "addr", addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("Gateway server crashed unexpectedly", "error", err)
 			os.Exit(1)
@@ -194,12 +200,6 @@ func main() {
 		slog.Error("Telemetry metric flush on shutdown failed", "error", err)
 	} else {
 		slog.Info("Telemetry pipeline drained cleanly")
-	}
-
-	if err := telemetry.InitTelemetry(telConfig); err != nil {
-		slog.Warn("Telemetry init failed", "error", err)
-	} else {
-		slog.Info("Telemetry initialized successfully")
 	}
 
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {

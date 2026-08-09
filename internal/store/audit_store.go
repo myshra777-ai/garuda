@@ -51,11 +51,9 @@ func (s *PostgresStore) LogAuditEvent(ctx context.Context, tenantID uuid.UUID, e
 		return nil, fmt.Errorf("failed to insert audit event: %w", err)
 	}
 
-	if len(rawPayload) > 0 {
-		_ = json.Unmarshal(rawPayload, &auditEvent.Payload)
-	}
+	_ = json.Unmarshal(rawPayload, &auditEvent.Payload)
 
-	// Append hash to Merkle chain if Merkle snapshot storage is active
+	// Append hash to Merkle chain if Merkle store method exists
 	_, _ = s.AppendMerkleChain(ctx, tenantID, eventHash)
 
 	return &auditEvent, nil
@@ -84,7 +82,7 @@ func (s *PostgresStore) VerifyAuditEvent(ctx context.Context, tenantID uuid.UUID
 	`
 	err = s.pool.QueryRow(ctx, rootQuery, tenantID).Scan(&rootHash, &blockHeight)
 	if err != nil {
-		// Fallback for clean environments prior to snapshot creation
+		// Fallback for clean environments
 		rootHash = eventHash
 		blockHeight = 1
 	}
@@ -98,7 +96,7 @@ func (s *PostgresStore) VerifyAuditEvent(ctx context.Context, tenantID uuid.UUID
 	}, nil
 }
 
-// ListAuditEvents queries audit events for a tenant starting from a given timestamp.
+// ListAuditEvents queries audit events for a tenant starting from a given timestamp
 func (s *PostgresStore) ListAuditEvents(ctx context.Context, tenantID uuid.UUID, since time.Time) ([]types.AuditEvent, error) {
 	query := `
 		SELECT id, tenant_id, event_type, event_id, actor, payload, event_hash, created_at
@@ -119,14 +117,8 @@ func (s *PostgresStore) ListAuditEvents(ctx context.Context, tenantID uuid.UUID,
 		if err := rows.Scan(&e.ID, &e.TenantID, &e.EventType, &e.EventID, &e.Actor, &rawPayload, &e.EventHash, &e.CreatedAt); err != nil {
 			return nil, err
 		}
-		if len(rawPayload) > 0 {
-			_ = json.Unmarshal(rawPayload, &e.Payload)
-		}
+		_ = json.Unmarshal(rawPayload, &e.Payload)
 		events = append(events, e)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating audit event rows: %w", err)
 	}
 
 	return events, nil

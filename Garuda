@@ -71,3 +71,99 @@ Automated Merkle Snapshot Worker: Build a background consolidation worker in cmd
 KMS / Hardware Security Module (HSM) Integration: Support asymmetric signing (Ed25519 or ECDSA Secp256k1) of Merkle root records using external key management services.
 
 Admin Verification Dashboard: Construct a visual frontend widget to browse decision trees, view quarantined contradictions, and test live Merkle inclusion proofs.
+
+
+🛡️ Garuda Architecture Specification (GAS) & Engineering Progress Report
+Date: August 3, 2026
+System: Garuda — Organizational Intelligence Runtime
+Target Standard: Garuda Architecture Specification (GAS) Roadmap & Architectural Principles
+1. Executive Summary & Strategic Positioning
+Garuda is built not as an AI chatbot or a model-centric orchestration framework, but as an Organizational Intelligence Runtime. Its core mandate is to separate enduring organizational intelligence from interchangeable foundation models—keeping models as replaceable compute engines while preserving truth, memory, reasoning, governance, and learning in a persistent, append-only semantic substrate.
+To satisfy the Garuda Architecture Specification (GAS) laws, all platform primitives must be deterministic, explainable, append-only, and fully replayable. Recent engineering cycles focused on solidifying the Layer 0 (Truth Foundation), Layer 1 (Directed Truth Graph), and Layer 7 (Intent Governance / Merkle Verification) subsystems.
+2. Platform Architecture & Layer Implementation Summary
+
+
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      GARUDA RUNTIME ARCHITECTURE                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│ [Layer 7 / 8] Intent Governance & Continuous Runtime                    │
+│   ├─ Cryptographic Merkle Attestation Engine                            │
+│   ├─ Token Budget Metering & Pre-Flight Ledger                          │
+│   └─ Model Context Protocol (MCP) Tool Suite                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│ [Layer 0 / 1 / 6] Truth Foundation, Directed Graph & Cognition          │
+│   ├─ Autonomous Contradiction Quarantine Engine                         │
+│   ├─ Append-Only Immutable Revisions & Decision Store                   │
+│   └─ SHA-256 Hash-Chained Evidence Ledger                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+
+A. Autonomous Contradiction Quarantine Engine (Layer 0 / Layer 1 / Layer 7)
+GAS Alignment: Fulfills GAS Volume 001 (Canonical Object Model) and Volume 005 (Canonical Semantic Model) by enforcing semantic validation prior to canonical knowledge promotion.
+Functionality: When an agent proposes a decision for a (scope_domain, scope_system) pair, the engine queries existing active decisions in PostgreSQL. If a semantic contradiction is detected, the decision is flagged as status: "quarantined" and quarantined: true, and an audit contradiction_id record is saved for governance review.
+B. Real-Time Token Budget Metering (Layer 0)
+GAS Alignment: Fulfills GAS Volume 001 (Budget Primitive) and Volume 007 (Runtime Resource Scheduling).
+Functionality: Performs pre-flight budget checks before executing agent requests and logs token consumption into an append-only ledger post-execution.
+C. Cryptographic Evidence Chain & Merkle Verification (Layer 0 / Layer 7 / GAS Vol 009 & 011)
+GAS Alignment: Implements GAS Volume 009 (Persistence & Temporal Semantics) and Volume 011 (External Contracts). Enforces the core invariant: Truth is append-only and cryptographically non-repudiable.
+Functionality:
+Generates deterministic SHA-256 leaf hashes from decision payloads.
+Chains leaf hashes to the previous tenant Merkle root (ChainHash(parent_root, leaf_hash)).
+Atomically persists updated Merkle roots in PostgreSQL using row-level locking (FOR UPDATE).
+Exposes an attestation API (GET /api/v1/evidence/verify/{decision_id}) returning leaf_hash, parent_hash, root_hash, block_height, and "is_verified": true.
+3. Engineering Incident Resolution Log (Issues & Fixes)
+During the integration of the Cryptographic Merkle Verification subsystem, several database constraint, schema, and driver edge cases were identified and resolved:
+Issue / Error Code
+Root Cause
+Solution / Architectural Fix
+Cascade Quarantine False Positives
+GetDecisionsByScope queried decisions without filtering out already quarantined decisions, causing subsequent proposals in a scope to perpetually conflict with old drafts.
+Updated DetectAndQuarantine in internal/engine/contradiction.go to explicitly skip decisions with status == "quarantined" or status == "superseded".
+SQLSTATE 42703 (Column scope_domain missing)
+Database schema previously stored scope using individual or composite column names that differed from the Go domain struct fields.
+Applied migration 013_add_scope_columns.sql adding scope_domain and scope_system to decisions, and updated Go store structs to maintain fallback sync between nested Scope structs and flat table fields.
+SQLSTATE 42P10 (ON CONFLICT constraint mismatch)
+PostgreSQL ON CONFLICT (id) failed because decisions used a compound primary key (tenant_id, id) or lacked an explicit single-column primary key constraint.
+Applied migration 014_fix_decisions_primary_key.sql setting PRIMARY KEY (tenant_id, id) and updated store upsert queries to ON CONFLICT (tenant_id, id) DO UPDATE.
+pgx.ErrNoRows on Initial Decision
+First decision for a new tenant failed because GetMerkleRoot encountered an empty result set and threw driver-level empty set errors.
+Updated GetMerkleRoot in internal/store/merkle_store.go to check for sql.ErrNoRows and strings.Contains(err.Error(), "no rows"), automatically triggering createGenesisMerkleRoot.
+Interface Compliance Compiler Error
+GetDecisionRevisions was accidentally omitted during a store refactor, violating the types.DecisionStore interface across cmd/garuda-api and cmd/garuda-mcp.
+Restored GetDecisionRevisions in internal/store/decision_store.go matching the types.DecisionStore interface signature.
+
+4. Current Position on the GAS Master Roadmap
+
+
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│                      GARUDA MASTER ROADMAP PROGRESS                       │
+├───────┬─────────────────────────────────────┬─────────────────────────────┤
+│ Layer │ Name & Purpose                      │ Status                      │
+├───────┼─────────────────────────────────────┼─────────────────────────────┤
+│ L0    │ Truth Foundation (Decisions/Merkle) │ ✅ 100% Operational          │
+│ L1    │ Directed Truth Graph (Nodes/Edges)  │ ✅ 85% Operational          │
+│ L2    │ Temporal Intelligence (Replay)      │ 🟡 50% (Merkle Chained)     │
+│ L3    │ Confidence Intelligence (Vectors)   │ 📅 Phase 2 Planned          │
+│ L4    │ Reasoning Engine (Trace/Constraint) │ 📅 Phase 2 Planned          │
+│ L5    │ Organizational Intelligence         │ 📅 Phase 3 Planned          │
+│ L6    │ Distributed Cognition (Workspaces)  │ 🟡 40% (MCP Tools Active)   │
+│ L7    │ Intent Governance & Policy          │ ✅ 80% (Quarantine Active)  │
+│ L8    │ Org Intelligence Runtime            │ 🟡 60% (API/MCP Gateway)    │
+└───────┴─────────────────────────────────────┴─────────────────────────────┘
+
+
+GAS Volume Compliance Audit
+Volume 000 (Philosophy): Fully compliant. Truth is append-only, models are interchangeable, and reasoning is preserved as first-class objects.
+Volume 001 (Canonical Object Model): Fully compliant. Decisions and evidence contain globally unique immutable IDs, state lifecycles, and cryptographic provenance.
+Volume 005 (Canonical Semantic Model): Fully compliant. Current state is derived from version history; history is never mutated.
+Volume 009 (Persistence & Temporal Semantics): In Progress (65%). Merkle root hash-chaining established; full bitemporal valid-time query range engine scheduled for next sprint.
+Volume 011 (External Contracts): Fully compliant. REST Gateway and MCP Protocol interfaces share a unified semantic contract model.
+5. Next Steps & Tactical Execution Plan
+GAS Volume 009 Completion (Bitemporal Queries): Implement EffectiveFrom and EffectiveUntil validity range queries in internal/store/decision_store.go to support time-travel replay over canonical Merkle trees.
+Background Merkle Snapshot Worker (GAS Vol 007 / Layer 8): Implement a background worker in cmd/garuda-worker that periodically anchors tenant Merkle roots to external immutable ledgers or object stores.
+Multi-Tenant Key Rotation (KMS Integration - GAS Vol 010): Support asymmetric signing (Ed25519/ECDSA) of Merkle roots via external AWS KMS / Vault HSM integrations.
+Visual Governance & Verification Dashboard (GAS Vol 006 Projections): Construct a non-authoritative projection frontend to visually traverse decision lineage graphs, inspect quarantined contradictions, and test live Merkle proofs.
+
+

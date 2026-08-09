@@ -10,4 +10,4 @@ CREATE TABLE IF NOT EXISTS decision_revisions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_decision_revisions_decision ON decision_revisions(decision_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_decision_revisions_decision_revision ON decision_revisions(decision_id, revision_number);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_decision_revisions_decision_revision ON decision_revisions(decision_id, revision_number); 
