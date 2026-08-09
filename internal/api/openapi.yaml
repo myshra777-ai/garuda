@@ -1,0 +1,1383 @@
+openapi: 3.0.3
+info:
+  title: Garuda Engine API Gateway
+  version: 1.0.0
+  description: |
+    Garuda is the deterministic governance, multi-agent state handoff,
+    and cryptographic audit layer for enterprise AI swarms.
+
+    All state changes are cryptographically verifiable via Merkle hashing.
+    Error responses include machine‑actionable remediation hints for self‑healing.
+  contact:
+    name: Garuda Team
+    url: https://github.com/myshra777-ai/garuda
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.garuda.dev/v1
+    description: Production
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+security:
+  - BearerAuth: []
+  - ActorHeader: []
+
+tags:
+  - name: System
+    description: Health, discovery, bootstrap, sandbox, and dashboard.
+  - name: Decisions
+    description: Propose, trace, and verify governance decisions.
+  - name: Agents
+    description: Multi-agent handoff, resume, and checkpointing.
+  - name: Audit
+    description: Cryptographic audit and Merkle proof verification.
+  - name: Budget
+    description: Token budget metering and consumption.
+  - name: Router
+    description: Pre-flight model classification and secret redaction.
+  - name: Telemetry
+    description: Server‑Sent Events (SSE) for real‑time state monitoring.
+  - name: Debug
+    description: Development-only endpoints (disabled in production).
+
+paths:
+  # ============================================================
+  # System
+  # ============================================================
+  /system/health:
+    get:
+      summary: Health check
+      tags: [System]
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  db_connected:
+                    type: boolean
+                    example: true
+                  merkle_root:
+                    type: string
+                    example: "3979217185da1d556e923273e417d4937b830488c45ce23f4eee9ea892fcc016"
+              example:
+                status: healthy
+                db_connected: true
+                merkle_root: "3979217185da1d556e923273e417d4937b830488c45ce23f4eee9ea892fcc016"
+
+  /system/discover:
+    get:
+      summary: Discover available endpoints
+      tags: [System]
+      security: []
+      description: Returns a machine-readable index of all endpoints grouped by domain.
+      responses:
+        '200':
+          description: Endpoint index
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    example: v1.0.0
+                  modules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: string
+                        endpoints:
+                          type: array
+                          items:
+                            type: string
+              example:
+                version: v1.0.0
+                modules:
+                  - name: System
+                    description: Health, discovery, bootstrap, sandbox, and dashboard.
+                    endpoints: ["GET /system/health", "GET /system/discover", "GET /system/bootstrap", "POST /sandbox", "GET /dashboard"]
+                  - name: Decisions
+                    description: Propose, trace, and verify governance decisions.
+                    endpoints: ["POST /decisions", "GET /decisions/{id}/lineage"]
+
+  /system/bootstrap:
+    get:
+      summary: Single-turn agent bootstrapper
+      tags: [System]
+      x-mcp-tool: true
+      security: [{ BearerAuth: [] }]
+      description: Returns endpoint paths, active Merkle block state, tenant budget, and MCP tool declarations in a single call.
+      responses:
+        '200':
+          description: Bootstrap context generated
+          headers:
+            X-Garuda-Merkle-Root:
+              $ref: '#/components/headers/X-Garuda-Merkle-Root'
+            X-Garuda-Block-Height:
+              $ref: '#/components/headers/X-Garuda-Block-Height'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapManifest'
+              example:
+                system: "Garuda Engine"
+                version: "v1.0.0"
+                tenant_id: "00000000-0000-0000-0000-000000000001"
+                active_merkle_root: "3979217185da1d556e923273e417d4937b830488c45ce23f4eee9ea892fcc016"
+                block_height: 64
+                endpoints:
+                  decisions: "POST /decisions"
+                  handoff: "POST /agents/handoff"
+                  resume: "POST /agents/resume"
+                  lineage: "GET /decisions/{id}/lineage"
+                  audit_verify: "GET /audit/verify"
+                  router: "POST /router/evaluate"
+                mcp_tools:
+                  - name: garuda_propose_decision
+                    description: Propose a governance decision
+                    parameters:
+                      title: string
+                      scope_domain: string
+                      scope_system: string
+                  - name: garuda_handoff_task
+                    description: Execute atomic task handoff
+                    parameters:
+                      task_id: uuid
+                      source_agent_id: uuid
+                      target_agent_id: uuid
+                      checkpoint_data: object
+                budget:
+                  token_balance: 1000000
+                  execution_limit: 10000
+                  status: active
+
+  /sandbox:
+    post:
+      summary: Interactive playground for human onboarding
+      tags: [System]
+      security: []
+      description: Send any JSON payload; returns a mock response with a link to the real endpoint. No authentication required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+            examples:
+              test:
+                value: {"test": "data"}
+      responses:
+        '200':
+          description: Mock response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Welcome to Garuda!"
+                  received:
+                    type: object
+                  real_endpoint:
+                    type: string
+                    example: "/decisions"
+                  tutorial:
+                    type: string
+                    example: "Try POST /decisions with {\"title\": \"Your decision\", \"scope_domain\": \"...\"}"
+                  documentation:
+                    type: string
+                    example: "https://docs.garuda.dev"
+              example:
+                message: "Welcome to Garuda!"
+                received: {"test": "data"}
+                real_endpoint: "/decisions"
+                tutorial: "Try POST /decisions with {\"title\": \"Your decision\", \"scope_domain\": \"...\"}"
+                documentation: "https://docs.garuda.dev"
+
+  /dashboard:
+    get:
+      summary: Mission Control UI
+      tags: [System]
+      security: []
+      description: Serves the embedded HTML dashboard.
+      responses:
+        '200':
+          description: HTML dashboard
+          content:
+            text/html:
+              example: "<!DOCTYPE html>..."
+
+  # ============================================================
+  # Decisions
+  # ============================================================
+  /decisions:
+    post:
+      summary: Propose a new governance decision
+      tags: [Decisions]
+      operationId: proposeDecision
+      x-mcp-tool: true
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionProposalRequest'
+            examples:
+              valid:
+                summary: Valid proposal
+                value:
+                  title: "Use PostgreSQL for financial records"
+                  scope_domain: "infrastructure"
+                  scope_system: "database"
+      responses:
+        '201':
+          description: Decision created and anchored to Merkle chain
+          headers:
+            X-Garuda-Merkle-Root:
+              $ref: '#/components/headers/X-Garuda-Merkle-Root'
+            X-Garuda-Block-Height:
+              $ref: '#/components/headers/X-Garuda-Block-Height'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+              examples:
+                success:
+                  summary: Successful canonical decision
+                  value:
+                    id: "47a3a136-4018-4200-88a2-244820f3167e"
+                    title: "Use PostgreSQL for financial records"
+                    status: "canonical"
+                    quarantined: false
+                quarantined:
+                  summary: Decision quarantined due to contradiction
+                  value:
+                    id: "47a3a136-4018-4200-88a2-244820f3167e"
+                    title: "Use MongoDB for financial records"
+                    status: "quarantined"
+                    quarantined: true
+                    contradiction_id: "abc123..."
+                    conflicting_decision_id: "def456..."
+        '409':
+          description: Contradiction detected – quarantined
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                code: 409
+                message: "Proposed decision conflicts with existing canonical decision D-042."
+                error_domain: "decision_governance"
+                details:
+                  existing_decision: "D-042"
+                remediation:
+                  action: "SUPERSEDE_EXISTING"
+                  suggested_patch:
+                    - op: "replace"
+                      path: "/parent_id"
+                      value: "D-042"
+                  alternative_endpoint: "GET /decisions/D-042/lineage"
+                timestamp: "2026-08-06T10:00:00Z"
+        '400':
+          description: Malformed request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                code: 400
+                message: "Missing required field 'title'"
+                timestamp: "2026-08-06T10:00:00Z"
+
+  /decisions/{id}/lineage:
+    get:
+      summary: Get full decision lineage DAG
+      tags: [Decisions]
+      x-mcp-tool: true
+      security: [{ BearerAuth: [] }]
+      description: Returns a recursive depth-guarded DAG with parent/child edges and handoff links.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "47a3a136-4018-4200-88a2-244820f3167e"
+      responses:
+        '200':
+          description: Lineage DAG
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LineageDAGResponse'
+              example:
+                task_id: "47a3a136-4018-4200-88a2-244820f3167e"
+                edges:
+                  - source_task_id: "47a3a136-4018-4200-88a2-244820f3167e"
+                    target_task_id: "def456..."
+                    edge_type: "depends_on"
+                    depth: 1
+                total: 1
+        '404':
+          description: Decision not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                code: 404
+                message: "Decision not found"
+                timestamp: "2026-08-06T10:00:00Z"
+
+  # ============================================================
+  # Decisions List (Pagination) – future-proof
+  # ============================================================
+  /decisions:
+    get:
+      summary: List decisions with pagination
+      tags: [Decisions]
+      x-mcp-tool: true
+      security: [{ BearerAuth: [] }]
+      description: Returns a paginated list of decisions for the tenant.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Max number of decisions to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Number of decisions to skip
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, review, approved, canonical, superseded, archived, quarantined]
+          description: Filter by status
+      responses:
+        '200':
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Decision'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+              example:
+                items:
+                  - id: "47a3a136-4018-4200-88a2-244820f3167e"
+                    title: "Use PostgreSQL"
+                    status: "canonical"
+                total: 1
+                limit: 20
+                offset: 0
+
+  # ============================================================
+  # Agents
+  # ============================================================
+  /agents/handoff:
+    post:
+      summary: Execute atomic inter-agent task handoff
+      tags: [Agents]
+      operationId: executeHandoff
+      x-mcp-tool: true
+      security: [{ BearerAuth: [] }]
+      description: Atomically pauses source agent, serializes CAS checkpoint, transfers task ownership, and logs a lineage edge.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HandoffRequest'
+            examples:
+              valid:
+                summary: Token exhaustion handoff
+                value:
+                  task_id: "00000000-0000-0000-0000-000000000001"
+                  source_agent_id: "b428b5d9-0000-0000-0000-000000000000"
+                  target_agent_id: "110f6c27-0000-0000-0000-000000000000"
+                  reason: "Token budget exhaustion – switching to Claude"
+                  checkpoint_data:
+                    active_context: "database_refactor_query_v2"
+                    progress: 42
+      responses:
+        '200':
+          description: Handoff completed atomically
+          headers:
+            X-Garuda-Merkle-Root:
+              $ref: '#/components/headers/X-Garuda-Merkle-Root'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/X-RateLimit-Limit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/X-RateLimit-Remaining'
+            X-RateLimit-Reset:
+              $ref: '#/components/headers/X-RateLimit-Reset'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoffResponse'
+              example:
+                handoff_id: "abc123..."
+                checkpoint_id: "def456..."
+                task_id: "00000000-0000-0000-0000-000000000001"
+                status: "completed"
+        '409':
+          description: Conflict or lock error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                code: 409
+                message: "handoff failed: source agent does not own task"
+                error_domain: "multi_agent_orchestration"
+                details:
+                  requested_source: "b428b5d9-..."
+                  actual_owner: "110f6c27-..."
+                remediation:
+                  action: "UPDATE_REQUEST_PAYLOAD"
+                  suggested_patch:
+                    - op: "replace"
+                      path: "/source_agent_id"
+                      value: "110f6c27-..."
+                  alternative_endpoint: "GET /decisions/00000000-.../lineage"
+                timestamp: "2026-08-06T10:00:00Z"
+
+  /agents/resume:
+    post:
+      summary: Resume an agent from a checkpoint
+      tags: [Agents]
+      x-mcp-tool: true
+      security: [{ BearerAuth: [] }]
+      description: Restores agent context from CAS and transitions status to 'working'.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResumeRequest'
+            examples:
+              valid:
+                value:
+                  agent_id: "110f6c27-..."
+                  checkpoint_id: "def456-..."
+      responses:
+        '200':
+          description: Agent resumed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumeResponse'
+              example:
+                agent_id: "110f6c27-..."
+                checkpoint_id: "def456-..."
+                status: "working"
+                state: {"active_context": "database_refactor_query_v2", "progress": 42}
+        '404':
+          description: Checkpoint not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                code: 404
+                message: "Checkpoint not found"
+                timestamp: "2026-08-06T10:00:00Z"
+
+  # ============================================================
+  # Audit
+  # ============================================================
+  /audit/verify:
+    get:
+      summary: Verify an audit event's Merkle inclusion proof
+      tags: [Audit]
+      x-mcp-tool: true
+      security: [{ BearerAuth: [] }]
+      description: Validates an event SHA-256 hash against the tenant's active Merkle root.
+      parameters:
+        - name: event_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "47a3a136-4018-4200-88a2-244820f3167e"
+      responses:
+        '200':
+          description: Verification proof calculated
+          headers:
+            X-Garuda-Merkle-Root:
+              $ref: '#/components/headers/X-Garuda-Merkle-Root'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditVerificationResponse'
+              example:
+                event_id: "47a3a136-..."
+                event_hash: "c6794103d1722bc5f692e280636ec4e0..."
+                root_hash: "3979217185da1d556e923273e417d493..."
+                block_height: 64
+                is_verified: true
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                code: 404
+                message: "Audit event not found"
+                timestamp: "2026-08-06T10:00:00Z"
+
+  /audit/export:
+    get:
+      summary: Export audit ledger for compliance
+      tags: [Audit]
+      security: [{ BearerAuth: [] }]
+      description: Streams structured audit events in JSON or CSV format.
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Start of the export window (default: 7 days ago)
+          example: "2026-07-30T00:00:00Z"
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [json, csv]
+          default: json
+      responses:
+        '200':
+          description: Export stream generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditExportResponse'
+              example:
+                tenant_id: "00000000-..."
+                count: 42
+                events:
+                  - id: "abc123..."
+                    event_type: "decision_proposed"
+                    event_id: "def456..."
+                    actor: "agent-123"
+                    created_at: "2026-08-06T10:00:00Z"
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
+  # ============================================================
+  # Budget
+  # ============================================================
+  /budget:
+    get:
+      summary: Get current tenant budget
+      tags: [Budget]
+      security: [{ BearerAuth: [] }]
+      description: Returns token balance, execution limits, and budget status.
+      responses:
+        '200':
+          description: Budget details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetResponse'
+              example:
+                tenant_id: "00000000-..."
+                token_balance: 950000
+                tokens_consumed: 50000
+                execution_limit: 10000
+                executions_consumed: 12
+                status: "active"
+                monthly_limit: 1000000
+                last_reset_at: "2026-08-01T00:00:00Z"
+
+  /budget/consume:
+    post:
+      summary: Consume tokens and log to ledger
+      tags: [Budget]
+      security: [{ BearerAuth: [] }]
+      description: Atomically deducts tokens and records consumption in the ledger.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetConsumptionRequest'
+            examples:
+              valid:
+                value:
+                  agent_id: "agent-123"
+                  tokens_used: 1500
+                  executions_used: 1
+                  operation: "propose_decision"
+      responses:
+        '200':
+          description: Consumption recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetConsumptionResponse'
+              example:
+                allowed: true
+                remaining_tokens: 948500
+                remaining_executions: 9987
+                status: "active"
+        '402':
+          description: Budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                code: 402
+                message: "Insufficient budget"
+                timestamp: "2026-08-06T10:00:00Z"
+
+  # ============================================================
+  # Router
+  # ============================================================
+  /router/evaluate:
+    post:
+      summary: Pre-flight model classification and secret redaction
+      tags: [Router]
+      x-mcp-tool: true
+      security: [{ BearerAuth: [] }]
+      description: Classifies task intent, redacts secrets, selects optimal model based on budget and domain.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteEvaluateRequest'
+            examples:
+              valid:
+                summary: Code governance request
+                value:
+                  payload: "Refactor database query with sk-abcdef12345678901234567890123456"
+                  token_estimate: 1500
+                  spend_ratio: 0.88
+      responses:
+        '200':
+          description: Routing decision with redacted payload
+          headers:
+            X-Garuda-Merkle-Root:
+              $ref: '#/components/headers/X-Garuda-Merkle-Root'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteEvaluateResponse'
+              example:
+                selected_model: "deepseek-v3"
+                domain: "code_governance"
+                redacted_payload: "Refactor database query with [REDACTED_API_KEY]"
+                redacted_count: 1
+                budget_shifted: true
+                timestamp: "2026-08-06T10:00:00Z"
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                code: 400
+                message: "Missing required field 'payload'"
+                timestamp: "2026-08-06T10:00:00Z"
+
+  # ============================================================
+  # Telemetry (SSE)
+  # ============================================================
+  /telemetry/stream:
+    get:
+      summary: Real-time event stream (Server-Sent Events)
+      tags: [Telemetry]
+      x-mcp-tool: true
+      security: [{ BearerAuth: [] }]
+      description: Opens an SSE connection for real‑time state updates – decisions, handoffs, contradictions, and budget events.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: JWT token for authentication (same as Bearer)
+      responses:
+        '200':
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: "event: decision_created\ndata: {\"id\":\"...\"}\n\n"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ============================================================
+  # Debug (Development Only)
+  # ============================================================
+  /debug/token:
+    get:
+      summary: Generate debug JWT (dev only)
+      tags: [Debug]
+      security: []
+      description: Generates a JWT with the given actor and tenant ID. Disabled in production.
+      parameters:
+        - name: actor
+          in: query
+          required: false
+          schema:
+            type: string
+          default: test-user
+          example: test-user
+        - name: tenant_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          default: "00000000-0000-0000-0000-000000000001"
+          example: "00000000-0000-0000-0000-000000000001"
+      responses:
+        '200':
+          description: JWT token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  tenant_id:
+                    type: string
+                  actor:
+                    type: string
+              example:
+                token: "eyJhbGciOiJFZERTQSIs..."
+                tenant_id: "00000000-0000-0000-0000-000000000001"
+                actor: "test-user"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ActorHeader:
+      type: apiKey
+      in: header
+      name: X-Garuda-Actor
+
+  headers:
+    X-Garuda-Merkle-Root:
+      schema:
+        type: string
+        example: "3979217185da1d556e923273e417d4937b830488c45ce23f4eee9ea892fcc016"
+      description: Active Merkle root hash.
+    X-Garuda-Block-Height:
+      schema:
+        type: integer
+        example: 64
+      description: Monotonically increasing Merkle snapshot height.
+    X-RateLimit-Limit:
+      schema:
+        type: integer
+        example: 100
+      description: Requests allowed per window.
+    X-RateLimit-Remaining:
+      schema:
+        type: integer
+        example: 95
+      description: Requests remaining in current window.
+    X-RateLimit-Reset:
+      schema:
+        type: integer
+        example: 1678900000
+      description: Unix timestamp when the rate limit resets.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Unique key for idempotent request handling.
+
+  schemas:
+    BootstrapManifest:
+      type: object
+      properties:
+        system:
+          type: string
+          example: "Garuda Engine"
+        version:
+          type: string
+          example: "v1.0.0"
+        tenant_id:
+          type: string
+          format: uuid
+        active_merkle_root:
+          type: string
+          example: "3979217185da1d556e923273e417d4937b830488c45ce23f4eee9ea892fcc016"
+        block_height:
+          type: integer
+          example: 64
+        endpoints:
+          type: object
+          additionalProperties:
+            type: string
+          required:
+            - decisions
+            - handoff
+            - resume
+            - lineage
+            - audit_verify
+            - router
+          properties:
+            decisions:
+              type: string
+              example: "POST /decisions"
+            handoff:
+              type: string
+              example: "POST /agents/handoff"
+            resume:
+              type: string
+              example: "POST /agents/resume"
+            lineage:
+              type: string
+              example: "GET /decisions/{id}/lineage"
+            audit_verify:
+              type: string
+              example: "GET /audit/verify"
+            router:
+              type: string
+              example: "POST /router/evaluate"
+        mcp_tools:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              parameters:
+                type: object
+        budget:
+          $ref: '#/components/schemas/BudgetResponse'
+
+    DecisionProposalRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          example: "Enforce TLS 1.3 for all APIs"
+        scope_domain:
+          type: string
+          example: "security"
+        scope_system:
+          type: string
+          example: "network"
+        valid_from:
+          type: string
+          format: date-time
+          description: When this decision becomes effective (default: now)
+          example: "2026-08-06T00:00:00Z"
+        valid_to:
+          type: string
+          format: date-time
+          description: When this decision expires (optional)
+          example: "2026-12-31T23:59:59Z"
+
+    Decision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "47a3a136-4018-4200-88a2-244820f3167e"
+        tenant_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: "Use PostgreSQL"
+        status:
+          type: string
+          enum:
+            - draft
+            - review
+            - approved
+            - canonical
+            - superseded
+            - archived
+            - quarantined
+          example: canonical
+        scope:
+          type: object
+          properties:
+            domain:
+              type: string
+              example: infrastructure
+            system:
+              type: string
+              example: database
+            team:
+              type: string
+            env:
+              type: string
+        owner:
+          type: string
+          example: "alice@company.com"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          example: 0.92
+        valid_from:
+          type: string
+          format: date-time
+        valid_to:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        approved_at:
+          type: string
+          format: date-time
+        merkle_hash:
+          type: string
+          example: "c6794103d1722bc5f692e280636ec4e0..."
+        parent_merkle_hash:
+          type: string
+
+    DecisionResponse:
+      allOf:
+        - $ref: '#/components/schemas/Decision'
+        - type: object
+          properties:
+            quarantined:
+              type: boolean
+              description: True if decision was quarantined due to contradiction
+              example: false
+            contradiction_id:
+              type: string
+              format: uuid
+              description: ID of the contradiction record
+            conflicting_decision_id:
+              type: string
+              format: uuid
+              description: ID of the decision that caused the conflict
+
+    HandoffRequest:
+      type: object
+      required:
+        - task_id
+        - source_agent_id
+        - target_agent_id
+        - checkpoint_data
+      properties:
+        task_id:
+          type: string
+          format: uuid
+          description: Task being transferred
+          example: "00000000-0000-0000-0000-000000000001"
+        source_agent_id:
+          type: string
+          format: uuid
+          description: Current owner
+          example: "b428b5d9-..."
+        target_agent_id:
+          type: string
+          format: uuid
+          description: New owner
+          example: "110f6c27-..."
+        reason:
+          type: string
+          example: "Token budget exhaustion – switching to Claude"
+        checkpoint_data:
+          type: object
+          description: Full agent context to checkpoint (will be CAS-deduplicated)
+          example: {"active_context": "database_refactor", "progress": 42}
+
+    HandoffResponse:
+      type: object
+      properties:
+        handoff_id:
+          type: string
+          format: uuid
+        checkpoint_id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - pending
+            - in_progress
+            - completed
+            - failed
+            - rolled_back
+          example: completed
+
+    ResumeRequest:
+      type: object
+      required:
+        - agent_id
+        - checkpoint_id
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+        checkpoint_id:
+          type: string
+          format: uuid
+
+    ResumeResponse:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+        checkpoint_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: "working"
+        state:
+          type: object
+          description: Restored agent context
+
+    LineageDAGResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        edges:
+          type: array
+          items:
+            type: object
+            properties:
+              source_task_id:
+                type: string
+                format: uuid
+              target_task_id:
+                type: string
+                format: uuid
+              edge_type:
+                type: string
+                enum:
+                  - handoff
+                  - depends_on
+                  - supersedes
+              handoff_id:
+                type: string
+                format: uuid
+              depth:
+                type: integer
+        total:
+          type: integer
+
+    RouteEvaluateRequest:
+      type: object
+      required:
+        - payload
+      properties:
+        payload:
+          type: string
+          description: Raw prompt or task payload
+          example: "Refactor database query"
+        token_estimate:
+          type: integer
+          description: Estimated token count
+          example: 1500
+        spend_ratio:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Current spend against budget
+          example: 0.88
+
+    RouteEvaluateResponse:
+      type: object
+      properties:
+        selected_model:
+          type: string
+          enum:
+            - claude-3.5-sonnet
+            - deepseek-v3
+            - gemini-1.5-pro
+            - local-llama
+            - gemini-flash
+          example: deepseek-v3
+        domain:
+          type: string
+          enum:
+            - code_governance
+            - reasoning
+            - large_context
+            - routine
+          example: code_governance
+        redacted_payload:
+          type: string
+          description: Payload with secrets masked
+          example: "Refactor database query with [REDACTED_API_KEY]"
+        redacted_count:
+          type: integer
+          example: 1
+        budget_shifted:
+          type: boolean
+          example: true
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-08-06T10:00:00Z"
+
+    BudgetResponse:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        token_balance:
+          type: integer
+          example: 950000
+        tokens_consumed:
+          type: integer
+          example: 50000
+        execution_limit:
+          type: integer
+          example: 10000
+        executions_consumed:
+          type: integer
+          example: 12
+        status:
+          type: string
+          enum:
+            - active
+            - throttled
+            - exhausted
+          example: active
+        monthly_limit:
+          type: integer
+          example: 1000000
+        last_reset_at:
+          type: string
+          format: date-time
+          example: "2026-08-01T00:00:00Z"
+
+    BudgetConsumptionRequest:
+      type: object
+      required:
+        - agent_id
+        - tokens_used
+        - operation
+      properties:
+        agent_id:
+          type: string
+          example: "agent-123"
+        tokens_used:
+          type: integer
+          minimum: 0
+          example: 1500
+        executions_used:
+          type: integer
+          default: 1
+          example: 1
+        operation:
+          type: string
+          description: Operation name (e.g., propose_decision, mcp_query)
+          example: "propose_decision"
+
+    BudgetConsumptionResponse:
+      type: object
+      properties:
+        allowed:
+          type: boolean
+          example: true
+        remaining_tokens:
+          type: integer
+          example: 948500
+        remaining_executions:
+          type: integer
+          example: 9987
+        status:
+          type: string
+          example: active
+
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          enum:
+            - decision_proposed
+            - handoff_completed
+            - budget_consumed
+            - model_routed
+          example: decision_proposed
+        event_id:
+          type: string
+          format: uuid
+        actor:
+          type: string
+          example: "agent-123"
+        payload:
+          type: object
+        event_hash:
+          type: string
+          description: SHA-256 hash of the event fields
+          example: "c6794103d1722bc5f692e280636ec4e0..."
+        created_at:
+          type: string
+          format: date-time
+
+    AuditVerificationResponse:
+      type: object
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        event_hash:
+          type: string
+        root_hash:
+          type: string
+        block_height:
+          type: integer
+        is_verified:
+          type: boolean
+
+    AuditExportResponse:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        count:
+          type: integer
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+
+    ProblemDetails:
+      type: object
+      required:
+        - code
+        - message
+        - timestamp
+      properties:
+        code:
+          type: integer
+          example: 409
+        message:
+          type: string
+          example: "handoff failed: source agent does not own task"
+        error_domain:
+          type: string
+          example: "multi_agent_orchestration"
+        details:
+          type: object
+          additionalProperties: true
+          example:
+            requested_source: "b428b5d9-..."
+            actual_owner: "110f6c27-..."
+        remediation:
+          type: object
+          properties:
+            action:
+              type: string
+              example: "UPDATE_REQUEST_PAYLOAD"
+            suggested_patch:
+              type: array
+              items:
+                type: object
+                properties:
+                  op:
+                    type: string
+                    enum:
+                      - replace
+                      - add
+                      - remove
+                    example: replace
+                  path:
+                    type: string
+                    example: "/source_agent_id"
+                  value:
+                    type: string
+                    example: "110f6c27-..."
+            alternative_endpoint:
+              type: string
+              example: "GET /decisions/00000000-.../lineage"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-08-06T10:00:00Z"

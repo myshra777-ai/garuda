@@ -1,0 +1,46 @@
+-- Enable pgcrypto for digest/sha256 calculation
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Audit event log table
+CREATE TABLE IF NOT EXISTS audit_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    event_type TEXT NOT NULL,           -- decision_proposed, handoff_completed, budget_consumed, model_routed
+    event_id UUID NOT NULL,             -- references source object ID
+    actor TEXT NOT NULL,                 -- agent_id or user_id
+    payload JSONB NOT NULL,             -- full event context payload
+    event_hash TEXT NOT NULL,           -- SHA-256 hash of event fields
+    merkle_proof JSONB DEFAULT '[]',    -- proof path sibling hashes
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_audit_tenant_time ON audit_events(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_audit_event_id ON audit_events(event_id);
+
+-- Auto-Hash Trigger Function
+CREATE OR REPLACE FUNCTION hash_audit_event()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.event_hash IS NULL OR NEW.event_hash = '' THEN
+        NEW.event_hash := encode(
+            digest(
+                NEW.tenant_id::text || 
+                NEW.event_type || 
+                NEW.event_id::text || 
+                NEW.actor || 
+                NEW.payload::text, 
+                'sha256'
+            ), 
+            'hex'
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_hash_audit_event ON audit_events;
+CREATE TRIGGER trigger_hash_audit_event
+BEFORE INSERT ON audit_events
+FOR EACH ROW EXECUTE FUNCTION hash_audit_event();

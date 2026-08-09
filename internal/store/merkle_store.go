@@ -167,26 +167,29 @@ func (s *PostgresStore) ListAllTenants(ctx context.Context) ([]uuid.UUID, error)
 	return ids, nil
 }
 
-// GetLatestMerkleSnapshot retrieves the most recent snapshot for a tenant matching Schema 016.
+// GetLatestMerkleSnapshot retrieves the most recent snapshot for a tenant.
 func (s *PostgresStore) GetLatestMerkleSnapshot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleSnapshot, error) {
 	query := `
-		SELECT id, tenant_id, root_hash, block_height,
-		       parent_snapshot_id, snapshot_hash, epoch_timestamp, created_at
-		FROM merkle_snapshots
-		WHERE tenant_id = $1
-		ORDER BY epoch_timestamp DESC
-		LIMIT 1;
-	`
+        SELECT id, tenant_id, root_hash, block_height,
+               parent_snapshot_id, snapshot_hash, epoch_timestamp, created_at
+        FROM merkle_snapshots
+        WHERE tenant_id = $1
+        ORDER BY epoch_timestamp DESC
+        LIMIT 1;
+    `
 	var snap types.MerkleSnapshot
 	var parentID *uuid.UUID
+	var epochSec int64
+
 	err := s.pool.QueryRow(ctx, query, tenantID).Scan(
 		&snap.ID, &snap.TenantID, &snap.RootHash, &snap.BlockHeight,
-		&parentID, &snap.SnapshotHash, &snap.EpochTimestamp, &snap.CreatedAt,
+		&parentID, &snap.SnapshotHash, &epochSec, &snap.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	snap.ParentSnapshotID = parentID
+	snap.EpochTimestamp = time.Unix(epochSec, 0).UTC()
 	return &snap, nil
 }
 
@@ -206,10 +209,12 @@ func (s *PostgresStore) SaveMerkleSnapshot(ctx context.Context, snapshot *types.
 		ON CONFLICT (tenant_id, snapshot_hash) DO NOTHING;
 	`
 
-	// Pass EpochTimestamp directly as time.Time (TIMESTAMPTZ column)
-	epochTime := snapshot.EpochTimestamp
-	if epochTime.IsZero() {
-		epochTime = time.Now().UTC()
+	// Ensure epoch_timestamp is strictly int64 (Unix timestamp in seconds)
+	var epochSec int64
+	if !snapshot.EpochTimestamp.IsZero() {
+		epochSec = snapshot.EpochTimestamp.Unix()
+	} else {
+		epochSec = time.Now().UTC().Unix()
 	}
 
 	createdAt := snapshot.CreatedAt
@@ -226,7 +231,7 @@ func (s *PostgresStore) SaveMerkleSnapshot(ctx context.Context, snapshot *types.
 		snapshot.BlockHeight,
 		snapshot.ParentSnapshotID,
 		snapshot.SnapshotHash,
-		epochTime,
+		epochSec, // Enables BIGINT SQL compatibility
 		createdAt,
 	)
 
@@ -237,19 +242,19 @@ func (s *PostgresStore) SaveMerkleSnapshot(ctx context.Context, snapshot *types.
 	return nil
 }
 
-// ListMerkleSnapshots returns the snapshot history for a tenant matching Schema 016.
+// ListMerkleSnapshots returns the snapshot history for a tenant up to the specified limit.
 func (s *PostgresStore) ListMerkleSnapshots(ctx context.Context, tenantID uuid.UUID, limit int) ([]types.MerkleSnapshot, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
 	query := `
-		SELECT id, tenant_id, root_hash, block_height,
-		       parent_snapshot_id, snapshot_hash, epoch_timestamp, created_at
-		FROM merkle_snapshots
-		WHERE tenant_id = $1
-		ORDER BY epoch_timestamp DESC
-		LIMIT $2;
-	`
+        SELECT id, tenant_id, root_hash, block_height,
+               parent_snapshot_id, snapshot_hash, epoch_timestamp, created_at
+        FROM merkle_snapshots
+        WHERE tenant_id = $1
+        ORDER BY epoch_timestamp DESC
+        LIMIT $2;
+    `
 	rows, err := s.pool.Query(ctx, query, tenantID, limit)
 	if err != nil {
 		return nil, err
@@ -260,14 +265,17 @@ func (s *PostgresStore) ListMerkleSnapshots(ctx context.Context, tenantID uuid.U
 	for rows.Next() {
 		var snap types.MerkleSnapshot
 		var parentID *uuid.UUID
+		var epochSec int64
+
 		err := rows.Scan(
 			&snap.ID, &snap.TenantID, &snap.RootHash, &snap.BlockHeight,
-			&parentID, &snap.SnapshotHash, &snap.EpochTimestamp, &snap.CreatedAt,
+			&parentID, &snap.SnapshotHash, &epochSec, &snap.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan merkle snapshot: %w", err)
 		}
 		snap.ParentSnapshotID = parentID
+		snap.EpochTimestamp = time.Unix(epochSec, 0).UTC()
 		results = append(results, snap)
 	}
 	return results, nil

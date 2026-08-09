@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: garuda-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: garuda-api
+  namespace: garuda-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: garuda-api
+  template:
+    metadata:
+      labels:
+        app: garuda-api
+    spec:
+      containers:
+        - name: garuda-api
+          image: garuda/garuda-api:v1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: garuda-secrets
+                  key: DATABASE_URL
+          readinessProbe:
+            httpGet:
+              path: /api/v1/system/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/v1/system/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: garuda-api-service
+  namespace: garuda-system
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: garuda-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: garuda-worker
+  namespace: garuda-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: garuda-worker
+  template:
+    metadata:
+      labels:
+        app: garuda-worker
+    spec:
+      containers:
+        - name: garuda-worker
+          image: garuda/garuda-worker:v1.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: garuda-secrets
+                  key: DATABASE_URL
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: garuda-secrets
+  namespace: garuda-system
+type: Opaque
+data:
+  DATABASE_URL: <base64-encoded-db-url>

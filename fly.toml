@@ -1,0 +1,34 @@
+# fly.toml
+app = "garuda-api"
+primary_region = "fra"
+
+[build]
+  dockerfile = "build/Dockerfile.api"
+
+[env]
+  GARUDA_ENV = "production"
+  JWT_SECRET = "usGQ3Xk/c7VbfP2v6ZARzhkkDbqNzCgmzA37t2eysBs="
+  REDIS_ADDR = "redis:6379"
+
+[services]
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+    force_https = true
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [services.http]
+    tls_termination = true
+
+  [[services.tcp_checks]]
+    interval = 15000
+    timeout = 2000
+    grace_period = 30s

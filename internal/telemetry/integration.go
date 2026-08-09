@@ -5,15 +5,23 @@ import (
 	"time"
 )
 
-// Global unexported pointer instance tracking the telemetry collection runtime.
 var globalCollector *Collector
 
-// InitTelemetry initializes the global telemetry collector instance.
-func InitTelemetry(cfg *Config) {
-	globalCollector = NewCollector(cfg)
+func InitTelemetry(cfg *Config) error {
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	if !cfg.Enabled || !IsConsentGiven() {
+		return nil
+	}
+	c, err := NewCollector(cfg)
+	if err != nil {
+		return err
+	}
+	globalCollector = c
+	return nil
 }
 
-// ShutdownTelemetry drains remaining data buffers and gracefully shuts down the telemetry loop.
 func ShutdownTelemetry(ctx context.Context) error {
 	if globalCollector == nil {
 		return nil
@@ -22,34 +30,35 @@ func ShutdownTelemetry(ctx context.Context) error {
 }
 
 // ============================================================
-// Handler Wrappers
+// Recording Helpers (to be called from handlers)
 // ============================================================
 
-// RecordDecisionProposed tracks an incoming proposed architectural decision path.
-func RecordDecisionProposed(reused bool) {
+func RecordDecisionProposed(modelName, modelProvider, status string, scopeDomain, scopeSystem string, confidence float64, tokensSaved int64) {
 	if globalCollector == nil {
 		return
 	}
-	globalCollector.RecordDecision("proposed", reused)
+	evt := TelemetryEvent{
+		ModelName:          modelName,
+		ModelProvider:      modelProvider,
+		DecisionStatus:     status,
+		DecisionScope:      &Scope{Domain: scopeDomain, System: scopeSystem},
+		DecisionConfidence: confidence,
+		TokensSaved:        tokensSaved,
+	}
+	globalCollector.Emit(evt)
 }
 
-// RecordDecisionRejected records a structural decision evaluation failure.
-func RecordDecisionRejected() {
+func RecordContradictionDetectedDefault() {
 	if globalCollector == nil {
 		return
 	}
-	globalCollector.RecordDecision("rejected", false)
-}
-
-// RecordDecisionStale flags when a historic governance decision falls out of compliance context.
-func RecordDecisionStale() {
-	if globalCollector == nil {
-		return
+	evt := TelemetryEvent{
+		TotalContradictions: 1,
 	}
-	globalCollector.RecordDecision("stale", false)
+	globalCollector.Emit(evt)
 }
 
-// RecordContradictionDetected signals when conflicting operational rules intersect.
+// Backwards-compatible no-arg wrapper used by older call sites.
 func RecordContradictionDetected() {
 	if globalCollector == nil {
 		return
@@ -57,55 +66,20 @@ func RecordContradictionDetected() {
 	globalCollector.RecordContradiction("detected")
 }
 
-// RecordContradictionResolved logs the successful mitigation of an operational contradiction.
-func RecordContradictionResolved() {
+func RecordDecisionRejected() {
 	if globalCollector == nil {
 		return
 	}
-	globalCollector.RecordContradiction("resolved")
+	globalCollector.RecordDecision("rejected")
 }
 
-// RecordContradictionFalsePositive logs when an automated warning check evaluates as clean.
-func RecordContradictionFalsePositive() {
+func RecordAPILatency(duration time.Duration) {
 	if globalCollector == nil {
 		return
 	}
-	globalCollector.RecordContradiction("false_positive")
+	globalCollector.RecordLatency("api", duration)
 }
 
-// RecordColdStartLatency records execution latency spikes on fresh container spin-ups.
-func RecordColdStartLatency(d time.Duration) {
-	if globalCollector == nil {
-		return
-	}
-	globalCollector.RecordLatency("cold_start", d)
-}
-
-// RecordWarmStartLatency records execution latency windows for cached engine instances.
-func RecordWarmStartLatency(d time.Duration) {
-	if globalCollector == nil {
-		return
-	}
-	globalCollector.RecordLatency("warm_start", d)
-}
-
-// RecordAPILatency measures standard end-to-end network handler response timelines.
-func RecordAPILatency(d time.Duration) {
-	if globalCollector == nil {
-		return
-	}
-	globalCollector.RecordLatency("api", d)
-}
-
-// RecordCostSaving evaluates token budget efficiencies against targeted model types.
-func RecordCostSaving(tokens int64, model string) {
-	if globalCollector == nil {
-		return
-	}
-	globalCollector.RecordCostSaving(tokens, model)
-}
-
-// RecordFeatureUsage increments tracking counters on internal system functions.
 func RecordFeatureUsage(feature string) {
 	if globalCollector == nil {
 		return
@@ -113,10 +87,165 @@ func RecordFeatureUsage(feature string) {
 	globalCollector.RecordFeatureUsage(feature)
 }
 
-// RecordError pipes internal exception tracking out to telemetry ingestion loops.
 func RecordError(errType, errMsg string) {
 	if globalCollector == nil {
 		return
 	}
 	globalCollector.RecordError(errType, errMsg)
+}
+
+func RecordHandoff(modelName, modelProvider string, latencyMs float64, success bool) {
+	if globalCollector == nil {
+		return
+	}
+	evt := TelemetryEvent{
+		ModelName:        modelName,
+		ModelProvider:    modelProvider,
+		HandoffLatencyMs: latencyMs,
+		TotalHandoffs:    1,
+		HandoffSuccessRate: func() float64 {
+			if success {
+				return 1.0
+			} else {
+				return 0.0
+			}
+		}(),
+	}
+	globalCollector.Emit(evt)
+}
+
+func RecordWarmStart(modelName, modelProvider string, latencyMs float64, tokensSaved int64) {
+	if globalCollector == nil {
+		return
+	}
+	evt := TelemetryEvent{
+		ModelName:          modelName,
+		ModelProvider:      modelProvider,
+		WarmStartLatencyMs: latencyMs,
+		TokensSaved:        tokensSaved,
+	}
+	globalCollector.Emit(evt)
+}
+
+func RecordColdStart(modelName, modelProvider string, latencyMs float64) {
+	if globalCollector == nil {
+		return
+	}
+	evt := TelemetryEvent{
+		ModelName:          modelName,
+		ModelProvider:      modelProvider,
+		ColdStartLatencyMs: latencyMs,
+	}
+	globalCollector.Emit(evt)
+}
+
+func RecordVerification(modelName, modelProvider string, latencyMs float64) {
+	if globalCollector == nil {
+		return
+	}
+	evt := TelemetryEvent{
+		ModelName:             modelName,
+		ModelProvider:         modelProvider,
+		VerificationLatencyMs: latencyMs,
+		TotalVerifications:    1,
+	}
+	globalCollector.Emit(evt)
+}
+
+// RecordDecisionProposedWithModel captures a decision proposal with full telemetry.
+func RecordDecisionProposedWithModel(
+	modelName, modelProvider string,
+	status string,
+	scopeDomain, scopeSystem string,
+	confidence float64,
+	tokensSaved int64,
+	contradictionsCaught int64,
+	hallucinationsPrevented int64,
+) {
+	if globalCollector == nil {
+		return
+	}
+	evt := TelemetryEvent{
+		ModelName:               modelName,
+		ModelProvider:           modelProvider,
+		DecisionStatus:          status,
+		DecisionScope:           &Scope{Domain: scopeDomain, System: scopeSystem},
+		DecisionConfidence:      confidence,
+		TokensSaved:             tokensSaved,
+		TotalContradictions:     contradictionsCaught,
+		HallucinationsPrevented: hallucinationsPrevented,
+	}
+	globalCollector.Emit(evt)
+}
+
+// RecordHandoffWithTelemetry captures handoff metrics.
+func RecordHandoffWithTelemetry(
+	modelName, modelProvider string,
+	latencyMs float64,
+	success bool,
+) {
+	if globalCollector == nil {
+		return
+	}
+	evt := TelemetryEvent{
+		ModelName:        modelName,
+		ModelProvider:    modelProvider,
+		HandoffLatencyMs: latencyMs,
+		TotalHandoffs:    1,
+		HandoffSuccessRate: func() float64 {
+			if success {
+				return 1.0
+			}
+			return 0.0
+		}(),
+	}
+	globalCollector.Emit(evt)
+}
+
+// Alias for existing call sites
+func RecordHandoffWithModel(modelName, modelProvider string, latencyMs float64, success bool) {
+	RecordHandoffWithTelemetry(modelName, modelProvider, latencyMs, success)
+}
+
+// RecordWarmStartWithModel captures warm‑start metrics.
+func RecordWarmStartWithModel(
+	modelName, modelProvider string,
+	latencyMs float64,
+	tokensSaved int64,
+) {
+	if globalCollector == nil {
+		return
+	}
+	evt := TelemetryEvent{
+		ModelName:          modelName,
+		ModelProvider:      modelProvider,
+		WarmStartLatencyMs: latencyMs,
+		TokensSaved:        tokensSaved,
+	}
+	globalCollector.Emit(evt)
+}
+
+// RecordVerificationWithModel captures Merkle verification metrics.
+func RecordVerificationWithModel(modelName string, latencyMs float64) {
+	if globalCollector == nil {
+		return
+	}
+	evt := TelemetryEvent{
+		ModelName:             modelName,
+		ModelProvider:         "",
+		VerificationLatencyMs: latencyMs,
+		TotalVerifications:    1,
+	}
+	globalCollector.Emit(evt)
+}
+
+// RecordBudgetExhausted telemetry.
+func RecordBudgetExhausted() {
+	if globalCollector == nil {
+		return
+	}
+	evt := TelemetryEvent{
+		BudgetExhausted: true,
+	}
+	globalCollector.Emit(evt)
 }

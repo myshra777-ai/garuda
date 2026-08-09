@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/types"
@@ -54,12 +55,104 @@ func (s *stubDecisionStore) ListByScope(ctx context.Context, tenantID uuid.UUID,
 	return nil, nil
 }
 
+func (s *stubDecisionStore) SaveCheckpoint(ctx context.Context, c *types.Checkpoint) error {
+	return nil
+}
+
+func (s *stubDecisionStore) GetCheckpoint(ctx context.Context, tenantID, id uuid.UUID) (*types.Checkpoint, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) ListCheckpointsByAgent(ctx context.Context, tenantID uuid.UUID, agentID string, limit int) ([]*types.Checkpoint, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (*types.TenantBudget, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) PreflightCheckAndReserve(ctx context.Context, tenantID uuid.UUID, estimatedTokens int) error {
+	return nil
+}
+
+func (s *stubDecisionStore) ConsumeBudgetDeduct(ctx context.Context, tenantID uuid.UUID, req types.BudgetConsumptionRequest) (*types.BudgetConsumptionResponse, error) {
+	return &types.BudgetConsumptionResponse{Allowed: true}, nil
+}
+
+func (s *stubDecisionStore) QuarantineDecision(ctx context.Context, tenantID uuid.UUID, proposedID, conflictingID uuid.UUID, domain, system, reason string) (*types.Contradiction, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) ListUnresolvedContradictions(ctx context.Context, tenantID uuid.UUID) ([]types.Contradiction, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) ResolveContradiction(ctx context.Context, id uuid.UUID, strategy string) error {
+	return nil
+}
+
+func (s *stubDecisionStore) GetMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleRoot, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) AppendMerkleChain(ctx context.Context, tenantID uuid.UUID, decisionHash string) (*types.MerkleRoot, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) AddEvidenceBlock(ctx context.Context, tenantID, decisionID uuid.UUID, payload any) (*types.EvidenceBlock, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) ListAllTenants(ctx context.Context) ([]uuid.UUID, error) { return nil, nil }
+
+func (s *stubDecisionStore) GetLatestMerkleSnapshot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleSnapshot, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) SaveMerkleSnapshot(ctx context.Context, snap *types.MerkleSnapshot) error {
+	return nil
+}
+
+func (s *stubDecisionStore) ListMerkleSnapshots(ctx context.Context, tenantID uuid.UUID, limit int) ([]types.MerkleSnapshot, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) GetDecisionsActiveAt(ctx context.Context, tenantID uuid.UUID, at time.Time, scope types.Scope, statuses []types.DecisionStatus) ([]*types.Decision, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) GetDecisionHistory(ctx context.Context, tenantID, decisionID uuid.UUID) ([]*types.Decision, error) {
+	return nil, nil
+}
+
 func (s *stubDecisionStore) ListContradictions(ctx context.Context, tenantID uuid.UUID, resolved bool) ([]types.Contradiction, error) {
 	return nil, nil
 }
 
 func (s *stubDecisionStore) GetContradiction(ctx context.Context, tenantID, id uuid.UUID) (*types.Contradiction, error) {
 	return nil, nil
+}
+func (s *stubDecisionStore) ListAuditEvents(ctx context.Context, tenantID uuid.UUID, since time.Time) ([]types.AuditEvent, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) LogAuditEvent(ctx context.Context, tenantID uuid.UUID, eventType string, eventID uuid.UUID, actor string, payload interface{}) (*types.AuditEvent, error) {
+	return &types.AuditEvent{
+		ID:        uuid.New(),
+		TenantID:  tenantID,
+		EventType: eventType,
+		EventID:   eventID,
+		Actor:     actor,
+		Payload:   payload,
+		CreatedAt: time.Now().UTC(),
+	}, nil
+}
+
+func (s *stubDecisionStore) VerifyAuditEvent(ctx context.Context, tenantID, eventID uuid.UUID) (*types.AuditVerification, error) {
+	return &types.AuditVerification{
+		EventID:    eventID,
+		IsVerified: true,
+	}, nil
 }
 
 func TestGetDecisionLineageIncludesParentAndChildren(t *testing.T) {

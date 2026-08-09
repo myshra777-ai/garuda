@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -11,20 +12,28 @@ import (
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
-// CheckpointRequest defines the payload for saving a checkpoint.
+// CheckpointRequest defines the payload for saving a checkpoint across CLI and API calls.
 type CheckpointRequest struct {
-	AgentID        string          `json:"agent_id"`
-	TaskID         *uuid.UUID      `json:"task_id,omitempty"`
-	CheckpointData json.RawMessage `json:"checkpoint_data"`
-	TTLSeconds     int             `json:"ttl_seconds,omitempty"`
+	AgentID        string                 `json:"agent_id"`
+	CheckpointName string                 `json:"checkpoint_name,omitempty"`
+	Reason         string                 `json:"reason,omitempty"`
+	TaskID         *uuid.UUID             `json:"task_id,omitempty"`
+	CheckpointData json.RawMessage        `json:"checkpoint_data,omitempty"`
+	Data           map[string]interface{} `json:"data,omitempty"`
+	TTLSeconds     int                    `json:"ttl_seconds,omitempty"`
 }
 
-// HandleAgentCheckpoint saves an agent's runtime state.
+// HandleAgentCheckpoint saves or updates an agent's runtime state.
 func (s *Server) HandleAgentCheckpoint(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.RespondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
 	start := time.Now()
 	telemetry.RecordFeatureUsage("agent_checkpoint")
 
-	tenantID, err := resolveTenantID(r, uuid.Nil)
+	tenantID, err := resolveTenantID(r, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
 	if err != nil {
 		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required")
 		return
@@ -42,13 +51,54 @@ func (s *Server) HandleAgentCheckpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	chkName := req.CheckpointName
+	if chkName == "" {
+		chkName = "manual_checkpoint"
+	}
+
+	// 1. Construct guaranteed fallback payload if CheckpointData is empty
+	var finalData []byte
+	if len(req.CheckpointData) > 0 && bytes.TrimSpace(req.CheckpointData) != nil && string(req.CheckpointData) != "null" {
+		finalData = req.CheckpointData
+	} else if req.Data != nil {
+		req.Data["checkpoint_name"] = chkName
+		if req.Reason != "" {
+			req.Data["reason"] = req.Reason
+		}
+		marshaled, err := json.Marshal(req.Data)
+		if err == nil {
+			finalData = marshaled
+		}
+	}
+
+	// Fallback to minimal JSON map if still empty
+	if len(finalData) == 0 {
+		reason := req.Reason
+		if reason == "" {
+			reason = "manual_cli_trigger"
+		}
+
+		fallbackMap := map[string]interface{}{
+			"agent_id":        req.AgentID,
+			"checkpoint_name": chkName,
+			"reason":          reason,
+			"timestamp":       time.Now().UTC().Format(time.RFC3339),
+		}
+		finalData, _ = json.Marshal(fallbackMap)
+	}
+
 	now := time.Now().UTC()
+
+	// Derives deterministic UUID for named checkpoints to trigger ON CONFLICT (id) updates
+	checkpointID := uuid.NewSHA1(tenantID, []byte(chkName))
+
 	checkpoint := &types.Checkpoint{
-		ID:             uuid.New(),
+		ID:             checkpointID,
 		TenantID:       tenantID,
 		AgentID:        req.AgentID,
+		CheckpointName: chkName,
 		TaskID:         req.TaskID,
-		CheckpointData: req.CheckpointData,
+		CheckpointData: finalData,
 		Status:         "active",
 		CreatedAt:      now,
 		UpdatedAt:      now,
@@ -57,27 +107,44 @@ func (s *Server) HandleAgentCheckpoint(w http.ResponseWriter, r *http.Request) {
 	if req.TTLSeconds > 0 {
 		expiry := now.Add(time.Duration(req.TTLSeconds) * time.Second)
 		checkpoint.ExpiresAt = &expiry
+	} else {
+		expiry := now.Add(30 * 24 * time.Hour) // 30-day default retention
+		checkpoint.ExpiresAt = &expiry
 	}
 
+	// 2. Persist to storage and handle ON CONFLICT / unique constraint errors cleanly
 	if err := s.store.SaveCheckpoint(r.Context(), checkpoint); err != nil {
 		telemetry.RecordError("db_save_failed", err.Error())
-		s.RespondWithError(w, http.StatusInternalServerError, "failed to save checkpoint")
+		errStr := strings.ToLower(err.Error())
+		if strings.Contains(errStr, "duplicate key") || strings.Contains(errStr, "unique constraint") || strings.Contains(errStr, "on conflict") {
+			s.RespondWithError(w, http.StatusConflict, "checkpoint conflict: record already exists")
+			return
+		}
+		s.RespondWithError(w, http.StatusInternalServerError, "failed to save checkpoint: "+err.Error())
 		return
 	}
 
 	telemetry.RecordAPILatency(time.Since(start))
 
+	// Fetch current Merkle root for response attestation if available
+	merkleRoot := "GENESIS"
+	if latestSnap, err := s.store.GetLatestMerkleSnapshot(r.Context(), tenantID); err == nil && latestSnap != nil {
+		merkleRoot = latestSnap.SnapshotHash
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":         checkpoint.ID.String(),
-		"status":     checkpoint.Status,
-		"agent_id":   checkpoint.AgentID,
-		"created_at": checkpoint.CreatedAt,
+		"id":               checkpoint.ID.String(),
+		"status":           checkpoint.Status,
+		"agent_id":         checkpoint.AgentID,
+		"checkpoint_name":  chkName,
+		"merkle_root_hash": merkleRoot,
+		"created_at":       checkpoint.CreatedAt.Format(time.RFC3339),
 	})
 }
 
-// HandleGetAgentCheckpoint retrieves a saved checkpoint.
+// HandleGetAgentCheckpoint retrieves a saved checkpoint by ID.
 func (s *Server) HandleGetAgentCheckpoint(w http.ResponseWriter, r *http.Request) {
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(pathParts) < 1 {
@@ -92,7 +159,7 @@ func (s *Server) HandleGetAgentCheckpoint(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	tenantID, err := resolveTenantID(r, uuid.Nil)
+	tenantID, err := resolveTenantID(r, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
 	if err != nil {
 		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required")
 		return
@@ -109,12 +176,12 @@ func (s *Server) HandleGetAgentCheckpoint(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(checkpoint)
 }
 
-// HandleAgentResume loads a checkpoint and returns it for resumption.
+// HandleAgentResume loads a checkpoint and returns it for task resumption.
 func (s *Server) HandleAgentResume(w http.ResponseWriter, r *http.Request) {
 	s.HandleGetAgentCheckpoint(w, r)
 }
 
-// HandleAgentHandoff transfers a task from one agent to another.
+// HandleAgentHandoff transfers a task checkpoint from one agent context to another.
 func (s *Server) HandleAgentHandoff(w http.ResponseWriter, r *http.Request) {
 	type HandoffRequest struct {
 		CheckpointID uuid.UUID `json:"checkpoint_id"`
@@ -122,7 +189,7 @@ func (s *Server) HandleAgentHandoff(w http.ResponseWriter, r *http.Request) {
 		ToAgentID    string    `json:"to_agent_id"`
 	}
 
-	tenantID, err := resolveTenantID(r, uuid.Nil)
+	tenantID, err := resolveTenantID(r, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
 	if err != nil {
 		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required")
 		return
@@ -150,6 +217,7 @@ func (s *Server) HandleAgentHandoff(w http.ResponseWriter, r *http.Request) {
 		ID:             uuid.New(),
 		TenantID:       tenantID,
 		AgentID:        req.ToAgentID,
+		CheckpointName: checkpoint.CheckpointName + "-handoff",
 		TaskID:         checkpoint.TaskID,
 		CheckpointData: checkpoint.CheckpointData,
 		Status:         "active",
@@ -158,7 +226,7 @@ func (s *Server) HandleAgentHandoff(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.store.SaveCheckpoint(r.Context(), newCheckpoint); err != nil {
-		s.RespondWithError(w, http.StatusInternalServerError, "failed to handoff checkpoint")
+		s.RespondWithError(w, http.StatusInternalServerError, "failed to handoff checkpoint: "+err.Error())
 		return
 	}
 

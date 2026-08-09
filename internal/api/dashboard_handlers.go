@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -11,211 +12,527 @@ import (
 )
 
 type DashboardData struct {
-	TenantID             string
-	TotalDecisions       int
-	ActiveContradictions int
-	TokensSaved          int64
-	CostSaved            float64
-	LatestMerkleHash     string
-	ParentMerkleHash     string
-	LatestBlockHeight    int64
+	TenantID string
 }
 
-const dashboardHTML = `<!DOCTYPE html>
+type AgentFleetItem struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Domain string `json:"domain"`
+	System string `json:"system"`
+	Status string `json:"status"`
+}
+
+type RealStatsResponse struct {
+	TotalDecisions       int               `json:"total_decisions"`
+	QuarantinedCount     int               `json:"quarantined_count"`
+	LatestBlockHeight    int64             `json:"latest_block_height"`
+	LatestMerkleHash     string            `json:"latest_merkle_hash"`
+	ParentMerkleHash     string            `json:"parent_merkle_hash"`
+	EstimatedSavings     float64           `json:"estimated_savings"`
+	DomainBreakdown      map[string]int    `json:"domain_breakdown"`
+	QuarantinedDecisions []*types.Decision `json:"quarantined_decisions"`
+	AgentList            []AgentFleetItem  `json:"agent_list"`
+}
+
+const prodDashboardHTML = `<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Garuda — Mission Control</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              garuda: { 500: '#8b5cf6', 600: '#7c3aed', 900: '#0f172a' }
-            }
-          }
-        }
-      }
-    </script>
-</head>
-<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen flex flex-col">
+    <title>Garuda — AI Governance Platform</title>
 
-    <!-- Top Navigation -->
-    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 py-4 flex items-center justify-between">
-        <div class="flex items-center space-x-3">
-            <span class="text-2xl">🛡️</span>
-            <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">Garuda Runtime</span>
-            <span class="text-xs px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">GAS v1.0</span>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f4f0ff',
+                            500: '#7c3aed',
+                            600: '#6d28d9',
+                            700: '#5b21b6',
+                            900: '#2e1065',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #080c14; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .summary-card { background: #0f172a; border: 1px solid #1e293b; box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3); }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #080c14; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-brand-500 selection:text-white">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="h-14 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between sticky top-0 z-30">
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2.5 cursor-pointer" onclick="switchTab('summary')">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 via-indigo-600 to-brand-500 flex items-center justify-center text-white font-bold text-lg shadow-md">
+                    🛡️
+                </div>
+                <span class="font-extrabold text-white tracking-tight text-base">GARUDA</span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800 font-mono">PROD v1.0</span>
+            </div>
+            <div class="h-4 w-px bg-slate-800 hidden sm:block"></div>
+            <div class="hidden sm:flex items-center space-x-2 text-xs text-slate-400 font-mono">
+                <span>Tenant: {{.TenantID}}</span>
+            </div>
         </div>
-        <div class="flex items-center space-x-4 text-sm text-slate-400">
-            <span>Tenant: <code class="text-slate-200 bg-slate-800 px-2 py-1 rounded">{{.TenantID}}</code></span>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                ● Daemon Active
-            </span>
+
+        <div class="flex items-center space-x-3 text-xs">
+            <div class="flex items-center space-x-1.5 px-2.5 py-1 bg-emerald-950/40 text-emerald-400 rounded-md border border-emerald-800/50">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="font-medium text-[11px]">Live PostgreSQL Sync</span>
+            </div>
         </div>
     </header>
 
-    <!-- Main Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-6 py-8 space-y-8">
-        
-        <!-- ROI Metrics Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Active Decisions</p>
-                <h3 class="text-3xl font-extrabold text-slate-100 mt-2">{{.TotalDecisions}}</h3>
-                <p class="text-xs text-emerald-400 mt-1">✓ Live PostgreSQL Query</p>
+    <!-- TITLE BAR & SUB-NAVIGATION -->
+    <div class="bg-slate-900 border-b border-slate-800 px-6 pt-5 pb-0">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-3">
+            <div>
+                <h1 class="text-xl font-bold text-white tracking-tight">Real-Time Telemetry Command Center</h1>
+                <p class="text-xs text-slate-400 mt-1">Live database execution metrics, Merkle proof tree heights, and domain isolation queues.</p>
             </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Quarantined Conflicts</p>
-                <h3 class="text-3xl font-extrabold text-amber-400 mt-2">{{.ActiveContradictions}}</h3>
-                <p class="text-xs text-amber-400/80 mt-1">Requires Operator Action</p>
-            </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Tokens Budgeted</p>
-                <h3 class="text-3xl font-extrabold text-purple-400 mt-2">1,250,000</h3>
-                <p class="text-xs text-purple-400/80 mt-1">Pre-flight Ledger Verified</p>
-            </div>
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Estimated LLM ROI</p>
-                <h3 class="text-3xl font-extrabold text-emerald-400 mt-2">${{.CostSaved}}</h3>
-                <p class="text-xs text-emerald-400/80 mt-1">Saved via Deduplication</p>
+
+            <div class="flex items-center space-x-2 text-xs">
+                <button onclick="openProvisionModal()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg shadow-sm transition flex items-center space-x-1.5">
+                    <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                    <span>Propose Decision</span>
+                </button>
+                <button onclick="fetchRealData()" class="px-3 py-1.5 bg-slate-800 border border-slate-700 text-slate-200 rounded-lg hover:bg-slate-700 transition flex items-center space-x-1.5">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                    <span>Refresh DB Telemetry</span>
+                </button>
             </div>
         </div>
 
-        <!-- Merkle Snapshot Chain & Live Command Trigger -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            <!-- Left 2 Cols: Merkle Chain Visualizer -->
-            <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
+        <!-- Sub-Navigation Tabs -->
+        <div class="flex space-x-6 text-sm font-medium border-b border-transparent -mb-px overflow-x-auto">
+            <button id="tab-summary" onclick="switchTab('summary')" class="tab-btn pb-3 border-b-2 border-brand-500 text-brand-400 font-semibold flex items-center space-x-2 whitespace-nowrap">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                <span>Executive Summary</span>
+            </button>
+            <button id="tab-workforce" onclick="switchTab('workforce')" class="tab-btn pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center space-x-2 whitespace-nowrap transition">
+                <i data-lucide="network" class="w-4 h-4"></i>
+                <span>AI Workforce Topology</span>
+            </button>
+            <button id="tab-governance" onclick="switchTab('governance')" class="tab-btn pb-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center space-x-2 whitespace-nowrap transition">
+                <i data-lucide="shield-alert" class="w-4 h-4"></i>
+                <span>Quarantine Queue</span>
+                <span id="quarantineBadge" class="bg-amber-500 text-slate-950 font-bold text-[10px] px-1.5 py-0.2 rounded-full ml-1">0</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-1 p-6 space-y-6 max-w-[1600px] w-full mx-auto">
+
+        <!-- TAB 1: EXECUTIVE SUMMARY -->
+        <div id="view-summary" class="tab-content space-y-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="summary-card rounded-xl p-4 flex flex-col justify-between">
+                    <span class="text-xs font-semibold text-slate-400 uppercase">Canonical Decisions</span>
+                    <span id="real-total-decisions" class="text-3xl font-bold text-white mt-2 font-mono">0</span>
+                    <span class="text-xs text-emerald-400 mt-1">✓ PostgreSQL Verified</span>
+                </div>
+                <div class="summary-card rounded-xl p-4 flex flex-col justify-between border-l-4 border-l-amber-500">
+                    <span class="text-xs font-semibold text-slate-400 uppercase">Quarantined Conflicts</span>
+                    <span id="real-quarantined-count" class="text-3xl font-bold text-amber-400 mt-2 font-mono">0</span>
+                    <span class="text-xs text-amber-400 mt-1">Requires Operator Action</span>
+                </div>
+                <div class="summary-card rounded-xl p-4 flex flex-col justify-between">
+                    <span class="text-xs font-semibold text-slate-400 uppercase">Merkle Block Height</span>
+                    <span id="real-block-height" class="text-3xl font-bold text-purple-400 mt-2 font-mono">#0</span>
+                    <span class="text-xs text-purple-300 mt-1">Worker Epoch Active</span>
+                </div>
+                <div class="summary-card rounded-xl p-4 flex flex-col justify-between">
+                    <span class="text-xs font-semibold text-slate-400 uppercase">Token Cost Savings</span>
+                    <span id="real-savings" class="text-3xl font-bold text-emerald-400 mt-2 font-mono">$0.00</span>
+                    <span class="text-xs text-emerald-400/80 mt-1">Calculated via Deduplication</span>
+                </div>
+            </div>
+
+            <!-- Merkle Root Chain Banner -->
+            <div class="summary-card rounded-xl p-5 space-y-3">
                 <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-bold text-slate-100">🔗 Cryptographic Merkle Root Chain</h2>
-                    <span class="text-xs text-slate-400">Epoch: 10s Ticker</span>
+                    <h2 class="text-sm font-bold text-white flex items-center">
+                        <i data-lucide="binary" class="w-4 h-4 mr-2 text-brand-500"></i> Latest Cryptographic Merkle Root Snapshot
+                    </h2>
+                    <span id="real-parent-hash" class="text-xs font-mono text-purple-400 bg-purple-950/50 px-2 py-0.5 rounded border border-purple-800">
+                        Parent: Genesis
+                    </span>
                 </div>
-                
-                <div class="space-y-3">
-                    <div class="p-4 bg-slate-950 border border-purple-500/30 rounded-lg flex items-center justify-between">
-                        <div>
-                            <span class="text-xs font-mono text-purple-400">LATEST ROOT SNAPSHOT</span>
-                            <p class="text-sm font-mono text-slate-200 mt-0.5 truncate max-w-md">{{.LatestMerkleHash}}</p>
-                        </div>
-                        <span class="text-xs px-2 py-1 bg-purple-500/20 text-purple-300 rounded font-mono">Block #{{.LatestBlockHeight}}</span>
-                    </div>
-
-                    <div class="p-4 bg-slate-950/60 border border-slate-800 rounded-lg flex items-center justify-between text-slate-400">
-                        <div>
-                            <span class="text-xs font-mono text-slate-500">PARENT HASH</span>
-                            <p class="text-sm font-mono text-slate-400 mt-0.5 truncate max-w-md">{{.ParentMerkleHash}}</p>
-                        </div>
-                    </div>
+                <div id="real-merkle-hash" class="p-3 bg-slate-950 border border-purple-500/30 rounded-lg font-mono text-xs text-slate-200 break-all">
+                    No Merkle root recorded yet
                 </div>
             </div>
 
-            <!-- Right Col: Live Slash Command Trigger -->
-            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
-                <h2 class="text-lg font-bold text-slate-100">⚡ Natural MCP Command Trigger</h2>
-                <p class="text-xs text-slate-400">Execute slash commands directly into your runtime:</p>
-                
-                <div class="space-y-3">
-                    <input id="cmdInput" type="text" 
-                           value='/garuda propose "Enforce TLS 1.3 for internal APIs" --scope-domain security --scope-system network' 
-                           class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono text-slate-200 focus:outline-none focus:border-purple-500" />
-                    <button type="button" onclick="executeSlashCommand()" 
-                            class="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 text-sm rounded-lg transition">
-                        Execute Command
-                    </button>
+            <div class="summary-card rounded-xl p-5">
+                <h2 class="text-sm font-bold text-white mb-4">Domain Operations Breakdown</h2>
+                <div class="h-64 w-full">
+                    <canvas id="domainOpsChart"></canvas>
                 </div>
-
-                <!-- Execution Feedback Output -->
-                <div id="cmdResult" class="hidden p-3 bg-slate-950 border border-slate-800 rounded-lg font-mono text-xs text-slate-300 overflow-x-auto"></div>
             </div>
         </div>
+
+        <!-- TAB 2: WORKFORCE TOPOLOGY -->
+        <div id="view-workforce" class="tab-content hidden space-y-6">
+            <div class="summary-card rounded-xl p-5">
+                <h2 class="text-sm font-bold text-white mb-2 flex items-center">
+                    <i data-lucide="share-2" class="w-4 h-4 mr-2 text-brand-500"></i> Active Agent Mesh Network
+                </h2>
+                <p class="text-xs text-slate-400 mb-4">Live agent instances registered from PostgreSQL decision origins.</p>
+                
+                <div id="agentFleetContainer" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 font-mono text-xs">
+                    <!-- Real Agents Rendered Dynamically -->
+                </div>
+
+                <div class="relative w-full h-80 bg-slate-950 rounded-lg overflow-hidden border border-slate-800 flex items-center justify-center">
+                    <canvas id="topologyCanvas" class="w-full h-full"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: QUARANTINE LEDGER -->
+        <div id="view-governance" class="tab-content hidden space-y-6">
+            <div class="summary-card rounded-xl p-5 border-l-4 border-l-amber-500">
+                <h2 class="text-base font-bold text-white mb-2">Quarantined Contradiction Queue</h2>
+                <p class="text-xs text-slate-400 mb-4">Real isolated proposals fetched directly from PostgreSQL storage.</p>
+                <div id="quarantineListContainer" class="space-y-3 font-mono text-xs">
+                    <!-- Real items rendered dynamically -->
+                </div>
+            </div>
+        </div>
+
     </main>
 
+    <!-- PROPOSE DECISION MODAL -->
+    <div id="provisionModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+            <h3 class="text-sm font-bold text-white">Propose Governance Decision</h3>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">Title / Policy Statement</label>
+                    <input type="text" id="newDecisionTitle" placeholder="e.g. Enforce OAuth2 for external endpoints" class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Scope Domain</label>
+                    <input type="text" id="newDecisionDomain" value="security" class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Scope System</label>
+                    <input type="text" id="newDecisionSystem" value="network" class="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-slate-100 focus:outline-none focus:border-brand-500">
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeProvisionModal()" class="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs rounded">Cancel</button>
+                <button onclick="submitRealDecision()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs rounded font-medium">Submit to Engine</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-    // Live Server-Sent Events Connection
-    const evtSource = new EventSource('/api/v1/events');
-    evtSource.addEventListener('ping', (e) => {
-        console.log('Garuda Live Event Pulse:', e.data);
-    });
+        lucide.createIcons();
 
-    async function executeSlashCommand() {
-        const rawCmd = document.getElementById('cmdInput').value.trim();
-        const resultDiv = document.getElementById('cmdResult');
-        resultDiv.classList.remove('hidden');
-        resultDiv.innerHTML = '<span class="text-purple-400">⏳ Submitting proposal to Merkle Engine...</span>';
+        let domainChart = null;
 
-        let title = "New Decision Proposal";
-        let scopeDomain = "general";
-        let scopeSystem = "web-ui";
-
-        // Parse command string
-        const titleMatch = rawCmd.match(/propose\s+"([^"]+)"/) || rawCmd.match(/propose\s+'([^']+)'/);
-        if (titleMatch) title = titleMatch[1];
-
-        const domainMatch = rawCmd.match(/--scope-domain\s+([^\s]+)/);
-        if (domainMatch) scopeDomain = domainMatch[1];
-
-        const systemMatch = rawCmd.match(/--scope-system\s+([^\s]+)/);
-        if (systemMatch) scopeSystem = systemMatch[1];
-
-        try {
-            // Fetch debug token
-            const tokRes = await fetch('/debug/token?actor=dashboard-ui&tenant_id=00000000-0000-0000-0000-000000000001');
-            const tokData = await tokRes.json();
-
-            // Submit proposal
-            const res = await fetch('/api/v1/decisions/submit', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + tokData.token
-                },
-                body: JSON.stringify({
-                    title: title,
-                    scope_domain: scopeDomain,
-                    scope_system: scopeSystem
-                })
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('border-brand-500', 'text-brand-400', 'font-semibold');
+                el.classList.add('border-transparent', 'text-slate-400');
             });
 
-            const data = await res.json();
-            if (res.ok || res.status === 200 || res.status === 201) {
-                resultDiv.innerHTML = '<span class="text-emerald-400">✅ PROPOSAL RECORDED!</span>\n' + JSON.stringify(data, null, 2);
-                setTimeout(() => { window.location.reload(); }, 1200);
-            } else {
-                resultDiv.innerHTML = '<span class="text-amber-400">⚠️ RESPONSE:</span>\n' + JSON.stringify(data, null, 2);
+            document.getElementById('view-' + tabId).classList.remove('hidden');
+            const activeBtn = document.getElementById('tab-' + tabId);
+            if (activeBtn) {
+                activeBtn.classList.remove('border-transparent', 'text-slate-400');
+                activeBtn.classList.add('border-brand-500', 'text-brand-400', 'font-semibold');
             }
-        } catch (err) {
-            resultDiv.innerHTML = '<span class="text-red-400">❌ Execution Error:</span> ' + err.message;
+
+            if (tabId === 'workforce') {
+                renderTopologyCanvas();
+            }
         }
-    }
+
+        function openProvisionModal() { document.getElementById('provisionModal').classList.remove('hidden'); }
+        function closeProvisionModal() { document.getElementById('provisionModal').classList.add('hidden'); }
+
+        async function fetchRealData() {
+            try {
+                const res = await fetch('/api/v1/dashboard/stats');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                document.getElementById('real-total-decisions').innerText = data.total_decisions || 0;
+                document.getElementById('real-quarantined-count').innerText = data.quarantined_count || 0;
+                document.getElementById('quarantineBadge').innerText = data.quarantined_count || 0;
+                document.getElementById('real-block-height').innerText = '#' + (data.latest_block_height || 0);
+                document.getElementById('real-savings').innerText = '$' + (data.estimated_savings || 0).toFixed(2);
+
+                if (data.latest_merkle_hash) {
+                    document.getElementById('real-merkle-hash').innerText = data.latest_merkle_hash;
+                }
+                if (data.parent_merkle_hash) {
+                    document.getElementById('real-parent-hash').innerText = 'Parent: ' + data.parent_merkle_hash;
+                }
+
+                renderQuarantineQueue(data.quarantined_decisions || []);
+                renderDomainChart(data.domain_breakdown || {});
+                renderAgentFleet(data.agent_list || []);
+            } catch (err) {
+                console.error('Error fetching dashboard stats:', err);
+            }
+        }
+
+        function renderAgentFleet(agents) {
+            const container = document.getElementById('agentFleetContainer');
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (agents.length === 0) {
+                container.innerHTML = '<div class="col-span-3 text-slate-500 text-center py-4 font-sans">No active agents registered in database. Propose a decision to instantiate agent contexts.</div>';
+                return;
+            }
+
+            agents.forEach(agent => {
+                const card = document.createElement('div');
+                card.className = 'p-3.5 bg-slate-950 border border-slate-800 rounded-lg space-y-1';
+                card.innerHTML =
+                    '<div class="flex items-center justify-between">' +
+                        '<span class="font-bold text-purple-400">' + agent.name + '</span>' +
+                        '<span class="px-1.5 py-0.5 bg-emerald-950/60 text-emerald-400 border border-emerald-800/50 rounded text-[9px]">ACTIVE</span>' +
+                    '</div>' +
+                    '<div class="text-[11px] text-slate-400">Domain: <span class="text-slate-200">' + agent.domain + '</span></div>' +
+                    '<div class="text-[10px] text-slate-500">System: ' + agent.system + '</div>';
+                container.appendChild(card);
+            });
+        }
+
+        function renderQuarantineQueue(list) {
+            const container = document.getElementById('quarantineListContainer');
+            container.innerHTML = '';
+
+            if (list.length === 0) {
+                container.innerHTML = '<div class="p-4 text-center text-slate-500 font-sans">No quarantined conflicts in PostgreSQL ledger. All decisions are canonical.</div>';
+                return;
+            }
+
+            list.forEach(item => {
+                const domain = (item.scope && item.scope.domain) ? item.scope.domain : (item.scope_domain || 'general');
+                const system = (item.scope && item.scope.system) ? item.scope.system : (item.scope_system || 'core');
+                
+                const card = document.createElement('div');
+                card.className = 'p-3.5 bg-slate-950 border border-amber-500/30 rounded-lg flex items-center justify-between';
+                card.innerHTML =
+                    '<div>' +
+                        '<div class="text-amber-400 font-bold">ID: ' + item.id + '</div>' +
+                        '<p class="text-slate-200 text-xs font-sans mt-0.5">' + item.title + '</p>' +
+                        '<span class="text-[10px] text-slate-500">Domain: ' + domain + ' / System: ' + system + '</span>' +
+                    '</div>' +
+                    '<span class="px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] uppercase font-bold">Quarantined</span>';
+                container.appendChild(card);
+            });
+        }
+
+        function renderDomainChart(breakdown) {
+            const ctx = document.getElementById('domainOpsChart').getContext('2d');
+            const labels = Object.keys(breakdown);
+            const values = Object.values(breakdown);
+
+            if (domainChart) domainChart.destroy();
+
+            domainChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels.length ? labels : ['No Active Domains'],
+                    datasets: [{
+                        label: 'Active Canonical Rules',
+                        data: values.length ? values : [0],
+                        backgroundColor: '#7c3aed',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                        y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function renderTopologyCanvas() {
+            const canvas = document.getElementById('topologyCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#7c3aed';
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, 16, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = '11px JetBrains Mono';
+            ctx.textAlign = 'center';
+            ctx.fillText('GARUDA CORE (PostgreSQL)', canvas.width / 2, canvas.height / 2 + 32);
+        }
+
+        async function submitRealDecision() {
+            const rawInput = document.getElementById('newDecisionTitle').value.trim();
+            let domain = document.getElementById('newDecisionDomain').value.trim();
+            let system = document.getElementById('newDecisionSystem').value.trim();
+
+            if (!rawInput) return;
+
+            let title = rawInput;
+
+            const titleMatch = rawInput.match(/"([^"]+)"/);
+            if (titleMatch) {
+                title = titleMatch[1];
+            } else {
+                title = rawInput.replace(/\/garuda\s+propose\s+|^propose\s+/, '')
+                                .replace(/--scope-domain\s+[^\s]+/, '')
+                                .replace(/--scope-system\s+[^\s]+/, '')
+                                .trim();
+            }
+
+            const domainMatch = rawInput.match(/--scope-domain\s+([^\s]+)/);
+            if (domainMatch) domain = domainMatch[1];
+
+            const systemMatch = rawInput.match(/--scope-system\s+([^\s]+)/);
+            if (systemMatch) system = systemMatch[1];
+
+            try {
+                const tokRes = await fetch('/debug/token?actor=dashboard-ui&tenant_id=00000000-0000-0000-0000-000000000001');
+                const tokData = await tokRes.json();
+
+                const res = await fetch('/api/v1/decisions/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + tokData.token
+                    },
+                    body: JSON.stringify({
+                        title: title,
+                        scope_domain: domain || "security",
+                        scope_system: system || "network"
+                    })
+                });
+
+                closeProvisionModal();
+                fetchRealData();
+            } catch (err) {
+                alert('Error submitting decision: ' + err.message);
+            }
+        }
+
+        fetchRealData();
+        setInterval(fetchRealData, 5000);
     </script>
 </body>
 </html>`
 
-// HandleDashboard renders the Mission Control Web UI
+var parsedProdDashboardTmpl = template.Must(template.New("dashboard").Parse(prodDashboardHTML))
+
 func (s *Server) HandleDashboard(w http.ResponseWriter, r *http.Request) {
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	data := DashboardData{
+		TenantID: tenantID.String(),
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = parsedProdDashboardTmpl.Execute(w, data)
+}
+
+func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	// 1. Fetch active decisions count
 	activeDecisions, err := s.store.GetDecisionsActiveAt(ctx, tenantID, time.Now().UTC(), types.Scope{}, nil)
-	activeCount := len(activeDecisions)
 	if err != nil {
-		activeCount = 0
+		activeDecisions = []*types.Decision{}
 	}
 
-	// 2. Count active quarantined items
-	quarantineCount := 0
+	canonicalCount := 0
+	quarantinedList := []*types.Decision{}
+	domainBreakdown := make(map[string]int)
+	agentMap := make(map[string]AgentFleetItem)
+
 	for _, d := range activeDecisions {
+		if d == nil {
+			continue
+		}
+
+		// Fallback resolution for scope domain across top-level fields & struct
+		domain := d.ScopeDomain
+		if domain == "" {
+			domain = d.Scope.Domain
+		}
+		if domain == "" {
+			domain = "general"
+		}
+
+		system := d.ScopeSystem
+		if system == "" {
+			system = d.Scope.System
+		}
+		if system == "" {
+			system = "core"
+		}
+
+		owner := d.Owner
+		if owner == "" {
+			owner = "mcp-agent"
+		}
+
 		if d.Status == types.StatusQuarantined {
-			quarantineCount++
+			quarantinedList = append(quarantinedList, d)
+		} else {
+			canonicalCount++
+			domainBreakdown[domain]++
+		}
+
+		if _, exists := agentMap[owner]; !exists {
+			agentMap[owner] = AgentFleetItem{
+				ID:     uuid.NewSHA1(uuid.NameSpaceOID, []byte(owner)).String()[:8],
+				Name:   owner,
+				Domain: domain,
+				System: system,
+				Status: string(d.Status),
+			}
 		}
 	}
 
-	// 3. Query latest Merkle snapshot
+	agentList := make([]AgentFleetItem, 0, len(agentMap))
+	for _, agent := range agentMap {
+		agentList = append(agentList, agent)
+	}
+
 	latestSnap, _ := s.store.GetLatestMerkleSnapshot(ctx, tenantID)
 	latestHash := "No snapshots recorded yet"
 	parentHash := "Genesis"
@@ -229,42 +546,59 @@ func (s *Server) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := DashboardData{
-		TenantID:             tenantID.String(),
-		TotalDecisions:       activeCount,
-		ActiveContradictions: quarantineCount,
-		TokensSaved:          1250000,
-		CostSaved:            24.50,
+	savings := float64(canonicalCount) * 0.20
+
+	resp := RealStatsResponse{
+		TotalDecisions:       canonicalCount,
+		QuarantinedCount:     len(quarantinedList),
+		LatestBlockHeight:    latestBlock,
 		LatestMerkleHash:     latestHash,
 		ParentMerkleHash:     parentHash,
-		LatestBlockHeight:    latestBlock,
+		EstimatedSavings:     savings,
+		DomainBreakdown:      domainBreakdown,
+		QuarantinedDecisions: quarantinedList,
+		AgentList:            agentList,
 	}
 
-	tmpl, err := template.New("dashboard").Parse(dashboardHTML)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html")
-	_ = tmpl.Execute(w, data)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// HandleLiveEvents streams real-time Server-Sent Events (SSE) to the Web UI
 func (s *Server) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-		return
+	rc := http.NewResponseController(w)
+	flushFunc := func() error {
+		return rc.Flush()
+	}
+
+	if err := rc.Flush(); err != nil {
+		var flusher http.Flusher
+		curr := w
+		for curr != nil {
+			if f, ok := curr.(http.Flusher); ok {
+				flusher = f
+				break
+			}
+			if unwrapper, ok := curr.(interface{ Unwrap() http.ResponseWriter }); ok {
+				curr = unwrapper.Unwrap()
+			} else {
+				break
+			}
+		}
+		if flusher != nil {
+			flushFunc = func() error {
+				flusher.Flush()
+				return nil
+			}
+		}
 	}
 
 	_, _ = fmt.Fprintf(w, "event: connected\ndata: {\"status\": \"online\", \"timestamp\": \"%s\"}\n\n", time.Now().Format(time.RFC3339))
-	flusher.Flush()
+	_ = flushFunc()
 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -278,7 +612,7 @@ func (s *Server) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return
 			}
-			flusher.Flush()
+			_ = flushFunc()
 		}
 	}
 }

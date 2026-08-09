@@ -1,0 +1,36 @@
+# -----------------------------------------------------------------------------
+# Stage 1: Build
+# -----------------------------------------------------------------------------
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git
+
+# Cache Go modules
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code and build binary
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/bin/telemetry-collector ./cmd/telemetry-collector
+
+# -----------------------------------------------------------------------------
+# Stage 2: Runtime
+# -----------------------------------------------------------------------------
+FROM alpine:3.21
+
+WORKDIR /app
+
+# Install ca-certificates and wget for healthchecks and HTTPS connections
+RUN apk add --no-cache ca-certificates wget
+
+# Copy compiled binary from builder
+COPY --from=builder /app/bin/telemetry-collector /app/telemetry-collector
+
+# Expose Telemetry Collector port
+EXPOSE 8081
+
+# Run binary
+ENTRYPOINT ["/app/telemetry-collector"]

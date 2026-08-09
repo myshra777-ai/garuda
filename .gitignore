@@ -1,0 +1,8 @@
+/bin/
+*.log
+.env
+garuda
+garuda-api
+garuda-mcp
+garuda_platform.html
+Release

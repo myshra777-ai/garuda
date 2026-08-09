@@ -1,44 +1,17 @@
 package telemetry
 
 import (
-	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
-	"sync"
 	"time"
 )
 
 // ============================================================
-// Configuration
+// Configuration Helpers
 // ============================================================
-
-// Config holds telemetry configuration.
-type Config struct {
-	Enabled       bool          `json:"enabled"`
-	Endpoint      string        `json:"endpoint"`
-	BatchSize     int           `json:"batch_size"`
-	FlushInterval time.Duration `json:"flush_interval"`
-	Anonymize     bool          `json:"anonymize"`
-	Salt          string        `json:"salt"`
-}
-
-// DefaultConfig returns the default telemetry configuration.
-func DefaultConfig() *Config {
-	return &Config{
-		Enabled:       true,
-		Endpoint:      "https://telemetry.garuda.dev/v1/ingest",
-		BatchSize:     100,
-		FlushInterval: 30 * time.Second,
-		Anonymize:     true,
-		Salt:          os.Getenv("GARUDA_TELEMETRY_SALT"),
-	}
-}
 
 // LoadConfigFromEnv loads telemetry config from environment variables.
 func LoadConfigFromEnv() *Config {
@@ -126,78 +99,22 @@ type ErrorEntry struct {
 }
 
 // ============================================================
-// Telemetry Collector
-// ============================================================
-
-// Collector aggregates and sends telemetry data.
-type Collector struct {
-	cfg        *Config
-	client     *http.Client
-	mu         sync.Mutex
-	batch      []TelemetryPayload
-	flushTimer *time.Ticker
-	stopChan   chan struct{}
-	wg         sync.WaitGroup
-
-	// Aggregated metrics
-	decisions      DecisionMetrics
-	contradictions ContradictionMetrics
-	performance    PerformanceMetrics
-	cost           CostMetrics
-	featureUsage   map[string]int64
-	errors         map[string]int64
-
-	// Latency histograms (for percentile calculation)
-	coldStartLatencies []float64
-	warmStartLatencies []float64
-	apiLatencies       []float64
-}
-
-// NewCollector creates a new telemetry collector.
-func NewCollector(cfg *Config) *Collector {
-	if cfg == nil {
-		cfg = LoadConfigFromEnv()
-	}
-	if cfg.Salt == "" {
-		cfg.Salt = "garuda-default-salt" // In production, set via env
-	}
-
-	c := &Collector{
-		cfg:          cfg,
-		client:       &http.Client{Timeout: 10 * time.Second},
-		batch:        make([]TelemetryPayload, 0, cfg.BatchSize),
-		featureUsage: make(map[string]int64),
-		errors:       make(map[string]int64),
-		stopChan:     make(chan struct{}),
-	}
-
-	if cfg.Enabled {
-		c.flushTimer = time.NewTicker(cfg.FlushInterval)
-		c.wg.Add(1)
-		go c.backgroundFlusher()
-	}
-
-	return c
-}
-
-// ============================================================
 // Metric Recording Methods
 // ============================================================
 
 // RecordDecision records a decision event.
-func (c *Collector) RecordDecision(action string, reused bool) {
+func (c *Collector) RecordDecision(status string) {
 	if !c.cfg.Enabled {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	switch action {
+	switch status {
 	case "proposed":
 		c.decisions.Proposed++
-		if reused {
-			c.decisions.Reused++
-		}
+	case "reused":
+		c.decisions.Reused++
 	case "rejected":
 		c.decisions.Rejected++
 	case "stale":
@@ -206,14 +123,14 @@ func (c *Collector) RecordDecision(action string, reused bool) {
 }
 
 // RecordContradiction records a contradiction event.
-func (c *Collector) RecordContradiction(action string) {
+func (c *Collector) RecordContradiction(status string) {
 	if !c.cfg.Enabled {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	switch action {
+	switch status {
 	case "detected":
 		c.contradictions.Detected++
 	case "resolved":
@@ -224,16 +141,15 @@ func (c *Collector) RecordContradiction(action string) {
 }
 
 // RecordLatency records a latency measurement.
-func (c *Collector) RecordLatency(metricType string, latency time.Duration) {
+func (c *Collector) RecordLatency(latencyType string, d time.Duration) {
 	if !c.cfg.Enabled {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	ms := float64(latency.Microseconds()) / 1000.0
-
-	switch metricType {
+	ms := float64(d.Milliseconds())
+	switch latencyType {
 	case "cold_start":
 		c.coldStartLatencies = append(c.coldStartLatencies, ms)
 	case "warm_start":
@@ -253,7 +169,7 @@ func (c *Collector) RecordCostSaving(tokens int64, model string) {
 
 	c.cost.TokensSaved += tokens
 	c.cost.ModelType = model
-	// Estimate cost: $0.002 per 1K tokens for GPT-4, adjust as needed
+	// Estimate cost: $0.002 per 1K tokens for GPT-4 baseline
 	c.cost.EstimatedCost += float64(tokens) * 0.000002
 }
 
@@ -291,7 +207,7 @@ func (c *Collector) backgroundFlusher() {
 			if err := c.Flush(); err != nil {
 				slog.Error("telemetry flush failed", "error", err)
 			}
-		case <-c.stopChan:
+		case <-c.shutdown:
 			// Final flush before exit
 			if err := c.Flush(); err != nil {
 				slog.Error("final telemetry flush failed", "error", err)
@@ -309,86 +225,63 @@ func (c *Collector) Flush() error {
 
 	c.mu.Lock()
 
-	// Build payload from aggregated metrics
-	payload := TelemetryPayload{
-		Version:              "1.0.0",
-		TenantHash:           c.anonymizeTenant(),
-		SessionID:            c.anonymizeSessionID(),
-		Timestamp:            time.Now().UTC(),
-		DecisionMetrics:      c.decisions,
-		ContradictionMetrics: c.contradictions,
-		CostMetrics:          c.cost,
-		FeatureUsage:         c.featureUsage,
+	// Build an aggregated TelemetryEvent from internal counters
+	perf := c.calculatePercentiles()
+	totalDecisions := c.decisions.Proposed + c.decisions.Reused + c.decisions.Rejected + c.decisions.Stale
+	totalContradictions := c.contradictions.Detected + c.contradictions.Resolved + c.contradictions.FalsePos
+
+	event := TelemetryEvent{
+		InstanceHash:          c.instanceHash,
+		SessionID:             c.sessionID,
+		Mode:                  c.cfg.Mode,
+		GarudaVersion:         "1.0.0",
+		TotalDecisions:        totalDecisions,
+		TotalContradictions:   totalContradictions,
+		TokensSaved:           c.cost.TokensSaved,
+		CostSavedUSD:          c.cost.EstimatedCost,
+		ColdStartLatencyMs:    perf.ColdStartLatencyP95,
+		WarmStartLatencyMs:    perf.WarmStartLatencyP95,
+		VerificationLatencyMs: perf.APILatencyP95,
 	}
 
-	// Calculate percentiles
-	payload.Performance = c.calculatePercentiles()
+	// Add to batch of events to send
+	c.batch = append(c.batch, event)
 
-	// Build error entries
-	payload.Errors = c.buildErrorEntries()
-
-	// Add to batch
-	c.batch = append(c.batch, payload)
-
-	// Reset aggregated metrics (keep running totals, but reset per-batch ones)
-	// Decision and contradiction metrics are cumulative, so we reset after flushing.
-	// But we should keep them running for the next batch.
-	// Actually, we want to reset them so the next batch doesn't double-count.
-	// However, for YC we want cumulative totals. Let's keep cumulative but send
-	// the cumulative value each time. That's fine—the server can handle it.
-
-	// For latency and errors, we reset after each flush to avoid sending
-	// the same data repeatedly.
+	// Reset sampled data after flush
 	c.coldStartLatencies = nil
 	c.warmStartLatencies = nil
 	c.apiLatencies = nil
 	c.errors = make(map[string]int64)
+	c.featureUsage = make(map[string]int64)
+	c.decisions = DecisionMetrics{}
+	c.contradictions = ContradictionMetrics{}
+	c.cost = CostMetrics{}
 
-	// Keep decision and contradiction metrics cumulative.
-	// The server will see the total over time.
-
-	// If batch is full, send immediately.
+	// If batch is full, trigger sending batch
 	if len(c.batch) >= c.cfg.BatchSize {
-		return c.sendBatch()
+		c.mu.Unlock()
+		return c.flushBatch()
 	}
 
 	c.mu.Unlock()
 	return nil
 }
 
-// sendBatch sends all batched payloads to the telemetry endpoint.
-func (c *Collector) sendBatch() error {
+// flushBatch sends all batched payloads to the endpoint safely.
+func (c *Collector) flushBatch() error {
+	// Delegate to collector's sendBatch which handles []TelemetryEvent
 	c.mu.Lock()
 	batch := c.batch
-	c.batch = make([]TelemetryPayload, 0, c.cfg.BatchSize)
+	c.batch = make([]TelemetryEvent, 0, c.cfg.BatchSize)
 	c.mu.Unlock()
 
 	if len(batch) == 0 {
 		return nil
 	}
 
-	body, err := json.Marshal(batch)
-	if err != nil {
-		return fmt.Errorf("failed to marshal telemetry batch: %w", err)
+	if err := c.sendBatch(batch); err != nil {
+		return fmt.Errorf("failed to send telemetry batch: %w", err)
 	}
-
-	req, err := http.NewRequest("POST", c.cfg.Endpoint, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create telemetry request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Garuda-Telemetry/1.0")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send telemetry: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("telemetry server returned %d", resp.StatusCode)
-	}
-
 	slog.Debug("telemetry batch sent", "count", len(batch))
 	return nil
 }
@@ -399,8 +292,6 @@ func (c *Collector) sendBatch() error {
 
 // anonymizeTenant hashes the tenant ID to prevent PII leakage.
 func (c *Collector) anonymizeTenant() string {
-	// In a real implementation, this would hash the tenant ID.
-	// For now, we return a placeholder.
 	tenantID := os.Getenv("GARUDA_TENANT_ID")
 	if tenantID == "" {
 		return "anonymous"
@@ -438,10 +329,8 @@ func (c *Collector) percentile(samples []float64, p float64) float64 {
 	if len(samples) == 0 {
 		return 0
 	}
-	// Sort samples
 	sorted := make([]float64, len(samples))
 	copy(sorted, samples)
-	// Simple sort (could be optimized)
 	for i := 0; i < len(sorted); i++ {
 		for j := i + 1; j < len(sorted); j++ {
 			if sorted[i] > sorted[j] {
@@ -465,29 +354,4 @@ func (c *Collector) buildErrorEntries() []ErrorEntry {
 		})
 	}
 	return entries
-}
-
-// ============================================================
-// Shutdown
-// ============================================================
-
-// Shutdown stops the telemetry collector and flushes remaining data.
-func (c *Collector) Shutdown(ctx context.Context) error {
-	if !c.cfg.Enabled {
-		return nil
-	}
-
-	close(c.stopChan)
-	c.wg.Wait()
-
-	if c.flushTimer != nil {
-		c.flushTimer.Stop()
-	}
-
-	// Final flush
-	if err := c.Flush(); err != nil {
-		slog.Error("final telemetry flush failed", "error", err)
-	}
-
-	return nil
 }

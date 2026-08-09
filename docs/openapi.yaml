@@ -1,0 +1,644 @@
+openapi: 3.0.3
+info:
+  title: Garuda Engine API Gateway
+  version: 1.0.0
+  description: |
+    Garuda is the deterministic governance, multi-agent state handoff, and cryptographic audit layer for enterprise AI swarms.
+    It provides a dual-engine protocol: high-ergonomics REST for humans and MCP Tool Manifests for autonomous agents.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: System
+  - name: Decisions
+  - name: Agents
+  - name: Audit
+  - name: Budget
+  - name: Router
+  - name: Debug
+
+paths:
+  /system/health:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+
+  /system/discover:
+    get:
+      tags: [System]
+      summary: Discover available endpoints
+      security: []
+      responses:
+        '200':
+          description: Endpoint index
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                  modules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: string
+                        endpoints:
+                          type: array
+                          items:
+                            type: string
+
+  /system/bootstrap:
+    get:
+      tags: [System]
+      summary: Single-turn agent bootstrapper
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Bootstrap manifest
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  system:
+                    type: string
+                  version:
+                    type: string
+                  tenant_id:
+                    type: string
+                  active_merkle_root:
+                    type: string
+                  block_height:
+                    type: integer
+                  endpoints:
+                    type: object
+                  mcp_tools:
+                    type: array
+                  budget:
+                    type: object
+
+  /sandbox:
+    post:
+      tags: [System]
+      summary: Interactive playground
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: Mock response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  received:
+                    type: object
+                  real_endpoint:
+                    type: string
+                  tutorial:
+                    type: string
+                  documentation:
+                    type: string
+
+  /dashboard:
+    get:
+      tags: [System]
+      summary: Mission Control UI
+      security: []
+      responses:
+        '200':
+          description: HTML dashboard
+          content:
+            text/html: {}
+
+  /decisions:
+    post:
+      tags: [Decisions]
+      summary: Propose a governance decision
+      operationId: proposeDecision
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                scope_domain:
+                  type: string
+                scope_system:
+                  type: string
+                valid_from:
+                  type: string
+                  format: date-time
+                valid_to:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: Decision created
+          headers:
+            X-Garuda-Merkle-Root:
+              schema:
+                type: string
+            X-Garuda-Block-Height:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Decision'
+                  - type: object
+                    properties:
+                      quarantined:
+                        type: boolean
+                      contradiction_id:
+                        type: string
+                      conflicting_decision_id:
+                        type: string
+        '409':
+          description: Contradiction detected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /decisions/{id}/lineage:
+    get:
+      tags: [Decisions]
+      summary: Get decision lineage DAG
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lineage graph
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                  edges:
+                    type: array
+                  total:
+                    type: integer
+
+  /agents/handoff:
+    post:
+      tags: [Agents]
+      summary: Execute atomic task handoff
+      operationId: executeHandoff
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - task_id
+                - source_agent_id
+                - target_agent_id
+                - checkpoint_data
+              properties:
+                task_id:
+                  type: string
+                source_agent_id:
+                  type: string
+                target_agent_id:
+                  type: string
+                reason:
+                  type: string
+                checkpoint_data:
+                  type: object
+      responses:
+        '200':
+          description: Handoff completed
+          headers:
+            X-Garuda-Merkle-Root:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  handoff_id:
+                    type: string
+                  checkpoint_id:
+                    type: string
+                  task_id:
+                    type: string
+                  status:
+                    type: string
+                    enum:
+                      - pending
+                      - in_progress
+                      - completed
+                      - failed
+                      - rolled_back
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /agents/resume:
+    post:
+      tags: [Agents]
+      summary: Resume agent from checkpoint
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - agent_id
+                - checkpoint_id
+              properties:
+                agent_id:
+                  type: string
+                checkpoint_id:
+                  type: string
+      responses:
+        '200':
+          description: Agent resumed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent_id:
+                    type: string
+                  checkpoint_id:
+                    type: string
+                  status:
+                    type: string
+                  state:
+                    type: object
+
+  /audit/verify:
+    get:
+      tags: [Audit]
+      summary: Verify audit event Merkle proof
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: event_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Verification proof
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event_id:
+                    type: string
+                  event_hash:
+                    type: string
+                  root_hash:
+                    type: string
+                  block_height:
+                    type: integer
+                  is_verified:
+                    type: boolean
+
+  /audit/export:
+    get:
+      tags: [Audit]
+      summary: Export audit ledger
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv]
+      responses:
+        '200':
+          description: Audit export
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id:
+                    type: string
+                  count:
+                    type: integer
+                  events:
+                    type: array
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
+  /budget:
+    get:
+      tags: [Budget]
+      summary: Get tenant budget
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Budget details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tenant_id:
+                    type: string
+                  token_balance:
+                    type: integer
+                  tokens_consumed:
+                    type: integer
+                  execution_limit:
+                    type: integer
+                  executions_consumed:
+                    type: integer
+                  status:
+                    type: string
+                    enum:
+                      - active
+                      - throttled
+                      - exhausted
+                  monthly_limit:
+                    type: integer
+                  last_reset_at:
+                    type: string
+                    format: date-time
+
+  /budget/consume:
+    post:
+      tags: [Budget]
+      summary: Consume tokens
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - agent_id
+                - tokens_used
+                - operation
+              properties:
+                agent_id:
+                  type: string
+                tokens_used:
+                  type: integer
+                executions_used:
+                  type: integer
+                operation:
+                  type: string
+      responses:
+        '200':
+          description: Consumption recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowed:
+                    type: boolean
+                  remaining_tokens:
+                    type: integer
+                  remaining_executions:
+                    type: integer
+                  status:
+                    type: string
+        '402':
+          description: Budget exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /router/evaluate:
+    post:
+      tags: [Router]
+      summary: Pre-flight model classification
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - payload
+              properties:
+                payload:
+                  type: string
+                token_estimate:
+                  type: integer
+                spend_ratio:
+                  type: number
+      responses:
+        '200':
+          description: Routing decision
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  selected_model:
+                    type: string
+                    enum:
+                      - claude-3.5-sonnet
+                      - deepseek-v3
+                      - gemini-1.5-pro
+                      - local-llama
+                      - gemini-flash
+                  domain:
+                    type: string
+                    enum:
+                      - code_governance
+                      - reasoning
+                      - large_context
+                      - routine
+                  redacted_payload:
+                    type: string
+                  redacted_count:
+                    type: integer
+                  budget_shifted:
+                    type: boolean
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /debug/token:
+    get:
+      tags: [Debug]
+      summary: Generate debug JWT (dev only)
+      security: []
+      parameters:
+        - name: actor
+          in: query
+          schema:
+            type: string
+        - name: tenant_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: JWT token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  tenant_id:
+                    type: string
+                  actor:
+                    type: string
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Decision:
+      type: object
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum:
+            - draft
+            - review
+            - approved
+            - canonical
+            - superseded
+            - archived
+            - quarantined
+        scope:
+          type: object
+          properties:
+            domain:
+              type: string
+            system:
+              type: string
+            team:
+              type: string
+            env:
+              type: string
+        owner:
+          type: string
+        confidence:
+          type: number
+        valid_from:
+          type: string
+          format: date-time
+        valid_to:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        approved_at:
+          type: string
+          format: date-time
+        merkle_hash:
+          type: string
+        parent_merkle_hash:
+          type: string
+
+    ProblemDetails:
+      type: object
+      required:
+        - code
+        - message
+        - timestamp
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        error_domain:
+          type: string
+        details:
+          type: object
+        remediation:
+          type: object
+          properties:
+            action:
+              type: string
+            suggested_patch:
+              type: array
+            alternative_endpoint:
+              type: string
+        timestamp:
+          type: string
+          format: date-time

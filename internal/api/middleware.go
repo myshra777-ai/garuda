@@ -3,6 +3,7 @@ package api
 import (
 	"container/list"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -11,10 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/auth"
 )
-
-type contextKey string
-
-const RequestIDKey contextKey = "request_id"
 
 // responseWriter wraps http.ResponseWriter to capture status code accurately.
 type responseWriter struct {
@@ -46,50 +43,10 @@ func WithRequestID(next http.Handler) http.Handler {
 		if requestID == "" {
 			requestID = uuid.New().String()
 		}
-		ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
+		ctx := context.WithValue(r.Context(), "request_id", requestID)
 		w.Header().Set("X-Request-ID", requestID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// WithAuth verifies the cryptographically signed JWT credentials in incoming requests.
-// It enforces a fail-closed model: paths not explicitly whitelisted are blocked immediately.
-func WithAuth(jwtConfig *auth.JWTConfig) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Explicit Perimeter Exemption Whitelist
-			// New endpoints default to BLOCKED unless added here.
-			if r.URL.Path == "/health" || r.URL.Path == "/debug/token" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// 1. Extract the Authorization bearer segment string
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" || len(authHeader) < 8 || authHeader[:7] != "Bearer " {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"code":412,"message":"security constraint breach: missing token credentials"}`))
-				return
-			}
-
-			tokenStr := authHeader[7:]
-
-			// 2. Execute cryptographic token parsing and verification
-			actor, tenantID, err := jwtConfig.ValidateToken(tokenStr)
-			if err != nil {
-				slog.Warn("unauthorized structural access target block", "error", err, "path", r.URL.Path)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				_, _ = w.Write([]byte(`{"code":403,"message":"access denied: cryptographic validation failed"}`))
-				return
-			}
-
-			// 3. Set actor/tenant in context
-			ctx := auth.ContextWithActorAndTenant(r.Context(), actor, tenantID)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
 }
 
 // WithLogging logs each request with method, path, status, and duration.
@@ -104,7 +61,7 @@ func WithLogging(next http.Handler) http.Handler {
 			"path", r.URL.Path,
 			"status", ww.statusCode,
 			"duration_ms", duration.Milliseconds(),
-			"request_id", r.Context().Value(RequestIDKey),
+			"request_id", r.Context().Value("request_id"),
 		)
 	})
 }
@@ -114,10 +71,8 @@ func WithRecovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				slog.Error("panic recovered", "error", err, "request_id", r.Context().Value(RequestIDKey))
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				_, _ = w.Write([]byte(`{"code":500,"message":"internal server error"}`))
+				slog.Error("panic recovered", "error", err, "request_id", r.Context().Value("request_id"))
+				http.Error(w, "internal server error", http.StatusInternalServerError)
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -224,9 +179,7 @@ func WithRateLimit(limiter *RateLimiter) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := r.RemoteAddr
 			if !limiter.Allow(ip) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusTooManyRequests)
-				_, _ = w.Write([]byte(`{"code":429,"message":"rate limit exceeded"}`))
+				http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -243,7 +196,7 @@ func WithCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 				if origin == allowed {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Garuda-Actor, X-Request-ID")
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Garuda-Actor, X-Request-ID, Authorization")
 					break
 				}
 			}
@@ -252,6 +205,51 @@ func WithCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// WithMerkleHeader injects the latest active Merkle root hash into outgoing HTTP response headers.
+func (s *Server) WithMerkleHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tenantID, err := resolveTenantID(r, uuid.Nil)
+		if err == nil && tenantID != uuid.Nil {
+			if snap, err := s.store.GetLatestMerkleSnapshot(r.Context(), tenantID); err == nil && snap != nil {
+				w.Header().Set("X-Garuda-Merkle-Root", snap.SnapshotHash)
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// WithAuth wraps an http.Handler with JWT authentication middleware using the provided JWTConfig.
+// WithAuth wraps an http.Handler with JWT authentication middleware using the provided JWTConfig.
+// WithAuth wraps an http.Handler with JWT authentication middleware using the provided JWTConfig.
+func WithAuth(jwtConfig *auth.JWTConfig) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tokenStr := ""
+			authHeader := r.Header.Get("Authorization")
+			if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+				tokenStr = authHeader[7:]
+			}
+			if tokenStr == "" {
+				tokenStr = r.URL.Query().Get("token")
+			}
+
+			if tokenStr == "" {
+				http.Error(w, `{"error":"unauthorized: missing authorization token"}`, http.StatusUnauthorized)
+				return
+			}
+
+			actor, tenantID, err := jwtConfig.ValidateToken(tokenStr)
+			if err != nil {
+				http.Error(w, `{"error":"unauthorized: invalid token"}`, http.StatusUnauthorized)
+				return
+			}
+
+			ctx := auth.ContextWithActorAndTenant(r.Context(), actor, fmt.Sprintf("%v", tenantID))
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

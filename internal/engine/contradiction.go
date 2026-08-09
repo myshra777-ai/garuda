@@ -16,41 +16,62 @@ func NewContradictionEngine(store types.DecisionStore) *ContradictionEngine {
 	return &ContradictionEngine{store: store}
 }
 
-// DetectAndQuarantine evaluates rules and quarantines new contradictory decisions.
-func (e *ContradictionEngine) DetectAndQuarantine(ctx context.Context,
-	newDecision *types.Decision) (*types.Contradiction, error) {
+// ValidateDecision reports whether a proposed decision conflicts with existing ones in scope.
+func (e *ContradictionEngine) ValidateDecision(ctx context.Context, newDecision *types.Decision) (bool, error) {
+	if e == nil || e.store == nil || newDecision == nil {
+		return false, nil
+	}
 
-	// Fetch active scope decisions
-	existing, err := e.store.GetDecisionsByScope(ctx, newDecision.TenantID,
-		newDecision.Scope.Domain, newDecision.Scope.System)
+	existing, err := e.store.GetDecisionsByScope(ctx, newDecision.TenantID, newDecision.Scope.Domain, newDecision.Scope.System)
+	if err != nil {
+		return false, err
+	}
+
+	for _, d := range existing {
+		if d == nil || d.ID == newDecision.ID || string(d.Status) == "quarantined" || string(d.Status) == "superseded" {
+			continue
+		}
+		if isContradictory(newDecision, d) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// DetectAndQuarantine evaluates rules and quarantines new contradictory decisions.
+func (e *ContradictionEngine) DetectAndQuarantine(ctx context.Context, newDecision *types.Decision) (*types.Contradiction, error) {
+	conflicting, err := e.ValidateDecision(ctx, newDecision)
+	if err != nil {
+		return nil, err
+	}
+	if !conflicting {
+		return nil, nil
+	}
+
+	// Fetch the conflicting decision to build a stable quarantine reason.
+	existing, err := e.store.GetDecisionsByScope(ctx, newDecision.TenantID, newDecision.Scope.Domain, newDecision.Scope.System)
 	if err != nil {
 		return nil, err
 	}
 
-	var conflicting *types.Decision
+	var conflictingDecision *types.Decision
 	for _, d := range existing {
-		// SKIP self AND skip decisions that are already quarantined or superseded
-		if d.ID == newDecision.ID || string(d.Status) == "quarantined" || string(d.Status) == "superseded" {
-			continue
-		}
-
-		if isContradictory(newDecision, d) {
-			conflicting = d
+		if d != nil && d.ID != newDecision.ID && !strings.EqualFold(string(d.Status), "quarantined") && !strings.EqualFold(string(d.Status), "superseded") && isContradictory(newDecision, d) {
+			conflictingDecision = d
 			break
 		}
 	}
-
-	if conflicting == nil {
-		return nil, nil // No contradiction found against active decisions
+	if conflictingDecision == nil {
+		return nil, nil
 	}
 
 	reason := fmt.Sprintf("Proposed decision '%s' contradicts active decision '%s' (ID: %s) in scope %s/%s",
-		newDecision.Title, conflicting.Title, conflicting.ID.String(),
+		newDecision.Title, conflictingDecision.Title, conflictingDecision.ID.String(),
 		newDecision.Scope.Domain, newDecision.Scope.System)
 
-	// Atomically quarantine decision and write record
 	record, err := e.store.QuarantineDecision(ctx, newDecision.TenantID,
-		newDecision.ID, conflicting.ID,
+		newDecision.ID, conflictingDecision.ID,
 		newDecision.Scope.Domain, newDecision.Scope.System, reason)
 	if err != nil {
 		return nil, err
@@ -60,18 +81,42 @@ func (e *ContradictionEngine) DetectAndQuarantine(ctx context.Context,
 }
 
 func isContradictory(a, b *types.Decision) bool {
-	if a.Title == b.Title {
+	if a == nil || b == nil {
+		return false
+	}
+	if strings.TrimSpace(a.Title) == "" || strings.TrimSpace(b.Title) == "" {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(a.Title), strings.TrimSpace(b.Title)) {
 		return true
 	}
 
 	aLower := strings.ToLower(a.Title)
 	bLower := strings.ToLower(b.Title)
 
-	if a.Scope.System == "db" || a.Scope.System == "database" {
-		if (strings.Contains(aLower, "postgres") && strings.Contains(bLower, "mongodb")) ||
-			(strings.Contains(aLower, "mongodb") && strings.Contains(bLower, "postgres")) {
+	if a.Scope.Domain == b.Scope.Domain && a.Scope.System == b.Scope.System {
+		if aLower == bLower {
+			return true
+		}
+		if aLower == strings.ToLower(b.Title) {
 			return true
 		}
 	}
+
+	techA, hasTechA := detectTechnologyToken(aLower)
+	techB, hasTechB := detectTechnologyToken(bLower)
+	if hasTechA && hasTechB && techA != techB {
+		return true
+	}
+
 	return false
+}
+
+func detectTechnologyToken(s string) (string, bool) {
+	for _, token := range []string{"postgres", "postgresql", "mysql", "mongodb", "redis", "sqlite", "sqlserver", "oracle", "cockroach", "elasticsearch"} {
+		if strings.Contains(s, token) {
+			return token, true
+		}
+	}
+	return "", false
 }

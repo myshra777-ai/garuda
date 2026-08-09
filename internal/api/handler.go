@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/engine"
+	"github.com/myshra777-ai/garuda/internal/telemetry"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -35,6 +37,27 @@ type AgentCheckpointRequest struct {
 	State  map[string]interface{} `json:"state,omitempty"`
 }
 
+// DashboardStatsResponse defines the structured JSON response for dashboard analytics.
+type DashboardStatsResponse struct {
+	TenantID             string  `json:"tenant_id"`
+	TotalDecisions       int     `json:"total_decisions"`
+	ActiveContradictions int     `json:"active_contradictions"`
+	TokensSaved          int64   `json:"tokens_saved"`
+	CostSaved            float64 `json:"cost_saved"`
+	LatestMerkleHash     string  `json:"latest_merkle_hash"`
+	ParentMerkleHash     string  `json:"parent_merkle_hash"`
+	LatestBlockHeight    int64   `json:"latest_block_height"`
+	Timestamp            string  `json:"timestamp"`
+}
+
+// EvaluateRouteRequest payload for testing or routing policy enforcement.
+type EvaluateRouteRequest struct {
+	TenantID    string `json:"tenant_id"`
+	ScopeDomain string `json:"scope_domain"`
+	ScopeSystem string `json:"scope_system"`
+	Action      string `json:"action"`
+}
+
 // Server holds dependencies for network API handlers.
 type Server struct {
 	store               types.DecisionStore
@@ -42,11 +65,13 @@ type Server struct {
 	jwtConfig           *auth.JWTConfig
 	contradictionEngine *engine.ContradictionEngine
 	lineageEngine       *engine.LineageEngine
+	sseBroker           *telemetry.SSEBroker
+	router              *mux.Router
 	checkpointMu        sync.RWMutex
 	checkpointStore     map[string]CheckpointRecord
 }
 
-// NewServer creates a new API server instance with initialized state.
+// NewServer creates a new API server instance with initialized state, router, and SSE broker.
 func NewServer(
 	store types.DecisionStore,
 	authService *auth.AuthService,
@@ -54,26 +79,62 @@ func NewServer(
 	contradictionEngine *engine.ContradictionEngine,
 	lineageEngine *engine.LineageEngine,
 ) *Server {
-	return &Server{
+	sseBroker := telemetry.NewSSEBroker()
+
+	s := &Server{
 		store:               store,
 		authService:         authService,
 		jwtConfig:           jwtConfig,
 		contradictionEngine: contradictionEngine,
 		lineageEngine:       lineageEngine,
+		sseBroker:           sseBroker,
+		router:              mux.NewRouter(),
 		checkpointStore:     make(map[string]CheckpointRecord),
 	}
+
+	s.RegisterRoutes(s.router)
+	return s
+}
+
+// RegisterRoutes sets up HTTP routing and subrouter middleware hierarchy.
+func (s *Server) RegisterRoutes(r *mux.Router) {
+	// Public routes
+	r.HandleFunc("/health", s.HandleHealth).Methods(http.MethodGet)
+	r.HandleFunc("/dashboard", s.HandleDashboard).Methods(http.MethodGet)
+	r.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}).Methods(http.MethodGet)
+	r.HandleFunc("/debug/token", s.HandleDebugToken).Methods(http.MethodGet)
+
+	// Protected API Subrouter - Single declaration wrapped with AuthMiddleware
+	api := r.PathPrefix("/api/v1").Subrouter()
+	api.Use(s.AuthMiddleware)
+
+	// Dashboard Telemetry & Stats
+	api.HandleFunc("/dashboard/stats", s.HandleDashboardStats).Methods(http.MethodGet)
+
+	// Live Telemetry SSE Stream Endpoint
+	api.Handle("/telemetry/stream", s.sseBroker).Methods(http.MethodGet)
+
+	// Pre-Flight Classification Router Evaluation
+	api.HandleFunc("/router/evaluate", s.HandleEvaluateRoute).Methods(http.MethodPost, http.MethodOptions)
+
+	// Multi-Agent Execution & Lineage
+	api.HandleFunc("/agents/handoff", s.HandleHandoff).Methods(http.MethodPost)
+	api.HandleFunc("/agents/resume", s.HandleResume).Methods(http.MethodPost)
+	api.HandleFunc("/tasks/{task_id}/lineage", s.HandleGetLineage).Methods(http.MethodGet)
+
+	// Audit Log & Compliance Endpoints
+	api.HandleFunc("/audit/export", s.HandleExportAuditLogs).Methods(http.MethodGet)
+	api.HandleFunc("/audit/verify/{id}", s.HandleVerifyAuditLog).Methods(http.MethodGet)
+}
+
+// ServeHTTP implements http.Handler for the Server struct.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.router.ServeHTTP(w, r)
 }
 
 // RespondWithError writes a standard JSON error response to the client.
-func (s *Server) RespondWithError(w http.ResponseWriter, code int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(APIError{
-		Code:      code,
-		Message:   msg,
-		Timestamp: time.Now().UTC(),
-	})
-}
 
 // HandleHealth returns gateway health status.
 func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +149,6 @@ func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 // HandleDebugToken generates a tenant-scoped JWT for testing (disabled in production).
 func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
-	// Guard: Never expose debug endpoint in production environments
 	if os.Getenv("GARUDA_ENV") == "production" {
 		s.RespondWithError(w, http.StatusNotFound, "debug endpoint disabled in production")
 		return
@@ -119,7 +179,6 @@ func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Deterministic tenant UUID derived from actor name
 		tenantID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(actor))
 	}
 
@@ -138,9 +197,29 @@ func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleAgentCheckpoint stores an agent execution state snapshot.
-// REMOVE THESE DUPLICATE METHODS FROM internal/api/handler.go:
+// HandleVerifyAuditLog verifies a given audit event ID against the tenant's active Merkle root.
+func (s *Server) HandleVerifyAuditLog(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	eventIDStr := vars["id"]
+	eventID, err := uuid.Parse(eventIDStr)
+	if err != nil {
+		s.RespondWithError(w, http.StatusBadRequest, "invalid audit event id format")
+		return
+	}
 
-// func (s *Server) HandleAgentCheckpoint(w http.ResponseWriter, r *http.Request) { ... }
-// func (s *Server) HandleGetAgentCheckpoint(w http.ResponseWriter, r *http.Request) { ... }
-// HandleGetAgentCheckpoint retrieves a stored agent execution state snapshot.
+	tenantID, err := resolveTenantID(r, uuid.Nil)
+	if err != nil {
+		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required")
+		return
+	}
+
+	verification, err := s.store.VerifyAuditEvent(r.Context(), tenantID, eventID)
+	if err != nil {
+		s.RespondWithError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(verification)
+}

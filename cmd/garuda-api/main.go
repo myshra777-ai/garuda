@@ -12,15 +12,23 @@ import (
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/engine"
 	"github.com/myshra777-ai/garuda/internal/lineage"
+	"github.com/myshra777-ai/garuda/internal/mcp"
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/telemetry"
 )
 
 func main() {
-	// 1. Initialize Telemetry (Garuda v4 Roadmap Specification)
+	// 1. Initialize Telemetry with config and consent checks.
 	telConfig := telemetry.LoadConfigFromEnv()
-	telemetry.InitTelemetry(telConfig)
-	slog.Info("Telemetry engine initialized", "enabled", telConfig.Enabled, "tenant", os.Getenv("GARUDA_TENANT_ID"))
+
+	if os.Getenv("GARUDA_MODE") == "passive" {
+		telConfig.Mode = "passive"
+	}
+
+	if err := telemetry.InitTelemetry(telConfig); err != nil {
+		slog.Warn("Telemetry init failed", "error", err)
+	}
+	slog.Info("Telemetry engine initialized", "enabled", telConfig.Enabled, "mode", telConfig.Mode, "tenant", os.Getenv("GARUDA_TENANT_ID"))
 
 	// 2. Load Configuration from Environment
 	dbURL := os.Getenv("DATABASE_URL")
@@ -79,56 +87,76 @@ func main() {
 	protectedMux := http.NewServeMux()
 
 	// ------------------------------------------------------------------
-	// A. UNPROTECTED / PUBLIC ROUTES (Accessible via Browser & Web UI)
+	// A. PUBLIC / SYSTEM ENDPOINTS (Accessible without JWT)
 	// ------------------------------------------------------------------
 	mainMux.HandleFunc("GET /health", server.HandleHealth)
+	mainMux.HandleFunc("GET /system/health", server.HandleHealth)
+	mainMux.HandleFunc("GET /system/discover", server.HandleSystemDiscover)
+	mainMux.HandleFunc("GET /system/bootstrap", server.HandleSystemBootstrap)
+	mainMux.HandleFunc("POST /sandbox", server.HandleSandbox)
+
+	// Documentation & Visual Dashboards
 	mainMux.HandleFunc("GET /dashboard", server.HandleDashboard)
-	mainMux.HandleFunc("GET /api/v1/events", server.HandleLiveEvents) // The Web Dashboard's SSE live-update script hit /api/v1/events, which requires JWT auth.
-	mainMux.HandleFunc("GET /debug/token", server.HandleDebugToken)
+	mainMux.HandleFunc("GET /docs", server.HandleSwaggerUI)
+	mainMux.HandleFunc("GET /openapi.yaml", server.HandleOpenAPISpec)
+	mainMux.HandleFunc("GET /openapi.json", server.HandleOpenAPISpec)
 	mainMux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
+	// MCP Bridge & Debug Token
+	mainMux.HandleFunc("POST /mcp/bridge", mcp.BridgeHandler("http://localhost:8080"))
+	mainMux.HandleFunc("GET /debug/token", server.HandleDebugToken)
+
 	// ------------------------------------------------------------------
 	// B. PROTECTED API ROUTES (Require JWT Authorization)
 	// ------------------------------------------------------------------
+	// Decisions
 	protectedMux.HandleFunc("POST /api/v1/decisions/submit", server.HandleProposeDecision)
+	protectedMux.HandleFunc("POST /api/v1/decisions", server.HandleProposeDecision)
+	protectedMux.HandleFunc("GET /api/v1/decisions/active", server.HandleDecisionsActiveAt)
+	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/history", server.HandleDecisionHistory)
 	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/lineage", server.HandleDecisionLineage)
-	protectedMux.HandleFunc("POST /api/v1/agents/warmup", server.HandleAgentWarmup)
 
-	// Agent checkpoint endpoints
+	// Multi-Agent Execution & Checkpoints
+	protectedMux.HandleFunc("POST /api/v1/agents/warmup", server.HandleAgentWarmup)
 	protectedMux.HandleFunc("POST /api/v1/agents/checkpoint", server.HandleAgentCheckpoint)
 	protectedMux.HandleFunc("GET /api/v1/agents/checkpoint/{id}", server.HandleGetAgentCheckpoint)
 	protectedMux.HandleFunc("POST /api/v1/agents/resume", server.HandleAgentResume)
 	protectedMux.HandleFunc("POST /api/v1/agents/handoff", server.HandleAgentHandoff)
 
-	// Budget & Metering endpoints
-	protectedMux.HandleFunc("GET /api/v1/budget", server.HandleGetBudget)
-	protectedMux.HandleFunc("POST /api/v1/budget/consume", server.HandleConsumeBudget)
-
-	// Evidence & Verification endpoints
+	// Audit & Compliance
+	protectedMux.HandleFunc("GET /api/v1/audit/export", server.HandleExportAuditLogs)
+	protectedMux.HandleFunc("GET /api/v1/audit/verify/{id}", server.HandleVerifyAuditLog)
 	protectedMux.HandleFunc("GET /api/v1/evidence/verify/{id}", server.HandleVerifyDecision)
 	protectedMux.HandleFunc("GET /api/v1/evidence/snapshots", server.HandleListMerkleSnapshots)
 
-	// Temporal / Bitemporal routes
-	protectedMux.HandleFunc("GET /api/v1/decisions/active", server.HandleDecisionsActiveAt)
-	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/history", server.HandleDecisionHistory)
+	// Budget & Metering
+	protectedMux.HandleFunc("GET /api/v1/budget", server.HandleGetBudget)
+	protectedMux.HandleFunc("POST /api/v1/budget/consume", server.HandleConsumeBudget)
+
+	// Router Pre-Flight Evaluation
+	protectedMux.HandleFunc("POST /api/v1/router/evaluate", server.HandleEvaluateRoute)
+
+	// Dashboard Stats Stream
+	protectedMux.HandleFunc("GET /api/v1/dashboard/stats", server.HandleDashboardStats)
+	protectedMux.HandleFunc("GET /api/v1/events", server.HandleLiveEvents)
 
 	// ------------------------------------------------------------------
 	// C. ROUTE INTEGRATION & MIDDLEWARE PIPELINE
 	// ------------------------------------------------------------------
-	// Wrap protected API endpoints with the JWT Auth Middleware
+	// Wrap protected API tree with JWT Authentication
 	protectedHandler := api.WithAuth(jwtConfig)(protectedMux)
-
-	// Mount protected API tree onto main multiplexer under /api/
 	mainMux.Handle("/api/", protectedHandler)
 
-	// Construct global middleware chain: Recovery -> Logging -> RequestID -> RateLimit -> CORS -> Mux
+	// Global Middleware Chain: Recovery -> Logging -> RequestID -> MerkleHeader -> RateLimit -> CORS -> Mux
 	handler := api.WithRecovery(
 		api.WithLogging(
 			api.WithRequestID(
-				api.WithRateLimit(rateLimiter)(
-					api.WithCORS([]string{"*"})(mainMux),
+				server.WithMerkleHeader(
+					api.WithRateLimit(rateLimiter)(
+						api.WithCORS([]string{"*"})(mainMux),
+					),
 				),
 			),
 		),
@@ -143,7 +171,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// 9. Graceful Shutdown & Intercept Mechanisms
+	// 9. Graceful Shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -159,18 +187,21 @@ func main() {
 	<-ctx.Done()
 	slog.Info("Shutting down gateway gracefully...")
 
-	// Allocate a 30-second window to flush processes and metrics safely
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Flush remaining telemetry batches before stopping network listeners
 	if err := telemetry.ShutdownTelemetry(shutdownCtx); err != nil {
 		slog.Error("Telemetry metric flush on shutdown failed", "error", err)
 	} else {
 		slog.Info("Telemetry pipeline drained cleanly")
 	}
 
-	// Terminate active network listeners
+	if err := telemetry.InitTelemetry(telConfig); err != nil {
+		slog.Warn("Telemetry init failed", "error", err)
+	} else {
+		slog.Info("Telemetry initialized successfully")
+	}
+
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		slog.Error("Graceful HTTP stack shutdown failed", "error", err)
 		os.Exit(1)

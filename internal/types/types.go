@@ -136,18 +136,6 @@ type TaskManifest struct {
 }
 
 // Checkpoint represents an agent's saved context state.
-type Checkpoint struct {
-	ID             uuid.UUID       `json:"id"`
-	TenantID       uuid.UUID       `json:"tenant_id"`
-	AgentID        string          `json:"agent_id"`
-	TaskID         *uuid.UUID      `json:"task_id,omitempty"`
-	CheckpointData json.RawMessage `json:"checkpoint_data"`
-	Status         string          `json:"status"` // active, completed, transferred, expired
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
-	ExpiresAt      *time.Time      `json:"expires_at,omitempty"`
-}
-
 // DecisionStore defines the multi-tenant contract for persisting governance and context objects.
 // internal/types/types.go
 
@@ -192,4 +180,72 @@ type DecisionStore interface {
 	// Temporal Methods
 	GetDecisionsActiveAt(ctx context.Context, tenantID uuid.UUID, at time.Time, scope Scope, statuses []DecisionStatus) ([]*Decision, error)
 	GetDecisionHistory(ctx context.Context, tenantID, decisionID uuid.UUID) ([]*Decision, error)
+	// Audit Trail Capabilities
+	LogAuditEvent(ctx context.Context, tenantID uuid.UUID, eventType string, eventID uuid.UUID, actor string, payload interface{}) (*AuditEvent, error)
+	VerifyAuditEvent(ctx context.Context, tenantID uuid.UUID, eventID uuid.UUID) (*AuditVerification, error)
+	ListAuditEvents(ctx context.Context, tenantID uuid.UUID, since time.Time) ([]AuditEvent, error)
+}
+
+// Agent represents an AI agent or worker.
+type Agent struct {
+	ID            uuid.UUID       `json:"id"`
+	TenantID      uuid.UUID       `json:"tenant_id"`
+	Name          string          `json:"name"`
+	ModelType     string          `json:"model_type"`
+	SessionID     string          `json:"session_id"`
+	Status        string          `json:"status"` // idle, working, transitioning, paused, offline
+	CurrentTaskID *uuid.UUID      `json:"current_task_id,omitempty"`
+	LastHeartbeat time.Time       `json:"last_heartbeat"`
+	Metadata      json.RawMessage `json:"metadata"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
+// Task represents a unit of work.
+type Task struct {
+	ID           uuid.UUID  `json:"id"`
+	TenantID     uuid.UUID  `json:"tenant_id"`
+	Title        string     `json:"title"`
+	Description  string     `json:"description,omitempty"`
+	Status       string     `json:"status"` // pending, in_progress, paused, completed, abandoned
+	Priority     int        `json:"priority"`
+	OwnerAgentID *uuid.UUID `json:"owner_agent_id,omitempty"`
+	ParentTaskID *uuid.UUID `json:"parent_task_id,omitempty"`
+	ScopeDomain  string     `json:"scope_domain"`
+	ScopeSystem  string     `json:"scope_system"`
+	Version      int        `json:"version"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+}
+
+// LineageEdge represents an edge in the lineage DAG.
+type LineageEdge struct {
+	SourceTaskID uuid.UUID  `json:"source_task_id"`
+	TargetTaskID uuid.UUID  `json:"target_task_id"`
+	EdgeType     string     `json:"edge_type"` // handoff, depends_on, supersedes
+	HandoffID    *uuid.UUID `json:"handoff_id,omitempty"`
+	Depth        int        `json:"depth,omitempty"`
+}
+
+// AuditEvent represents a logged state change with Merkle chain linkage.
+type AuditEvent struct {
+	ID          uuid.UUID       `json:"id"`
+	TenantID    uuid.UUID       `json:"tenant_id"`
+	EventType   string          `json:"event_type"`
+	EventID     uuid.UUID       `json:"event_id"`
+	Actor       string          `json:"actor"`
+	Payload     interface{}     `json:"payload"`
+	EventHash   string          `json:"event_hash"`
+	MerkleProof json.RawMessage `json:"merkle_proof,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+}
+
+// AuditVerification returns the Merkle proof for an event.
+type AuditVerification struct {
+	EventID     uuid.UUID `json:"event_id"`
+	EventHash   string    `json:"event_hash"`
+	RootHash    string    `json:"root_hash"`
+	BlockHeight int64     `json:"block_height"`
+	IsVerified  bool      `json:"is_verified"`
 }

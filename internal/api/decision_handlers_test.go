@@ -1,10 +1,8 @@
 package api
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/auth"
-	"github.com/myshra777-ai/garuda/internal/telemetry"
+	"github.com/myshra777-ai/garuda/internal/engine"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -54,6 +52,76 @@ func (f *fakeDecisionStore) ListDecisionsByParent(ctx context.Context, tenantID,
 	return nil, nil
 }
 
+func (f *fakeDecisionStore) SaveCheckpoint(ctx context.Context, c *types.Checkpoint) error {
+	return nil
+}
+
+func (f *fakeDecisionStore) GetCheckpoint(ctx context.Context, tenantID, id uuid.UUID) (*types.Checkpoint, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) ListCheckpointsByAgent(ctx context.Context, tenantID uuid.UUID, agentID string, limit int) ([]*types.Checkpoint, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (*types.TenantBudget, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) PreflightCheckAndReserve(ctx context.Context, tenantID uuid.UUID, estimatedTokens int) error {
+	return nil
+}
+
+func (f *fakeDecisionStore) ConsumeBudgetDeduct(ctx context.Context, tenantID uuid.UUID, req types.BudgetConsumptionRequest) (*types.BudgetConsumptionResponse, error) {
+	return &types.BudgetConsumptionResponse{Allowed: true}, nil
+}
+
+func (f *fakeDecisionStore) QuarantineDecision(ctx context.Context, tenantID uuid.UUID, proposedID, conflictingID uuid.UUID, domain, system, reason string) (*types.Contradiction, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) ListUnresolvedContradictions(ctx context.Context, tenantID uuid.UUID) ([]types.Contradiction, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) ResolveContradiction(ctx context.Context, id uuid.UUID, strategy string) error {
+	return nil
+}
+
+func (f *fakeDecisionStore) GetMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleRoot, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) AppendMerkleChain(ctx context.Context, tenantID uuid.UUID, decisionHash string) (*types.MerkleRoot, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) AddEvidenceBlock(ctx context.Context, tenantID, decisionID uuid.UUID, payload any) (*types.EvidenceBlock, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) ListAllTenants(ctx context.Context) ([]uuid.UUID, error) { return nil, nil }
+
+func (f *fakeDecisionStore) GetLatestMerkleSnapshot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleSnapshot, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) SaveMerkleSnapshot(ctx context.Context, snap *types.MerkleSnapshot) error {
+	return nil
+}
+
+func (f *fakeDecisionStore) ListMerkleSnapshots(ctx context.Context, tenantID uuid.UUID, limit int) ([]types.MerkleSnapshot, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) GetDecisionsActiveAt(ctx context.Context, tenantID uuid.UUID, at time.Time, scope types.Scope, statuses []types.DecisionStatus) ([]*types.Decision, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) GetDecisionHistory(ctx context.Context, tenantID, decisionID uuid.UUID) ([]*types.Decision, error) {
+	return nil, nil
+}
+
 func (f *fakeDecisionStore) ListContradictions(ctx context.Context, tenantID uuid.UUID, resolved bool) ([]types.Contradiction, error) {
 	return nil, nil
 }
@@ -70,103 +138,63 @@ func (f *fakeDecisionStore) ConsumeBudget(ctx context.Context, tenantID uuid.UUI
 	return nil
 }
 
-// HandleProposeDecision validates and persists a new decision proposal.
-func (s *Server) HandleProposeDecision(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-	telemetry.RecordFeatureUsage("submit_decision")
+// Audit Trail Implementations for fakeDecisionStore
+func (f *fakeDecisionStore) LogAuditEvent(ctx context.Context, tenantID uuid.UUID, eventType string, eventID uuid.UUID, actor string, payload interface{}) (*types.AuditEvent, error) {
+	return &types.AuditEvent{
+		ID:        uuid.New(),
+		TenantID:  tenantID,
+		EventType: eventType,
+		EventID:   eventID,
+		Actor:     actor,
+		Payload:   payload,
+		CreatedAt: time.Now().UTC(),
+	}, nil
+}
 
-	var req DecisionProposalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		telemetry.RecordError("malformed_json", err.Error())
-		http.Error(w, `{"error":"invalid request payload"}`, http.StatusBadRequest)
-		return
-	}
+func (f *fakeDecisionStore) VerifyAuditEvent(ctx context.Context, tenantID, eventID uuid.UUID) (*types.AuditVerification, error) {
+	return &types.AuditVerification{
+		EventID:    eventID,
+		IsVerified: true,
+	}, nil
+}
 
-	tenantID, err := resolveTenantID(r, req.TenantID)
+func (f *fakeDecisionStore) ListAuditEvents(ctx context.Context, tenantID uuid.UUID, since time.Time) ([]types.AuditEvent, error) {
+	return []types.AuditEvent{}, nil
+}
+
+func TestHandleProposeDecisionRejectsContradictions(t *testing.T) {
+	store := &fakeDecisionStore{decisions: map[uuid.UUID]*types.Decision{}}
+	jwtConfig, err := auth.NewJWTConfig("garuda", "garuda-api", 5*time.Minute)
 	if err != nil {
-		telemetry.RecordError("validation_failure", err.Error())
-		http.Error(w, `{"error":"tenant_id is required"}`, http.StatusUnprocessableEntity)
-		return
+		t.Fatalf("new jwt config: %v", err)
+	}
+	tenantID := uuid.New()
+	token, err := jwtConfig.GenerateTokenWithTenant("alice", tenantID.String())
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
 	}
 
-	if req.Title == "" {
-		telemetry.RecordError("validation_failure", "missing title")
-		http.Error(w, `{"error":"title is required"}`, http.StatusUnprocessableEntity)
-		return
+	server := NewServer(store, nil, jwtConfig, engine.NewContradictionEngine(store), nil)
+
+	first := []byte(`{"title":"Use PostgreSQL for financial records","scope_domain":"finance","scope_system":"ledger"}`)
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/decisions/submit", bytes.NewReader(first))
+	req1.Header.Set("Authorization", "Bearer "+token)
+	req1 = req1.WithContext(auth.ContextWithActorAndTenant(req1.Context(), "alice", tenantID.String()))
+	rr1 := httptest.NewRecorder()
+	server.HandleProposeDecision(rr1, req1)
+	if rr1.Code != http.StatusCreated {
+		t.Fatalf("first decision expected 201, got %d: %s", rr1.Code, rr1.Body.String())
 	}
 
-	now := time.Now().UTC()
-	actor, _ := auth.ActorFromContext(r.Context())
-	if actor == "" {
-		actor = "system"
+	second := []byte(`{"title":"Use MongoDB for financial records","scope_domain":"finance","scope_system":"ledger"}`)
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/decisions/submit", bytes.NewReader(second))
+	req2.Header.Set("Authorization", "Bearer "+token)
+	req2 = req2.WithContext(auth.ContextWithActorAndTenant(req2.Context(), "alice", tenantID.String()))
+	rr2 := httptest.NewRecorder()
+	server.HandleProposeDecision(rr2, req2)
+	if rr2.Code != http.StatusConflict {
+		t.Fatalf("second decision expected 409, got %d: %s", rr2.Code, rr2.Body.String())
 	}
-
-	decision := &types.Decision{
-		ID:               uuid.New(),
-		TenantID:         tenantID,
-		Title:            req.Title,
-		Status:           types.StatusDraft,
-		ScopeDomain:      req.ScopeDomain, // Populated flat field
-		ScopeSystem:      req.ScopeSystem, // Populated flat field
-		Scope:            types.Scope{Domain: req.ScopeDomain, System: req.ScopeSystem},
-		Owner:            actor,
-		Confidence:       0.8,
-		EvidenceIDs:      req.EvidenceIDs,
-		TemporalMetadata: req.TemporalMetadata,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-	}
-
-	// 1. Save decision and expose exact error on failure
-	if err := s.store.SaveDecision(r.Context(), decision); err != nil {
-		log.Printf("ERROR: SaveDecision failed: %v", err)
-		telemetry.RecordError("db_save_failed", err.Error())
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("failed to save decision: %v", err),
-		})
-		return
-	}
-
-	// 2. Run Autonomous Contradiction Quarantine Engine
-	var quarantineResult *types.Contradiction
-	if s.contradictionEngine != nil {
-		q, err := s.contradictionEngine.DetectAndQuarantine(r.Context(), decision)
-		if err != nil {
-			telemetry.RecordError("quarantine_evaluation_failed", err.Error())
-		} else if q != nil {
-			quarantineResult = q
-			telemetry.RecordContradictionDetected()
-		}
-	}
-
-	// 3. Consume budget post-execution
-	if err := s.ConsumeBudgetForRequest(r, "propose_decision", req); err != nil {
-		telemetry.RecordError("budget_consume_failed", err.Error())
-	}
-
-	telemetry.RecordDecisionProposed(quarantineResult != nil)
-	telemetry.RecordAPILatency(time.Since(start))
-
-	// 4. Build response payload
-	resp := map[string]interface{}{
-		"id":        decision.ID.String(),
-		"status":    decision.Status,
-		"tenant_id": decision.TenantID.String(),
-		"title":     decision.Title,
-	}
-
-	if quarantineResult != nil {
-		resp["quarantined"] = true
-		resp["status"] = types.StatusQuarantined
-		resp["contradiction_id"] = quarantineResult.ID.String()
-		resp["conflicting_decision_id"] = quarantineResult.DecisionA.String()
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func TestHandleDecisionLineageUsesTenantFromContext(t *testing.T) {
