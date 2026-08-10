@@ -73,15 +73,32 @@ func (s *Server) HandleTopologyExecute(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleTopologyStatus returns topology details and SSE stream.
+// HandleTopologyStatus returns topology details with tasks.
 func (s *Server) HandleTopologyStatus(w http.ResponseWriter, r *http.Request) {
-	// For MVP, return basic status
 	topologyIDStr := r.PathValue("id")
 	if topologyIDStr == "" {
 		s.RespondWithError(w, http.StatusBadRequest, "topology ID required")
 		return
 	}
-	// Fetch from DB and return
+	topologyID, err := uuid.Parse(topologyIDStr)
+	if err != nil {
+		s.RespondWithError(w, http.StatusBadRequest, "invalid topology ID")
+		return
+	}
+
+	topology, err := s.store.GetTopology(r.Context(), topologyID)
+	if err != nil {
+		s.RespondWithError(w, http.StatusNotFound, "topology not found")
+		return
+	}
+	tasks, err := s.store.GetTasksByTopology(r.Context(), topologyID)
+	if err != nil {
+		s.RespondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	topology.Tasks = tasks
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"active"}`))
+	json.NewEncoder(w).Encode(topology)
 }

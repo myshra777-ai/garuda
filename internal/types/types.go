@@ -147,7 +147,14 @@ type DecisionStore interface {
 	GetContradiction(ctx context.Context, tenantID, id uuid.UUID) (*Contradiction, error)
 	IngestEvidence(ctx context.Context, tenantID uuid.UUID, evidence []Evidence) error
 	ConsumeBudget(ctx context.Context, tenantID uuid.UUID, tokens int) error
+
+	// Topology methods
 	SaveTopology(ctx context.Context, top *Topology) error
+	GetTopology(ctx context.Context, id uuid.UUID) (*Topology, error)
+	GetTasksByTopology(ctx context.Context, topologyID uuid.UUID) ([]*Task, error)
+	UpdateTopologyStatus(ctx context.Context, id uuid.UUID, status TopologyStatus) error
+	UpdateTask(ctx context.Context, task *Task) error
+	UpdateTopologyTokens(ctx context.Context, id uuid.UUID, tokens int64) error
 
 	// Checkpoint methods
 	SaveCheckpoint(ctx context.Context, c *Checkpoint) error

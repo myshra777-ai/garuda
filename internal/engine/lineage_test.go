@@ -199,6 +199,22 @@ func TestGetDecisionLineageIncludesParentAndChildren(t *testing.T) {
 		t.Fatalf("expected no direct children for lineage root, got %d", len(lineage.Children))
 	}
 }
+
+func (s *stubDecisionStore) GetTopology(ctx context.Context, id uuid.UUID) (*types.Topology, error) {
+	return nil, nil
+}
+func (s *stubDecisionStore) GetTasksByTopology(ctx context.Context, topologyID uuid.UUID) ([]*types.Task, error) {
+	return nil, nil
+}
+func (s *stubDecisionStore) UpdateTopologyStatus(ctx context.Context, id uuid.UUID, status types.TopologyStatus) error {
+	return nil
+}
+func (s *stubDecisionStore) UpdateTask(ctx context.Context, task *types.Task) error {
+	return nil
+}
+func (s *stubDecisionStore) UpdateTopologyTokens(ctx context.Context, id uuid.UUID, tokens int64) error {
+	return nil
+}
 func (s *stubDecisionStore) GetPlan(ctx context.Context, tenantID uuid.UUID, req *types.PlanRequest) (*types.PlanResult, error) {
 	return &types.PlanResult{
 		TenantID:     tenantID,

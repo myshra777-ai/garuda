@@ -66,7 +66,6 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	protectedMux.HandleFunc("GET /api/v1/agents/checkpoint/{id}", server.HandleGetAgentCheckpoint)
 	protectedMux.HandleFunc("POST /api/v1/agents/resume", server.HandleAgentResume)
 	protectedMux.HandleFunc("POST /api/v1/agents/handoff", server.HandleAgentHandoff)
-
 	// Audit & Compliance
 	protectedMux.HandleFunc("GET /api/v1/audit/export", server.HandleExportAuditLogs)
 	protectedMux.HandleFunc("GET /api/v1/audit/verify/{id}", server.HandleVerifyAuditLog)
