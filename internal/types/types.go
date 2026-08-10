@@ -184,6 +184,8 @@ type DecisionStore interface {
 	LogAuditEvent(ctx context.Context, tenantID uuid.UUID, eventType string, eventID uuid.UUID, actor string, payload interface{}) (*AuditEvent, error)
 	VerifyAuditEvent(ctx context.Context, tenantID uuid.UUID, eventID uuid.UUID) (*AuditVerification, error)
 	ListAuditEvents(ctx context.Context, tenantID uuid.UUID, since time.Time) ([]AuditEvent, error)
+	// GetPlan assembles a structured plan from decisions, tasks, handoffs, milestones, and lineage.
+	GetPlan(ctx context.Context, tenantID uuid.UUID, req *PlanRequest) (*PlanResult, error)
 }
 
 // Agent represents an AI agent or worker.
@@ -249,3 +251,51 @@ type AuditVerification struct {
 	BlockHeight int64     `json:"block_height"`
 	IsVerified  bool      `json:"is_verified"`
 }
+type Milestone struct {
+	ID          uuid.UUID  `json:"id"`
+	TenantID    uuid.UUID  `json:"tenant_id"`
+	TaskID      *uuid.UUID `json:"task_id,omitempty"`
+	Title       string     `json:"title"`
+	Description string     `json:"description,omitempty"`
+	Status      string     `json:"status"` // pending, completed, superseded
+	DueDate     *time.Time `json:"due_date,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+type HandoffRecord struct {
+	ID            uuid.UUID  `json:"id"`
+	TenantID      uuid.UUID  `json:"tenant_id"`
+	TaskID        uuid.UUID  `json:"task_id"`
+	SourceAgentID uuid.UUID  `json:"source_agent_id"`
+	TargetAgentID uuid.UUID  `json:"target_agent_id"`
+	Reason        string     `json:"reason"`
+	Status        string     `json:"status"`
+	CreatedAt     time.Time  `json:"created_at"`
+	CompletedAt   *time.Time `json:"completed_at,omitempty"`
+}
+
+// PlanRequest defines the filters for a plan query.
+type PlanRequest struct {
+	ScopeDomain string     `json:"scope_domain"`
+	ScopeSystem string     `json:"scope_system"`
+	At          *time.Time `json:"at"`
+	Statuses    []string   `json:"statuses"`
+}
+
+// PlanResult encapsulates the full plan for a scope.
+type PlanResult struct {
+	TenantID     uuid.UUID        `json:"tenant_id"`
+	Scope        Scope            `json:"scope"`
+	Decisions    []*Decision      `json:"decisions"`
+	Tasks        []*Task          `json:"tasks"`
+	Handoffs     []*HandoffRecord `json:"handoffs"`
+	Milestones   []*Milestone     `json:"milestones"`
+	Dependencies []LineageEdge    `json:"dependencies"`
+	GeneratedAt  time.Time        `json:"generated_at"`
+}
+
+// HandoffRecord represents a handoff between agents.
+
+// Milestone represents a project milestone.

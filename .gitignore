@@ -6,3 +6,4 @@ garuda-api
 garuda-mcp
 garuda_platform.html
 Release
+.venv/

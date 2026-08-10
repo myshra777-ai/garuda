@@ -1,0 +1,43 @@
+name: Weekly Benchmark Suite
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"  # Every Sunday at midnight
+  workflow_dispatch:      # Manual trigger
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install matplotlib requests
+
+      - name: Install Garuda
+        run: |
+          chmod +x install.sh
+          ./install.sh
+          export PATH=$PATH:/usr/local/bin
+
+      - name: Run Benchmark Suite
+        env:
+          GEMINI_API_KEY_QUATERNARY: ${{ secrets.GEMINI_API_KEY_QUATERNARY }}
+          GEMINI_API_KEY_PRIMARY: ${{ secrets.GEMINI_API_KEY_PRIMARY }}
+        run: |
+          python scripts/weekly_benchmark.py
+
+      - name: Commit benchmark results
+        uses: EndBug/add-and-commit@v9
+        with:
+          author_name: "Garuda Benchmark Bot"
+          author_email: "benchmark@garuda.ai"
+          message: "benchmark: weekly performance report [skip ci]"
+          add: "benchmarks/ BENCHMARKS.md"

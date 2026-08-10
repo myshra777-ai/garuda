@@ -175,3 +175,15 @@ func TestGetDecisionLineageIncludesParentAndChildren(t *testing.T) {
 		t.Fatalf("expected no direct children for lineage root, got %d", len(lineage.Children))
 	}
 }
+func (s *stubDecisionStore) GetPlan(ctx context.Context, tenantID uuid.UUID, req *types.PlanRequest) (*types.PlanResult, error) {
+	return &types.PlanResult{
+		TenantID:     tenantID,
+		Scope:        types.Scope{Domain: req.ScopeDomain, System: req.ScopeSystem},
+		Decisions:    []*types.Decision{},
+		Tasks:        []*types.Task{},
+		Handoffs:     []*types.HandoffRecord{},
+		Milestones:   []*types.Milestone{},
+		Dependencies: []types.LineageEdge{},
+		GeneratedAt:  time.Now().UTC(),
+	}, nil
+}

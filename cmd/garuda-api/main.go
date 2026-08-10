@@ -17,85 +17,22 @@ import (
 	"github.com/myshra777-ai/garuda/internal/telemetry"
 )
 
-func main() {
-	// 1. Initialize Telemetry with config and consent checks.
-	telConfig := telemetry.LoadConfigFromEnv()
-
-	if os.Getenv("GARUDA_MODE") == "passive" {
-		telConfig.Mode = "passive"
-	}
-
-	if err := telemetry.InitTelemetry(telConfig); err != nil {
-		slog.Warn("Telemetry init failed", "error", err)
-	}
-	slog.Info("Telemetry engine initialized", "enabled", telConfig.Enabled, "mode", telConfig.Mode, "tenant", os.Getenv("GARUDA_TENANT_ID"))
-
-	// 2. Load Configuration from Environment
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
-	}
-
-	// 3. Database Migrations
-	slog.Info("Running migrations...")
-	if err := store.Migrate(dbURL, "migrations"); err != nil {
-		slog.Error("Migration failed", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("Migrations completed successfully")
-
-	// 4. Identity & Access Management (JWT)
-	jwtIssuer := os.Getenv("JWT_ISSUER")
-	if jwtIssuer == "" {
-		jwtIssuer = "garuda"
-	}
-	jwtAudience := os.Getenv("JWT_AUDIENCE")
-	if jwtAudience == "" {
-		jwtAudience = "garuda-api"
-	}
-	jwtExpiry := 15 * time.Minute
-
-	jwtConfig, err := auth.NewJWTConfig(jwtIssuer, jwtAudience, jwtExpiry)
-	if err != nil {
-		slog.Error("Failed to initialize JWT config", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("JWT authentication initialized", "public_key", jwtConfig.GetPublicKeyHex())
-
-	// 5. Core Storage & Engine Initializations
-	dbStore, err := store.NewPostgresStore(dbURL)
-	if err != nil {
-		slog.Error("Failed to initialize database", "error", err)
-		os.Exit(1)
-	}
-	defer dbStore.Close()
-
-	// Lineage Core Graph & Engine Instances
-	_ = lineage.NewGraph(1000)
-	lineageEngine := engine.NewLineageEngine(dbStore)
-	contradictionEngine := engine.NewContradictionEngine(dbStore)
-
-	// App Services
-	authService := auth.NewAuthService(dbStore, jwtConfig)
-	server := api.NewServer(dbStore, authService, jwtConfig, contradictionEngine, lineageEngine)
-
-	// 6. Security & Traffic Controls
-	rateLimiter := api.NewRateLimiter(100, time.Minute, 1000)
-
-	// 7. Separate Muxing for Public vs. JWT-Protected Endpoints
+// SetupRouter initializes and returns the complete http.Handler middleware pipeline.
+// This allows testing route registrations without spinning up DB connections or the HTTP listener.
+func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api.RateLimiter) http.Handler {
 	mainMux := http.NewServeMux()
 	protectedMux := http.NewServeMux()
 
-	// ------------------------------------------------------------------
-	// A. PUBLIC / SYSTEM ENDPOINTS (Accessible without JWT)
-	// ------------------------------------------------------------------
+	// ----------------------------------------------------------------
+	// A. PUBLIC / SYSTEM ENDPOINTS (No JWT required)
+	// ----------------------------------------------------------------
 	mainMux.HandleFunc("GET /health", server.HandleHealth)
 	mainMux.HandleFunc("GET /system/health", server.HandleHealth)
 	mainMux.HandleFunc("GET /system/discover", server.HandleSystemDiscover)
 	mainMux.HandleFunc("GET /system/bootstrap", server.HandleSystemBootstrap)
 	mainMux.HandleFunc("POST /sandbox", server.HandleSandbox)
 
-	// Documentation & Visual Dashboards
+	// Documentation & Dashboard
 	mainMux.HandleFunc("GET /dashboard", server.HandleDashboard)
 	mainMux.HandleFunc("GET /docs", server.HandleSwaggerUI)
 	mainMux.HandleFunc("GET /openapi.yaml", server.HandleOpenAPISpec)
@@ -108,9 +45,9 @@ func main() {
 	mainMux.HandleFunc("POST /mcp/bridge", mcp.BridgeHandler("http://localhost:8080"))
 	mainMux.HandleFunc("GET /debug/token", server.HandleDebugToken)
 
-	// ------------------------------------------------------------------
-	// B. PROTECTED API ROUTES (Require JWT Authorization)
-	// ------------------------------------------------------------------
+	// ----------------------------------------------------------------
+	// B. PROTECTED API ROUTES (JWT required)
+	// ----------------------------------------------------------------
 	// Decisions
 	protectedMux.HandleFunc("POST /api/v1/decisions/submit", server.HandleProposeDecision)
 	protectedMux.HandleFunc("POST /api/v1/decisions", server.HandleProposeDecision)
@@ -138,18 +75,23 @@ func main() {
 	// Router Pre-Flight Evaluation
 	protectedMux.HandleFunc("POST /api/v1/router/evaluate", server.HandleEvaluateRoute)
 
-	// Dashboard Stats Stream
+	// Dashboard Stats & Live Events
 	protectedMux.HandleFunc("GET /api/v1/dashboard/stats", server.HandleDashboardStats)
 	protectedMux.HandleFunc("GET /api/v1/events", server.HandleLiveEvents)
 
-	// ------------------------------------------------------------------
-	// C. ROUTE INTEGRATION & MIDDLEWARE PIPELINE
-	// ------------------------------------------------------------------
-	// Wrap protected API tree with JWT Authentication
+	// Plan API (protected)
+	protectedMux.HandleFunc("GET /api/v1/plan", server.HandleGetPlan)
+
+	// ----------------------------------------------------------------
+	// C. MIDDLEWARE PIPELINE
+	// ----------------------------------------------------------------
+	// Wrap protected routes with JWT authentication
 	protectedHandler := api.WithAuth(jwtConfig)(protectedMux)
+
+	// Mount protected routes under /api/ prefix
 	mainMux.Handle("/api/", protectedHandler)
 
-	// Global Middleware Chain: Recovery -> Logging -> RequestID -> MerkleHeader -> RateLimit -> CORS -> Mux
+	// Apply global middleware chain
 	handler := api.WithRecovery(
 		api.WithLogging(
 			api.WithRequestID(
@@ -162,7 +104,74 @@ func main() {
 		),
 	)
 
-	// 8. HTTP Server Configuration
+	return handler
+}
+
+func main() {
+	// 1. Initialize Telemetry
+	telConfig := telemetry.LoadConfigFromEnv()
+	if os.Getenv("GARUDA_MODE") == "passive" {
+		telConfig.Mode = "passive"
+	}
+	if err := telemetry.InitTelemetry(telConfig); err != nil {
+		slog.Warn("Telemetry init failed", "error", err)
+	}
+	slog.Info("Telemetry engine initialized", "enabled", telConfig.Enabled, "mode", telConfig.Mode)
+
+	// 2. Load Configuration
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+	}
+
+	// 3. Database Migrations
+	slog.Info("Running migrations...")
+	if err := store.Migrate(dbURL, "migrations"); err != nil {
+		slog.Error("Migration failed", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("Migrations completed successfully")
+
+	// 4. JWT Config
+	jwtIssuer := os.Getenv("JWT_ISSUER")
+	if jwtIssuer == "" {
+		jwtIssuer = "garuda"
+	}
+	jwtAudience := os.Getenv("JWT_AUDIENCE")
+	if jwtAudience == "" {
+		jwtAudience = "garuda-api"
+	}
+	jwtExpiry := 15 * time.Minute
+
+	jwtConfig, err := auth.NewJWTConfig(jwtIssuer, jwtAudience, jwtExpiry)
+	if err != nil {
+		slog.Error("Failed to initialize JWT config", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("JWT authentication initialized", "public_key", jwtConfig.GetPublicKeyHex())
+
+	// 5. Core Storage & Engines
+	dbStore, err := store.NewPostgresStore(dbURL)
+	if err != nil {
+		slog.Error("Failed to initialize database", "error", err)
+		os.Exit(1)
+	}
+	defer dbStore.Close()
+
+	_ = lineage.NewGraph(1000)
+	lineageEngine := engine.NewLineageEngine(dbStore)
+	contradictionEngine := engine.NewContradictionEngine(dbStore)
+
+	authService := auth.NewAuthService(dbStore, jwtConfig)
+	server := api.NewServer(dbStore, authService, jwtConfig, contradictionEngine, lineageEngine)
+
+	// 6. Rate Limiter
+	rateLimiter := api.NewRateLimiter(100, time.Minute, 1000)
+
+	// 7. Build Router
+	handler := SetupRouter(server, jwtConfig, rateLimiter)
+
+	// 8. HTTP Server
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -189,7 +198,6 @@ func main() {
 		}
 	}()
 
-	// Wait for termination signal
 	<-ctx.Done()
 	slog.Info("Shutting down gateway gracefully...")
 
@@ -206,7 +214,5 @@ func main() {
 		slog.Error("Graceful HTTP stack shutdown failed", "error", err)
 		os.Exit(1)
 	}
-
 	slog.Info("Gateway shutdown complete")
 }
-// Render deploy trigger

@@ -1,0 +1,42 @@
+name: AI README Updater
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Needed to get the diff
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install google-generativeai
+          pip install pyyaml  # Optional, if needed
+      
+      - name: Run AI README updater
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          chmod +x scripts/update_readme_ai.py
+          python scripts/update_readme_ai.py || echo "Script failed, continuing..."
+      
+      - name: Commit and push changes
+        if: success()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git diff --staged --quiet || git commit -m "🤖 Auto-update README from AI [skip ci]"
+          git push

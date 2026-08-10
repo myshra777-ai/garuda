@@ -219,3 +219,15 @@ func TestHandleDecisionLineageUsesTenantFromContext(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
+func (f *fakeDecisionStore) GetPlan(ctx context.Context, tenantID uuid.UUID, req *types.PlanRequest) (*types.PlanResult, error) {
+	return &types.PlanResult{
+		TenantID:     tenantID,
+		Scope:        types.Scope{Domain: req.ScopeDomain, System: req.ScopeSystem},
+		Decisions:    []*types.Decision{},
+		Tasks:        []*types.Task{},
+		Handoffs:     []*types.HandoffRecord{},
+		Milestones:   []*types.Milestone{},
+		Dependencies: []types.LineageEdge{},
+		GeneratedAt:  time.Now().UTC(),
+	}, nil
+}

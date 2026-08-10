@@ -1,0 +1,74 @@
+version: "1"
+
+# ------------------------------------------------------------------------------
+# Managed Databases
+# ------------------------------------------------------------------------------
+databases:
+  - name: garuda-postgres-prod
+    databaseName: garuda
+    user: garuda_admin
+    plan: starter # Options: free, starter, standard, pro
+    region: oregon # Options: oregon, frankfurt, singapore, ohio
+    postgresMajorVersion: "16"
+
+# ------------------------------------------------------------------------------
+# Web Services & Application Nodes
+# ------------------------------------------------------------------------------
+services:
+  # ----------------------------------------------------------------------------
+  # Garuda API Gateway
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: garuda-api
+    env: docker
+    region: oregon
+    plan: starter # Options: free, starter, standard, pro
+    dockerfilePath: build/Dockerfile.api
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+
+    envVars:
+      - key: GARUDA_ENV
+        value: production
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: garuda-postgres-prod
+          property: connectionString
+
+      - key: JWT_ISSUER
+        value: garuda
+
+      - key: JWT_AUDIENCE
+        value: garuda-api
+
+      - key: JWT_SECRET
+        generateValue: true
+
+      - key: GARUDA_TELEMETRY_ENABLED
+        value: "false"
+
+      # PORT is automatically injected by Render (typically 10000)
+
+  # ----------------------------------------------------------------------------
+  # Telemetry Collector Service (Private Worker / Collector)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: garuda-telemetry-collector
+    env: docker
+    region: oregon
+    plan: starter
+    dockerfilePath: build/Dockerfile.collector
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeploy: true
+
+    envVars:
+      - key: TELEMETRY_PORT
+        value: "8081"
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: garuda-postgres-prod
+          property: connectionString

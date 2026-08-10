@@ -358,3 +358,32 @@ func computeStateHash(tenantID, agentID uuid.UUID, data []byte) string {
 	h.Write(data)
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+// ListHandoffsByScope returns handoffs linked to tasks in a given scope.
+func (s *PostgresStore) ListHandoffsByScope(ctx context.Context, tenantID uuid.UUID, domain, system string) ([]*types.HandoffRecord, error) {
+	query := `
+		SELECT h.id, h.tenant_id, h.task_id, h.source_agent_id, h.target_agent_id,
+		       h.reason, h.status, h.created_at, h.completed_at
+		FROM handoffs h
+		JOIN tasks t ON h.task_id = t.id
+		WHERE h.tenant_id = $1 AND t.scope_domain = $2 AND t.scope_system = $3
+		ORDER BY h.created_at DESC
+	`
+	rows, err := s.pool.Query(ctx, query, tenantID, domain, system)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list handoffs: %w", err)
+	}
+	defer rows.Close()
+
+	var handoffs []*types.HandoffRecord
+	for rows.Next() {
+		var h types.HandoffRecord
+		err := rows.Scan(&h.ID, &h.TenantID, &h.TaskID, &h.SourceAgentID, &h.TargetAgentID,
+			&h.Reason, &h.Status, &h.CreatedAt, &h.CompletedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan handoff: %w", err)
+		}
+		handoffs = append(handoffs, &h)
+	}
+	return handoffs, nil
+}
