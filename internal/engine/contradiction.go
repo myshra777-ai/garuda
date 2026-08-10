@@ -120,3 +120,29 @@ func detectTechnologyToken(s string) (string, bool) {
 	}
 	return "", false
 }
+
+// CheckPolicyViolation returns true if the proposal violates any active policy.
+func (e *ContradictionEngine) CheckPolicyViolation(ctx context.Context, proposal *types.Decision) (bool, string, *types.Policy, error) {
+	policies, err := e.store.GetActivePolicies(ctx, proposal.TenantID, proposal.Scope.Domain, proposal.Scope.System)
+	if err != nil {
+		return false, "", nil, err
+	}
+	for _, p := range policies {
+		if isProposalViolatingPolicy(proposal, p) {
+			return true, p.Statement, p, nil
+		}
+	}
+	return false, "", nil, nil
+}
+
+func isProposalViolatingPolicy(proposal *types.Decision, policy *types.Policy) bool {
+	// Check for explicit contradictions (simplified)
+	if policy.Statement == "do not change schema" && strings.Contains(proposal.Title, "change schema") {
+		return true
+	}
+	// Check if policy statement appears in proposal title or rationale
+	if strings.Contains(strings.ToLower(proposal.Title), strings.ToLower(policy.Statement)) {
+		return true
+	}
+	return false
+}

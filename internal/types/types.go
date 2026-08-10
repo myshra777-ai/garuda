@@ -135,10 +135,7 @@ type TaskManifest struct {
 	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
-// Checkpoint represents an agent's saved context state.
 // DecisionStore defines the multi-tenant contract for persisting governance and context objects.
-// internal/types/types.go
-
 type DecisionStore interface {
 	GetDecision(ctx context.Context, tenantID, decisionID uuid.UUID) (*Decision, error)
 	SaveDecision(ctx context.Context, d *Decision) error
@@ -150,6 +147,7 @@ type DecisionStore interface {
 	GetContradiction(ctx context.Context, tenantID, id uuid.UUID) (*Contradiction, error)
 	IngestEvidence(ctx context.Context, tenantID uuid.UUID, evidence []Evidence) error
 	ConsumeBudget(ctx context.Context, tenantID uuid.UUID, tokens int) error
+	SaveTopology(ctx context.Context, top *Topology) error
 
 	// Checkpoint methods
 	SaveCheckpoint(ctx context.Context, c *Checkpoint) error
@@ -180,12 +178,21 @@ type DecisionStore interface {
 	// Temporal Methods
 	GetDecisionsActiveAt(ctx context.Context, tenantID uuid.UUID, at time.Time, scope Scope, statuses []DecisionStatus) ([]*Decision, error)
 	GetDecisionHistory(ctx context.Context, tenantID, decisionID uuid.UUID) ([]*Decision, error)
+
 	// Audit Trail Capabilities
 	LogAuditEvent(ctx context.Context, tenantID uuid.UUID, eventType string, eventID uuid.UUID, actor string, payload interface{}) (*AuditEvent, error)
 	VerifyAuditEvent(ctx context.Context, tenantID uuid.UUID, eventID uuid.UUID) (*AuditVerification, error)
 	ListAuditEvents(ctx context.Context, tenantID uuid.UUID, since time.Time) ([]AuditEvent, error)
-	// GetPlan assembles a structured plan from decisions, tasks, handoffs, milestones, and lineage.
+
+	// Plan assembling
 	GetPlan(ctx context.Context, tenantID uuid.UUID, req *PlanRequest) (*PlanResult, error)
+
+	// Policy methods
+	SavePolicy(ctx context.Context, p *Policy) error
+	GetActivePolicies(ctx context.Context, tenantID uuid.UUID, scopeDomain, scopeSystem string) ([]*Policy, error)
+	GetActivePoliciesByScope(ctx context.Context, tenantID uuid.UUID, scope Scope) ([]*Policy, error)
+	SupersedePolicy(ctx context.Context, oldID, newID uuid.UUID) error
+	LogPolicyViolation(ctx context.Context, v *PolicyViolation) error
 }
 
 // Agent represents an AI agent or worker.
@@ -205,20 +212,28 @@ type Agent struct {
 
 // Task represents a unit of work.
 type Task struct {
-	ID           uuid.UUID  `json:"id"`
-	TenantID     uuid.UUID  `json:"tenant_id"`
-	Title        string     `json:"title"`
-	Description  string     `json:"description,omitempty"`
-	Status       string     `json:"status"` // pending, in_progress, paused, completed, abandoned
-	Priority     int        `json:"priority"`
-	OwnerAgentID *uuid.UUID `json:"owner_agent_id,omitempty"`
-	ParentTaskID *uuid.UUID `json:"parent_task_id,omitempty"`
-	ScopeDomain  string     `json:"scope_domain"`
-	ScopeSystem  string     `json:"scope_system"`
-	Version      int        `json:"version"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+	ID           uuid.UUID   `json:"id"`
+	TenantID     uuid.UUID   `json:"tenant_id"`
+	Title        string      `json:"title"`
+	Description  string      `json:"description,omitempty"`
+	Status       TaskStatus  `json:"status"` // pending, in_progress, paused, completed, abandoned
+	Priority     int         `json:"priority"`
+	OwnerAgentID *uuid.UUID  `json:"owner_agent_id,omitempty"`
+	AssignedTo   *uuid.UUID  `json:"assigned_to,omitempty"`
+	ParentTaskID *uuid.UUID  `json:"parent_task_id,omitempty"`
+	ScopeDomain  string      `json:"scope_domain"`
+	ScopeSystem  string      `json:"scope_system"`
+	RequiredRole AgentRole   `json:"required_role,omitempty"`
+	Scope        string      `json:"scope,omitempty"`
+	TokenBudget  int64       `json:"token_budget,omitempty"`
+	TokensUsed   int64       `json:"tokens_used,omitempty"`
+	TopologyID   uuid.UUID   `json:"topology_id,omitempty"`
+	SequenceNo   int         `json:"sequence_no,omitempty"`
+	DependsOn    []uuid.UUID `json:"depends_on,omitempty"`
+	Version      int         `json:"version"`
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
+	CompletedAt  *time.Time  `json:"completed_at,omitempty"`
 }
 
 // LineageEdge represents an edge in the lineage DAG.
@@ -251,6 +266,8 @@ type AuditVerification struct {
 	BlockHeight int64     `json:"block_height"`
 	IsVerified  bool      `json:"is_verified"`
 }
+
+// Milestone represents a project milestone.
 type Milestone struct {
 	ID          uuid.UUID  `json:"id"`
 	TenantID    uuid.UUID  `json:"tenant_id"`
@@ -264,6 +281,7 @@ type Milestone struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
+// HandoffRecord represents a handoff between agents.
 type HandoffRecord struct {
 	ID            uuid.UUID  `json:"id"`
 	TenantID      uuid.UUID  `json:"tenant_id"`
@@ -295,7 +313,3 @@ type PlanResult struct {
 	Dependencies []LineageEdge    `json:"dependencies"`
 	GeneratedAt  time.Time        `json:"generated_at"`
 }
-
-// HandoffRecord represents a handoff between agents.
-
-// Milestone represents a project milestone.

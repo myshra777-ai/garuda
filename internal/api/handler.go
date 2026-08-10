@@ -12,6 +12,7 @@ import (
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/engine"
 	"github.com/myshra777-ai/garuda/internal/telemetry"
+	"github.com/myshra777-ai/garuda/internal/topology"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -65,6 +66,8 @@ type Server struct {
 	jwtConfig           *auth.JWTConfig
 	contradictionEngine *engine.ContradictionEngine
 	lineageEngine       *engine.LineageEngine
+	topologyGenerator   *topology.Generator
+	topologyExecutor    *topology.Executor
 	sseBroker           *telemetry.SSEBroker
 	router              *mux.Router
 	checkpointMu        sync.RWMutex
@@ -78,6 +81,8 @@ func NewServer(
 	jwtConfig *auth.JWTConfig,
 	contradictionEngine *engine.ContradictionEngine,
 	lineageEngine *engine.LineageEngine,
+	topologyGenerator *topology.Generator,
+	topologyExecutor *topology.Executor,
 ) *Server {
 	sseBroker := telemetry.NewSSEBroker()
 
@@ -87,6 +92,8 @@ func NewServer(
 		jwtConfig:           jwtConfig,
 		contradictionEngine: contradictionEngine,
 		lineageEngine:       lineageEngine,
+		topologyGenerator:   topologyGenerator,
+		topologyExecutor:    topologyExecutor,
 		sseBroker:           sseBroker,
 		router:              mux.NewRouter(),
 		checkpointStore:     make(map[string]CheckpointRecord),

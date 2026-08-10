@@ -129,6 +129,26 @@ func (s *stubDecisionStore) ListContradictions(ctx context.Context, tenantID uui
 	return nil, nil
 }
 
+func (s *stubDecisionStore) GetActivePolicies(ctx context.Context, tenantID uuid.UUID, scopeDomain, scopeSystem string) ([]*types.Policy, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) GetActivePoliciesByScope(ctx context.Context, tenantID uuid.UUID, scope types.Scope) ([]*types.Policy, error) {
+	return nil, nil
+}
+
+func (s *stubDecisionStore) SavePolicy(ctx context.Context, p *types.Policy) error {
+	return nil
+}
+
+func (s *stubDecisionStore) SupersedePolicy(ctx context.Context, oldID, newID uuid.UUID) error {
+	return nil
+}
+
+func (s *stubDecisionStore) LogPolicyViolation(ctx context.Context, v *types.PolicyViolation) error {
+	return nil
+}
+
 func (s *stubDecisionStore) GetContradiction(ctx context.Context, tenantID, id uuid.UUID) (*types.Contradiction, error) {
 	return nil, nil
 }
@@ -153,6 +173,10 @@ func (s *stubDecisionStore) VerifyAuditEvent(ctx context.Context, tenantID, even
 		EventID:    eventID,
 		IsVerified: true,
 	}, nil
+}
+
+func (s *stubDecisionStore) SaveTopology(ctx context.Context, top *types.Topology) error {
+	return nil
 }
 
 func TestGetDecisionLineageIncludesParentAndChildren(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"github.com/myshra777-ai/garuda/internal/mcp"
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/telemetry"
+	"github.com/myshra777-ai/garuda/internal/topology"
 )
 
 // SetupRouter initializes and returns the complete http.Handler middleware pipeline.
@@ -54,7 +55,11 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	protectedMux.HandleFunc("GET /api/v1/decisions/active", server.HandleDecisionsActiveAt)
 	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/history", server.HandleDecisionHistory)
 	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/lineage", server.HandleDecisionLineage)
-
+	// Topology routes
+	protectedMux.HandleFunc("POST /api/v1/topology/recommend", server.HandleTopologyRecommend)
+	protectedMux.HandleFunc("POST /api/v1/topology/{id}/execute", server.HandleTopologyExecute)
+	protectedMux.HandleFunc("GET /api/v1/topology/{id}", server.HandleTopologyStatus)
+	protectedMux.HandleFunc("GET /api/v1/topology/{id}/status", server.HandleTopologyStatus) // SSE stream (optional)
 	// Multi-Agent Execution & Checkpoints
 	protectedMux.HandleFunc("POST /api/v1/agents/warmup", server.HandleAgentWarmup)
 	protectedMux.HandleFunc("POST /api/v1/agents/checkpoint", server.HandleAgentCheckpoint)
@@ -81,6 +86,11 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 
 	// Plan API (protected)
 	protectedMux.HandleFunc("GET /api/v1/plan", server.HandleGetPlan)
+
+	// Policy routes
+	protectedMux.HandleFunc("POST /api/v1/policies", server.HandleRememberPolicy)
+	protectedMux.HandleFunc("GET /api/v1/policies", server.HandleListPolicies)
+	protectedMux.HandleFunc("POST /api/v1/policies/{id}/supersede", server.HandleSupersedePolicy)
 
 	// ----------------------------------------------------------------
 	// C. MIDDLEWARE PIPELINE
@@ -151,6 +161,7 @@ func main() {
 	slog.Info("JWT authentication initialized", "public_key", jwtConfig.GetPublicKeyHex())
 
 	// 5. Core Storage & Engines
+	// Core Storage & Engines
 	dbStore, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		slog.Error("Failed to initialize database", "error", err)
@@ -162,9 +173,12 @@ func main() {
 	lineageEngine := engine.NewLineageEngine(dbStore)
 	contradictionEngine := engine.NewContradictionEngine(dbStore)
 
-	authService := auth.NewAuthService(dbStore, jwtConfig)
-	server := api.NewServer(dbStore, authService, jwtConfig, contradictionEngine, lineageEngine)
+	shield := engine.NewPreFlightShield(contradictionEngine) // budget engine optional
+	topologyExecutor := topology.NewExecutor(dbStore, shield)
+	topologyGenerator := topology.NewGenerator(dbStore)
 
+	authService := auth.NewAuthService(dbStore, jwtConfig)
+	server := api.NewServer(dbStore, authService, jwtConfig, contradictionEngine, lineageEngine, topologyGenerator, topologyExecutor)
 	// 6. Rate Limiter
 	rateLimiter := api.NewRateLimiter(100, time.Minute, 1000)
 

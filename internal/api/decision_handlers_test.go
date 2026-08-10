@@ -130,6 +130,26 @@ func (f *fakeDecisionStore) GetContradiction(ctx context.Context, tenantID, id u
 	return nil, nil
 }
 
+func (f *fakeDecisionStore) GetActivePolicies(ctx context.Context, tenantID uuid.UUID, scopeDomain, scopeSystem string) ([]*types.Policy, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) GetActivePoliciesByScope(ctx context.Context, tenantID uuid.UUID, scope types.Scope) ([]*types.Policy, error) {
+	return nil, nil
+}
+
+func (f *fakeDecisionStore) SavePolicy(ctx context.Context, p *types.Policy) error {
+	return nil
+}
+
+func (f *fakeDecisionStore) SupersedePolicy(ctx context.Context, oldID, newID uuid.UUID) error {
+	return nil
+}
+
+func (f *fakeDecisionStore) LogPolicyViolation(ctx context.Context, v *types.PolicyViolation) error {
+	return nil
+}
+
 func (f *fakeDecisionStore) IngestEvidence(ctx context.Context, tenantID uuid.UUID, evidence []types.Evidence) error {
 	return nil
 }
@@ -162,6 +182,25 @@ func (f *fakeDecisionStore) ListAuditEvents(ctx context.Context, tenantID uuid.U
 	return []types.AuditEvent{}, nil
 }
 
+func (f *fakeDecisionStore) SaveTopology(ctx context.Context, top *types.Topology) error {
+	return nil // stub
+}
+func (f *fakeDecisionStore) GetTopology(ctx context.Context, id uuid.UUID) (*types.Topology, error) {
+	return nil, nil
+}
+func (f *fakeDecisionStore) GetTasksByTopology(ctx context.Context, topologyID uuid.UUID) ([]*types.Task, error) {
+	return nil, nil
+}
+func (f *fakeDecisionStore) UpdateTask(ctx context.Context, task *types.Task) error {
+	return nil
+}
+func (f *fakeDecisionStore) UpdateTopologyStatus(ctx context.Context, id uuid.UUID, status types.TopologyStatus) error {
+	return nil
+}
+func (f *fakeDecisionStore) UpdateTopologyTokens(ctx context.Context, id uuid.UUID, tokens int64) error {
+	return nil
+}
+
 func TestHandleProposeDecisionRejectsContradictions(t *testing.T) {
 	store := &fakeDecisionStore{decisions: map[uuid.UUID]*types.Decision{}}
 	jwtConfig, err := auth.NewJWTConfig("garuda", "garuda-api", 5*time.Minute)
@@ -174,7 +213,7 @@ func TestHandleProposeDecisionRejectsContradictions(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 
-	server := NewServer(store, nil, jwtConfig, engine.NewContradictionEngine(store), nil)
+	server := NewServer(store, nil, jwtConfig, engine.NewContradictionEngine(store), nil, nil, nil)
 
 	first := []byte(`{"title":"Use PostgreSQL for financial records","scope_domain":"finance","scope_system":"ledger"}`)
 	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/decisions/submit", bytes.NewReader(first))
@@ -209,7 +248,7 @@ func TestHandleDecisionLineageUsesTenantFromContext(t *testing.T) {
 	store.decisions[parentID] = &types.Decision{ID: parentID, TenantID: tenantID, Title: "parent", Status: types.StatusCanonical}
 	store.decisions[childID] = &types.Decision{ID: childID, TenantID: tenantID, ParentID: &parentID, Title: "child", Status: types.StatusDraft}
 
-	server := NewServer(store, nil, jwtConfig, nil, nil)
+	server := NewServer(store, nil, jwtConfig, nil, nil, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/decisions/"+childID.String()+"/lineage", nil)
 	req = req.WithContext(auth.ContextWithActorAndTenant(req.Context(), "alice", tenantID.String()))
 	rr := httptest.NewRecorder()
