@@ -7,3 +7,43 @@ garuda-mcp
 garuda_platform.html
 Release
 .venv/
+# Binary files
+bin/
+garuda
+garuda-api
+garuda-mcp
+garuda-worker
+telemetry-collector
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# Version file (if auto-generated locally)
+version.txt
+
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Benchmark / test artifacts
+benchmarks/
+*.log
+*.out
+
+# Temporary files
+tmp/
+temp/
