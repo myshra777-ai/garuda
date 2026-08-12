@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 // HandleHandoff processes POST /api/v1/agents/handoff
 func (s *Server) HandleHandoff(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	requestID := getRequestID(r)
 
 	tenantID, ok := r.Context().Value(TenantIDKey).(uuid.UUID)
 	if !ok {
@@ -24,13 +26,13 @@ func (s *Server) HandleHandoff(w http.ResponseWriter, r *http.Request) {
 
 	var req store.HandoffRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json payload: "+err.Error(), http.StatusBadRequest)
+		s.RespondWithError(w, http.StatusBadRequest, "invalid json payload", requestID)
 		return
 	}
 
 	// Validate required fields
 	if req.TaskID == uuid.Nil || req.SourceAgentID == uuid.Nil || req.TargetAgentID == uuid.Nil {
-		http.Error(w, "task_id, source_agent_id, and target_agent_id are required", http.StatusUnprocessableEntity)
+		s.RespondWithError(w, http.StatusUnprocessableEntity, "task_id, source_agent_id, and target_agent_id are required", requestID)
 		return
 	}
 
@@ -55,12 +57,13 @@ func (s *Server) HandleHandoff(w http.ResponseWriter, r *http.Request) {
 				false,
 			)
 
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"code":    409,
-				"message": "handoff failed: " + err.Error(),
-			})
+			slog.Error("handoff execution failed",
+				"error", err,
+				"request_id", requestID,
+				"task_id", req.TaskID,
+				"tenant_id", tenantID,
+			)
+			s.RespondWithError(w, http.StatusConflict, "handoff execution failed", requestID)
 			return
 		}
 	} else {
@@ -70,7 +73,7 @@ func (s *Server) HandleHandoff(w http.ResponseWriter, r *http.Request) {
 			float64(time.Since(start).Milliseconds()),
 			false,
 		)
-		s.RespondWithError(w, http.StatusNotImplemented, "store does not support handoff operations")
+		s.RespondWithError(w, http.StatusNotImplemented, "store does not support handoff operations", requestID)
 		return
 	}
 
@@ -92,6 +95,7 @@ func (s *Server) HandleHandoff(w http.ResponseWriter, r *http.Request) {
 			"target_agent_id": req.TargetAgentID,
 			"reason":          req.Reason,
 			"status":          resp.Status,
+			"request_id":      requestID,
 		})
 	}
 
@@ -102,6 +106,8 @@ func (s *Server) HandleHandoff(w http.ResponseWriter, r *http.Request) {
 
 // HandleResume processes POST /api/v1/agents/resume
 func (s *Server) HandleResume(w http.ResponseWriter, r *http.Request) {
+	requestID := getRequestID(r)
+
 	tenantID, ok := r.Context().Value(TenantIDKey).(uuid.UUID)
 	if !ok {
 		tenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
@@ -112,12 +118,12 @@ func (s *Server) HandleResume(w http.ResponseWriter, r *http.Request) {
 		CheckpointID uuid.UUID `json:"checkpoint_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json payload", http.StatusBadRequest)
+		s.RespondWithError(w, http.StatusBadRequest, "invalid json payload", requestID)
 		return
 	}
 
 	if req.AgentID == uuid.Nil || req.CheckpointID == uuid.Nil {
-		http.Error(w, "agent_id and checkpoint_id are required", http.StatusUnprocessableEntity)
+		s.RespondWithError(w, http.StatusUnprocessableEntity, "agent_id and checkpoint_id are required", requestID)
 		return
 	}
 
@@ -129,16 +135,17 @@ func (s *Server) HandleResume(w http.ResponseWriter, r *http.Request) {
 		var err error
 		restoredState, err = rs.ResumeAgent(r.Context(), tenantID, req.AgentID, req.CheckpointID)
 		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotFound)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"code":    404,
-				"message": "resume failed: " + err.Error(),
-			})
+			slog.Error("resume agent failed",
+				"error", err,
+				"request_id", requestID,
+				"agent_id", req.AgentID,
+				"checkpoint_id", req.CheckpointID,
+			)
+			s.RespondWithError(w, http.StatusNotFound, "failed to resume agent execution state", requestID)
 			return
 		}
 	} else {
-		s.RespondWithError(w, http.StatusNotImplemented, "store does not support resume operations")
+		s.RespondWithError(w, http.StatusNotImplemented, "store does not support resume operations", requestID)
 		return
 	}
 
@@ -148,6 +155,7 @@ func (s *Server) HandleResume(w http.ResponseWriter, r *http.Request) {
 			"agent_id":      req.AgentID,
 			"checkpoint_id": req.CheckpointID,
 			"status":        "working",
+			"request_id":    requestID,
 		})
 	}
 
@@ -158,11 +166,14 @@ func (s *Server) HandleResume(w http.ResponseWriter, r *http.Request) {
 		"checkpoint_id": req.CheckpointID,
 		"status":        "working",
 		"state":         restoredState,
+		"request_id":    requestID,
 	})
 }
 
 // HandleGetLineage processes GET /api/v1/tasks/{task_id}/lineage
 func (s *Server) HandleGetLineage(w http.ResponseWriter, r *http.Request) {
+	requestID := getRequestID(r)
+
 	tenantID, ok := r.Context().Value(TenantIDKey).(uuid.UUID)
 	if !ok {
 		tenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
@@ -171,7 +182,7 @@ func (s *Server) HandleGetLineage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	taskID, err := uuid.Parse(vars["task_id"])
 	if err != nil {
-		http.Error(w, "invalid task_id UUID", http.StatusBadRequest)
+		s.RespondWithError(w, http.StatusBadRequest, "invalid task_id UUID", requestID)
 		return
 	}
 
@@ -183,24 +194,26 @@ func (s *Server) HandleGetLineage(w http.ResponseWriter, r *http.Request) {
 		var err error
 		edges, err = ls.GetLineageDAG(r.Context(), tenantID, taskID)
 		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"code":    500,
-				"message": "failed to query lineage DAG: " + err.Error(),
-			})
+			slog.Error("failed to query lineage DAG",
+				"error", err,
+				"request_id", requestID,
+				"task_id", taskID,
+				"tenant_id", tenantID,
+			)
+			s.RespondWithError(w, http.StatusInternalServerError, "failed to query lineage DAG", requestID)
 			return
 		}
 	} else {
-		s.RespondWithError(w, http.StatusNotImplemented, "store does not support lineage queries")
+		s.RespondWithError(w, http.StatusNotImplemented, "store does not support lineage queries", requestID)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"task_id": taskID,
-		"edges":   edges,
-		"total":   len(edges),
+		"task_id":    taskID,
+		"edges":      edges,
+		"total":      len(edges),
+		"request_id": requestID,
 	})
 }

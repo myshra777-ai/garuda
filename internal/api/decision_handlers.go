@@ -2,9 +2,10 @@ package api
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -30,15 +31,12 @@ type DecisionProposalRequest struct {
 
 // resolveTenantID extracts the tenant UUID from JWT context first, falling back to request body.
 func resolveTenantID(r *http.Request, fallback uuid.UUID) (uuid.UUID, error) {
-	// Priority 1: Context claim injected by auth middleware
 	if tid, ok := auth.TenantIDFromContext(r.Context()); ok && tid != uuid.Nil {
 		return tid, nil
 	}
-	// Priority 2: Fallback payload parameter
 	if fallback != uuid.Nil {
 		return fallback, nil
 	}
-	// Priority 3: Error
 	return uuid.Nil, fmt.Errorf("tenant_id is required")
 }
 
@@ -50,183 +48,155 @@ func getActorFromContext(ctx context.Context) string {
 	return "cli-operator"
 }
 
-// use getModelInfo from internal/api/helpers.go
-
 // estimateTokensSaved calculates an estimated token saving heuristic for a decision proposal.
 func estimateTokensSaved(d *types.Decision) int64 {
 	if d == nil {
 		return 0
 	}
-	// Base estimation heuristic: title token count estimate + token count per evidence hash
 	titleTokens := int64(len(strings.Fields(d.Title)) * 4)
 	evidenceTokens := int64(len(d.EvidenceIDs) * 128)
 	return titleTokens + evidenceTokens + 250
 }
 
+// getRequestID safely extracts or generates the request correlation ID.
+func getRequestID(r *http.Request) string {
+	if reqID, ok := r.Context().Value("request_id").(string); ok && reqID != "" {
+		return reqID
+	}
+	return uuid.New().String()
+}
+
 // HandleProposeDecision validates and persists a new decision proposal.
 func (s *Server) HandleProposeDecision(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	now := time.Now().UTC()
+	telemetry.RecordFeatureUsage("submit_decision")
+	requestID := getRequestID(r)
 
-	var req DecisionProposalRequest
+	actor, ok := auth.ActorFromContext(r.Context())
+	if !ok || actor == "" {
+		s.RespondWithError(w, http.StatusUnauthorized, "missing actor context", requestID)
+		return
+	}
+	tenantID, ok := auth.TenantIDFromContext(r.Context())
+	if !ok || tenantID == uuid.Nil {
+		s.RespondWithError(w, http.StatusUnauthorized, "missing tenant context", requestID)
+		return
+	}
+
+	var req types.SubmitDecisionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.RespondWithError(w, http.StatusBadRequest, "invalid request body")
+		s.RespondWithError(w, http.StatusBadRequest, "invalid request payload", requestID)
+		return
+	}
+	req.TenantID = tenantID
+
+	if req.Title == "" && req.Statement == "" {
+		s.RespondWithError(w, http.StatusUnprocessableEntity, "title or statement required", requestID)
 		return
 	}
 
-	tenantID, err := resolveTenantID(r, req.TenantID)
-	if err != nil {
-		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required")
-		return
+	var evIDs []types.EvidenceHash
+	if len(req.Evidence) > 0 {
+		evIDs = make([]types.EvidenceHash, 0, len(req.Evidence))
+		for _, ev := range req.Evidence {
+			evIDs = append(evIDs, ev.Hash)
+		}
 	}
 
-	actor := getActorFromContext(r.Context())
-	modelName, modelProvider := getModelInfo(r)
-
-	decision := &types.Decision{
-		ID:               uuid.New(),
-		TenantID:         tenantID,
-		Title:            req.Title,
-		Status:           types.StatusCanonical,
-		ScopeDomain:      req.ScopeDomain,
-		ScopeSystem:      req.ScopeSystem,
-		Scope:            types.Scope{Domain: req.ScopeDomain, System: req.ScopeSystem},
-		Owner:            actor,
-		Confidence:       0.8,
-		EvidenceIDs:      req.EvidenceIDs,
-		TemporalMetadata: req.TemporalMetadata,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+	newDecision := &types.Decision{
+		ID:          req.DecisionID,
+		TenantID:    req.TenantID,
+		Title:       req.Title,
+		Scope:       req.Scope,
+		EvidenceIDs: evIDs,
 	}
 
-	var contradictionsCaught int64
-	var hallucinationPrevented bool
-
-	// 1. Run contradiction validation before persistence so conflicting proposals are rejected early.
 	if s.contradictionEngine != nil {
-		hasContradiction, err := s.contradictionEngine.ValidateDecision(r.Context(), decision)
+		conflicting, err := s.contradictionEngine.ValidateDecision(r.Context(), newDecision)
 		if err != nil {
-			telemetry.RecordError("contradiction_evaluation_failed", err.Error())
-			s.RespondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to validate decision: %v", err))
+			slog.Error("contradiction check failed", "error", err, "request_id", requestID)
+			s.RespondWithError(w, http.StatusInternalServerError, "failed to validate decision policy", requestID)
 			return
 		}
-		if hasContradiction {
-			contradictionsCaught = 1
-			hallucinationPrevented = true
-			telemetry.RecordContradictionDetectedDefault()
-			telemetry.RecordDecisionRejected()
-
-			tokensSaved := estimateTokensSaved(decision)
-			telemetry.RecordDecisionProposedWithModel(
-				modelName,
-				modelProvider,
-				string(decision.Status),
-				decision.ScopeDomain,
-				decision.ScopeSystem,
-				decision.Confidence,
-				tokensSaved,
-				contradictionsCaught,
-				1,
-			)
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusConflict)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"status": "rejected",
-				"reason": "contradiction with existing decision",
-			})
+		if conflicting {
+			s.RespondWithError(w, http.StatusConflict, "proposed decision contradicts existing policy/decision", requestID)
 			return
 		}
 	}
 
-	// 2. Persist only after validation passes.
-	if err := s.store.SaveDecision(r.Context(), decision); err != nil {
-		log.Printf("ERROR: SaveDecision failed: %v", err)
-		telemetry.RecordError("db_save_failed", err.Error())
-		s.RespondWithError(w, http.StatusInternalServerError, fmt.Sprintf("failed to save decision: %v", err))
+	result, err := s.store.SubmitDecision(r.Context(), &req, actor, requestID)
+	if err != nil {
+		slog.Error("decision submission failed",
+			"error", err,
+			"request_id", requestID,
+			"tenant", tenantID,
+			"actor", actor,
+		)
+		s.RespondWithError(w, http.StatusInternalServerError, "decision submission failed", requestID)
 		return
 	}
 
-	// 3. Log audit event for compliance and Merkle tree chaining
-	_, _ = s.store.LogAuditEvent(r.Context(), tenantID, "decision_proposed", decision.ID, actor, map[string]interface{}{
-		"title":  decision.Title,
-		"scope":  decision.Scope,
-		"status": decision.Status,
-	})
-
-	// 4. Consume budget post-execution
-	if err := s.ConsumeBudgetForRequest(r, "propose_decision", req); err != nil {
-		telemetry.RecordError("budget_consume_failed", err.Error())
+	domain, system := "", ""
+	if req.Scope.Domain != "" || req.Scope.System != "" {
+		domain = req.Scope.Domain
+		system = req.Scope.System
 	}
-
-	tokensSaved := estimateTokensSaved(decision)
-	telemetry.RecordDecisionProposedWithModel(
-		modelName,
-		modelProvider,
-		string(decision.Status),
-		decision.ScopeDomain,
-		decision.ScopeSystem,
-		decision.Confidence,
-		tokensSaved,
-		contradictionsCaught,
-		func() int64 {
-			if hallucinationPrevented {
-				return 1
-			}
-			return 0
-		}(),
-	)
-
+	telemetry.RecordDecisionProposed("", "", "proposed", domain, system, 0.0, 0)
 	telemetry.RecordAPILatency(time.Since(start))
-
-	// 5. Build response payload
-	resp := map[string]interface{}{
-		"id":        decision.ID.String(),
-		"status":    decision.Status,
-		"tenant_id": decision.TenantID.String(),
-		"title":     decision.Title,
-	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":          "created",
+		"decision_id":     result.DecisionID.String(),
+		"revision_id":     result.RevisionID.String(),
+		"revision_number": result.RevisionNumber,
+		"content_hash":    hex.EncodeToString(result.ContentHash),
+		"merkle_root":     hex.EncodeToString(result.MerkleRoot),
+		"request_id":      requestID,
+	})
 }
 
 // HandleDecisionLineage resolves and retrieves parent and child lineage graphs.
 func (s *Server) HandleDecisionLineage(w http.ResponseWriter, r *http.Request) {
+	requestID := getRequestID(r)
+
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(pathParts) < 5 || pathParts[len(pathParts)-1] != "lineage" {
-		http.Error(w, `{"error":"invalid request path"}`, http.StatusBadRequest)
+		s.RespondWithError(w, http.StatusBadRequest, "invalid request path", requestID)
 		return
 	}
 
 	decisionIDStr := pathParts[len(pathParts)-2]
 	decisionID, err := uuid.Parse(decisionIDStr)
 	if err != nil {
-		http.Error(w, `{"error":"invalid decision ID"}`, http.StatusBadRequest)
+		s.RespondWithError(w, http.StatusBadRequest, "invalid decision ID format", requestID)
 		return
 	}
 
 	tenantID, err := resolveTenantID(r, uuid.Nil)
 	if err != nil {
-		http.Error(w, `{"error":"tenant_id is required"}`, http.StatusUnauthorized)
+		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required", requestID)
 		return
 	}
 
 	decision, err := s.store.GetDecision(r.Context(), tenantID, decisionID)
 	if err != nil {
-		http.Error(w, `{"error":"decision not found"}`, http.StatusNotFound)
+		slog.Warn("decision not found", "decision_id", decisionID, "tenant_id", tenantID, "error", err)
+		s.RespondWithError(w, http.StatusNotFound, "decision not found", requestID)
 		return
 	}
 
 	children, err := s.store.ListDecisionsByParent(r.Context(), tenantID, decisionID)
 	if err != nil {
+		slog.Warn("failed to fetch child decisions", "decision_id", decisionID, "error", err)
 		children = []*types.Decision{}
 	}
 
 	lineage := map[string]interface{}{
-		"decision": decision,
-		"children": children,
+		"decision":   decision,
+		"children":   children,
+		"request_id": requestID,
 	}
 
 	if decision.ParentID != nil && *decision.ParentID != uuid.Nil {
@@ -243,35 +213,46 @@ func (s *Server) HandleDecisionLineage(w http.ResponseWriter, r *http.Request) {
 
 // HandleSystemPromptContext returns a formatted text block containing active canonical policies.
 func (s *Server) HandleSystemPromptContext(w http.ResponseWriter, r *http.Request) {
+	requestID := getRequestID(r)
+
 	tenantID, err := resolveTenantID(r, uuid.Nil)
 	if err != nil {
-		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id required")
+		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required", requestID)
 		return
 	}
 
-	// Fetch active canonical decisions
-	decisions, err := s.store.GetDecisionsActiveAt(r.Context(), tenantID, time.Now().UTC(), types.Scope{}, []types.DecisionStatus{types.StatusCanonical, types.StatusApproved})
+	decisions, err := s.store.GetDecisionsActiveAt(
+		r.Context(),
+		tenantID,
+		time.Now().UTC(),
+		types.Scope{},
+		[]types.DecisionStatus{types.StatusCanonical, types.StatusApproved},
+	)
 	if err != nil {
-		s.RespondWithError(w, http.StatusInternalServerError, err.Error())
+		slog.Error("failed to retrieve canonical decisions", "tenant_id", tenantID, "error", err, "request_id", requestID)
+		s.RespondWithError(w, http.StatusInternalServerError, "failed to build system prompt context", requestID)
 		return
 	}
 
-	prompt := "--- GARUDA ORGANIZATIONAL TRUTH BOOTSTRAP ---\n"
-	prompt += "The following canonical policy decisions are currently active and strictly enforced:\n\n"
+	var prompt strings.Builder
+	prompt.WriteString("--- GARUDA ORGANIZATIONAL TRUTH BOOTSTRAP ---\n")
+	prompt.WriteString("The following canonical policy decisions are currently active and strictly enforced:\n\n")
 
 	for i, d := range decisions {
-		prompt += fmt.Sprintf("%d. [%s/%s] %s (ID: %s)\n", i+1, d.ScopeDomain, d.ScopeSystem, d.Title, d.ID.String())
+		prompt.WriteString(fmt.Sprintf("%d. [%s/%s] %s (ID: %s)\n", i+1, d.ScopeDomain, d.ScopeSystem, d.Title, d.ID.String()))
 	}
-	prompt += "\nDo not generate plans or code that contradict these policies.\n"
-	prompt += "---------------------------------------------\n"
+	prompt.WriteString("\nDo not generate plans or code that contradict these policies.\n")
+	prompt.WriteString("---------------------------------------------\n")
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(prompt))
+	_, _ = w.Write([]byte(prompt.String()))
 }
 
 // HandleEvaluateRoute dispatches incoming payloads through the pre-flight classifier and shield.
 func (s *Server) HandleEvaluateRoute(w http.ResponseWriter, r *http.Request) {
+	requestID := getRequestID(r)
+
 	var req struct {
 		Payload       string  `json:"payload"`
 		TokenEstimate int     `json:"token_estimate"`
@@ -279,14 +260,15 @@ func (s *Server) HandleEvaluateRoute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		s.RespondWithError(w, http.StatusBadRequest, "invalid request body", requestID)
 		return
 	}
 
 	router := engine.NewDynamicRouter()
 	decision, err := router.ClassifyAndRoute(r.Context(), req.Payload, req.TokenEstimate, req.SpendRatio)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("route classification error", "error", err, "request_id", requestID)
+		s.RespondWithError(w, http.StatusInternalServerError, "failed to evaluate route classification", requestID)
 		return
 	}
 
@@ -300,7 +282,7 @@ func (s *Server) HandleAgentWarmup(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	modelName, modelProvider := getModelInfo(r)
 
-	tokensSaved := int64(0) // computed based on checkpoint reuse heuristics
+	tokensSaved := int64(0)
 	telemetry.RecordWarmStartWithModel(
 		modelName,
 		modelProvider,
@@ -310,14 +292,15 @@ func (s *Server) HandleAgentWarmup(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`{"status":"warmed","message":"asynchronous execution agents initialized"}`))
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":  "warmed",
+		"message": "asynchronous execution agents initialized",
+	})
 }
 
 // HandleAuditVerify handles verification requests and logs model-attributed telemetry.
 func (s *Server) HandleAuditVerify(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-
-	// ... verification logic ...
 
 	modelName, _ := getModelInfo(r)
 	telemetry.RecordVerificationWithModel(
@@ -329,5 +312,3 @@ func (s *Server) HandleAuditVerify(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "verified"})
 }
-
-// HandleConsumeBudget is implemented in budget_handlers.go

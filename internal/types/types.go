@@ -78,14 +78,6 @@ type Decision struct {
 }
 
 // DecisionRevision snapshots an earlier version of a decision.
-type DecisionRevision struct {
-	ID             uuid.UUID `json:"id"`
-	TenantID       uuid.UUID `json:"tenant_id"`
-	DecisionID     uuid.UUID `json:"decision_id"`
-	RevisionNumber int       `json:"revision_number"`
-	SnapshotJSON   []byte    `json:"snapshot_json"`
-	CreatedAt      time.Time `json:"created_at"`
-}
 
 // Contradiction represents conflicting governance decisions.
 type Contradiction struct {
@@ -193,6 +185,9 @@ type DecisionStore interface {
 
 	// Plan assembling
 	GetPlan(ctx context.Context, tenantID uuid.UUID, req *PlanRequest) (*PlanResult, error)
+
+	// SubmitDecision atomically creates an immutable revision and returns result.
+	SubmitDecision(ctx context.Context, req *SubmitDecisionRequest, actor, requestID string) (*SubmitDecisionResult, error)
 
 	// Policy methods
 	SavePolicy(ctx context.Context, p *Policy) error
@@ -319,4 +314,50 @@ type PlanResult struct {
 	Milestones   []*Milestone     `json:"milestones"`
 	Dependencies []LineageEdge    `json:"dependencies"`
 	GeneratedAt  time.Time        `json:"generated_at"`
+}
+
+// DecisionID is a UUID for the decision identity.
+type DecisionID = uuid.UUID
+
+// DecisionContent is the immutable content (defined in canonical package).
+// We keep a copy here for convenience.
+
+// DecisionRevision represents an immutable revision.
+type DecisionRevision struct {
+	ID                   uuid.UUID `json:"id"`
+	TenantID             uuid.UUID `json:"tenant_id"`
+	DecisionID           uuid.UUID `json:"decision_id"`
+	RevisionNumber       int       `json:"revision_number"`
+	ContentHash          []byte    `json:"content_hash"` // SHA-256 of canonical content
+	PreviousRevisionHash []byte    `json:"previous_revision_hash"`
+	Actor                string    `json:"actor"`      // From auth context
+	RequestID            string    `json:"request_id"` // For correlation
+	CreatedAt            time.Time `json:"created_at"`
+	// Metadata (not hashed)
+}
+
+// SubmitDecisionRequest is used for creating a new immutable revision.
+type SubmitDecisionRequest struct {
+	TenantID       uuid.UUID  `json:"tenant_id"`
+	DecisionID     uuid.UUID  `json:"decision_id"`
+	Title          string     `json:"title"`
+	Statement      string     `json:"statement"`
+	Scope          Scope      `json:"scope"`
+	Owner          string     `json:"owner"`
+	Confidence     float64    `json:"confidence"`
+	Evidence       []Evidence `json:"evidence,omitempty"` // changed from []EvidenceHash
+	ParentID       *uuid.UUID `json:"parent_id,omitempty"`
+	IdempotencyKey string     `json:"idempotency_key,omitempty"`
+}
+
+// Actor is NOT in the request; it comes from auth context.
+// IdempotencyKey allows safe retries.
+
+// SubmitDecisionResult returned after atomic commit.
+type SubmitDecisionResult struct {
+	DecisionID     uuid.UUID `json:"decision_id"`
+	RevisionID     uuid.UUID `json:"revision_id"`
+	RevisionNumber int       `json:"revision_number"`
+	ContentHash    []byte    `json:"content_hash"`
+	MerkleRoot     []byte    `json:"merkle_root"`
 }

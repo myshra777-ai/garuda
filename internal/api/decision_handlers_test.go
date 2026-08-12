@@ -270,3 +270,16 @@ func (f *fakeDecisionStore) GetPlan(ctx context.Context, tenantID uuid.UUID, req
 		GeneratedAt:  time.Now().UTC(),
 	}, nil
 }
+
+// Minimal SubmitDecision stub for fakeDecisionStore used in API tests.
+func (f *fakeDecisionStore) SubmitDecision(ctx context.Context, req *types.SubmitDecisionRequest, actor, requestID string) (*types.SubmitDecisionResult, error) {
+	if f.decisions == nil {
+		f.decisions = make(map[uuid.UUID]*types.Decision)
+	}
+	id := req.DecisionID
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+	f.decisions[id] = &types.Decision{ID: id, TenantID: req.TenantID, Title: req.Title, Status: types.StatusDraft}
+	return &types.SubmitDecisionResult{DecisionID: id, RevisionID: uuid.New(), RevisionNumber: 1, ContentHash: []byte{}, MerkleRoot: []byte{}}, nil
+}
