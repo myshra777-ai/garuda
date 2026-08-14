@@ -8,7 +8,7 @@ import (
 )
 
 // generateFingerprint creates a SHA‑256 hash of the canonical representation
-func generateFingerprint(result *AnalysisResult) string {
+func generateFingerprint(result *Result) string {
 	// Sort entities and relationships for deterministic output
 	sort.Slice(result.Entities, func(i, j int) bool {
 		return result.Entities[i].ID < result.Entities[j].ID

@@ -11,7 +11,7 @@ import (
 )
 
 // Extract extracts entities and relationships from a Go repository
-func Extract(root string) (*AnalysisResult, error) {
+func Extract(root string) (*Result, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName |
 			packages.NeedFiles |
@@ -33,7 +33,7 @@ func Extract(root string) (*AnalysisResult, error) {
 		return nil, fmt.Errorf("no Go packages found in %s", root)
 	}
 
-	result := &AnalysisResult{
+	result := &Result{
 		Source:        root,
 		AnalyzedAt:    time.Now().UTC(),
 		Entities:      []Entity{},
@@ -162,6 +162,7 @@ func extractStruct(pkg *packages.Package, ts *ast.TypeSpec, filename string) Ent
 				}
 				if field.Tag != nil {
 					tag := field.Tag.Value
+					f.Tag = strings.Trim(tag, "`")
 					f.JSONTag = parseTag(tag, "json")
 					f.DBTag = parseTag(tag, "db")
 					f.ValidateTag = parseTag(tag, "validate")

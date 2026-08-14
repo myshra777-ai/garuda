@@ -1,48 +1,34 @@
--- 027_hardening.sql
--- Enforces Multi-Tenant Isolation, Provenance, and Workspace Registry
+-- 027_hardening.sql (Idempotent)
+ALTER TABLE decisions ADD COLUMN IF NOT EXISTS workspace_id UUID;
+ALTER TABLE decisions ADD COLUMN IF NOT EXISTS repository_id UUID;
+ALTER TABLE decisions ADD COLUMN IF NOT EXISTS commit_sha TEXT;
 
--- 1. Isolated Content-Addressed Evidence Store
-CREATE TABLE IF NOT EXISTS evidence_store (
-    tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000001'::uuid,
-    block_hash BYTEA NOT NULL,
-    content JSONB NOT NULL,
-    ref_count INT NOT NULL DEFAULT 1,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (tenant_id, block_hash)
-);
+ALTER TABLE evidence_store ADD COLUMN IF NOT EXISTS tenant_id UUID;
 
--- 2. Workspace Boundary Tables
-CREATE TABLE IF NOT EXISTS workspaces (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL,
-    name TEXT NOT NULL,
-    description TEXT DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_workspaces_tenant_name UNIQUE (tenant_id, name)
-);
+-- Add composite primary key to evidence_store
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints tc
+        JOIN information_schema.constraint_column_usage ccu
+        ON tc.constraint_name = ccu.constraint_name
+        WHERE tc.table_name = 'evidence_store'
+          AND tc.constraint_type = 'PRIMARY KEY'
+          AND ccu.column_name = 'block_hash'
+          AND NOT EXISTS (
+              SELECT 1 FROM information_schema.constraint_column_usage
+              WHERE constraint_name = tc.constraint_name
+                AND column_name = 'tenant_id'
+          )
+    ) THEN
+        ALTER TABLE evidence_store DROP CONSTRAINT evidence_store_pkey;
+    END IF;
 
-CREATE TABLE IF NOT EXISTS repositories (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    tenant_id UUID NOT NULL,
-    provider TEXT NOT NULL DEFAULT 'github',
-    url TEXT NOT NULL,
-    default_branch TEXT NOT NULL DEFAULT 'main',
-    language TEXT DEFAULT 'go',
-    current_commit TEXT DEFAULT '',
-    enabled BOOLEAN NOT NULL DEFAULT true,
-    analysis_status TEXT NOT NULL DEFAULT 'pending',
-    last_analyzed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_repositories_workspace_url UNIQUE (workspace_id, url)
-);
-
--- 3. Hardened Decisions & Revisions with Provenance Links
-ALTER TABLE decisions ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES workspaces(id) ON DELETE SET NULL;
-ALTER TABLE decisions ADD COLUMN IF NOT EXISTS repository_id UUID REFERENCES repositories(id) ON DELETE SET NULL;
-ALTER TABLE decisions ADD COLUMN IF NOT EXISTS commit_sha TEXT DEFAULT '';
-
-CREATE INDEX IF NOT EXISTS idx_decisions_provenance ON decisions(tenant_id, workspace_id, repository_id);
-CREATE INDEX IF NOT EXISTS idx_repositories_status ON repositories(tenant_id, analysis_status);
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_name = 'evidence_store'
+          AND constraint_type = 'PRIMARY KEY'
+    ) THEN
+        ALTER TABLE evidence_store ADD PRIMARY KEY (tenant_id, block_hash);
+    END IF;
+END $$;

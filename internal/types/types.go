@@ -22,6 +22,7 @@ type Scope struct {
 	System string `json:"system"`
 	Team   string `json:"team,omitempty"`
 	Env    string `json:"env,omitempty"`
+	Region string `json:"region,omitempty"`
 }
 
 // DecisionStatus captures the lifecycle state of a governance decision.
