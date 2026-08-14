@@ -1,49 +1,86 @@
+# Binaries
 /bin/
+/garuda
+/garuda-api
+/garuda-worker
+/garuda-mcp
+/garuda-slack
+/telemetry-collector
+
+# Output files
+*.json
+*.html
+*.md.gz
+*.txt
+!README.md
+!docs/*.md
+!LICENSE
 *.log
-.env
-garuda
-garuda-api
-garuda-mcp
-garuda_platform.html
-Release
-.venv/
-# Binary files
-bin/
-garuda
-garuda-api
-garuda-mcp
-garuda-worker
-telemetry-collector
+*.tmp
+*.tmp.*
 
-# Local environment files
-.env
-.env.local
-.env.*.local
-
-# Version file (if auto-generated locally)
-version.txt
-
-# Python virtual environment
-.venv/
-venv/
-__pycache__/
-*.pyc
-
-# IDE files
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
-# Benchmark / test artifacts
-benchmarks/
-*.log
-*.out
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Temporary files
-tmp/
-temp/
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Kubernetes
+*.kubeconfig
+
+# Docker
+docker-compose.override.yml
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing
+coverage.out
+coverage.html
+*.test
+*.prof
+
+# Vendor
+vendor/
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Temporary sync directories
+/tmp/
+garuda-sync/
+
+# Generated documentation
+/docs/api/
+/docs/openapi.yaml
+
+# Garuda specific generated files
+garuda_graph_*.html
+garuda_audit_*.txt
+garuda_snapshot_*.txt
+garuda_truth_index_*.md
+v*.json
+*.bak
+*.sql.bak
