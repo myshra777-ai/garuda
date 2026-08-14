@@ -1,0 +1,9 @@
+version: "1.0"
+rules:
+  - id: POL-001
+    name: "No hardcoded secrets"
+    action: DENY
+    scope:
+      domain: security
+    condition: "regex: (key|token|secret)"
+    enforcement: hard

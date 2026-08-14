@@ -227,3 +227,14 @@ func (s *stubDecisionStore) GetPlan(ctx context.Context, tenantID uuid.UUID, req
 		GeneratedAt:  time.Now().UTC(),
 	}, nil
 }
+
+// Minimal SubmitDecision stub to satisfy interface in tests.
+func (s *stubDecisionStore) SubmitDecision(ctx context.Context, req *types.SubmitDecisionRequest, actor, requestID string) (*types.SubmitDecisionResult, error) {
+	return &types.SubmitDecisionResult{
+		DecisionID:     req.DecisionID,
+		RevisionID:     uuid.New(),
+		RevisionNumber: 1,
+		ContentHash:    []byte{},
+		MerkleRoot:     []byte{},
+	}, nil
+}

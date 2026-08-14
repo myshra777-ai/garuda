@@ -37,17 +37,6 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 }
 
 // WithRequestID adds a unique request ID to the context and response headers.
-func WithRequestID(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestID := r.Header.Get("X-Request-ID")
-		if requestID == "" {
-			requestID = uuid.New().String()
-		}
-		ctx := context.WithValue(r.Context(), "request_id", requestID)
-		w.Header().Set("X-Request-ID", requestID)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
 
 // WithLogging logs each request with method, path, status, and duration.
 func WithLogging(next http.Handler) http.Handler {
@@ -252,4 +241,19 @@ func WithAuth(jwtConfig *auth.JWTConfig) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// WithRequestID adds a request ID to the context and response headers.
+func WithRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := r.Header.Get("X-Request-ID")
+		if requestID == "" {
+			requestID = uuid.New().String()
+		}
+		// Set response header
+		w.Header().Set("X-Request-ID", requestID)
+		// Add to context
+		ctx := context.WithValue(r.Context(), "request_id", requestID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
