@@ -9,25 +9,29 @@ import (
 )
 
 // SaveHarvestedDecision persists or updates a harvested candidate record.
+// SaveHarvestedDecision persists a harvested decision.
 func (s *PostgresStore) SaveHarvestedDecision(ctx context.Context, hd *harvester.HarvestedDecision) error {
 	query := `
 		INSERT INTO harvested_decisions (
-			id, source_type, source_id, source_url, raw_text,
+			id, tenant_id, source_type, source_id, source_url, raw_text,
 			extracted_decision, confidence, human_validated, decision_id,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		ON CONFLICT (id) DO UPDATE SET
-			extracted_decision = EXCLUDED.extracted_decision,
-			confidence = EXCLUDED.confidence,
-			human_validated = EXCLUDED.human_validated,
-			decision_id = EXCLUDED.decision_id,
-			updated_at = NOW()
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
 	_, err := s.pool.Exec(ctx, query,
-		hd.ID, hd.SourceType, hd.SourceID, hd.SourceURL, hd.RawText,
-		hd.ExtractedDecision, hd.Confidence, hd.HumanValidated, hd.DecisionID,
-		hd.CreatedAt, hd.UpdatedAt,
+		hd.ID,
+		hd.TenantID, // ✅ SaveHarvestedDecision Uses TenantID
+		hd.SourceType,
+		hd.SourceID,
+		hd.SourceURL,
+		hd.RawText,
+		hd.ExtractedDecision,
+		hd.Confidence,
+		hd.HumanValidated,
+		hd.DecisionID,
+		hd.CreatedAt,
+		hd.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save harvested decision: %w", err)
@@ -38,7 +42,7 @@ func (s *PostgresStore) SaveHarvestedDecision(ctx context.Context, hd *harvester
 // GetHarvestedDecision retrieves a harvested decision candidate by UUID.
 func (s *PostgresStore) GetHarvestedDecision(ctx context.Context, id uuid.UUID) (*harvester.HarvestedDecision, error) {
 	query := `
-		SELECT id, source_type, source_id, source_url, raw_text,
+		SELECT id, tenant_id, source_type, source_id, source_url, raw_text,
 		       extracted_decision, confidence, human_validated, decision_id,
 		       created_at, updated_at
 		FROM harvested_decisions
@@ -47,7 +51,7 @@ func (s *PostgresStore) GetHarvestedDecision(ctx context.Context, id uuid.UUID) 
 	var hd harvester.HarvestedDecision
 
 	err := s.pool.QueryRow(ctx, query, id).Scan(
-		&hd.ID, &hd.SourceType, &hd.SourceID, &hd.SourceURL, &hd.RawText,
+		&hd.ID, &hd.TenantID, &hd.SourceType, &hd.SourceID, &hd.SourceURL, &hd.RawText,
 		&hd.ExtractedDecision, &hd.Confidence, &hd.HumanValidated, &hd.DecisionID,
 		&hd.CreatedAt, &hd.UpdatedAt,
 	)
@@ -60,7 +64,7 @@ func (s *PostgresStore) GetHarvestedDecision(ctx context.Context, id uuid.UUID) 
 // ListHarvestedDecisions returns harvested decisions filtered by source and validation state.
 func (s *PostgresStore) ListHarvestedDecisions(ctx context.Context, sourceType string, validatedOnly bool) ([]*harvester.HarvestedDecision, error) {
 	query := `
-		SELECT id, source_type, source_id, source_url, raw_text,
+		SELECT id, tenant_id, source_type, source_id, source_url, raw_text,
 		       extracted_decision, confidence, human_validated, decision_id,
 		       created_at, updated_at
 		FROM harvested_decisions
@@ -78,7 +82,7 @@ func (s *PostgresStore) ListHarvestedDecisions(ctx context.Context, sourceType s
 	for rows.Next() {
 		var hd harvester.HarvestedDecision
 		err := rows.Scan(
-			&hd.ID, &hd.SourceType, &hd.SourceID, &hd.SourceURL, &hd.RawText,
+			&hd.ID, &hd.TenantID, &hd.SourceType, &hd.SourceID, &hd.SourceURL, &hd.RawText,
 			&hd.ExtractedDecision, &hd.Confidence, &hd.HumanValidated, &hd.DecisionID,
 			&hd.CreatedAt, &hd.UpdatedAt,
 		)

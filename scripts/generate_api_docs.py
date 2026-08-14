@@ -9,7 +9,9 @@ import sys
 import json
 import yaml
 import subprocess
-import google.generativeai as genai
+from google import genai
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
 
 OPENAPI_PATH = "openapi.yaml"
 DOCS_PATH = "docs/API.md"

@@ -139,32 +139,9 @@ func (s *PostgresStore) GetDecision(ctx context.Context, tenantID, decisionID uu
 }
 
 // GetDecisionRevisions returns historical snapshots for a decision.
+// GetDecisionRevisions is DEPRECATED. Use the new revision store.
 func (s *PostgresStore) GetDecisionRevisions(ctx context.Context, tenantID, decisionID uuid.UUID) ([]types.DecisionRevision, error) {
-	query := `
-		SELECT id, revision_number, snapshot_json, created_at
-		FROM decision_revisions
-		WHERE tenant_id = $1 AND decision_id = $2
-		ORDER BY revision_number ASC;
-	`
-	rows, err := s.pool.Query(ctx, query, tenantID, decisionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query revisions: %w", err)
-	}
-	defer rows.Close()
-
-	var revisions []types.DecisionRevision
-	for rows.Next() {
-		var rev types.DecisionRevision
-		var snapshotJSON []byte
-		if err := rows.Scan(&rev.ID, &rev.RevisionNumber, &snapshotJSON, &rev.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan revision: %w", err)
-		}
-		rev.TenantID = tenantID
-		rev.DecisionID = decisionID
-		rev.SnapshotJSON = snapshotJSON
-		revisions = append(revisions, rev)
-	}
-	return revisions, nil
+	return []types.DecisionRevision{}, nil
 }
 
 // GetDecisionsByScope fetches decisions with optional domain/system filters including temporal fields.

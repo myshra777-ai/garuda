@@ -23,9 +23,16 @@ func NewPostgresStore(connString string) (*PostgresStore, error) {
 	return &PostgresStore{pool: pool}, nil
 }
 
+// Pool exposes the underlying connection pool for ledger queries and transactions.
+func (s *PostgresStore) Pool() *pgxpool.Pool {
+	return s.pool
+}
+
 // Close gracefully terminates active database connections.
 func (s *PostgresStore) Close() {
-	s.pool.Close()
+	if s.pool != nil {
+		s.pool.Close()
+	}
 }
 
 // IngestEvidence commits structural governance evidence payloads inside an atomic transaction.
@@ -41,10 +48,10 @@ func (s *PostgresStore) IngestEvidence(ctx context.Context, tenantID uuid.UUID, 
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO evidence_store (tenant_id, block_hash, content, ref_count, created_at)
-		VALUES ($1, $2, $3, 1, NOW())
-		ON CONFLICT (tenant_id, block_hash) DO NOTHING;
-	`
+        INSERT INTO evidence_store (tenant_id, block_hash, content, ref_count, created_at)
+        VALUES ($1, $2, $3, 1, NOW())
+        ON CONFLICT (tenant_id, block_hash) DO NOTHING;
+    `
 	for _, e := range evidence {
 		if _, err := tx.Exec(ctx, query, tenantID, e.Hash[:], e.Content); err != nil {
 			return fmt.Errorf("failed to ingest evidence %x: %w", e.Hash, err)
@@ -66,11 +73,11 @@ func (s *PostgresStore) IngestBlocks(ctx context.Context, blocks []types.Block) 
 	defer tx.Rollback(ctx)
 
 	query := `
-		INSERT INTO blocks (hash, content, ref_count, created_at)
-		VALUES ($1, $2, $3, NOW())
-		ON CONFLICT (hash) DO UPDATE 
-		SET ref_count = blocks.ref_count + EXCLUDED.ref_count;
-	`
+        INSERT INTO blocks (hash, content, ref_count, created_at)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (hash) DO UPDATE 
+        SET ref_count = blocks.ref_count + EXCLUDED.ref_count;
+    `
 
 	batch := &pgx.Batch{}
 	for _, b := range blocks {
@@ -92,22 +99,22 @@ func (s *PostgresStore) IngestBlocks(ctx context.Context, blocks []types.Block) 
 // SaveTaskManifest handles full upsert transitions for agent executions and universal context states.
 func (s *PostgresStore) SaveTaskManifest(ctx context.Context, m *types.TaskManifest) error {
 	query := `
-		INSERT INTO task_manifests (
-			task_id, customer_id, credential_ref, title, scope_domain, scope_system, 
-			status, manifest_blocks, normalized_ir, ir_version, decision_ids, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
-		ON CONFLICT (task_id) DO UPDATE SET
-			credential_ref  = EXCLUDED.credential_ref,
-			title           = EXCLUDED.title,
-			scope_domain    = EXCLUDED.scope_domain,
-			scope_system    = EXCLUDED.scope_system,
-			status          = EXCLUDED.status,
-			manifest_blocks = EXCLUDED.manifest_blocks,
-			normalized_ir   = EXCLUDED.normalized_ir,
-			ir_version      = EXCLUDED.ir_version,
-			decision_ids    = EXCLUDED.decision_ids,
-			updated_at      = NOW();
-	`
+        INSERT INTO task_manifests (
+            task_id, customer_id, credential_ref, title, scope_domain, scope_system, 
+            status, manifest_blocks, normalized_ir, ir_version, decision_ids, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+        ON CONFLICT (task_id) DO UPDATE SET
+            credential_ref  = EXCLUDED.credential_ref,
+            title           = EXCLUDED.title,
+            scope_domain    = EXCLUDED.scope_domain,
+            scope_system    = EXCLUDED.scope_system,
+            status          = EXCLUDED.status,
+            manifest_blocks = EXCLUDED.manifest_blocks,
+            normalized_ir   = EXCLUDED.normalized_ir,
+            ir_version      = EXCLUDED.ir_version,
+            decision_ids    = EXCLUDED.decision_ids,
+            updated_at      = NOW();
+    `
 
 	blockSlices := make([][]byte, len(m.ManifestBlocks))
 	for i, hash := range m.ManifestBlocks {
@@ -146,11 +153,11 @@ func (s *PostgresStore) ListDecisions(ctx context.Context, tenantID uuid.UUID, s
 	}
 
 	query := `
-		SELECT id, tenant_id, title, statement, status, domain, system, team, env,
-		       owner, confidence, fingerprint, parent_id, temporal_metadata,
-		       created_at, updated_at, approved_at
-		FROM decisions
-		WHERE `
+        SELECT id, tenant_id, title, statement, status, domain, system, team, env,
+               owner, confidence, fingerprint, parent_id, temporal_metadata,
+               created_at, updated_at, approved_at
+        FROM decisions
+        WHERE `
 	args := []any{}
 	paramIndex := 1
 	if tenantID != uuid.Nil {
@@ -173,8 +180,8 @@ func (s *PostgresStore) ListDecisions(ctx context.Context, tenantID uuid.UUID, s
 	query += fmt.Sprintf(` AND (cardinality($%d::text[]) = 0 OR status = ANY($%d))`, paramIndex, paramIndex)
 	args = append(args, statusStrs)
 	query += `
-		ORDER BY created_at DESC;
-	`
+        ORDER BY created_at DESC;
+    `
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -210,3 +217,11 @@ func (s *PostgresStore) ListDecisions(ctx context.Context, tenantID uuid.UUID, s
 func (s *PostgresStore) ListByScope(ctx context.Context, tenantID uuid.UUID, scope types.Scope, statuses []types.DecisionStatus) ([]*types.Decision, error) {
 	return s.ListDecisions(ctx, tenantID, scope, statuses)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════════
+//  IMPORTANT: SaveAnalysisDecision has been removed from this file.
+//  It is now located in internal/store/analysis.go to maintain a clean separation
+//  of concerns and avoid duplicate method definitions.
+//  The implementation there matches the signature required by main.go:
+//     func (s *PostgresStore) SaveAnalysisDecision(ctx context.Context, tenantID uuid.UUID, result *analyzer.Result) (uuid.UUID, int, error)
+// ═══════════════════════════════════════════════════════════════════════════════════

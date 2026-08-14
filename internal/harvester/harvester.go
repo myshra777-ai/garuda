@@ -11,6 +11,7 @@ import (
 // HarvestedDecision represents a decision extracted from an unstructured source.
 type HarvestedDecision struct {
 	ID                uuid.UUID  `json:"id"`
+	TenantID          uuid.UUID  `json:"tenant_id"`   // ✅ Added TenantID to HarvestedDecision Struct
 	SourceType        string     `json:"source_type"` // slack, email, notion, jira
 	SourceID          string     `json:"source_id"`   // channel_id, email_id, etc.
 	SourceURL         string     `json:"source_url,omitempty"`
