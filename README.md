@@ -1,359 +1,758 @@
-# 🛡️ Garuda — Organizational Intelligence Runtime
+```markdown
+# Garuda
 
-**The truth maintenance system and persistent substrate for enterprise AI agents.**
+### Evidence-backed software intelligence for Go codebases.
 
-Garuda separates persistent organizational knowledge, reasoning, and governance from interchangeable foundation models. It operates as a persistent, append-only semantic substrate beneath models, applications, and multi-agent systems—ensuring every decision, evidence artifact, and policy action is **cryptographically verifiable, explainable, and non-repudiable**.
+Garuda analyzes a Go repository, builds a structured semantic model of its entities and relationships, preserves the evidence behind that model, and lets developers explore what exists, how components connect, and what changed.
 
----
+> **Understand your codebase. Follow its relationships. Trace the evidence.**
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go)](https://go.dev/)
-[![Architecture](https://img.shields.io/badge/Specification-GAS_v1.0-orange)](docs/GAS_Roadmap.md)
-[![Status](https://img.shields.io/badge/Status-Phase_3_Active-green)](#-current-status--roadmap)
+Garuda starts with a single repository and is being built toward a multi‑repository Company Graph.
 
 ---
 
-## 🧠 The Story Behind Garuda
+## Why Garuda?
 
-> *"I have 100 AI agents running on ChatGPT, Claude, and Gemini. They don't talk to each other. They re-read the same code, re-burn the same tokens, and sometimes contradict each other. That's chaos. That's wasted money. That's the problem Garuda solves."*
+Modern codebases are too large to understand from files and folders alone.
 
-This was the problem statement that started Garuda. The boom of AI agentic workflows has been extraordinary. Every engineering team is delegating tasks to autonomous agents. But at scale, multi-agent systems break down fast:
+A repository contains:
 
-- **Agent A** spends 8 minutes re-reading the codebase to understand context that **Agent B** already figured out an hour ago.
-- **Agent C** quietly overrides a critical security policy that **Agent D** just implemented.
-- Different agents using ChatGPT, Claude, and Gemini operate in silos, wasting **40–60% of your token budget** re-ingesting state and making conflicting decisions.
+- packages
+- files
+- structs
+- interfaces
+- functions
+- methods
+- APIs
+- dependencies
+- calls
+- references
+- implementation relationships
 
-**Garuda was built to solve this.**
+But traditional code browsing forces developers to reconstruct these relationships manually.
 
-It is not just another MCP tool. It is the **central brain and governance layer** for your entire fleet of AI agents. It doesn't matter if half your team is using Claude, some are using GPT-4o, or others are on Gemini. You install Garuda with a single command, and it immediately organizes your team of AI agents so they work as a single, coordinated unit.
+Garuda creates a **machine-readable semantic model** of the repository so that the structure of the system can be explored directly.
 
----
+Instead of asking:
 
-## 🌟 Why Garuda?
+> "Where is this implemented?"
 
-### The Problem
-- **Context Loss & Friction:** AI agents forget context between sessions, causing 8-minute cold starts and redundant execution cycles.
-- **Token Inefficiency:** Uncoordinated multi-agent deployments duplicate work, leading to 40%–60% token budget waste.
-- **Semantic Drift & Contradictions:** Unmonitored models output conflicting decisions, introducing operational risk and data corruption.
-- **Compliance & Audit Blindspots:** Traditional model calls lack deterministic, tamper-proof execution trails required for enterprise governance.
+you can ask:
 
-### The Solution
+> "What is this entity connected to?"
 
-Garuda gives every agent a **permanent, auditable, shareable memory**:
+> "What depends on it?"
 
-| Feature | Function & Impact |
-| :--- | :--- |
-| **Cryptographic Evidence Chain** | Every decision is SHA‑256 hashed and linked into a per‑tenant Merkle tree – tamper‑proof, auditable, legally verifiable. |
-| **Autonomous Contradiction Quarantine** | Real‑time conflict detection within `(scope_domain, scope_system)` – zero‑trust governance, conflicting proposals quarantined before they corrupt truth. |
-| **Token & Cost Metering** | Pre-flight budget enforcement and token savings heuristics prevent runaway model costs. |
-| **Agent State Checkpoint & Handoff** | Enables cross-model and cross-agent execution handoffs with zero-downtime state resumption – Claude ↔ GPT ↔ Gemini seamless. |
-| **Bitemporal & Replayable Truth** | Stores decisions as append-only revisions, allowing point-in-time state reconstruction and audit replay. |
-| **Native MCP Integration** | `/garuda` slash commands inside Cursor, Claude Desktop, or any MCP‑compatible client – zero‑learning‑curve for agents and humans. |
+> "What changed?"
 
----
+> "Where did Garuda get this information?"
 
-## Features
-<!-- FEATURES_START -->
-### 🚀 Latest Capabilities (Updated 2026-08-09)
-
-- **Decision Registry & Immutable Truth Foundation** – versioned, append-only ledger with full metadata (who, when, why, evidence).
-- **Directed Lineage Graph (DAG)** – full traceability of dependencies, supersession, and impact analysis.
-- **Autonomous Contradiction Quarantine Engine** – real‑time detection and isolation of conflicting decisions.
-- **Multi‑Agent Handoff & Checkpointing** – atomic, crash‑safe transfer of tasks with CAS‑deduplicated context.
-- **Cryptographic Merkle Audit Ledger** – SHA‑256 hashed event chaining; every API response includes `X-Garuda-Merkle-Root`.
-- **Token Budget Metering & Circuit Breakers** – real‑time tracking with pre‑flight checks and automatic fallback.
-- **Bitemporal Validity Queries** – point‑in‑time truth reconstruction: "What was the state on 2026‑06‑01?"
-- **Automatic Checkpointing & Idle Watchdog** – token exhaustion and 60‑min inactivity auto‑checkpoint.
-- **Dynamic Model Router & Pre‑Flight Classifier** – intelligent task routing based on intent, token depth, budget, and SLA.
-- **Secret Redaction & PII Protection** – real‑time regex‑based detection and masking of API keys, certificates, personal data.
-- **Native MCP Integration** – slash commands inside Cursor, Claude Desktop, Gemini CLI, etc.
-- **Mission Control Dashboard** – embedded dark‑mode web UI with live SSE metrics, lineage, contradictions, and budget.
-- **Single‑Turn Agent Bootstrapper** – `/system/bootstrap` returns endpoints, Merkle state, budget, and MCP tools in one call.
-- **Self‑Healing Error Remediation** – error responses include machine‑actionable remediation hints.
-- **OpenAPI 3.0.3 Specification & Swagger UI** – interactive API docs at `/docs`.
-
----
-_This section is auto-generated by AI from the latest commits._
-<!-- FEATURES_END -->
+The goal is not simply to search code. The goal is to build a **continuously verifiable understanding of software**.
 
 ---
 
-## 🏗️ Architecture & Component Design
+## The Core Idea
 
-<!-- AUTO-GENERATED:DIAGRAM:START -->
 ```
-┌──────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 GARUDA RUNTIME ENGINE                                        │
-├──────────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │  Layer 7/8 – Intent Governance & Continuous Runtime                                  │   │
-│  │  ├─ Cryptographic Merkle Attestation Engine                                         │   │
-│  │  ├─ Model‑Attributed Telemetry Collector (Async Batch Ingestor)                     │   │
-│  │  ├─ Token Budget Metering & Pre‑Flight Ledger                                       │   │
-│  │  └─ MCP Bridge & Slash‑Command Router                                               │   │
-│  └──────────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │  Layer 0/1/6 – Truth Foundation, Directed Graph & Cognition                          │   │
-│  │  ├─ Autonomous Contradiction Pre‑Flight Shield                                       │   │
-│  │  ├─ Append‑Only Immutable Revisions & Decision Store                                  │   │
-│  │  ├─ SHA‑256 Hash‑Chained Evidence Ledger                                             │   │
-│  │  └─ Agent State Checkpoint & Handoff Engine                                          │   │
-│  └──────────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │  Storage Layer                                                                        │   │
-│  │  ├─ PostgreSQL / Supabase (Decisions, Evidence, Telemetry Events)                    │   │
-│  │  ├─ Redis (State Cache & SSE Broker Stream)                                          │   │
-│  │  └─ Merkle Roots (Per‑Tenant Cryptographic State)                                    │   │
-│  └──────────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │  Background Daemons                                                                    │   │
-│  │  ├─ Merkle Snapshot Worker (Epochic SHA‑256 parent‑chained snapshots)                │   │
-│  │  └─ Telemetry Collector (Async, batched ingestion)                                   │   │
-│  └──────────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                              │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
+                         SOURCE CODE
+                              │
+                              ▼
+                       ┌─────────────┐
+                       │ Go Analyzer │
+                       │ AST / Types │
+                       └──────┬──────┘
+                              │
+                              ▼
+                     ┌─────────────────┐
+                     │  Semantic Core  │
+                     │                 │
+                     │ Entities        │
+                     │ Relationships   │
+                     │ Claims          │
+                     │ Observations    │
+                     └────────┬────────┘
+                              │
+                              ▼
+                         ┌──────────┐
+                         │ Evidence │
+                         │          │
+                         │ File     │
+                         │ Location │
+                         │ Commit   │
+                         │ Hash     │
+                         └────┬─────┘
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │ Immutable Snapshot│
+                    │ + Integrity Layer │
+                    └─────────┬─────────┘
+                              │
+                ┌─────────────┼──────────────┐
+                ▼             ▼              ▼
+             CLI          Graph         Artifacts
+                │             │              │
+                └─────────────┼──────────────┘
+                              ▼
+                     Developers + AI
 ```
-<!-- AUTO-GENERATED:DIAGRAM:END -->
+
+Garuda deliberately follows a simple principle:
+
+> **Build structured truth first. Put generative intelligence on top of it later.**
 
 ---
 
-## 📊 Live Observability & Telemetry Metrics
+## What Garuda Understands
 
-Garuda continuously captures model‑attributed operational metrics to evaluate execution efficiency, policy compliance, and resource usage.
+Garuda's semantic model is designed around explicit entities, relationships, claims, and evidence.
 
-<!-- AUTO-GENERATED:METRICS:START -->
-| Metric Category | Metrics Tracked |
-| :--- | :--- |
-| **Instance Context** | `instance_hash`, `session_id`, `garuda_version`, `agent_runtime` |
-| **Decision Lifecycle** | `decision_status`, `scope_domain`, `scope_system`, `decision_confidence`, `contradictions_caught` |
-| **Model Attribution** | `model_name`, `model_provider`, `model_route` |
-| **Cost & Efficiency** | `tokens_estimated`, `tokens_saved`, `estimated_cost_usd`, `budget_remaining` |
-| **Performance (ms)** | `cold_start_latency_p50/p95/p99`, `warm_start_latency_p50/p95/p99`, `api_latency_p50/p95/p99`, `handoff_latency` |
-| **Efficacy Rates** | `handoff_success_rate`, `contradiction_reduction_rate`, `token_reuse_rate`, `hallucinations_prevented` |
-<!-- AUTO-GENERATED:METRICS:END -->
+### Entities
+
+Depending on analyzer coverage, Garuda can represent entities such as:
+
+- Packages
+- Files
+- Structs
+- Interfaces
+- Types
+- Functions
+- Methods
+- APIs
+- Dependencies
+- External packages
+
+Every entity has a stable identity within the semantic model.
+
+### Relationships
+
+The semantic graph represents relationships between entities.
+
+Examples include:
+
+```
+CALLS
+IMPORTS
+REFERENCES
+CONTAINS
+DEFINES
+IMPLEMENTS
+EMBEDS
+DEPENDS_ON
+```
+
+This turns a repository from a collection of files into an interconnected system.
+
+For example:
+
+```
+PaymentService
+      │
+      ├── CONTAINS ──► ProcessPayment()
+      │
+      ├── DEPENDS_ON ──► PaymentRepository
+      │
+      ├── CALLS ──► ValidatePayment()
+      │
+      └── REFERENCES ──► PaymentRequest
+```
+
+The graph is designed to make these relationships directly explorable.
 
 ---
 
-## ⚡ Quickstart Guide
+## Evidence Is Part of the Model
 
-### Prerequisites
-* **Go** `1.25` or higher
-* **PostgreSQL** `14` or higher (or Supabase / Render Postgres)
-* **Redis** `7` or higher (optional, for caching)
-* **Docker & Docker Compose** (Optional, for containerized deployments)
+Garuda is not an unexplained graph.
 
-### 1. One‑Command Install (Recommended)
+Important semantic information is traceable back to source evidence.
+
+Conceptually:
+
+```
+Entity / Relationship
+        │
+        ▼
+      Claim
+        │
+        ▼
+     Evidence
+        │
+        ├── Repository
+        ├── Commit
+        ├── File
+        ├── Location
+        └── Content / Hash
+```
+
+This allows Garuda to answer not only:
+
+> "What does the system contain?"
+
+but also:
+
+> "Why does Garuda believe this?"
+
+and:
+
+> "What source evidence supports this relationship?"
+
+This evidence‑first architecture is a core design principle.
+
+---
+
+## Immutable Analysis
+
+Garuda treats analysis results as versioned artifacts.
+
+A simplified lifecycle is:
+
+```
+Repository
+    │
+    ▼
+Commit
+    │
+    ▼
+Analysis
+    │
+    ▼
+Snapshot
+    │
+    ▼
+Entities + Relationships
+    │
+    ▼
+Claims + Evidence
+```
+
+The trust layer includes:
+
+- immutable revisions
+- cryptographic integrity
+- Merkle‑backed verification
+- provenance
+- reproducible analysis artifacts
+
+This allows historical semantic state to be preserved instead of continuously overwriting the latest result.
+
+---
+
+## Explore Your Codebase as a Graph
+
+Garuda's graph experience is designed around the idea that software should be explored as a connected system rather than as isolated files.
+
+```
+                    ┌─────────────┐
+                    │   Package   │
+                    └──────┬──────┘
+                           │
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+         ┌──────┐      ┌────────┐    ┌────────┐
+         │ File │      │ Struct │    │ Func   │
+         └──┬───┘      └───┬────┘    └───┬────┘
+            │              │             │
+            └──────────────┼─────────────┘
+                           ▼
+                    ┌────────────┐
+                    │ Dependency │
+                    └─────┬──────┘
+                          │
+                          ▼
+                    ┌────────────┐
+                    │  External  │
+                    └────────────┘
+```
+
+Progressive exploration:
+
+```
+Repository
+    ↓
+Package
+    ↓
+File
+    ↓
+Entity
+    ↓
+Relationship
+    ↓
+Evidence
+    ↓
+Source
+```
+
+The objective is to let a developer select an entity and progressively understand its surrounding system without losing the underlying provenance.
+
+---
+
+## Current MVP Focus
+
+Garuda is currently focused on **one repository** – getting it genuinely understandable before scaling outward.
+
+The initial implementation focuses on:
+
+- Go source analysis
+- deterministic semantic extraction
+- repository snapshots
+- entity modeling
+- relationship modeling
+- semantic inspection
+- semantic diffing
+- evidence and provenance
+- immutable analysis history
+- cryptographic integrity
+- interactive graph exploration
+
+Go is the first analyzer target.
+
+Additional languages are intentionally deferred until the Go semantic model and evaluation process are sufficiently mature.
+
+---
+
+## CLI Commands
+
+Garuda is primarily designed to be used from the command line.
+
+### Production‑Ready Commands
+
+| Command | Purpose | Status |
+|---------|---------|--------|
+| `garuda analyze . --save` | Analyze and persist semantic state | ✅ Stable |
+| `garuda analyze . -o v1.json` | Create machine‑readable snapshot | ✅ Stable |
+| `garuda inspect <entity>` | Inspect a semantic entity | ✅ Stable |
+| `garuda diff v1.json v2.json` | Compare semantic snapshots | ✅ Stable |
+| `garuda graph <workspace> --open` | Generate interactive graph | ✅ Stable |
+| `garuda verify` | Verify cryptographic integrity | ✅ Stable |
+| `garuda explain <id>` | Trace evidence for a claim | ✅ Stable |
+| `garuda self-describe` | Generate product description | ✅ Stable |
+
+### Commands in Active Development
+
+| Command | Purpose | Status |
+|---------|---------|--------|
+| `garuda justify <entity>` | Explain why code exists | 🧪 Active |
+| `garuda judge v1.json v2.json` | Governance report | 🧪 Active |
+| `garuda ponytail .` | Code hygiene detection | 🧪 Active |
+
+### Planned / Future Commands
+
+| Command | Purpose | Status |
+|---------|---------|--------|
+| `garuda graph <workspace> --cross-repo` | Cross‑repository graph | 🔜 Planned |
+| `garuda ci` | CI integration | 🔜 Planned |
+| `garuda policy` | Policy evaluation | 🔜 Planned |
+
+---
+
+## Product Self‑Description
+
+Garuda contains a self‑description capability designed to keep product documentation aligned with the actual product state.
 
 ```bash
-# Install Garuda globally (like Ollama, npm, or go install)
-curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | sh
+# Generate a machine‑readable product description
+garuda self-describe --workspace my-workspace
 
-# Start the full runtime
-garuda up
+# Generate a Markdown README skeleton
+garuda self-describe \
+  --workspace my-workspace \
+  --markdown \
+  --output README.md
 ```
 
-That's it. You now have:
-- ✅ PostgreSQL + Redis (managed via Docker)
-- ✅ API Gateway on `:8080`
-- ✅ Merkle snapshot worker
-- ✅ Mission Control dashboard at `http://localhost:8080/dashboard`
-- ✅ MCP bridge for slash commands
+The documentation workflow is designed so that product documentation is driven by explicit product and capability contracts rather than allowing an LLM to guess what the software does.
 
-### 2. Manual Build (Without Docker)
+---
+
+## Architecture
+
+Garuda is intentionally layered.
+
+```
+┌──────────────────────────────────────────────┐
+│                  SOURCES                     │
+│       Git / Code / Commits / Documents      │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│             HARVEST & ANALYSIS              │
+│       AST / Go Types / Dependencies         │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│               SEMANTIC CORE                 │
+│                                              │
+│ Entities │ Relationships │ Claims │ Evidence │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│              TRUST / INTEGRITY              │
+│                                              │
+│ Immutable revisions │ Merkle │ Provenance   │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│                 EXPERIENCE                  │
+│                                              │
+│       CLI │ API │ Graph │ Artifacts         │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+              DEVELOPERS + AI
+```
+
+A key architectural rule is that Garuda keeps different kinds of knowledge distinct.
+
+For example:
+
+```
+OBSERVATION
+"Service A imports package B"
+
+        ≠
+
+INFERENCE
+"Service A probably depends on Service B"
+
+        ≠
+
+DECISION
+"Service A must use Service B"
+```
+
+Keeping these epistemic categories separate prevents observed implementation details from being incorrectly presented as organizational decisions or policies.
+
+---
+
+## Data Model
+
+At the conceptual level:
+
+```
+Workspace
+    │
+    └── Repository
+           │
+           └── Commit
+                  │
+                  └── Analysis
+                         │
+                         └── Snapshot
+                                │
+                ┌───────────────┼───────────────┐
+                ▼               ▼               ▼
+             Entities      Relationships      Claims
+                                                │
+                                                ▼
+                                             Evidence
+```
+
+Core concepts include:
+
+| Concept | Purpose |
+|---|---|
+| Workspace | Company or project boundary |
+| Repository | Source system being analyzed |
+| Commit | Immutable source state |
+| Analysis | One analyzer execution |
+| Snapshot | Normalized semantic output |
+| Entity | Identifiable software element |
+| Relationship | Typed connection between entities |
+| Claim | Statement represented by Garuda |
+| Evidence | Source information supporting a claim |
+
+---
+
+## Storage
+
+Garuda uses **PostgreSQL** as the primary structured persistence layer.
+
+Conceptually:
+
+```
+PostgreSQL
+├── Tenants
+├── Workspaces
+├── Repositories
+├── Commits
+├── Analyses
+├── Entities
+├── Relationships
+├── Claims
+├── Evidence metadata
+└── Governance data
+```
+
+Immutable analysis artifacts are represented as structured snapshots. Larger evidence and reproducible artifacts use content‑addressed storage.
+
+The graph is a semantic experience and projection over this structured information – not an isolated visualization disconnected from the underlying evidence.
+
+---
+
+## Trust Model
+
+Garuda is built around a simple principle:
+
+> **Evidence before confidence.**
+
+The system distinguishes:
+
+```
+Observed
+   ↓
+Supported by evidence
+   ↓
+Represented as semantic information
+   ↓
+Versioned
+   ↓
+Cryptographically verifiable
+```
+
+This makes the graph more than a visualization. It becomes an inspectable representation of what Garuda knows about the software system.
+
+---
+
+## Development
+
+### Requirements
+
+- Go 1.21+
+- PostgreSQL 16+
+- Git
+
+### Build
 
 ```bash
 git clone https://github.com/myshra777-ai/garuda.git
 cd garuda
-go mod tidy
-go build ./...
-export DATABASE_URL="postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable"
-export JWT_SECRET="your-256-bit-production-secret"
-export GARUDA_TELEMETRY_ENABLED="true"
-go run cmd/migrate/main.go
-go run cmd/garuda-api/main.go
+go build -o garuda cmd/garuda/*.go
 ```
 
----
-
-## 🧪 Verification Walkthrough
-
-Validate decision submission, policy validation, and Merkle inclusion proofs using `curl`:
-
-### Step 1: Issue Debug Auth Token
+### Run tests
 
 ```bash
-TOKEN=$(curl -s "http://localhost:8080/debug/token?actor=verifier&tenant_id=00000000-0000-0000-0000-000000000001" | jq -r '.token')
+go test ./...
 ```
 
-### Step 2: Propose Policy Decision
+### Quick Start
 
 ```bash
-DECISION_RESP=$(curl -s -X POST http://localhost:8080/api/v1/decisions/submit \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "X-Model: claude-3-5-sonnet" \
-  -H "X-Model-Provider: anthropic" \
-  -d '{
-    "tenant_id": "00000000-0000-0000-0000-000000000001",
-    "title": "Enforce TLS 1.3 across external endpoints",
-    "scope_domain": "security",
-    "scope_system": "network"
-  }')
+# Start the stack
+garuda up
 
-echo "$DECISION_RESP" | jq .
-DECISION_ID=$(echo "$DECISION_RESP" | jq -r '.id')
+# Analyze your codebase
+garuda analyze . --save
+
+# Generate interactive graph
+garuda graph my-workspace --open
+
+# Inspect an entity
+garuda inspect PaymentService
 ```
 
-### Step 3: Verify Cryptographic Merkle Inclusion
+### Example Workflow
 
 ```bash
-curl -s -X GET "http://localhost:8080/api/v1/evidence/verify/$DECISION_ID" \
-  -H "Authorization: Bearer $TOKEN" | jq .
+# 1. Analyze the repository
+garuda analyze . --save
+
+# 2. Inspect the semantic model
+garuda inspect PaymentService
+
+# 3. Generate the graph
+garuda graph my-workspace --open
+
+# 4. Create a snapshot
+garuda analyze . -o before.json
+
+# 5. Make code changes...
+
+# 6. Analyze again
+garuda analyze . -o after.json
+
+# 7. Compare semantic changes
+garuda diff before.json after.json
+
+# 8. Verify Garuda's integrity
+garuda verify
 ```
 
-### Step 4: Try a Contradictory Proposal (Quarantine Test)
+The important workflow is:
 
-```bash
-curl -s -X POST http://localhost:8080/api/v1/decisions/submit \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tenant_id": "00000000-0000-0000-0000-000000000001",
-    "title": "Disable TLS 1.3 for legacy endpoints",
-    "scope_domain": "security",
-    "scope_system": "network"
-  }' | jq .
-# Expected output: {"status":"quarantined","reason":"contradiction with existing decision"}
+```
+Analyze
+   ↓
+Understand
+   ↓
+Explore
+   ↓
+Change
+   ↓
+Re-analyze
+   ↓
+Diff
+   ↓
+Verify
 ```
 
 ---
 
-## 📡 Gateway API Reference
+## Roadmap
 
-| Method | Path | Function |
-| :--- | :--- | :--- |
-| `POST` | `/api/v1/decisions/submit` | Propose a new decision; executes pre‑flight contradiction check and records Merkle evidence. |
-| `GET` | `/api/v1/evidence/verify/{id}` | Retrieve cryptographic Merkle inclusion proofs for target decision. |
-| `GET` | `/api/v1/decisions/{id}/lineage` | Query parent and child decision lineage relationships (DAG). |
-| `POST` | `/api/v1/agents/checkpoint` | Persist execution agent state for thinking cycles. |
-| `GET` | `/api/v1/agents/checkpoint/{id}` | Retrieve a saved execution state checkpoint. |
-| `POST` | `/api/v1/agents/handoff` | Atomically transfer task execution across runtime agents. |
-| `POST` | `/api/v1/agents/warmup` | Pre‑heat runtime states and context buffers. |
-| `POST` | `/api/v1/budget/consume` | Record token/execution unit consumption against tenant balance. |
-| `GET` | `/api/v1/budget` | Fetch active budget allocation and remaining limits. |
-| `GET` | `/api/v1/decisions/active?at=...` | Point‑in‑time truth reconstruction. |
-| `GET` | `/api/v1/audit/verify` | Verify an audit event's Merkle inclusion. |
-| `POST` | `/mcp/bridge` | Execute quote‑aware slash commands (`/garuda propose`, etc.). |
-| `GET` | `/dashboard` | Mission Control dark‑mode web dashboard. |
-| `GET` | `/docs` | Swagger UI interactive API documentation. |
+Garuda follows an incremental strategy:
 
----
-
-## 🧠 MCP Integration – Slash Commands
-
-Garuda speaks MCP (Model Context Protocol). Inside **Cursor, Claude Desktop, or any MCP‑compatible client**, you can use slash commands:
-
-```text
-/garuda propose "Use Redis for caching" --scope-domain infrastructure --scope-system cache
-/garuda verify <decision_id>
-/garuda lineage <decision_id>
-/garuda status
-/garuda handoff <task_id> <source_agent> <target_agent>
+```
+1 Repository
+      ↓
+10 Repositories
+      ↓
+25 Repositories
+      ↓
+Company Graph
+      ↓
+Trusted State & Governance
 ```
 
-No new APIs to learn – your agents just talk to Garuda.
+### Current Direction
+
+| Phase | Focus | Status |
+|---|---|---|
+| P0 | Trust Foundation | ✅ Complete |
+| P1 | Semantic Core | ✅ Complete |
+| P2 | Go Analyzer | ✅ Complete |
+| P3 | Artifact + CLI | ✅ Complete |
+| P4 | Governance (justify, judge, ponytail) | 🧪 Active |
+| P5 | Multi‑Repository | 🔜 Planned |
+| P6 | Company Brain | 🔜 Planned |
+| P7 | CI / PR Integration | 🔜 Planned |
+| P8 | Governance Policies | 🔜 Planned |
+| P9 | Business Integrity | 📋 Long‑term |
+
+The important milestone before multi‑repository expansion is **confidence in single‑repository semantic analysis**.
+
+The goal is not to build a large graph quickly. The goal is to build a graph that can be trusted.
 
 ---
 
-## 🧩 CLI Reference
+## Design Principles
 
-| Command | Description |
-| :--- | :--- |
-| `garuda init` | Set up your local environment. |
-| `garuda up` | Start all services (API, Worker, Dashboard). |
-| `garuda down` | Stop everything. |
-| `garuda status` | Check health, budget, and Merkle root. |
-| `garuda propose "<title>" [--scope-domain domain] [--scope-system system]` | Add a new decision to the brain. |
-| `garuda verify <id>` | Get cryptographic proof of a decision. |
-| `garuda lineage <id>` | See the full family tree of a decision. |
-| `garuda handoff <task_id> <source> <target>` | Handoff task between agents. |
-| `garuda resume <agent_id>` | Resume agent from checkpoint. |
-| `garuda dashboard` | Open Mission Control. |
-| `garuda --version` | Show version. |
+Garuda follows several principles:
 
----
+### Deterministic first
+Prefer deterministic analysis for facts that can be extracted from source code.
 
-## 🗺️ Current Status & Roadmap
+### Evidence before confidence
+Important claims should have traceable evidence.
 
-| Layer | Component | Status |
-| :--- | :--- | :--- |
-| Layer 0 | Truth Foundation (Decisions, Revisions, Evidence, Merkle Trees) | ✅ 100% Operational |
-| Layer 1 | Directed Truth Graph (Nodes, Edges, Lineage DAGs) | ✅ 100% Operational |
-| Layer 2 | Temporal Intelligence (Snapshots, Bitemporal Replay) | 🟡 65% Operational |
-| Layer 6 | Distributed Cognition (MCP Tools, Workspaces) | 🟡 40% Operational |
-| Layer 7 | Intent Governance (Contradiction Shield, Policy Enforcement) | ✅ 90% Operational |
-| Layer 8 | Runtime Gateway & Telemetry (API Gateway, Telemetry Ingestor) | ✅ 100% Operational |
+### Structured truth before generative intelligence
+Build the semantic model before asking an LLM to reason over it.
 
-**Overall Platform: ~70% of Full GAS Roadmap**
+### Observations are not decisions
+What the code does and what an organization has decided should remain separate concepts.
 
----
+### Immutable history
+Analysis results should be reproducible and historically inspectable.
 
-## 📊 Live Dashboard
+### Progressive disclosure
+Start with the repository and progressively drill down:
 
-Mission Control (`/dashboard`) shows:
-- **Active decisions** – what the brain knows.
-- **Quarantined conflicts** – catch contradictions before they cause damage.
-- **Token budget & ROI** – real‑time cost savings.
-- **Merkle snapshot chain** – cryptographic proof of everything.
-- **SSE event stream** – live telemetry feed.
+```
+Repository
+ → Package
+ → File
+ → Entity
+ → Relationship
+ → Evidence
+ → Source
+```
+
+### Scale only after correctness
+The 1 → 10 → 25 repository strategy prevents a weak single‑repository analyzer from becoming a weak Company Graph.
 
 ---
 
-## 🔐 Security & Trust
+## What Garuda Is Becoming
 
-- JWT authentication with tenant isolation.
-- Ed25519 signing for non‑repudiation.
-- Cryptographic Merkle hashing prevents tampering.
-- Append‑only ledger – no destructive updates.
-- Built‑in secret redaction for API keys and PII.
-- GDPR/DPDP‑compliant telemetry with explicit consent and opt‑out.
+Garuda is being developed in three broad layers.
 
----
+### 1. Software Intelligence
+Understand one repository.
 
-## 🌍 Why Garuda Over Competitors?
+> "What is in this codebase and how does it work?"
 
-| Competitor | Their Focus | Garuda's Edge |
-| :--- | :--- | :--- |
-| **Hyper** | Temporal knowledge graphs | Contradiction detection + multi‑agent handoff |
-| **Trace** | Workflow orchestration | Decision lineage + cryptographic proof |
-| **Graphify** | Code graph extraction | Business decision linking + MCP governance tools |
-| **Glen** | Metric consistency | Tribal knowledge harvesting + handoff |
-| **Coasty** | RPA + SOP | Thinking Mode + contradiction resolution |
+### 2. Company Brain
+Connect repositories and services.
 
----
+> "How do all our systems connect?"
 
-## 🤝 Contributing
+### 3. Trusted State & Governance
+Connect software knowledge with organizational decisions, policies, and business state.
 
-Contributions are welcome! Please ensure all code additions:
+> "Can this change or state transition happen safely?"
 
-- Follow the **Garuda Architecture Specification (GAS)** laws.
-- Maintain **append‑only immutability** principles.
-- Include relevant SQL migrations in `migrations/`.
-- Pass `go build ./...` and `go test ./...`.
-- Update the README (auto‑generated by AI, or manually).
+These layers are intentionally developed in sequence. Garuda is currently focused on the first layer.
 
 ---
 
-## 📄 License
+## Not the MVP Yet
 
-Garuda is released under the **Apache 2.0 License**. See the [LICENSE](LICENSE) file for details.
+The following areas are intentionally being developed later:
+
+- Full multi‑language analysis
+- Large‑scale multi‑repository deployments
+- Complete cross‑repository dependency resolution
+- Company‑wide semantic overview
+- Deep CI / PR integration
+- Advanced policy governance
+- Runtime‑informed semantic analysis
+- Business‑state integrity
+- Full natural‑language graph querying
+
+These are part of the longer‑term direction rather than claims about the current MVP.
 
 ---
 
-**Star ⭐ us on GitHub** and help build the memory layer for enterprise AI.
+## Contributing
 
-**🔗 https://github.com/myshra777-ai/garuda**
+Contributions are welcome.
+
+A good contribution should:
+
+1. Have a clear purpose.
+2. Preserve deterministic behavior where possible.
+3. Include tests for new behavior.
+4. Preserve evidence and provenance semantics.
+5. Avoid silently changing the meaning of existing semantic entities or relationships.
+6. Keep documentation aligned with actual capabilities.
+
+For larger changes, open an issue first to discuss the proposed design.
+
+---
+
+## License
+
+Apache License 2.0
+
+---
+
+## Status
+
+Garuda is an actively developed project.
+
+The current MVP is focused on **Go‑based software intelligence and evidence‑backed semantic exploration**.
+
+The architecture is intentionally being developed incrementally, with correctness and evidence preceding multi‑repository scale and governance.
+
+---
+
+<p align="center">
+  <strong>Garuda</strong><br>
+  Understand your codebase. Follow its relationships. Trace the evidence.
+</p>
+```
