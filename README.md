@@ -1,273 +1,39 @@
-```markdown
-# Garuda
+# 🛡️ Garuda — Evidence-Backed Software Intelligence
 
-### Evidence-backed software intelligence for Go codebases.
+**Understand your codebase as a connected, inspectable, and verifiable system.**
 
-Garuda analyzes a Go repository, builds a structured semantic model of its entities and relationships, preserves the evidence behind that model, and lets developers explore what exists, how components connect, and what changed.
+Garuda analyzes Go repositories, builds a structured semantic model of the software inside them, preserves the evidence behind that model, and provides interactive tools for exploring how the codebase is connected.
 
-> **Understand your codebase. Follow its relationships. Trace the evidence.**
+> **Code → Semantics → Relationships → Evidence → Understanding**
 
-Garuda starts with a single repository and is being built toward a multi‑repository Company Graph.
-
----
-
-## Why Garuda?
-
-Modern codebases are too large to understand from files and folders alone.
-
-A repository contains:
-
-- packages
-- files
-- structs
-- interfaces
-- functions
-- methods
-- APIs
-- dependencies
-- calls
-- references
-- implementation relationships
-
-But traditional code browsing forces developers to reconstruct these relationships manually.
-
-Garuda creates a **machine-readable semantic model** of the repository so that the structure of the system can be explored directly.
-
-Instead of asking:
-
-> "Where is this implemented?"
-
-you can ask:
-
-> "What is this entity connected to?"
-
-> "What depends on it?"
-
-> "What changed?"
-
-> "Where did Garuda get this information?"
-
-The goal is not simply to search code. The goal is to build a **continuously verifiable understanding of software**.
+Garuda is being built incrementally: **single-repository correctness first, multi-repository intelligence next, Company Graph later.**
 
 ---
 
-## The Core Idea
+## 🧭 What Garuda Does
 
-```
-                         SOURCE CODE
-                              │
-                              ▼
-                       ┌─────────────┐
-                       │ Go Analyzer │
-                       │ AST / Types │
-                       └──────┬──────┘
-                              │
-                              ▼
-                     ┌─────────────────┐
-                     │  Semantic Core  │
-                     │                 │
-                     │ Entities        │
-                     │ Relationships   │
-                     │ Claims          │
-                     │ Observations    │
-                     └────────┬────────┘
-                              │
-                              ▼
-                         ┌──────────┐
-                         │ Evidence │
-                         │          │
-                         │ File     │
-                         │ Location │
-                         │ Commit   │
-                         │ Hash     │
-                         └────┬─────┘
-                              │
-                              ▼
-                    ┌───────────────────┐
-                    │ Immutable Snapshot│
-                    │ + Integrity Layer │
-                    └─────────┬─────────┘
-                              │
-                ┌─────────────┼──────────────┐
-                ▼             ▼              ▼
-             CLI          Graph         Artifacts
-                │             │              │
-                └─────────────┼──────────────┘
-                              ▼
-                     Developers + AI
-```
+Modern codebases are not just collections of files.
 
-Garuda deliberately follows a simple principle:
+A single repository can contain thousands of interconnected:
 
-> **Build structured truth first. Put generative intelligence on top of it later.**
+* 📦 Packages
+* 📄 Files
+* 🧱 Structs
+* 🔌 Interfaces
+* ⚙️ Functions
+* 🧩 Methods
+* 🔗 Dependencies
+* 📞 Calls
+* 🔍 References
+* 🧬 Implementations
 
----
+The difficult part is not finding a file.
 
-## What Garuda Understands
+The difficult part is understanding **how everything connects**.
 
-Garuda's semantic model is designed around explicit entities, relationships, claims, and evidence.
+Garuda builds a semantic representation of those connections so developers can move from:
 
-### Entities
-
-Depending on analyzer coverage, Garuda can represent entities such as:
-
-- Packages
-- Files
-- Structs
-- Interfaces
-- Types
-- Functions
-- Methods
-- APIs
-- Dependencies
-- External packages
-
-Every entity has a stable identity within the semantic model.
-
-### Relationships
-
-The semantic graph represents relationships between entities.
-
-Examples include:
-
-```
-CALLS
-IMPORTS
-REFERENCES
-CONTAINS
-DEFINES
-IMPLEMENTS
-EMBEDS
-DEPENDS_ON
-```
-
-This turns a repository from a collection of files into an interconnected system.
-
-For example:
-
-```
-PaymentService
-      │
-      ├── CONTAINS ──► ProcessPayment()
-      │
-      ├── DEPENDS_ON ──► PaymentRepository
-      │
-      ├── CALLS ──► ValidatePayment()
-      │
-      └── REFERENCES ──► PaymentRequest
-```
-
-The graph is designed to make these relationships directly explorable.
-
----
-
-## Evidence Is Part of the Model
-
-Garuda is not an unexplained graph.
-
-Important semantic information is traceable back to source evidence.
-
-Conceptually:
-
-```
-Entity / Relationship
-        │
-        ▼
-      Claim
-        │
-        ▼
-     Evidence
-        │
-        ├── Repository
-        ├── Commit
-        ├── File
-        ├── Location
-        └── Content / Hash
-```
-
-This allows Garuda to answer not only:
-
-> "What does the system contain?"
-
-but also:
-
-> "Why does Garuda believe this?"
-
-and:
-
-> "What source evidence supports this relationship?"
-
-This evidence‑first architecture is a core design principle.
-
----
-
-## Immutable Analysis
-
-Garuda treats analysis results as versioned artifacts.
-
-A simplified lifecycle is:
-
-```
-Repository
-    │
-    ▼
-Commit
-    │
-    ▼
-Analysis
-    │
-    ▼
-Snapshot
-    │
-    ▼
-Entities + Relationships
-    │
-    ▼
-Claims + Evidence
-```
-
-The trust layer includes:
-
-- immutable revisions
-- cryptographic integrity
-- Merkle‑backed verification
-- provenance
-- reproducible analysis artifacts
-
-This allows historical semantic state to be preserved instead of continuously overwriting the latest result.
-
----
-
-## Explore Your Codebase as a Graph
-
-Garuda's graph experience is designed around the idea that software should be explored as a connected system rather than as isolated files.
-
-```
-                    ┌─────────────┐
-                    │   Package   │
-                    └──────┬──────┘
-                           │
-             ┌─────────────┼─────────────┐
-             ▼             ▼             ▼
-         ┌──────┐      ┌────────┐    ┌────────┐
-         │ File │      │ Struct │    │ Func   │
-         └──┬───┘      └───┬────┘    └───┬────┘
-            │              │             │
-            └──────────────┼─────────────┘
-                           ▼
-                    ┌────────────┐
-                    │ Dependency │
-                    └─────┬──────┘
-                          │
-                          ▼
-                    ┌────────────┐
-                    │  External  │
-                    └────────────┘
-```
-
-Progressive exploration:
-
-```
+```text
 Repository
     ↓
 Package
@@ -283,157 +49,483 @@ Evidence
 Source
 ```
 
-The objective is to let a developer select an entity and progressively understand its surrounding system without losing the underlying provenance.
+Instead of manually reconstructing the architecture, you can explore it.
 
 ---
 
-## Current MVP Focus
+# 🧠 The Core Idea
 
-Garuda is currently focused on **one repository** – getting it genuinely understandable before scaling outward.
-
-The initial implementation focuses on:
-
-- Go source analysis
-- deterministic semantic extraction
-- repository snapshots
-- entity modeling
-- relationship modeling
-- semantic inspection
-- semantic diffing
-- evidence and provenance
-- immutable analysis history
-- cryptographic integrity
-- interactive graph exploration
-
-Go is the first analyzer target.
-
-Additional languages are intentionally deferred until the Go semantic model and evaluation process are sufficiently mature.
-
----
-
-## CLI Commands
-
-Garuda is primarily designed to be used from the command line.
-
-### Production‑Ready Commands
-
-| Command | Purpose | Status |
-|---------|---------|--------|
-| `garuda analyze . --save` | Analyze and persist semantic state | ✅ Stable |
-| `garuda analyze . -o v1.json` | Create machine‑readable snapshot | ✅ Stable |
-| `garuda inspect <entity>` | Inspect a semantic entity | ✅ Stable |
-| `garuda diff v1.json v2.json` | Compare semantic snapshots | ✅ Stable |
-| `garuda graph <workspace> --open` | Generate interactive graph | ✅ Stable |
-| `garuda verify` | Verify cryptographic integrity | ✅ Stable |
-| `garuda explain <id>` | Trace evidence for a claim | ✅ Stable |
-| `garuda self-describe` | Generate product description | ✅ Stable |
-
-### Commands in Active Development
-
-| Command | Purpose | Status |
-|---------|---------|--------|
-| `garuda justify <entity>` | Explain why code exists | 🧪 Active |
-| `garuda judge v1.json v2.json` | Governance report | 🧪 Active |
-| `garuda ponytail .` | Code hygiene detection | 🧪 Active |
-
-### Planned / Future Commands
-
-| Command | Purpose | Status |
-|---------|---------|--------|
-| `garuda graph <workspace> --cross-repo` | Cross‑repository graph | 🔜 Planned |
-| `garuda ci` | CI integration | 🔜 Planned |
-| `garuda policy` | Policy evaluation | 🔜 Planned |
-
----
-
-## Product Self‑Description
-
-Garuda contains a self‑description capability designed to keep product documentation aligned with the actual product state.
-
-```bash
-# Generate a machine‑readable product description
-garuda self-describe --workspace my-workspace
-
-# Generate a Markdown README skeleton
-garuda self-describe \
-  --workspace my-workspace \
-  --markdown \
-  --output README.md
+```text
+                         SOURCE CODE
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │   Go Analyzer    │
+                    │                  │
+                    │ AST / Types      │
+                    │ Imports / Calls  │
+                    │ Dependencies     │
+                    └────────┬─────────┘
+                             │
+                             ▼
+                  ┌───────────────────────┐
+                  │     SEMANTIC CORE     │
+                  │                       │
+                  │ Entities              │
+                  │ Relationships         │
+                  │ Claims                │
+                  │ Observations          │
+                  └───────────┬───────────┘
+                              │
+                              ▼
+                     ┌────────────────┐
+                     │    EVIDENCE    │
+                     │                │
+                     │ File           │
+                     │ Location       │
+                     │ Commit         │
+                     │ Content / Hash │
+                     └───────┬────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │ IMMUTABLE ANALYSIS   │
+                  │       HISTORY        │
+                  │                      │
+                  │ Revisions            │
+                  │ Merkle Integrity     │
+                  │ Provenance           │
+                  └──────────┬───────────┘
+                             │
+                ┌────────────┼────────────┐
+                ▼            ▼            ▼
+             CLI          GRAPH       ARTIFACTS
+                │            │            │
+                └────────────┼────────────┘
+                             ▼
+                    DEVELOPERS + AI
 ```
 
-The documentation workflow is designed so that product documentation is driven by explicit product and capability contracts rather than allowing an LLM to guess what the software does.
+### The principle
+
+> **Build structured truth first. Put generative intelligence on top of it later.**
+
+Garuda does not start with an LLM guessing what your repository means.
+
+It starts with the source code.
 
 ---
 
-## Architecture
+# 🔗 A Codebase as a Web
 
-Garuda is intentionally layered.
-
-```
-┌──────────────────────────────────────────────┐
-│                  SOURCES                     │
-│       Git / Code / Commits / Documents      │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────┐
-│             HARVEST & ANALYSIS              │
-│       AST / Go Types / Dependencies         │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────┐
-│               SEMANTIC CORE                 │
-│                                              │
-│ Entities │ Relationships │ Claims │ Evidence │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────┐
-│              TRUST / INTEGRITY              │
-│                                              │
-│ Immutable revisions │ Merkle │ Provenance   │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────┐
-│                 EXPERIENCE                  │
-│                                              │
-│       CLI │ API │ Graph │ Artifacts         │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼
-              DEVELOPERS + AI
-```
-
-A key architectural rule is that Garuda keeps different kinds of knowledge distinct.
+Garuda's graph is designed to represent software as an interconnected system.
 
 For example:
 
+```text
+                         ┌───────────────┐
+                         │   Package     │
+                         └───────┬───────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              │                  │                  │
+              ▼                  ▼                  ▼
+        ┌──────────┐       ┌──────────┐       ┌──────────┐
+        │   File   │       │  Struct  │       │ Function │
+        └────┬─────┘       └────┬─────┘       └────┬─────┘
+             │                  │                  │
+             │             ┌────┴────┐             │
+             │             │         │             │
+             ▼             ▼         ▼             ▼
+        ┌─────────┐   ┌─────────┐ ┌────────┐ ┌────────────┐
+        │ Method  │   │Interface│ │ Type   │ │ Dependency │
+        └────┬────┘   └────┬────┘ └────────┘ └─────┬──────┘
+             │             │                       │
+             └─────────────┼───────────────────────┘
+                           ▼
+                     ┌────────────┐
+                     │  External  │
+                     │  Package   │
+                     └────────────┘
 ```
-OBSERVATION
-"Service A imports package B"
 
-        ≠
+Relationships are represented explicitly rather than being inferred only by the visualization layer.
 
-INFERENCE
-"Service A probably depends on Service B"
+Examples include:
 
-        ≠
-
-DECISION
-"Service A must use Service B"
+```text
+CALLS
+IMPORTS
+REFERENCES
+CONTAINS
+DEFINES
+IMPLEMENTS
+EMBEDS
+DEPENDS_ON
 ```
 
-Keeping these epistemic categories separate prevents observed implementation details from being incorrectly presented as organizational decisions or policies.
+A relationship can therefore be explored as:
+
+```text
+PaymentService
+      │
+      ├── CONTAINS ──────► ProcessPayment()
+      │
+      ├── CALLS ─────────► ValidatePayment()
+      │
+      ├── DEPENDS_ON ────► PaymentRepository
+      │
+      └── REFERENCES ────► PaymentRequest
+```
+
+The objective is simple:
+
+> **Turn the codebase into something developers can navigate as a system, not merely as a directory tree.**
 
 ---
 
-## Data Model
+# 🔍 Evidence Is Part of the Graph
 
-At the conceptual level:
+Garuda is not intended to be a graph of unexplained assertions.
 
+Semantic information is tied back to evidence.
+
+```text
+Entity / Relationship
+        │
+        ▼
+      Claim
+        │
+        ▼
+     Evidence
+        │
+        ├── Repository
+        ├── Commit
+        ├── File
+        ├── Location
+        └── Content / Hash
 ```
+
+This creates a critical distinction.
+
+Garuda should be able to represent:
+
+> **What exists**
+
+and, where supported:
+
+> **Why Garuda believes it exists**
+
+and:
+
+> **Where the supporting evidence came from**
+
+This is the foundation for trustworthy software intelligence.
+
+---
+
+# 🔐 Immutable Analysis & Integrity
+
+Garuda preserves analysis history instead of treating every analysis as disposable output.
+
+```text
+Repository
+    │
+    ▼
+ Commit
+    │
+    ▼
+Analysis
+    │
+    ▼
+Snapshot
+    │
+    ├────────► Entities
+    │
+    ├────────► Relationships
+    │
+    ├────────► Claims
+    │
+    └────────► Evidence
+```
+
+The trust layer is designed around:
+
+* 🔒 Immutable revisions
+* 🔗 Cryptographic integrity
+* 🌳 Merkle-backed verification
+* 📍 Provenance
+* 📦 Reproducible analysis artifacts
+
+The result is an analysis history that can be inspected and verified rather than silently overwritten.
+
+---
+
+# 🧩 Garuda's Semantic Model
+
+Garuda deliberately separates different kinds of information.
+
+For example:
+
+```text
+OBSERVATION
+
+"Service A imports package B"
+
+
+        ≠
+
+
+INFERENCE
+
+"Service A probably depends on Service B"
+
+
+        ≠
+
+
+DECISION
+
+"Service A must use Service B"
+```
+
+This distinction matters.
+
+A code analyzer can observe relationships in source code.
+
+It should not automatically turn those observations into organizational policies or decisions.
+
+> **Observed software state is not the same thing as organizational truth.**
+
+---
+
+# 🗂️ What Garuda Understands
+
+The semantic model is designed around explicit entities, relationships, claims, observations, and evidence.
+
+### Entities
+
+Depending on analyzer coverage:
+
+| Entity       | Description                     |
+| ------------ | ------------------------------- |
+| 📦 Package   | Go package                      |
+| 📄 File      | Source file                     |
+| 🧱 Struct    | Struct/type definition          |
+| 🔌 Interface | Interface definition            |
+| ⚙️ Function  | Function declaration            |
+| 🧩 Method    | Method associated with a type   |
+| 🏷️ Type     | Other semantic type definitions |
+| 🌐 External  | External dependency or package  |
+
+### Relationships
+
+| Relationship | Meaning                                |
+| ------------ | -------------------------------------- |
+| `CALLS`      | One function or method invokes another |
+| `IMPORTS`    | A package/file imports another package |
+| `REFERENCES` | An entity references another entity    |
+| `CONTAINS`   | One entity contains another            |
+| `DEFINES`    | A file/package defines an entity       |
+| `IMPLEMENTS` | A type implements an interface         |
+| `EMBEDS`     | A type embeds another type             |
+| `DEPENDS_ON` | A semantic dependency exists           |
+
+The exact set of relationships grows with analyzer coverage and validation.
+
+---
+
+# 🖥️ Interactive Graph
+
+Garuda's graph interface is designed around **progressive exploration**.
+
+A user should be able to move from:
+
+```text
+Repository
+     ↓
+Package
+     ↓
+File
+     ↓
+Entity
+     ↓
+Relationship
+     ↓
+Evidence
+     ↓
+Source
+```
+
+The intended interaction model includes:
+
+* 🔎 Search
+* 🖱️ Click-to-select
+* 🧭 Progressive exploration
+* 🔗 Relationship traversal
+* 🔍 Zoom and pan
+* 🧩 Entity filtering
+* 📋 Detailed entity information
+* 🧾 Relationship information
+* 📍 Evidence/provenance inspection
+
+The graph is not meant to replace the underlying semantic model.
+
+It is a **visual interface over it**.
+
+---
+
+# ⚙️ CLI
+
+Garuda is designed to be useful directly from the command line.
+
+## Stable Core Commands
+
+| Command                           | Purpose                                 |
+| --------------------------------- | --------------------------------------- |
+| `garuda analyze . --save`         | Analyze and persist semantic state      |
+| `garuda analyze . -o v1.json`     | Generate a semantic snapshot            |
+| `garuda inspect <entity>`         | Inspect a semantic entity               |
+| `garuda diff v1.json v2.json`     | Compare semantic snapshots              |
+| `garuda graph <workspace> --open` | Open the interactive graph              |
+| `garuda verify`                   | Verify analysis integrity               |
+| `garuda explain <id>`             | Trace available evidence                |
+| `garuda self-describe`            | Generate structured product information |
+
+## Active Development
+
+These capabilities are being developed and validated separately from the stable semantic-analysis core:
+
+| Command                        | Purpose                                |
+| ------------------------------ | -------------------------------------- |
+| `garuda justify <entity>`      | Explain why an entity/code path exists |
+| `garuda judge v1.json v2.json` | Governance-oriented comparison         |
+| `garuda ponytail .`            | Code-quality and hygiene analysis      |
+
+## Planned
+
+| Capability             | Direction                                          |
+| ---------------------- | -------------------------------------------------- |
+| Cross-repository graph | Connect semantic models across repositories        |
+| CI integration         | Bring semantic analysis into development workflows |
+| Policy evaluation      | Evaluate software state against explicit policies  |
+
+> Command maturity is intentionally documented separately so experimental capabilities are not presented as production guarantees.
+
+---
+
+# 🚀 Quick Start
+
+## 1. Clone Garuda
+
+```bash
+git clone https://github.com/myshra777-ai/garuda.git
+cd garuda
+```
+
+## 2. Build
+
+```bash
+go build -o garuda cmd/garuda/*.go
+```
+
+## 3. Start the stack
+
+```bash
+./garuda up
+```
+
+## 4. Analyze a repository
+
+```bash
+./garuda analyze . --save
+```
+
+## 5. Inspect an entity
+
+```bash
+./garuda inspect PaymentService
+```
+
+## 6. Generate the graph
+
+```bash
+./garuda graph my-workspace --open
+```
+
+## 7. Generate a snapshot
+
+```bash
+./garuda analyze . -o v1.json
+```
+
+## 8. Change the code and analyze again
+
+```bash
+./garuda analyze . -o v2.json
+```
+
+## 9. Compare the semantic state
+
+```bash
+./garuda diff v1.json v2.json
+```
+
+## 10. Verify the analysis history
+
+```bash
+./garuda verify
+```
+
+---
+
+# 🔄 The Garuda Workflow
+
+```text
+             ┌───────────────┐
+             │  SOURCE CODE  │
+             └───────┬───────┘
+                     │
+                     ▼
+              ┌─────────────┐
+              │   ANALYZE   │
+              └──────┬──────┘
+                     │
+                     ▼
+             ┌───────────────┐
+             │   SEMANTIC    │
+             │     MODEL     │
+             └───────┬───────┘
+                     │
+          ┌──────────┼──────────┐
+          ▼          ▼          ▼
+       INSPECT      GRAPH      SNAPSHOT
+          │          │          │
+          └──────────┼──────────┘
+                     ▼
+                  CHANGE
+                     │
+                     ▼
+                  ANALYZE
+                     │
+                     ▼
+                   DIFF
+                     │
+                     ▼
+                  VERIFY
+```
+
+The central loop is:
+
+> **Analyze → Understand → Explore → Change → Re-analyze → Diff → Verify**
+
+---
+
+# 📦 Data Model
+
+At a high level:
+
+```text
 Workspace
     │
     └── Repository
@@ -444,39 +536,39 @@ Workspace
                          │
                          └── Snapshot
                                 │
-                ┌───────────────┼───────────────┐
-                ▼               ▼               ▼
-             Entities      Relationships      Claims
-                                                │
-                                                ▼
-                                             Evidence
+                    ┌───────────┼───────────┐
+                    ▼           ▼           ▼
+                 Entities  Relationships  Claims
+                                             │
+                                             ▼
+                                          Evidence
 ```
 
-Core concepts include:
+Core concepts:
 
-| Concept | Purpose |
-|---|---|
-| Workspace | Company or project boundary |
-| Repository | Source system being analyzed |
-| Commit | Immutable source state |
-| Analysis | One analyzer execution |
-| Snapshot | Normalized semantic output |
-| Entity | Identifiable software element |
-| Relationship | Typed connection between entities |
-| Claim | Statement represented by Garuda |
-| Evidence | Source information supporting a claim |
+| Concept      | Purpose                                      |
+| ------------ | -------------------------------------------- |
+| Workspace    | Logical analysis boundary                    |
+| Repository   | Source system being analyzed                 |
+| Commit       | Source state associated with analysis        |
+| Analysis     | One execution of the analyzer                |
+| Snapshot     | Structured representation of analysis output |
+| Entity       | Identifiable software element                |
+| Relationship | Typed connection between entities            |
+| Claim        | Semantic statement represented by Garuda     |
+| Evidence     | Source information supporting that statement |
 
 ---
 
-## Storage
+# 🗄️ Storage Architecture
 
-Garuda uses **PostgreSQL** as the primary structured persistence layer.
+Garuda uses PostgreSQL for structured persistence.
 
 Conceptually:
 
-```
+```text
 PostgreSQL
-├── Tenants
+│
 ├── Workspaces
 ├── Repositories
 ├── Commits
@@ -484,275 +576,483 @@ PostgreSQL
 ├── Entities
 ├── Relationships
 ├── Claims
-├── Evidence metadata
-└── Governance data
+├── Observations
+└── Evidence Metadata
 ```
 
-Immutable analysis artifacts are represented as structured snapshots. Larger evidence and reproducible artifacts use content‑addressed storage.
+The graph experience is a semantic projection of this underlying information.
 
-The graph is a semantic experience and projection over this structured information – not an isolated visualization disconnected from the underlying evidence.
+It is not intended to become a disconnected visualization layer.
 
 ---
 
-## Trust Model
+# 🏗️ Architecture
 
-Garuda is built around a simple principle:
-
-> **Evidence before confidence.**
-
-The system distinguishes:
-
+```text
+┌──────────────────────────────────────────────┐
+│                  SOURCES                     │
+│                                              │
+│       Git • Code • Commits • Documents       │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│              ANALYSIS LAYER                  │
+│                                              │
+│        Go AST • Types • Dependencies         │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│               SEMANTIC CORE                  │
+│                                              │
+│ Entities │ Relationships │ Claims │ Evidence │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│               TRUST LAYER                    │
+│                                              │
+│ Immutable Revisions • Merkle • Provenance    │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│              EXPERIENCE LAYER                │
+│                                              │
+│        CLI • Graph • API • Artifacts         │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+                 DEVELOPERS + AI
 ```
-Observed
-   ↓
-Supported by evidence
-   ↓
-Represented as semantic information
-   ↓
-Versioned
-   ↓
-Cryptographically verifiable
-```
-
-This makes the graph more than a visualization. It becomes an inspectable representation of what Garuda knows about the software system.
 
 ---
 
-## Development
+# 🎯 Current MVP
 
-### Requirements
+Garuda is currently focused on **single-repository Go software intelligence**.
 
-- Go 1.21+
-- PostgreSQL 16+
-- Git
+The current MVP prioritizes:
 
-### Build
+* ✅ Go source analysis
+* ✅ Semantic entity extraction
+* ✅ Relationship modeling
+* ✅ Repository snapshots
+* ✅ Semantic inspection
+* ✅ Semantic diffing
+* ✅ Evidence and provenance
+* ✅ Immutable analysis history
+* ✅ Cryptographic integrity
+* ✅ Interactive graph exploration
+
+Go is the first language target.
+
+Additional languages are intentionally deferred until the Go semantic model and evaluation process are mature enough to justify expansion.
+
+---
+
+# 🧪 Why Single Repository First?
+
+Garuda is deliberately following:
+
+```text
+        1 Repository
+             │
+             ▼
+       Validate Semantics
+             │
+             ▼
+        Benchmark
+             │
+             ▼
+       10 Repositories
+             │
+             ▼
+       25 Repositories
+             │
+             ▼
+      Company Graph
+```
+
+A weak semantic analyzer becomes a much bigger problem when multiplied across hundreds of repositories.
+
+Garuda therefore follows a simple rule:
+
+> **Correctness before scale.**
+
+The objective of the MVP is not to claim that Garuda already understands an entire company.
+
+The objective is to make Garuda understand **one repository extremely well**.
+
+---
+
+# 🧭 Roadmap
+
+## Phase 0 — Trust Foundation
+
+**Status: ✅ Complete**
+
+* Immutable revisions
+* Cryptographic integrity
+* Merkle-backed history
+* Provenance
+* Audit foundations
+
+---
+
+## Phase 1 — Semantic Core
+
+**Status: ✅ Complete**
+
+* Entity model
+* Relationship model
+* Claims
+* Observations
+* Evidence model
+* Workspace/repository foundations
+
+---
+
+## Phase 2 — Go Analyzer
+
+**Status: 🧪 MVP / Active Refinement**
+
+* Go AST analysis
+* Semantic entity extraction
+* Relationship extraction
+* Repository-level semantic model
+* Analysis snapshots
+* Accuracy validation
+
+---
+
+## Phase 3 — CLI & Interactive Exploration
+
+**Status: 🧪 MVP / Active Refinement**
+
+* `analyze`
+* `inspect`
+* `diff`
+* `verify`
+* `explain`
+* `graph`
+* Interactive semantic exploration
+
+---
+
+## Phase 4 — Multi-Repository
+
+**Status: 🔜 Next Major Expansion**
+
+```text
+Repository A ─────┐
+Repository B ─────┤
+Repository C ─────┼────► Company Semantic Graph
+Repository D ─────┤
+Repository E ─────┘
+```
+
+Focus:
+
+* Repository synchronization
+* Cross-repository entities
+* Cross-repository relationships
+* Dependency mapping
+* Company-level graph exploration
+
+---
+
+## Phase 5 — Contract Intelligence
+
+**Status: 📋 Planned**
+
+Move from understanding code structure toward understanding contracts between systems.
+
+Potential areas include:
+
+* API relationships
+* producer/consumer relationships
+* missing dependencies
+* contractual gaps
+* impact analysis
+
+---
+
+## Phase 6 — Runtime Intelligence
+
+**Status: 📋 Planned**
+
+Combine static semantic understanding with runtime evidence.
+
+```text
+STATIC CODE
+     │
+     ├──────────┐
+     │          │
+     ▼          ▼
+Semantic     Runtime
+Graph       Evidence
+     │          │
+     └────┬─────┘
+          ▼
+     Richer System
+     Understanding
+```
+
+---
+
+## Phase 7+ — Governance & Trusted Organizational Intelligence
+
+**Status: 📋 Future**
+
+Long-term areas include:
+
+* policy evaluation
+* agent governance
+* decision intelligence
+* business-state integrity
+* temporal analysis
+* AI-assisted reasoning over evidence-backed software state
+
+These are future layers, not claims about the current MVP.
+
+---
+
+# 🧠 Garuda's Design Principles
+
+### 01 — Deterministic First
+
+If a fact can be reliably extracted from source code, prefer deterministic analysis over probabilistic interpretation.
+
+### 02 — Evidence Before Confidence
+
+A claim should be traceable to the evidence supporting it.
+
+### 03 — Structured Truth Before Generative Intelligence
+
+Build the semantic model first.
+
+Use AI on top of structured information rather than asking AI to reconstruct everything from raw code.
+
+### 04 — Observation ≠ Inference ≠ Decision
+
+Different epistemic categories must remain distinguishable.
+
+### 05 — Immutable History
+
+Changes in semantic state should be inspectable over time.
+
+### 06 — Progressive Disclosure
+
+Do not overwhelm the developer with the entire graph.
+
+Move naturally from:
+
+```text
+Repository
+    ↓
+Package
+    ↓
+File
+    ↓
+Entity
+    ↓
+Relationship
+    ↓
+Evidence
+    ↓
+Source
+```
+
+### 07 — Scale Only After Correctness
+
+The Company Graph is the destination.
+
+A trustworthy single-repository graph is the foundation.
+
+---
+
+# 🤖 AI + Garuda
+
+Garuda's long-term AI architecture is intentionally different from:
+
+```text
+Code → LLM → Answer
+```
+
+The intended model is:
+
+```text
+                   SOURCE CODE
+                       │
+                       ▼
+              DETERMINISTIC ANALYSIS
+                       │
+                       ▼
+               SEMANTIC KNOWLEDGE
+                       │
+                       ▼
+                    EVIDENCE
+                       │
+                       ▼
+                      AI
+                       │
+                       ▼
+              REASONING / UX
+```
+
+This allows AI systems to reason over structured and traceable software information.
+
+The AI should not become the source of truth.
+
+> **Garuda provides the substrate. Models provide reasoning.**
+
+---
+
+# 📚 Documentation as Code
+
+Garuda is also building a documentation pipeline around explicit product contracts.
+
+```text
+product.yaml
+      │
+      ├──────────────┐
+      ▼              ▼
+capabilities.yaml  roadmap.yaml
+      │              │
+      └──────┬───────┘
+             ▼
+      docs-context.json
+             │
+             ▼
+       Documentation AI
+             │
+       ┌─────┼─────┐
+       ▼     ▼     ▼
+    README  API  CHANGELOG
+```
+
+The important rule is:
+
+> **AI generates documentation. AI does not define product reality.**
+
+Product positioning, capability maturity, and roadmap state remain explicitly controlled by project contracts.
+
+---
+
+# 🔎 Product Self-Description
+
+Garuda can generate a machine-readable description of the product:
 
 ```bash
-git clone https://github.com/myshra777-ai/garuda.git
-cd garuda
+./garuda self-describe --workspace my-workspace
+```
+
+And a Markdown representation:
+
+```bash
+./garuda self-describe \
+  --workspace my-workspace \
+  --markdown \
+  --output README.md
+```
+
+This is intended to become part of an automated documentation workflow so that README, API documentation, changelogs, and related material remain synchronized with the project.
+
+---
+
+# 📊 What Garuda Is — and Isn't
+
+| Garuda is                             | Garuda is not                                            |
+| ------------------------------------- | -------------------------------------------------------- |
+| 🧠 Semantic software intelligence     | ❌ Merely a code search tool                              |
+| 🕸️ An interconnected code graph      | ❌ Just a static visualization                            |
+| 🔍 Evidence-aware analysis            | ❌ An unexplained AI answer engine                        |
+| 🔐 Integrity-aware analysis history   | ❌ Disposable analysis output                             |
+| 🧩 A structured semantic substrate    | ❌ A replacement for your source code                     |
+| 🚧 Building toward a Company Graph    | ❌ Already a complete company-wide brain                  |
+| 🤖 Designed for AI-assisted reasoning | ❌ Dependent on an LLM to understand basic code structure |
+
+---
+
+# 🚧 What Is Not the MVP
+
+Garuda intentionally does **not** treat the following as completed capabilities:
+
+* Full multi-language support
+* Large-scale multi-repository analysis
+* Complete cross-repository dependency resolution
+* Company-wide semantic intelligence
+* Runtime-informed analysis
+* Full natural-language graph querying
+* Advanced policy governance
+* Business-state integrity
+* Mature autonomous agent governance
+
+These are part of the longer-term architecture.
+
+The MVP stays focused.
+
+---
+
+# 🛠️ Development
+
+## Requirements
+
+* Go 1.21+
+* PostgreSQL 16+
+* Git
+
+## Build
+
+```bash
 go build -o garuda cmd/garuda/*.go
 ```
 
-### Run tests
+## Test
 
 ```bash
 go test ./...
 ```
 
-### Quick Start
-
-```bash
-# Start the stack
-garuda up
-
-# Analyze your codebase
-garuda analyze . --save
-
-# Generate interactive graph
-garuda graph my-workspace --open
-
-# Inspect an entity
-garuda inspect PaymentService
-```
-
-### Example Workflow
-
-```bash
-# 1. Analyze the repository
-garuda analyze . --save
-
-# 2. Inspect the semantic model
-garuda inspect PaymentService
-
-# 3. Generate the graph
-garuda graph my-workspace --open
-
-# 4. Create a snapshot
-garuda analyze . -o before.json
-
-# 5. Make code changes...
-
-# 6. Analyze again
-garuda analyze . -o after.json
-
-# 7. Compare semantic changes
-garuda diff before.json after.json
-
-# 8. Verify Garuda's integrity
-garuda verify
-```
-
-The important workflow is:
-
-```
-Analyze
-   ↓
-Understand
-   ↓
-Explore
-   ↓
-Change
-   ↓
-Re-analyze
-   ↓
-Diff
-   ↓
-Verify
-```
-
 ---
 
-## Roadmap
-
-Garuda follows an incremental strategy:
-
-```
-1 Repository
-      ↓
-10 Repositories
-      ↓
-25 Repositories
-      ↓
-Company Graph
-      ↓
-Trusted State & Governance
-```
-
-### Current Direction
-
-| Phase | Focus | Status |
-|---|---|---|
-| P0 | Trust Foundation | ✅ Complete |
-| P1 | Semantic Core | ✅ Complete |
-| P2 | Go Analyzer | ✅ Complete |
-| P3 | Artifact + CLI | ✅ Complete |
-| P4 | Governance (justify, judge, ponytail) | 🧪 Active |
-| P5 | Multi‑Repository | 🔜 Planned |
-| P6 | Company Brain | 🔜 Planned |
-| P7 | CI / PR Integration | 🔜 Planned |
-| P8 | Governance Policies | 🔜 Planned |
-| P9 | Business Integrity | 📋 Long‑term |
-
-The important milestone before multi‑repository expansion is **confidence in single‑repository semantic analysis**.
-
-The goal is not to build a large graph quickly. The goal is to build a graph that can be trusted.
-
----
-
-## Design Principles
-
-Garuda follows several principles:
-
-### Deterministic first
-Prefer deterministic analysis for facts that can be extracted from source code.
-
-### Evidence before confidence
-Important claims should have traceable evidence.
-
-### Structured truth before generative intelligence
-Build the semantic model before asking an LLM to reason over it.
-
-### Observations are not decisions
-What the code does and what an organization has decided should remain separate concepts.
-
-### Immutable history
-Analysis results should be reproducible and historically inspectable.
-
-### Progressive disclosure
-Start with the repository and progressively drill down:
-
-```
-Repository
- → Package
- → File
- → Entity
- → Relationship
- → Evidence
- → Source
-```
-
-### Scale only after correctness
-The 1 → 10 → 25 repository strategy prevents a weak single‑repository analyzer from becoming a weak Company Graph.
-
----
-
-## What Garuda Is Becoming
-
-Garuda is being developed in three broad layers.
-
-### 1. Software Intelligence
-Understand one repository.
-
-> "What is in this codebase and how does it work?"
-
-### 2. Company Brain
-Connect repositories and services.
-
-> "How do all our systems connect?"
-
-### 3. Trusted State & Governance
-Connect software knowledge with organizational decisions, policies, and business state.
-
-> "Can this change or state transition happen safely?"
-
-These layers are intentionally developed in sequence. Garuda is currently focused on the first layer.
-
----
-
-## Not the MVP Yet
-
-The following areas are intentionally being developed later:
-
-- Full multi‑language analysis
-- Large‑scale multi‑repository deployments
-- Complete cross‑repository dependency resolution
-- Company‑wide semantic overview
-- Deep CI / PR integration
-- Advanced policy governance
-- Runtime‑informed semantic analysis
-- Business‑state integrity
-- Full natural‑language graph querying
-
-These are part of the longer‑term direction rather than claims about the current MVP.
-
----
-
-## Contributing
+# 🤝 Contributing
 
 Contributions are welcome.
 
-A good contribution should:
+When contributing to Garuda:
 
-1. Have a clear purpose.
-2. Preserve deterministic behavior where possible.
-3. Include tests for new behavior.
-4. Preserve evidence and provenance semantics.
-5. Avoid silently changing the meaning of existing semantic entities or relationships.
-6. Keep documentation aligned with actual capabilities.
+1. Keep semantic behavior deterministic where possible.
+2. Add tests for new behavior.
+3. Preserve evidence and provenance.
+4. Avoid silently changing existing semantic meanings.
+5. Keep documentation aligned with implemented capabilities.
+6. Clearly distinguish experimental functionality from stable functionality.
 
-For larger changes, open an issue first to discuss the proposed design.
+For larger architectural changes, open an issue or discussion before implementation.
 
 ---
 
-## License
+# 📜 License
 
 Apache License 2.0
 
 ---
 
-## Status
+# 🦅 Garuda
 
-Garuda is an actively developed project.
+**Understand the code.**
 
-The current MVP is focused on **Go‑based software intelligence and evidence‑backed semantic exploration**.
+**See the connections.**
 
-The architecture is intentionally being developed incrementally, with correctness and evidence preceding multi‑repository scale and governance.
+**Trace the evidence.**
 
----
+**Build the Company Graph.**
 
 <p align="center">
-  <strong>Garuda</strong><br>
-  Understand your codebase. Follow its relationships. Trace the evidence.
+
+### `Code → Semantics → Graph → Evidence → Intelligence`
+
 </p>
-```
