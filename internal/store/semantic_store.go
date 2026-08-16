@@ -9,13 +9,17 @@ import (
 	"github.com/myshra777-ai/garuda/internal/analyzer"
 )
 
-// SaveEntities saves all entities and claims from an analysis result
-func (s *PostgresStore) SaveEntities(
+// SaveSemanticGraph stores all entities and claims from an analysis result.
+// It builds a map from entity ID to DB UUID, then inserts claims using that map.
+func (s *PostgresStore) SaveSemanticGraph(
 	ctx context.Context,
 	tenantID, workspaceID, repoID, analysisID uuid.UUID,
 	result *analyzer.Result,
 ) error {
-	// 1. Insert entities
+	// Map to hold entity ID → DB UUID
+	entityIDMap := make(map[string]uuid.UUID)
+
+	// 1. Insert entities and populate map
 	for _, entity := range result.Entities {
 		entityID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(
 			tenantID.String()+workspaceID.String()+repoID.String()+entity.ID,
@@ -38,43 +42,33 @@ func (s *PostgresStore) SaveEntities(
 			    is_exported = EXCLUDED.is_exported,
 			    updated_at = NOW()
 		`, entityID, tenantID, workspaceID, repoID, analysisID,
-			entity.Name, entity.Kind, entity.Package, entity.File, "HEAD",
-			entity.Signature, fieldsJSON, methodsJSON, entity.IsExported)
+			entity.Name, string(entity.Kind), entity.Package, entity.File, "HEAD",
+			entity.Signature, fieldsJSON, methodsJSON, entity.Exported)
 		if err != nil {
 			return fmt.Errorf("failed to insert entity %s: %w", entity.Name, err)
 		}
+
+		// Store mapping
+		entityIDMap[entity.ID] = entityID
 	}
 
-	// 2. Insert claims (relationships)
+	// 2. Insert claims (relationships) using the map
 	for _, rel := range result.Relationships {
-		var fromID, toID uuid.UUID
-
-		err := s.pool.QueryRow(ctx, `
-			SELECT id FROM entities
-			WHERE tenant_id = $1 AND workspace_id = $2 AND repository_id = $3
-			AND name = $4 AND package = $5
-		`, tenantID, workspaceID, repoID, rel.From, result.Package).Scan(&fromID)
-		if err != nil {
+		fromID, fromOk := entityIDMap[rel.From]
+		toID, toOk := entityIDMap[rel.To]
+		if !fromOk || !toOk {
+			// If either side is missing, skip (e.g., external packages not in the repo)
 			continue
 		}
 
-		err = s.pool.QueryRow(ctx, `
-			SELECT id FROM entities
-			WHERE tenant_id = $1 AND workspace_id = $2 AND repository_id = $3
-			AND name = $4 AND package = $5
-		`, tenantID, workspaceID, repoID, rel.To, result.Package).Scan(&toID)
-		if err != nil {
-			continue
-		}
-
-		_, err = s.pool.Exec(ctx, `
+		_, err := s.pool.Exec(ctx, `
 			INSERT INTO claims (
 				id, tenant_id, workspace_id, repository_id, analysis_id,
 				from_entity_id, to_entity_id, claim_type, confidence, created_at
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
 			ON CONFLICT (tenant_id, from_entity_id, to_entity_id, claim_type) DO NOTHING
 		`, uuid.New(), tenantID, workspaceID, repoID, analysisID,
-			fromID, toID, rel.Type, 0.9)
+			fromID, toID, string(rel.Type), rel.Confidence)
 		if err != nil {
 			return fmt.Errorf("failed to insert claim: %w", err)
 		}
@@ -95,7 +89,7 @@ func (s *PostgresStore) GetEntity(ctx context.Context, tenantID, workspaceID uui
 		ORDER BY created_at DESC LIMIT 1
 	`, tenantID, workspaceID, entityName).Scan(
 		&entity.Name, &entity.Kind, &entity.Package, &entity.File,
-		&entity.Signature, &fieldsJSON, &methodsJSON, &entity.IsExported,
+		&entity.Signature, &fieldsJSON, &methodsJSON, &entity.Exported,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("entity not found: %w", err)
@@ -141,11 +135,14 @@ func (s *PostgresStore) GetEntityRelationships(
 
 	for rows.Next() {
 		var rel analyzer.Relationship
-		err := rows.Scan(&rel.To, &rel.Package, &rel.Type)
+		var toName, toPkg, relType string
+		err := rows.Scan(&toName, &toPkg, &relType)
 		if err != nil {
 			continue
 		}
 		rel.From = entityName
+		rel.To = toPkg + "." + toName // reconstruct ID
+		rel.Type = analyzer.RelationshipType(relType)
 		outgoing = append(outgoing, rel)
 	}
 
@@ -163,11 +160,14 @@ func (s *PostgresStore) GetEntityRelationships(
 
 	for rows.Next() {
 		var rel analyzer.Relationship
-		err := rows.Scan(&rel.From, &rel.Package, &rel.Type)
+		var fromName, fromPkg, relType string
+		err := rows.Scan(&fromName, &fromPkg, &relType)
 		if err != nil {
 			continue
 		}
+		rel.From = fromPkg + "." + fromName
 		rel.To = entityName
+		rel.Type = analyzer.RelationshipType(relType)
 		incoming = append(incoming, rel)
 	}
 
@@ -190,7 +190,7 @@ func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID 
 	var entities []analyzer.Entity
 	for rows.Next() {
 		var e analyzer.Entity
-		err := rows.Scan(&e.Name, &e.Kind, &e.Package, &e.File, &e.IsExported)
+		err := rows.Scan(&e.Name, &e.Kind, &e.Package, &e.File, &e.Exported)
 		if err != nil {
 			continue
 		}
@@ -221,11 +221,12 @@ func (s *PostgresStore) GetGraphData(ctx context.Context, tenantID, workspaceID 
 			continue
 		}
 		nodes = append(nodes, map[string]interface{}{
-			"id":      id.String(),
-			"label":   name,
-			"group":   kind,
-			"package": pkg,
-			"file":    file,
+			"id":       id.String(),
+			"label":    name,
+			"group":    kind,
+			"package":  pkg,
+			"file":     file,
+			"exported": true, // we can fetch is_exported if needed
 		})
 	}
 
@@ -258,54 +259,14 @@ func (s *PostgresStore) GetGraphData(ctx context.Context, tenantID, workspaceID 
 }
 
 // UpdateRepositorySyncStatus updates the sync status of a repository
-// SaveSemanticGraph stores entities, claims, and observations from an analysis result
-func (s *PostgresStore) SaveSemanticGraph(ctx context.Context, tenantID, workspaceID, repoID, analysisID uuid.UUID, result *analyzer.Result) error {
-	// 1. Insert entities
-	for _, entity := range result.Entities {
-		entityID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(tenantID.String()+workspaceID.String()+repoID.String()+entity.ID))
-		_, err := s.pool.Exec(ctx, `
-			INSERT INTO entities (id, tenant_id, workspace_id, repository_id, analysis_id, name, kind, package, file_path, commit_sha, signature, fields, methods, is_exported, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
-			ON CONFLICT (tenant_id, workspace_id, repository_id, name, package) DO UPDATE
-			SET analysis_id = EXCLUDED.analysis_id,
-			    fields = EXCLUDED.fields,
-			    methods = EXCLUDED.methods,
-			    signature = EXCLUDED.signature,
-			    is_exported = EXCLUDED.is_exported
-		`, entityID, tenantID, workspaceID, repoID, analysisID,
-			entity.Name, entity.Kind, entity.Package, entity.File, "HEAD",
-			entity.Signature, entity.Fields, entity.Methods, entity.IsExported)
-		if err != nil {
-			return fmt.Errorf("failed to insert entity %s: %w", entity.Name, err)
-		}
-	}
-
-	// 2. Insert claims
-	for _, rel := range result.Relationships {
-		// Find the entity IDs
-		var fromID, toID uuid.UUID
-		err := s.pool.QueryRow(ctx, `
-			SELECT id FROM entities WHERE tenant_id = $1 AND workspace_id = $2 AND repository_id = $3 AND name = $4 AND package = $5
-		`, tenantID, workspaceID, repoID, rel.From, result.Package).Scan(&fromID)
-		if err != nil {
-			continue // Skip if entity not found
-		}
-		err = s.pool.QueryRow(ctx, `
-			SELECT id FROM entities WHERE tenant_id = $1 AND workspace_id = $2 AND repository_id = $3 AND name = $4 AND package = $5
-		`, tenantID, workspaceID, repoID, rel.To, result.Package).Scan(&toID)
-		if err != nil {
-			continue
-		}
-
-		_, err = s.pool.Exec(ctx, `
-			INSERT INTO claims (id, tenant_id, workspace_id, repository_id, analysis_id, from_entity_id, to_entity_id, claim_type, confidence, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-			ON CONFLICT (tenant_id, from_entity_id, to_entity_id, claim_type) DO NOTHING
-		`, uuid.New(), tenantID, workspaceID, repoID, analysisID,
-			fromID, toID, rel.Type, 0.9)
-		if err != nil {
-			return fmt.Errorf("failed to insert claim: %w", err)
-		}
+func (s *PostgresStore) UpdateRepositorySyncStatus(ctx context.Context, tenantID string, repoID uuid.UUID, commitSHA, status string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE repositories
+		SET current_commit = $1, analysis_status = $2, updated_at = NOW()
+		WHERE id = $3
+	`, commitSHA, status, repoID)
+	if err != nil {
+		return fmt.Errorf("failed to update repository status: %w", err)
 	}
 	return nil
 }

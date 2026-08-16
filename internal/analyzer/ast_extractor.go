@@ -3,6 +3,10 @@ package analyzer
 import (
 	"fmt"
 	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -10,7 +14,7 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// Extract extracts entities and relationships from a Go repository
+// Extract analyses a Go repository and returns entities and relationships.
 func Extract(root string) (*Result, error) {
 	cfg := &packages.Config{
 		Mode: packages.NeedName |
@@ -23,197 +27,274 @@ func Extract(root string) (*Result, error) {
 			packages.NeedImports,
 		Dir: root,
 	}
-
 	pkgs, err := packages.Load(cfg, "./...")
 	if err != nil {
 		return nil, fmt.Errorf("failed to load packages: %w", err)
 	}
-
 	if len(pkgs) == 0 {
-		return nil, fmt.Errorf("no Go packages found in %s", root)
+		return nil, fmt.Errorf("no Go packages found")
 	}
 
-	result := &Result{
-		Source:        root,
-		AnalyzedAt:    time.Now().UTC(),
-		Entities:      []Entity{},
-		Relationships: []Relationship{},
-		Stats:         Stats{},
+	commit := getCommit(root)
+	analyzerVersion := "go-ast-v1"
+
+	entityMap := make(map[string]Entity)
+	relationList := []Relationship{}
+
+	getEntityID := func(pkg, name string, kind string) string {
+		return pkg + "." + name
 	}
 
-	entityMap := make(map[string]*Entity)
+	addEntity := func(e Entity) {
+		if _, exists := entityMap[e.ID]; !exists {
+			entityMap[e.ID] = e
+		}
+	}
+
+	addRelation := func(from, to string, relType RelationshipType, line int, file string) {
+		if from == "" || to == "" {
+			return
+		}
+		relationList = append(relationList, Relationship{
+			From:       from,
+			To:         to,
+			Type:       relType,
+			Confidence: 1.0,
+			Evidence: Evidence{
+				File:     file,
+				Line:     line,
+				Commit:   commit,
+				Analyzer: analyzerVersion,
+			},
+		})
+	}
 
 	for _, pkg := range pkgs {
 		if strings.HasSuffix(pkg.PkgPath, "_test") {
 			continue
 		}
-		result.Stats.Packages++
+		pkgPath := pkg.PkgPath
+		pkgEntityID := pkgPath
+		if _, exists := entityMap[pkgEntityID]; !exists {
+			entityMap[pkgEntityID] = Entity{
+				ID:       pkgEntityID,
+				Kind:     KindPackage,
+				Name:     pkgPath,
+				Package:  pkgPath,
+				File:     "",
+				Exported: true,
+			}
+		}
 
-		for _, file := range pkg.Syntax {
-			result.Stats.Files++
-
-			// 1st Pass: Discover Structs, Interfaces, Standalone Functions
-			ast.Inspect(file, func(n ast.Node) bool {
-				if n == nil {
-					return true
+		// Iterate over compiled Go files (not syntax, to get correct filenames)
+		for _, filename := range pkg.CompiledGoFiles {
+			// Skip test files if desired
+			if strings.HasSuffix(filename, "_test.go") {
+				continue
+			}
+			fileID := filename
+			if _, exists := entityMap[fileID]; !exists {
+				entityMap[fileID] = Entity{
+					ID:       fileID,
+					Kind:     KindFile,
+					Name:     filepath.Base(filename),
+					Package:  pkgPath,
+					File:     filename,
+					Exported: true,
 				}
+			}
+			addRelation(pkgEntityID, fileID, RelContains, 0, filename)
 
-				pos := pkg.Fset.Position(n.Pos())
-				filename := filepath.Base(pos.Filename)
+			fset := token.NewFileSet()
+			content, err := os.ReadFile(filename)
+			if err != nil {
+				continue
+			}
+			fileAst, err := parser.ParseFile(fset, filename, content, parser.AllErrors)
+			if err != nil {
+				continue
+			}
 
+			var currentFuncName, currentFuncPkg string
+
+			ast.Inspect(fileAst, func(n ast.Node) bool {
 				switch x := n.(type) {
-				case *ast.TypeSpec:
-					if _, ok := x.Type.(*ast.StructType); ok {
-						entity := extractStruct(pkg, x, filename)
-						entityMap[entity.ID] = &entity
-						result.Stats.Structs++
-					}
-					if _, ok := x.Type.(*ast.InterfaceType); ok {
-						entity := extractInterface(pkg, x, filename)
-						entityMap[entity.ID] = &entity
-						result.Stats.Interfaces++
-					}
 				case *ast.FuncDecl:
-					if x.Recv == nil { // Pure standalone function
-						entity := extractFunction(pkg, x, filename)
-						entityMap[entity.ID] = &entity
-						result.Stats.Functions++
+					funcName := x.Name.Name
+					funcPkg := pkgPath
+					funcKind := KindFunction
+					funcID := getEntityID(funcPkg, funcName, string(funcKind))
+					if x.Recv != nil {
+						funcKind = KindMethod
+						funcID = getEntityID(funcPkg, funcName, string(KindMethod))
+						addEntity(Entity{
+							ID:        funcID,
+							Kind:      KindMethod,
+							Name:      funcName,
+							Package:   funcPkg,
+							File:      filename,
+							Line:      fset.Position(x.Pos()).Line,
+							Exported:  x.Name.IsExported(),
+							Signature: exprToString(x.Type),
+						})
+						addRelation(fileID, funcID, RelContains, fset.Position(x.Pos()).Line, filename)
+						if recv := x.Recv; recv != nil && len(recv.List) > 0 {
+							recvType := exprToString(recv.List[0].Type)
+							recvID := getEntityID(funcPkg, recvType, string(KindStruct))
+							addRelation(funcID, recvID, RelReferences, fset.Position(x.Pos()).Line, filename)
+						}
+					} else {
+						addEntity(Entity{
+							ID:        funcID,
+							Kind:      KindFunction,
+							Name:      funcName,
+							Package:   funcPkg,
+							File:      filename,
+							Line:      fset.Position(x.Pos()).Line,
+							Exported:  x.Name.IsExported(),
+							Signature: exprToString(x.Type),
+						})
+						addRelation(fileID, funcID, RelContains, fset.Position(x.Pos()).Line, filename)
+					}
+					currentFuncName = funcName
+					currentFuncPkg = funcPkg
+
+				case *ast.TypeSpec:
+					switch t := x.Type.(type) {
+					case *ast.StructType:
+						structName := x.Name.Name
+						structID := getEntityID(pkgPath, structName, string(KindStruct))
+						addEntity(Entity{
+							ID:       structID,
+							Kind:     KindStruct,
+							Name:     structName,
+							Package:  pkgPath,
+							File:     filename,
+							Line:     fset.Position(x.Pos()).Line,
+							Exported: x.Name.IsExported(),
+						})
+						addRelation(fileID, structID, RelDefines, fset.Position(x.Pos()).Line, filename)
+						for _, field := range t.Fields.List {
+							if field.Type != nil {
+								fieldType := exprToString(field.Type)
+								if fieldType != "" {
+									fieldID := getEntityID(pkgPath, fieldType, string(KindExternal))
+									addRelation(structID, fieldID, RelReferences, fset.Position(field.Pos()).Line, filename)
+								}
+							}
+						}
+					case *ast.InterfaceType:
+						ifaceName := x.Name.Name
+						ifaceID := getEntityID(pkgPath, ifaceName, string(KindInterface))
+						addEntity(Entity{
+							ID:       ifaceID,
+							Kind:     KindInterface,
+							Name:     ifaceName,
+							Package:  pkgPath,
+							File:     filename,
+							Line:     fset.Position(x.Pos()).Line,
+							Exported: x.Name.IsExported(),
+						})
+						addRelation(fileID, ifaceID, RelDefines, fset.Position(x.Pos()).Line, filename)
+					}
+
+				case *ast.ImportSpec:
+					importPath := strings.Trim(x.Path.Value, `"`)
+					extPkgID := importPath
+					if _, exists := entityMap[extPkgID]; !exists {
+						entityMap[extPkgID] = Entity{
+							ID:       extPkgID,
+							Kind:     KindExternal,
+							Name:     importPath,
+							Package:  importPath,
+							File:     filename,
+							Exported: true,
+						}
+					}
+					addRelation(pkgEntityID, extPkgID, RelImports, fset.Position(x.Pos()).Line, filename)
+
+				case *ast.CallExpr:
+					if currentFuncName == "" {
+						return true
+					}
+					var calledName string
+					switch fun := x.Fun.(type) {
+					case *ast.Ident:
+						calledName = fun.Name
+					case *ast.SelectorExpr:
+						calledName = exprToString(fun)
+					default:
+						calledName = exprToString(fun)
+					}
+					if calledName != "" {
+						calledID := getEntityID(currentFuncPkg, calledName, string(KindFunction))
+						if _, exists := entityMap[calledID]; !exists {
+							entityMap[calledID] = Entity{
+								ID:       calledID,
+								Kind:     KindExternal,
+								Name:     calledName,
+								Package:  currentFuncPkg,
+								File:     filename,
+								Exported: false,
+							}
+						}
+						callerID := getEntityID(currentFuncPkg, currentFuncName, string(KindFunction))
+						addRelation(callerID, calledID, RelCalls, fset.Position(x.Pos()).Line, filename)
 					}
 				}
 				return true
 			})
-
-			// 2nd Pass: Attach struct receiver methods
-			ast.Inspect(file, func(n ast.Node) bool {
-				fd, ok := n.(*ast.FuncDecl)
-				if !ok || fd.Recv == nil || len(fd.Recv.List) == 0 {
-					return true
-				}
-
-				recvType := exprToString(fd.Recv.List[0].Type)
-				recvType = strings.TrimPrefix(recvType, "*") // Strip pointer prefix if present
-
-				entityID := fmt.Sprintf("%s.%s", pkg.PkgPath, recvType)
-				if structEntity, exists := entityMap[entityID]; exists {
-					structEntity.Methods = append(structEntity.Methods, Method{
-						Name:       fd.Name.Name,
-						Signature:  exprToString(fd.Type),
-						IsExported: fd.Name.IsExported(),
-					})
-				}
-				return true
-			})
 		}
 	}
 
-	// Build Relationships (Package Imports)
-	for _, pkg := range pkgs {
-		for _, imp := range pkg.Imports {
-			result.Relationships = append(result.Relationships, Relationship{
-				From: pkg.PkgPath,
-				To:   imp.PkgPath,
-				Type: "imports",
-			})
-			result.Stats.Imports++
-		}
-	}
-
-	// Transfer entities from map to result slice
+	entities := make([]Entity, 0, len(entityMap))
 	for _, e := range entityMap {
-		result.Entities = append(result.Entities, *e)
-		result.Stats.TotalFields += len(e.Fields)
+		entities = append(entities, e)
 	}
 
+	stats := Stats{
+		Files:       len(entityMap),
+		Packages:    len(pkgs),
+		Structs:     countByKind(entities, KindStruct),
+		Interfaces:  countByKind(entities, KindInterface),
+		Functions:   countByKind(entities, KindFunction),
+		Imports:     0,
+		TotalFields: 0,
+	}
+
+	result := &Result{
+		Entities:      entities,
+		Relationships: relationList,
+		AnalyzedAt:    time.Now().UTC(),
+		Package:       root,
+		Source:        root,
+		Stats:         stats,
+	}
 	result.Fingerprint = generateFingerprint(result)
 	return result, nil
 }
 
-func extractStruct(pkg *packages.Package, ts *ast.TypeSpec, filename string) Entity {
-	e := Entity{
-		Package:    pkg.PkgPath,
-		File:       filename,
-		Kind:       "struct",
-		Name:       ts.Name.Name,
-		IsExported: ast.IsExported(ts.Name.Name),
-		Comments:   extractComments(ts.Doc),
-		Fields:     []Field{},
-		Methods:    []Method{},
-	}
-	e.ID = fmt.Sprintf("%s.%s", pkg.PkgPath, ts.Name.Name)
+// -----------------------------------------------------------------------------
+// Helpers (unchanged)
+// -----------------------------------------------------------------------------
 
-	if st, ok := ts.Type.(*ast.StructType); ok {
-		for _, field := range st.Fields.List {
-			if len(field.Names) == 0 { // Embedded type
-				f := Field{
-					Name:      exprToString(field.Type),
-					Type:      exprToString(field.Type),
-					IsPointer: isPointer(field.Type),
-				}
-				e.Fields = append(e.Fields, f)
-				continue
-			}
-			for _, name := range field.Names {
-				f := Field{
-					Name:      name.Name,
-					Type:      exprToString(field.Type),
-					Comment:   extractComments(field.Doc),
-					IsPointer: isPointer(field.Type),
-					IsSlice:   isSlice(field.Type),
-				}
-				if field.Tag != nil {
-					tag := field.Tag.Value
-					f.Tag = strings.Trim(tag, "`")
-					f.JSONTag = parseTag(tag, "json")
-					f.DBTag = parseTag(tag, "db")
-					f.ValidateTag = parseTag(tag, "validate")
-				}
-				e.Fields = append(e.Fields, f)
-			}
+func countByKind(entities []Entity, kind EntityKind) int {
+	c := 0
+	for _, e := range entities {
+		if e.Kind == kind {
+			c++
 		}
 	}
-	return e
+	return c
 }
 
-func extractInterface(pkg *packages.Package, ts *ast.TypeSpec, filename string) Entity {
-	e := Entity{
-		Package:    pkg.PkgPath,
-		File:       filename,
-		Kind:       "interface",
-		Name:       ts.Name.Name,
-		IsExported: ast.IsExported(ts.Name.Name),
-		Comments:   extractComments(ts.Doc),
-		Methods:    []Method{},
+func getCommit(root string) string {
+	cmd := exec.Command("git", "-C", root, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "unknown"
 	}
-	e.ID = fmt.Sprintf("%s.%s", pkg.PkgPath, ts.Name.Name)
-
-	if iface, ok := ts.Type.(*ast.InterfaceType); ok {
-		for _, method := range iface.Methods.List {
-			if len(method.Names) == 0 {
-				continue
-			}
-			for _, name := range method.Names {
-				e.Methods = append(e.Methods, Method{
-					Name:       name.Name,
-					Signature:  exprToString(method.Type),
-					IsExported: ast.IsExported(name.Name),
-				})
-			}
-		}
-	}
-	return e
-}
-
-func extractFunction(pkg *packages.Package, fd *ast.FuncDecl, filename string) Entity {
-	e := Entity{
-		Package:    pkg.PkgPath,
-		File:       filename,
-		Kind:       "func",
-		Name:       fd.Name.Name,
-		IsExported: fd.Name.IsExported(),
-		Comments:   extractComments(fd.Doc),
-	}
-	e.ID = fmt.Sprintf("%s.%s", pkg.PkgPath, fd.Name.Name)
-	return e
+	return strings.TrimSpace(string(out))
 }
 
 func exprToString(expr ast.Expr) string {
@@ -232,49 +313,7 @@ func exprToString(expr ast.Expr) string {
 		return "chan " + exprToString(t.Value)
 	case *ast.ParenExpr:
 		return "(" + exprToString(t.X) + ")"
-	case *ast.FuncType:
-		return "func(...)"
 	default:
 		return fmt.Sprintf("%T", expr)
 	}
-}
-
-func isPointer(expr ast.Expr) bool {
-	_, ok := expr.(*ast.StarExpr)
-	return ok
-}
-
-func isSlice(expr ast.Expr) bool {
-	if arr, ok := expr.(*ast.ArrayType); ok {
-		return arr.Len == nil
-	}
-	return false
-}
-
-func parseTag(tagValue, key string) string {
-	if tagValue == "" {
-		return ""
-	}
-	tag := strings.Trim(tagValue, "`")
-	parts := strings.Fields(tag)
-	for _, part := range parts {
-		if strings.HasPrefix(part, key+":") {
-			kv := strings.SplitN(part, ":", 2)
-			if len(kv) == 2 {
-				return strings.Trim(kv[1], `"`)
-			}
-		}
-	}
-	return ""
-}
-
-func extractComments(cg *ast.CommentGroup) string {
-	if cg == nil {
-		return ""
-	}
-	var lines []string
-	for _, c := range cg.List {
-		lines = append(lines, strings.TrimPrefix(c.Text, "// "))
-	}
-	return strings.Join(lines, "\n")
 }

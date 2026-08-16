@@ -1,522 +1,0 @@
-## 1. Environment Information
-Date: Mon Aug 10 07:53:59 PM IST 2026
-Go version: go version go1.25.0 linux/amd64
-Docker version: Docker version 29.6.2, build dfc4efb
-PostgreSQL client: psql (PostgreSQL) 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
-
-## 2. Codebase Structure
-### Directory tree (limited depth 3)
-.
-├── bin
-├── build
-├── cmd
-│   ├── garuda
-│   ├── garuda-api
-│   ├── garuda-mcp
-│   ├── garuda-slack
-│   ├── garuda-worker
-│   ├── migrate
-│   └── telemetry-collector
-├── deploy
-│   ├── compose
-│   └── k8s
-├── docs
-├── internal
-│   ├── api
-│   ├── auth
-│   ├── budget
-│   ├── cache
-│   ├── cas
-│   ├── engine
-│   ├── harvester
-│   ├── lineage
-│   ├── mcp
-│   ├── merkle
-│   ├── pool
-│   ├── refund
-│   ├── store
-│   ├── telemetry
-│   ├── topology
-│   └── types
-├── migrations
-├── scripts
-└── vendor
-    ├── github.com
-    │   ├── AlecAivazis
-    │   ├── apapsch
-    │   ├── cespare
-    │   ├── golang-jwt
-    │   ├── google
-    │   ├── gorilla
-    │   ├── inconshreveable
-    │   ├── jackc
-    │   ├── kballard
-    │   ├── labstack
-    │   ├── mattn
-    │   ├── mgutz
-    │   ├── oapi-codegen
-    │   ├── redis
-    │   ├── slack-go
-    │   ├── spf13
-    │   └── valyala
-    ├── golang.org
-    │   └── x
-    └── go.uber.org
-        └── atomic
-
-57 directories
-
-### Go package list
-github.com/myshra777-ai/garuda
-github.com/myshra777-ai/garuda/cmd/garuda
-github.com/myshra777-ai/garuda/cmd/garuda-api
-github.com/myshra777-ai/garuda/cmd/garuda-mcp
-github.com/myshra777-ai/garuda/cmd/garuda-slack
-github.com/myshra777-ai/garuda/cmd/garuda-worker
-github.com/myshra777-ai/garuda/cmd/migrate
-github.com/myshra777-ai/garuda/cmd/telemetry-collector
-github.com/myshra777-ai/garuda/internal/api
-github.com/myshra777-ai/garuda/internal/auth
-github.com/myshra777-ai/garuda/internal/budget
-github.com/myshra777-ai/garuda/internal/cache
-github.com/myshra777-ai/garuda/internal/cas
-github.com/myshra777-ai/garuda/internal/engine
-github.com/myshra777-ai/garuda/internal/harvester
-github.com/myshra777-ai/garuda/internal/lineage
-github.com/myshra777-ai/garuda/internal/mcp
-github.com/myshra777-ai/garuda/internal/merkle
-github.com/myshra777-ai/garuda/internal/pool
-github.com/myshra777-ai/garuda/internal/refund
-github.com/myshra777-ai/garuda/internal/store
-github.com/myshra777-ai/garuda/internal/telemetry
-github.com/myshra777-ai/garuda/internal/topology
-github.com/myshra777-ai/garuda/internal/types
-
-### Core types (internal/types/types.go)
-type Scope struct {
-type DecisionStatus string
-type EvidenceHash [32]byte
-type Decision struct {
-type DecisionRevision struct {
-type Contradiction struct {
-type Evidence struct {
-type DecisionStore interface {
-
-### Store methods (internal/store/decision_store.go, contradiction_store.go)
-internal/store/audit_store.go:func (s *PostgresStore) LogAuditEvent(ctx context.Context, tenantID uuid.UUID, eventType string, eventID uuid.UUID, actor string, payload interface{}) (*types.AuditEvent, error) {
-internal/store/audit_store.go:func (s *PostgresStore) VerifyAuditEvent(ctx context.Context, tenantID uuid.UUID, eventID uuid.UUID) (*types.AuditVerification, error) {
-internal/store/audit_store.go:func (s *PostgresStore) ListAuditEvents(ctx context.Context, tenantID uuid.UUID, since time.Time) ([]types.AuditEvent, error) {
-internal/store/budget.go:func (s *PostgresStore) ConsumeBudget(ctx context.Context, tenantID uuid.UUID, tokens int) error {
-internal/store/budget.go:func (s *PostgresStore) consumeBudgetTx(ctx context.Context, tenantID uuid.UUID, tokens int) error {
-internal/store/budget_store.go:func (s *PostgresStore) GetTenantBudget(ctx context.Context, tenantID uuid.UUID) (*types.TenantBudget, error) {
-internal/store/budget_store.go:func (s *PostgresStore) PreflightCheckAndReserve(ctx context.Context, tenantID uuid.UUID, estimatedTokens int) error {
-internal/store/budget_store.go:func (s *PostgresStore) ConsumeBudgetDeduct(ctx context.Context, tenantID uuid.UUID, req types.BudgetConsumptionRequest) (*types.BudgetConsumptionResponse, error) {
-internal/store/checkpoint_store.go:func (s *PostgresStore) GetCheckpoint(ctx context.Context, tenantID, id uuid.UUID) (*types.Checkpoint, error) {
-internal/store/checkpoint_store.go:func (s *PostgresStore) SaveCheckpoint(ctx context.Context, c *types.Checkpoint) error {
-internal/store/checkpoint_store.go:func (s *PostgresStore) ListCheckpointsByAgent(ctx context.Context, tenantID uuid.UUID, agentID string, limit int) ([]*types.Checkpoint, error) {
-internal/store/contradiction_store.go:func (s *PostgresStore) QuarantineDecision(ctx context.Context, tenantID uuid.UUID,
-internal/store/contradiction_store.go:func (s *PostgresStore) ListUnresolvedContradictions(ctx context.Context, tenantID uuid.UUID) ([]types.Contradiction, error) {
-internal/store/contradiction_store.go:func (s *PostgresStore) ResolveContradiction(ctx context.Context, id uuid.UUID, strategy string) error {
-internal/store/contradiction_store.go:func (s *PostgresStore) GetContradiction(ctx context.Context, tenantID, id uuid.UUID) (*types.Contradiction, error) {
-internal/store/contradiction_store.go:func (s *PostgresStore) ListContradictions(ctx context.Context, tenantID uuid.UUID, resolved bool) ([]types.Contradiction, error) {
-internal/store/decision_store.go:func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) error {
-internal/store/decision_store.go:func (s *PostgresStore) GetDecision(ctx context.Context, tenantID, decisionID uuid.UUID) (*types.Decision, error) {
-internal/store/decision_store.go:func (s *PostgresStore) GetDecisionRevisions(ctx context.Context, tenantID, decisionID uuid.UUID) ([]types.DecisionRevision, error) {
-internal/store/decision_store.go:func (s *PostgresStore) GetDecisionsByScope(ctx context.Context, tenantID uuid.UUID, domain, system string) ([]*types.Decision, error) {
-internal/store/decision_store.go:func (s *PostgresStore) ListDecisionsByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*types.Decision, error) {
-internal/store/expiry.go:func (s *PostgresStore) StartExpiryWorker(ctx context.Context, interval time.Duration) {
-internal/store/expiry.go:func (s *PostgresStore) markExpiredTasks(ctx context.Context) error {
-internal/store/flusher.go:func (s *PostgresStore) StartRefCountFlusher(ctx context.Context, rdb *redis.Client, stream, group string) error {
-internal/store/flusher.go:func (s *PostgresStore) flush(ctx context.Context, rdb *redis.Client, stream, group string) error {
-internal/store/flusher.go:func (s *PostgresStore) commitEvidenceDeltas(ctx context.Context, deltas map[string]int) error {
-internal/store/handoff_store.go:func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *HandoffRequest) (*HandoffResponse, error) {
-internal/store/handoff_store.go:func (s *PostgresStore) ResumeAgent(ctx context.Context, tenantID, agentID, checkpointID uuid.UUID) (interface{}, error) {
-internal/store/handoff_store.go:func (s *PostgresStore) GetLineageDAG(ctx context.Context, tenantID, taskID uuid.UUID) ([]types.LineageEdge, error) {
-internal/store/handoff_store.go:func (s *PostgresStore) lockAgent(ctx context.Context, tx pgx.Tx, agentID, tenantID uuid.UUID) (*types.Agent, error) {
-internal/store/handoff_store.go:func (s *PostgresStore) lockTask(ctx context.Context, tx pgx.Tx, taskID, tenantID uuid.UUID) (*types.Task, error) {
-internal/store/handoff_store.go:func (s *PostgresStore) updateAgentStatus(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, status string) error {
-internal/store/handoff_store.go:func (s *PostgresStore) storeCheckpointInCAS(ctx context.Context, tx pgx.Tx, stateHash string, data []byte) error {
-internal/store/handoff_store.go:func (s *PostgresStore) ListHandoffsByScope(ctx context.Context, tenantID uuid.UUID, domain, system string) ([]*types.HandoffRecord, error) {
-internal/store/harvested_store.go:func (s *PostgresStore) SaveHarvestedDecision(ctx context.Context, hd *harvester.HarvestedDecision) error {
-internal/store/harvested_store.go:func (s *PostgresStore) GetHarvestedDecision(ctx context.Context, id uuid.UUID) (*harvester.HarvestedDecision, error) {
-internal/store/harvested_store.go:func (s *PostgresStore) ListHarvestedDecisions(ctx context.Context, sourceType string, validatedOnly bool) ([]*harvester.HarvestedDecision, error) {
-internal/store/lineage_store.go:func (s *PostgresStore) ListLineageEdgesByTasks(ctx context.Context, tenantID uuid.UUID, taskIDs []uuid.UUID) ([]types.LineageEdge, error) {
-internal/store/merkle_store.go:func (s *PostgresStore) GetMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleRoot, error) {
-internal/store/merkle_store.go:func (s *PostgresStore) createGenesisMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleRoot, error) {
-internal/store/merkle_store.go:func (s *PostgresStore) AppendMerkleChain(ctx context.Context, tenantID uuid.UUID, decisionHash string) (*types.MerkleRoot, error) {
-internal/store/merkle_store.go:func (s *PostgresStore) AddEvidenceBlock(ctx context.Context, tenantID, decisionID uuid.UUID, payload any) (*types.EvidenceBlock, error) {
-internal/store/merkle_store.go:func (s *PostgresStore) ListAllTenants(ctx context.Context) ([]uuid.UUID, error) {
-internal/store/merkle_store.go:func (s *PostgresStore) GetLatestMerkleSnapshot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleSnapshot, error) {
-internal/store/merkle_store.go:func (s *PostgresStore) SaveMerkleSnapshot(ctx context.Context, snapshot *types.MerkleSnapshot) error {
-internal/store/merkle_store.go:func (s *PostgresStore) ListMerkleSnapshots(ctx context.Context, tenantID uuid.UUID, limit int) ([]types.MerkleSnapshot, error) {
-internal/store/milestone_store.go:func (s *PostgresStore) ListMilestonesByScope(ctx context.Context, tenantID uuid.UUID, domain, system string) ([]*types.Milestone, error) {
-internal/store/milestone_store.go:func (s *PostgresStore) SaveMilestone(ctx context.Context, m *types.Milestone) error {
-internal/store/plan_store.go:func (s *PostgresStore) GetPlan(ctx context.Context, tenantID uuid.UUID, req *types.PlanRequest) (*types.PlanResult, error) {
-internal/store/policy_store.go:func (s *PostgresStore) SavePolicy(ctx context.Context, p *types.Policy) error {
-internal/store/policy_store.go:func (s *PostgresStore) GetActivePolicies(ctx context.Context, tenantID uuid.UUID, scopeDomain, scopeSystem string) ([]*types.Policy, error) {
-internal/store/policy_store.go:func (s *PostgresStore) GetActivePoliciesByScope(ctx context.Context, tenantID uuid.UUID, scope types.Scope) ([]*types.Policy, error) {
-internal/store/policy_store.go:func (s *PostgresStore) SupersedePolicy(ctx context.Context, oldID, newID uuid.UUID) error {
-internal/store/policy_store.go:func (s *PostgresStore) LogPolicyViolation(ctx context.Context, v *types.PolicyViolation) error {
-internal/store/postgres.go:func (s *PostgresStore) Close() {
-internal/store/postgres.go:func (s *PostgresStore) IngestEvidence(ctx context.Context, tenantID uuid.UUID, evidence []types.Evidence) error {
-internal/store/postgres.go:func (s *PostgresStore) IngestBlocks(ctx context.Context, blocks []types.Block) error {
-internal/store/postgres.go:func (s *PostgresStore) SaveTaskManifest(ctx context.Context, m *types.TaskManifest) error {
-internal/store/postgres.go:func (s *PostgresStore) ListDecisions(ctx context.Context, tenantID uuid.UUID, scope types.Scope, statuses []types.DecisionStatus) ([]*types.Decision, error) {
-internal/store/postgres.go:func (s *PostgresStore) ListByScope(ctx context.Context, tenantID uuid.UUID, scope types.Scope, statuses []types.DecisionStatus) ([]*types.Decision, error) {
-internal/store/task_store.go:func (s *PostgresStore) ListTasksByScope(ctx context.Context, tenantID uuid.UUID, domain, system string, statuses []string) ([]*types.Task, error) {
-internal/store/task_store.go:func (s *PostgresStore) GetTask(ctx context.Context, tenantID, taskID uuid.UUID) (*types.Task, error) {
-internal/store/task_store.go:func (s *PostgresStore) SaveTask(ctx context.Context, t *types.Task) error {
-internal/store/temporal_store.go:func (s *PostgresStore) GetDecisionsActiveAt(ctx context.Context, tenantID uuid.UUID, at time.Time, scope types.Scope, statuses []types.DecisionStatus) ([]*types.Decision, error) {
-internal/store/temporal_store.go:func (s *PostgresStore) GetDecisionHistory(ctx context.Context, tenantID, decisionID uuid.UUID) ([]*types.Decision, error) {
-internal/store/topology_store.go:func (s *PostgresStore) SaveTopology(ctx context.Context, top *types.Topology) error {
-internal/store/topology_store.go:func (s *PostgresStore) GetTopology(ctx context.Context, id uuid.UUID) (*types.Topology, error) {
-internal/store/topology_store.go:func (s *PostgresStore) UpdateTopologyStatus(ctx context.Context, id uuid.UUID, status types.TopologyStatus) error {
-internal/store/topology_store.go:func (s *PostgresStore) GetTasksByTopology(ctx context.Context, topologyID uuid.UUID) ([]*types.Task, error) {
-internal/store/topology_store.go:func (s *PostgresStore) UpdateTask(ctx context.Context, task *types.Task) error {
-internal/store/topology_store.go:func (s *PostgresStore) UpdateTopologyTokens(ctx context.Context, id uuid.UUID, tokens int64) error {
-internal/store/user_store.go:func (s *PostgresStore) CreateUser(ctx context.Context, user *auth.User) error {
-internal/store/user_store.go:func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*auth.User, error) {
-
-### API handlers (internal/api/*.go)
-internal/api/audit_handlers.go:func (s *Server) HandleExportAuditLogs(w http.ResponseWriter, r *http.Request) {
-internal/api/auth.go:func (s *Server) HandleSignUp(w http.ResponseWriter, r *http.Request) {
-internal/api/auth.go:func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
-internal/api/auth.go:func (s *Server) HandleSignOut(w http.ResponseWriter, r *http.Request) {
-internal/api/budget_handlers.go:func (s *Server) HandleGetBudget(w http.ResponseWriter, r *http.Request) {
-internal/api/budget_handlers.go:func (s *Server) HandleConsumeBudget(w http.ResponseWriter, r *http.Request) {
-internal/api/checkpoint_handlers.go:func (s *Server) HandleAgentCheckpoint(w http.ResponseWriter, r *http.Request) {
-internal/api/checkpoint_handlers.go:func (s *Server) HandleGetAgentCheckpoint(w http.ResponseWriter, r *http.Request) {
-internal/api/checkpoint_handlers.go:func (s *Server) HandleAgentResume(w http.ResponseWriter, r *http.Request) {
-internal/api/checkpoint_handlers.go:func (s *Server) HandleAgentHandoff(w http.ResponseWriter, r *http.Request) {
-internal/api/dashboard_handlers.go:func (s *Server) HandleDashboard(w http.ResponseWriter, r *http.Request) {
-internal/api/dashboard_handlers.go:func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
-internal/api/dashboard_handlers.go:func (s *Server) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {
-internal/api/decision_handlers.go:func (s *Server) HandleProposeDecision(w http.ResponseWriter, r *http.Request) {
-internal/api/decision_handlers.go:func (s *Server) HandleDecisionLineage(w http.ResponseWriter, r *http.Request) {
-internal/api/decision_handlers.go:func (s *Server) HandleSystemPromptContext(w http.ResponseWriter, r *http.Request) {
-internal/api/decision_handlers.go:func (s *Server) HandleEvaluateRoute(w http.ResponseWriter, r *http.Request) {
-internal/api/decision_handlers.go:func (s *Server) HandleAgentWarmup(w http.ResponseWriter, r *http.Request) {
-internal/api/decision_handlers.go:func (s *Server) HandleAuditVerify(w http.ResponseWriter, r *http.Request) {
-internal/api/handler.go:func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
-internal/api/handler.go:func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
-internal/api/handler.go:func (s *Server) HandleVerifyAuditLog(w http.ResponseWriter, r *http.Request) {
-internal/api/handoff_handlers.go:func (s *Server) HandleHandoff(w http.ResponseWriter, r *http.Request) {
-internal/api/handoff_handlers.go:func (s *Server) HandleResume(w http.ResponseWriter, r *http.Request) {
-internal/api/handoff_handlers.go:func (s *Server) HandleGetLineage(w http.ResponseWriter, r *http.Request) {
-internal/api/merkle_handlers.go:func (s *Server) HandleListMerkleSnapshots(w http.ResponseWriter, r *http.Request) {
-internal/api/plan_handlers.go:func (s *Server) HandleGetPlan(w http.ResponseWriter, r *http.Request) {
-internal/api/policy_handlers.go:func (s *Server) HandleRememberPolicy(w http.ResponseWriter, r *http.Request) {
-internal/api/policy_handlers.go:func (s *Server) HandleListPolicies(w http.ResponseWriter, r *http.Request) {
-internal/api/policy_handlers.go:func (s *Server) HandleSupersedePolicy(w http.ResponseWriter, r *http.Request) {
-internal/api/swagger.go:func (s *Server) HandleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
-internal/api/swagger_ui.go:func (s *Server) HandleSwaggerUI(w http.ResponseWriter, r *http.Request) {
-internal/api/system_handlers.go:func (s *Server) HandleSystemDiscover(w http.ResponseWriter, r *http.Request) {
-internal/api/system_handlers.go:func (s *Server) HandleSystemBootstrap(w http.ResponseWriter, r *http.Request) {
-internal/api/system_handlers.go:func (s *Server) HandleSandbox(w http.ResponseWriter, r *http.Request) {
-internal/api/temporal_handlers.go:func (s *Server) HandleDecisionsActiveAt(w http.ResponseWriter, r *http.Request) {
-internal/api/temporal_handlers.go:func (s *Server) HandleDecisionHistory(w http.ResponseWriter, r *http.Request) {
-internal/api/topology_handlers.go:func (s *Server) HandleTopologyRecommend(w http.ResponseWriter, r *http.Request) {
-internal/api/topology_handlers.go:func (s *Server) HandleTopologyExecute(w http.ResponseWriter, r *http.Request) {
-internal/api/topology_handlers.go:func (s *Server) HandleTopologyStatus(w http.ResponseWriter, r *http.Request) {
-internal/api/verification_handlers.go:func (s *Server) HandleVerifyDecision(w http.ResponseWriter, r *http.Request) {
-
-### MCP tools (cmd/garuda-mcp/main.go)
-			"name":        "garuda.query",
-			"name":        "garuda.get_lineage",
-			"name":        "garuda.detect_contradictions",
-			"name":        "garuda.get_impact",
-			"name":        "garuda.propose_decision",
-	case "garuda.query":
-	case "garuda.get_lineage":
-	case "garuda.detect_contradictions":
-	case "garuda.get_impact":
-	case "garuda.propose_decision":
-
-## 3. Build & Test Status
-### go build ./...
-✅ Build successful
-
-### go test ./... -short
-?   	github.com/myshra777-ai/garuda	[no test files]
-?   	github.com/myshra777-ai/garuda/cmd/garuda	[no test files]
-ok  	github.com/myshra777-ai/garuda/cmd/garuda-api	0.012s
-?   	github.com/myshra777-ai/garuda/cmd/garuda-mcp	[no test files]
-?   	github.com/myshra777-ai/garuda/cmd/garuda-slack	[no test files]
-?   	github.com/myshra777-ai/garuda/cmd/garuda-worker	[no test files]
-?   	github.com/myshra777-ai/garuda/cmd/migrate	[no test files]
-?   	github.com/myshra777-ai/garuda/cmd/telemetry-collector	[no test files]
-ok  	github.com/myshra777-ai/garuda/internal/api	0.011s
-ok  	github.com/myshra777-ai/garuda/internal/auth	0.007s
-?   	github.com/myshra777-ai/garuda/internal/budget	[no test files]
-?   	github.com/myshra777-ai/garuda/internal/cache	[no test files]
-?   	github.com/myshra777-ai/garuda/internal/cas	[no test files]
-ok  	github.com/myshra777-ai/garuda/internal/engine	0.005s
-?   	github.com/myshra777-ai/garuda/internal/harvester	[no test files]
-?   	github.com/myshra777-ai/garuda/internal/lineage	[no test files]
-?   	github.com/myshra777-ai/garuda/internal/mcp	[no test files]
-?   	github.com/myshra777-ai/garuda/internal/merkle	[no test files]
-?   	github.com/myshra777-ai/garuda/internal/pool	[no test files]
-?   	github.com/myshra777-ai/garuda/internal/refund	[no test files]
-?   	github.com/myshra777-ai/garuda/internal/store	[no test files]
-ok  	github.com/myshra777-ai/garuda/internal/telemetry	0.106s
-?   	github.com/myshra777-ai/garuda/internal/topology	[no test files]
-?   	github.com/myshra777-ai/garuda/internal/types	[no test files]
-✅ Tests passed (short)
-
-## 4. Database Schema
-Checking database connection at postgres://test:test@localhost:5433/garuda_test?sslmode=disable
-✅ Database reachable
-
-### Tables
-              List of relations
- Schema |        Name        | Type  | Owner 
---------+--------------------+-------+-------
- public | agent_checkpoints  | table | test
- public | agents             | table | test
- public | assumptions        | table | test
- public | audit_events       | table | test
- public | budget_ledger      | table | test
- public | checkpoints        | table | test
- public | contradictions     | table | test
- public | decision_revisions | table | test
- public | decisions          | table | test
- public | evidence_blocks    | table | test
- public | evidence_store     | table | test
- public | facts              | table | test
- public | handoffs           | table | test
- public | lineage_edges      | table | test
- public | merkle_roots       | table | test
- public | merkle_snapshots   | table | test
- public | migrations         | table | test
- public | milestones         | table | test
- public | task_manifests     | table | test
- public | tasks              | table | test
- public | telemetry_events   | table | test
- public | tenant_budgets     | table | test
-(22 rows)
-
-
-### Table: decisions
-                                                          Table "public.decisions"
-       Column       |           Type           | Collation | Nullable |    Default    | Storage  | Compression | Stats target | Description 
---------------------+--------------------------+-----------+----------+---------------+----------+-------------+--------------+-------------
- tenant_id          | uuid                     |           | not null |               | plain    |             |              | 
- id                 | uuid                     |           | not null |               | plain    |             |              | 
- title              | text                     |           | not null |               | extended |             |              | 
- status             | text                     |           | not null | 'DRAFT'::text | extended |             |              | 
- fingerprint        | text                     |           |          |               | extended |             |              | 
- evidence_ids       | bytea[]                  |           |          |               | extended |             |              | 
- temporal_metadata  | jsonb                    |           |          |               | extended |             |              | 
- scope              | jsonb                    |           |          |               | extended |             |              | 
- owner              | text                     |           |          |               | extended |             |              | 
- confidence         | double precision         |           |          |               | plain    |             |              | 
- parent_id          | uuid                     |           |          |               | plain    |             |              | 
- created_at         | timestamp with time zone |           | not null | now()         | plain    |             |              | 
- updated_at         | timestamp with time zone |           | not null | now()         | plain    |             |              | 
- approved_at        | timestamp with time zone |           |          |               | plain    |             |              | 
- rationale          | text                     |           |          |               | extended |             |              | 
- alternatives       | jsonb                    |           |          |               | extended |             |              | 
- approvers          | jsonb                    |           |          |               | extended |             |              | 
- dependencies       | jsonb                    |           |          |               | extended |             |              | 
- affected_systems   | jsonb                    |           |          |               | extended |             |              | 
- authorized_by      | text                     |           |          |               | extended |             |              | 
- signature          | bytea                    |           |          |               | extended |             |              | 
- merkle_hash        | text                     |           |          |               | extended |             |              | 
- parent_merkle_hash | text                     |           |          |               | extended |             |              | 
- scope_domain       | text                     |           |          | ''::text      | extended |             |              | 
- scope_system       | text                     |           |          | ''::text      | extended |             |              | 
- valid_from         | timestamp with time zone |           | not null |               | plain    |             |              | 
- valid_to           | timestamp with time zone |           |          |               | plain    |             |              | 
-Indexes:
-    "decisions_pkey" PRIMARY KEY, btree (tenant_id, id)
-    "idx_decisions_merkle_hash" btree (merkle_hash)
-    "idx_decisions_parent" btree (parent_id)
-    "idx_decisions_scope" gin (scope)
-    "idx_decisions_tenant_created" btree (tenant_id, created_at DESC)
-    "idx_decisions_tenant_status" btree (tenant_id, status)
-    "idx_decisions_valid_range" btree (tenant_id, valid_from, valid_to)
-Check constraints:
-    "check_valid_range" CHECK (valid_to IS NULL OR valid_from <= valid_to)
-Referenced by:
-    TABLE "contradictions" CONSTRAINT "fk_contradictions_decision_a" FOREIGN KEY (tenant_id, decision_a) REFERENCES decisions(tenant_id, id) ON DELETE CASCADE
-    TABLE "contradictions" CONSTRAINT "fk_contradictions_decision_b" FOREIGN KEY (tenant_id, decision_b) REFERENCES decisions(tenant_id, id) ON DELETE CASCADE
-Access method: heap
-
-
-### Table: contradictions
-                                                        Table "public.contradictions"
-       Column        |           Type           | Collation | Nullable |    Default    | Storage  | Compression | Stats target | Description 
----------------------+--------------------------+-----------+----------+---------------+----------+-------------+--------------+-------------
- id                  | uuid                     |           | not null |               | plain    |             |              | 
- tenant_id           | uuid                     |           | not null |               | plain    |             |              | 
- decision_a          | uuid                     |           | not null |               | plain    |             |              | 
- decision_b          | uuid                     |           | not null |               | plain    |             |              | 
- severity            | text                     |           | not null |               | extended |             |              | 
- resolved            | boolean                  |           | not null | false         | plain    |             |              | 
- created_at          | timestamp with time zone |           | not null | now()         | plain    |             |              | 
- resolved_at         | timestamp with time zone |           |          |               | plain    |             |              | 
- quarantined         | boolean                  |           |          | true          | plain    |             |              | 
- resolution_strategy | text                     |           |          | 'human'::text | extended |             |              | 
- auto_resolved_at    | timestamp with time zone |           |          |               | plain    |             |              | 
-Indexes:
-    "contradictions_pkey" PRIMARY KEY, btree (id)
-    "idx_contradictions_resolved" btree (tenant_id, resolved)
-    "idx_contradictions_tenant" btree (tenant_id)
-    "idx_contradictions_unresolved" btree (tenant_id, resolved, quarantined)
-Foreign-key constraints:
-    "fk_contradictions_decision_a" FOREIGN KEY (tenant_id, decision_a) REFERENCES decisions(tenant_id, id) ON DELETE CASCADE
-    "fk_contradictions_decision_b" FOREIGN KEY (tenant_id, decision_b) REFERENCES decisions(tenant_id, id) ON DELETE CASCADE
-Access method: heap
-
-
-### Table: evidence_store
-                                                Table "public.evidence_store"
-   Column   |           Type           | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
-------------+--------------------------+-----------+----------+---------+----------+-------------+--------------+-------------
- block_hash | bytea                    |           | not null |         | extended |             |              | 
- content    | text                     |           | not null |         | extended |             |              | 
- ref_count  | integer                  |           | not null | 1       | plain    |             |              | 
- created_at | timestamp with time zone |           | not null | now()   | plain    |             |              | 
-Indexes:
-    "cas_blocks_pkey" PRIMARY KEY, btree (block_hash)
-    "idx_evidence_created" btree (created_at)
-Access method: heap
-
-
-### Table: facts
-                                                      Table "public.facts"
-    Column    |           Type           | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
---------------+--------------------------+-----------+----------+---------+----------+-------------+--------------+-------------
- id           | uuid                     |           | not null |         | plain    |             |              | 
- statement    | text                     |           | not null |         | extended |             |              | 
- confidence   | double precision         |           | not null | 0.8     | plain    |             |              | 
- evidence_ids | uuid[]                   |           |          |         | extended |             |              | 
- created_at   | timestamp with time zone |           | not null | now()   | plain    |             |              | 
-Indexes:
-    "facts_pkey" PRIMARY KEY, btree (id)
-Access method: heap
-
-
-### Table: assumptions
-                                                   Table "public.assumptions"
-    Column    |           Type           | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
---------------+--------------------------+-----------+----------+---------+----------+-------------+--------------+-------------
- id           | uuid                     |           | not null |         | plain    |             |              | 
- statement    | text                     |           | not null |         | extended |             |              | 
- confidence   | double precision         |           | not null | 0.5     | plain    |             |              | 
- evidence_ids | uuid[]                   |           |          |         | extended |             |              | 
- created_at   | timestamp with time zone |           | not null | now()   | plain    |             |              | 
-Indexes:
-    "assumptions_pkey" PRIMARY KEY, btree (id)
-Access method: heap
-
-
-### Table: budgets
-Table budgets does not exist
-
-### Table: users
-Table users does not exist
-
-### Table: harvested_decisions
-Table harvested_decisions does not exist
-
-### Table: checkpoints
-                                                         Table "public.checkpoints"
-     Column      |           Type           | Collation | Nullable |      Default      | Storage  | Compression | Stats target | Description 
------------------+--------------------------+-----------+----------+-------------------+----------+-------------+--------------+-------------
- id              | uuid                     |           | not null | gen_random_uuid() | plain    |             |              | 
- tenant_id       | uuid                     |           | not null |                   | plain    |             |              | 
- task_id         | uuid                     |           |          |                   | plain    |             |              | 
- agent_id        | uuid                     |           |          |                   | plain    |             |              | 
- state_hash      | text                     |           | not null |                   | extended |             |              | 
- checkpoint_data | jsonb                    |           | not null |                   | extended |             |              | 
- status          | text                     |           | not null | 'active'::text    | extended |             |              | 
- created_at      | timestamp with time zone |           | not null | now()             | plain    |             |              | 
- restored_at     | timestamp with time zone |           |          |                   | plain    |             |              | 
- expires_at      | timestamp with time zone |           |          |                   | plain    |             |              | 
-Indexes:
-    "checkpoints_pkey" PRIMARY KEY, btree (id)
-    "idx_checkpoints_task_state" btree (task_id, state_hash)
-Foreign-key constraints:
-    "checkpoints_agent_id_fkey" FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
-    "checkpoints_task_id_fkey" FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
-Referenced by:
-    TABLE "handoffs" CONSTRAINT "handoffs_checkpoint_id_fkey" FOREIGN KEY (checkpoint_id) REFERENCES checkpoints(id) ON DELETE RESTRICT
-Access method: heap
-
-
-### Migration history (if migrations table exists)
-No migrations table found
-
-## 5. API Endpoints (registered in cmd/garuda-api/main.go)
-No endpoints found
-
-## 6. Migration Files (migrations/*.sql)
--rw-rw-r-- 1 rohit rohit  179 Aug  8 22:07 migrations/000_create_extensions.sql
--rw-rw-r-- 1 rohit rohit  234 Jun  3 08:34 migrations/001_cas_blocks.sql
--rw-rw-r-- 1 rohit rohit  951 Jun  1 14:10 migrations/001_create_decisions_table.sql
--rw-rw-r-- 1 rohit rohit  513 Jun  1 14:10 migrations/002_create_audit_events_table.sql
--rw-rw-r-- 1 rohit rohit 1016 Jun  5 11:40 migrations/002_task_manifests.sql
--rw-rw-r-- 1 rohit rohit  393 Jun  2 12:12 migrations/003_create_users_table.sql
--rw-rw-r-- 1 rohit rohit  108 Jun  5 13:45 migrations/003_rename_cas_blocks_to_evidence.sql
--rw-rw-r-- 1 rohit rohit  398 Jun  5 13:45 migrations/004_facts_assumptions.sql
--rw-rw-r-- 1 rohit rohit  309 Jun  5 13:46 migrations/005_contradictions.sql
--rw-rw-r-- 1 rohit rohit  671 Aug  9 13:51 migrations/005_decision_revisions.sql
--rw-rw-r-- 1 rohit rohit  608 Jul 26 20:46 migrations/007_add_tenant_id_to_decisions.sql
--rw-rw-r-- 1 rohit rohit 1149 Jul 26 20:59 migrations/007_tenant_composite_key.sql
--rw-rw-r-- 1 rohit rohit  977 Aug  3 18:01 migrations/008_contradictions_schema.sql
--rw-rw-r-- 1 rohit rohit 1157 Aug  4 23:24 migrations/009_agent_checkpoints.sql
--rw-rw-r-- 1 rohit rohit 1131 Aug  3 21:24 migrations/010_tenant_budgets.sql
--rw-rw-r-- 1 rohit rohit  469 Aug  3 21:48 migrations/011_contradiction_quarantine.sql
--rw-rw-r-- 1 rohit rohit 1062 Aug  3 23:03 migrations/012_merkle_verification.sql
--rw-rw-r-- 1 rohit rohit  379 Aug  3 23:35 migrations/013_add_scope_columns.sql
--rw-rw-r-- 1 rohit rohit 1005 Aug  4 15:24 migrations/013_bitemporal_validity.sql
--rw-rw-r-- 1 rohit rohit 1284 Aug  4 15:24 migrations/014_merkle_snapshots.sql
--rw-rw-r-- 1 rohit rohit  694 Aug  4 15:24 migrations/015_bitemporal_validity.sql
--rw-rw-r-- 1 rohit rohit 1079 Aug  4 15:24 migrations/016_merkle_snapshots.sql
--rw-rw-r-- 1 rohit rohit 4015 Aug  6 15:40 migrations/017_agent_handoff_lineage.sql
--rw-rw-r-- 1 rohit rohit 1627 Aug  8 21:08 migrations/019_telemetry.sql
--rw-rw-r-- 1 rohit rohit  726 Aug 10 08:12 migrations/020_plan_support.sql
--rw-rw-r-- 1 rohit rohit 1566 Aug 10 11:01 migrations/021_policy_engine.sql
--rw-rw-r-- 1 rohit rohit 2544 Aug 10 13:16 migrations/022_topology.sql
-
-### Last 5 migration files
--rw-rw-r-- 1 rohit rohit 2544 Aug 10 13:16 migrations/022_topology.sql
--rw-rw-r-- 1 rohit rohit 1566 Aug 10 11:01 migrations/021_policy_engine.sql
--rw-rw-r-- 1 rohit rohit  726 Aug 10 08:12 migrations/020_plan_support.sql
--rw-rw-r-- 1 rohit rohit  671 Aug  9 13:51 migrations/005_decision_revisions.sql
--rw-rw-r-- 1 rohit rohit  179 Aug  8 22:07 migrations/000_create_extensions.sql
-
-## 7. Git Status
-Branch: main
-Latest commit: fb05419 fix: remove duplicate topology route
-Uncommitted changes:
- M scripts/generate_api_docs.py
-?? garuda_snapshot_20260810_195359.txt
-
-## 8. Key Dependencies (go.mod)
-require (
-require (
-
-## 9. Summary of Findings
-1. Database: Connected
-2. Build: ❌ Failing
-3. Tests (short): ✅ Passing
-4. Number of Go files: 1201
-5. Number of SQL migrations: 27
-6. Contradictions table exists:  ?column? 
-----------
-(0 rows)
-
-✅
-7. Checkpoints table exists:  ?column? 
-----------
-(0 rows)
-
-✅
-8. MCP tools found: 0
-0
-
-✅ Snapshot complete. Output saved to garuda_snapshot_20260810_195359.txt
-[?2004h]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [K]0;rohit@rohit-750XGK: ~/garuda[01;32mrohit@rohit-750XGK[00m:[01;34m~/garuda[00m$ [7mmigrations/023_harvested_decisions.sql[27m[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[Cmigrations/023_harvested_decisions.sql
-[?2004lbash: migrations/023_harvested_decisions.sql: No such file or directory

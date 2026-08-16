@@ -1,0 +1,89 @@
+name: Auto‑Generate Documentation
+
+on:
+  push:
+    branches: [ main, mvp-refactor ]
+  schedule:
+    - cron: '0 0 * * 1'  # weekly
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build Garuda
+        run: go build -o garuda cmd/garuda/*.go
+
+      - name: Run analysis
+        env:
+          GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+        run: |
+          ./garuda analyze . --output garuda-snapshot.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r scripts/requirements.txt
+
+      - name: Build documentation context
+        run: |
+          python scripts/build_docs_context.py \
+            --snapshot garuda-snapshot.json \
+            --product docs/source/product.yaml \
+            --capabilities docs/source/capabilities.yaml \
+            --roadmap docs/source/roadmap.yaml \
+            --output docs/generated/docs-context.json
+
+      - name: Generate README
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_PRIMARY }}
+        run: |
+          python scripts/update_readme_ai.py \
+            --context docs/generated/docs-context.json \
+            --output README.md
+
+      - name: Generate CHANGELOG
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_SECONDARY }}
+        run: |
+          python scripts/generate_changelog.py \
+            --context docs/generated/docs-context.json \
+            --output CHANGELOG.md
+
+      - name: Generate API documentation
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_TERTIARY }}
+        run: |
+          python scripts/generate_api_docs.py \
+            --context docs/generated/docs-context.json \
+            --output docs/API.md
+
+      - name: Validate generated documentation
+        run: |
+          python scripts/validate_docs.py \
+            --context docs/generated/docs-context.json
+
+      - name: Commit and push docs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md CHANGELOG.md docs/API.md
+          git diff --staged --quiet || (git commit -m "docs: auto‑update README, CHANGELOG, API docs [skip ci]" && git push origin HEAD:${{ github.ref_name }})
