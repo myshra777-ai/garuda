@@ -6,81 +6,6 @@ import (
 	"io/ioutil"
 )
 
-// DiffReport holds the complete diff result
-type DiffReport struct {
-	StatsDiff         StatsDiff          `json:"stats_diff"`
-	FingerprintDiff   FingerprintDiff    `json:"fingerprint_diff"`
-	EntityDiffs       []EntityDiff       `json:"entity_diffs"`
-	RelationshipDiffs []RelationshipDiff `json:"relationship_diffs"`
-	Summary           DiffSummary        `json:"summary"`
-}
-
-// StatsDiff shows numeric changes
-type StatsDiff struct {
-	Files       int `json:"files"`
-	Packages    int `json:"packages"`
-	Structs     int `json:"structs"`
-	Interfaces  int `json:"interfaces"`
-	Functions   int `json:"functions"`
-	Imports     int `json:"imports"`
-	TotalFields int `json:"total_fields"`
-}
-
-// FingerprintDiff shows if fingerprints match
-type FingerprintDiff struct {
-	Before string `json:"before"`
-	After  string `json:"after"`
-	Match  bool   `json:"match"`
-}
-
-// EntityDiff represents a change to an entity
-type EntityDiff struct {
-	EntityID    string       `json:"entity_id"`
-	Kind        string       `json:"kind"`
-	Name        string       `json:"name"`
-	Status      string       `json:"status"` // added, removed, modified
-	FieldsDiff  *FieldsDiff  `json:"fields_diff,omitempty"`
-	MethodsDiff *MethodsDiff `json:"methods_diff,omitempty"`
-	Impact      int          `json:"impact"` // number of references affected
-}
-
-// FieldsDiff shows field changes
-type FieldsDiff struct {
-	Added    []Field     `json:"added"`
-	Removed  []Field     `json:"removed"`
-	Modified []FieldDiff `json:"modified"`
-}
-
-// FieldDiff shows a field change (before/after)
-type FieldDiff struct {
-	Name   string `json:"name"`
-	Before Field  `json:"before"`
-	After  Field  `json:"after"`
-}
-
-// MethodsDiff shows method changes
-type MethodsDiff struct {
-	Added   []Method `json:"added"`
-	Removed []Method `json:"removed"`
-}
-
-// RelationshipDiff represents a change to a relationship
-type RelationshipDiff struct {
-	From   string `json:"from"`
-	To     string `json:"to"`
-	Type   string `json:"type"`
-	Status string `json:"status"` // added, removed
-}
-
-// DiffSummary provides a high-level overview
-type DiffSummary struct {
-	BreakingChanges int `json:"breaking_changes"`
-	Warnings        int `json:"warnings"`
-	Additions       int `json:"additions"`
-	Removals        int `json:"removals"`
-	Modified        int `json:"modified"`
-}
-
 // LoadResult loads an AnalysisResult from a JSON file
 func LoadResult(path string) (*Result, error) {
 	data, err := ioutil.ReadFile(path)
@@ -138,8 +63,9 @@ func Diff(before, after *Result) *DiffReport {
 				EntityID: id,
 				Kind:     e.Kind,
 				Name:     e.Name,
+				File:     e.File, // added
 				Status:   "added",
-				Impact:   0, // can compute later
+				Impact:   0,
 			})
 			report.Summary.Additions++
 		}
@@ -152,8 +78,9 @@ func Diff(before, after *Result) *DiffReport {
 				EntityID: id,
 				Kind:     e.Kind,
 				Name:     e.Name,
+				File:     e.File, // added
 				Status:   "removed",
-				Impact:   len(e.Fields) + len(e.Methods), // rough impact
+				Impact:   len(e.Fields) + len(e.Methods),
 			})
 			report.Summary.Removals++
 		}
@@ -175,13 +102,13 @@ func Diff(before, after *Result) *DiffReport {
 					EntityID:    id,
 					Kind:        beforeEntity.Kind,
 					Name:        beforeEntity.Name,
+					File:        beforeEntity.File, // added
 					Status:      "modified",
 					FieldsDiff:  fieldsDiff,
 					MethodsDiff: methodsDiff,
 					Impact:      impact,
 				})
 				report.Summary.Modified++
-				// Breaking if fields removed or types changed
 				if fieldsDiff != nil && len(fieldsDiff.Removed) > 0 {
 					report.Summary.BreakingChanges++
 				}
@@ -195,12 +122,12 @@ func Diff(before, after *Result) *DiffReport {
 	// 4. Relationship diff
 	beforeRels := make(map[string]Relationship)
 	for _, r := range before.Relationships {
-		key := r.From + "|" + r.To + "|" + r.Type
+		key := r.From + "|" + r.To + "|" + string(r.Type)
 		beforeRels[key] = r
 	}
 	afterRels := make(map[string]Relationship)
 	for _, r := range after.Relationships {
-		key := r.From + "|" + r.To + "|" + r.Type
+		key := r.From + "|" + r.To + "|" + string(r.Type)
 		afterRels[key] = r
 	}
 

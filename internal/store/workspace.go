@@ -170,21 +170,6 @@ func (s *PostgresStore) ListRepositories(ctx context.Context, workspaceID uuid.U
 	return repos, nil
 }
 
-func (s *PostgresStore) UpdateRepositorySyncStatus(ctx context.Context, tenantIDStr string, repoID uuid.UUID, commitSHA, status string) error {
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
-		return fmt.Errorf("invalid tenant ID: %w", err)
-	}
-	_, err = s.pool.Exec(ctx, `
-		UPDATE repositories r
-		SET current_commit = $1, analysis_status = $2, last_analyzed_at = NOW()
-		FROM workspaces w
-		WHERE r.id = $3
-		  AND r.workspace_id = w.id
-		  AND w.tenant_id = $4
-	`, commitSHA, status, repoID, tenantID)
-	return err
-}
 func (s *PostgresStore) SyncWorkspace(ctx context.Context, workspaceID uuid.UUID, syncFunc func(repo *Repository, path string) error) error {
 	repos, err := s.ListRepositories(ctx, workspaceID)
 	if err != nil {

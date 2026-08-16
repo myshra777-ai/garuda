@@ -36,7 +36,6 @@ type RealStatsResponse struct {
 	AgentList            []AgentFleetItem  `json:"agent_list"`
 }
 
-// GraphResponse for D3 visualization
 type GraphResponse struct {
 	Nodes []GraphNode `json:"nodes"`
 	Edges []GraphEdge `json:"edges"`
@@ -99,9 +98,138 @@ const prodDashboardHTML = `<!DOCTYPE html>
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #080c14; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
-        #graph-container svg { display: block; width: 100%; height: 100%; }
-        .node-label { font-size: 10px; font-weight: 500; fill: #f8fafc; }
-        .link { stroke: #94a3b8; stroke-opacity: 0.5; stroke-width: 1.5; }
+        #graph-container {
+            width: 100%;
+            height: 500px;
+            background: #0f172a;
+            border-radius: 12px;
+            border: 1px solid #1e293b;
+            overflow: hidden;
+            position: relative;
+            cursor: grab;
+        }
+        #graph-container:active {
+            cursor: grabbing;
+        }
+        #graph-container svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .node-label {
+            font-size: 10px;
+            font-weight: 500;
+            fill: #f8fafc;
+            pointer-events: none;
+            text-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        .link {
+            stroke: #94a3b8;
+            stroke-opacity: 0.6;
+            stroke-width: 1.5;
+        }
+        .link-label {
+            font-size: 8px;
+            fill: #94a3b8;
+            pointer-events: none;
+            text-shadow: 0 0 4px rgba(0,0,0,0.8);
+        }
+        .graph-controls {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 8px 10px;
+            backdrop-filter: blur(8px);
+        }
+        .graph-controls button {
+            background: #1e293b;
+            border: none;
+            color: #f8fafc;
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+        }
+        .graph-controls button:hover {
+            background: #334155;
+        }
+        .graph-controls input[type="range"] {
+            writing-mode: bt-lr;
+            -webkit-appearance: slider-vertical;
+            width: 80px;
+            height: 6px;
+            background: #1e293b;
+            border-radius: 9999px;
+            outline: none;
+            margin: 4px 0;
+        }
+        .graph-controls input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #7c3aed;
+            cursor: pointer;
+        }
+        .graph-controls .zoom-label {
+            font-size: 10px;
+            color: #94a3b8;
+            text-align: center;
+            margin-top: -2px;
+        }
+        .graph-controls .fullscreen-btn {
+            font-size: 12px;
+            width: 28px;
+            height: 28px;
+        }
+        .legend {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 10px;
+            color: #94a3b8;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 2px 0;
+        }
+        .legend-color {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        /* Fullscreen mode */
+        #graph-container.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 9999;
+            border-radius: 0;
+            border: none;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col selection:bg-brand-500 selection:text-white">
@@ -137,7 +265,6 @@ const prodDashboardHTML = `<!DOCTYPE html>
                 <h1 class="text-xl font-bold text-white tracking-tight">Real-Time Telemetry Command Center</h1>
                 <p class="text-xs text-slate-400 mt-1">Live database execution metrics, Merkle proof tree heights, and domain isolation queues.</p>
             </div>
-
             <div class="flex items-center space-x-2 text-xs">
                 <button onclick="openProvisionModal()" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg shadow-sm transition flex items-center space-x-1.5">
                     <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
@@ -150,7 +277,6 @@ const prodDashboardHTML = `<!DOCTYPE html>
             </div>
         </div>
 
-        <!-- Sub-Navigation Tabs -->
         <div class="flex space-x-6 text-sm font-medium border-b border-transparent -mb-px overflow-x-auto">
             <button id="tab-summary" onclick="switchTab('summary')" class="tab-btn pb-3 border-b-2 border-brand-500 text-brand-400 font-semibold flex items-center space-x-2 whitespace-nowrap">
                 <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
@@ -168,7 +294,7 @@ const prodDashboardHTML = `<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- MAIN CONTENT CONTAINER -->
+    <!-- MAIN CONTENT -->
     <main class="flex-1 p-6 space-y-6 max-w-[1600px] w-full mx-auto">
 
         <!-- TAB 1: EXECUTIVE SUMMARY -->
@@ -196,7 +322,6 @@ const prodDashboardHTML = `<!DOCTYPE html>
                 </div>
             </div>
 
-            <!-- Merkle Root Chain Banner -->
             <div class="summary-card rounded-xl p-5 space-y-3">
                 <div class="flex items-center justify-between">
                     <h2 class="text-sm font-bold text-white flex items-center">
@@ -231,8 +356,19 @@ const prodDashboardHTML = `<!DOCTYPE html>
                     <!-- Real Agents Rendered Dynamically -->
                 </div>
 
-                <!-- D3.js Graph Container -->
-                <div id="graph-container" style="width:100%; height:400px; background:#0f172a; border-radius:12px; border:1px solid #1e293b; overflow:hidden;"></div>
+                <!-- Graph Container with Controls -->
+                <div id="graph-container">
+                    <!-- Zoom & fullscreen controls -->
+                    <div class="graph-controls">
+                        <button id="zoom-in" title="Zoom In">+</button>
+                        <input type="range" id="zoom-slider" min="0.1" max="5" step="0.05" value="1" />
+                        <button id="zoom-out" title="Zoom Out">−</button>
+                        <button id="zoom-reset" title="Reset View" style="font-size:12px;">⟲</button>
+                        <button id="fullscreen-btn" class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
+                        <div class="zoom-label" id="zoom-level">100%</div>
+                    </div>
+                    <div class="legend" id="graph-legend"></div>
+                </div>
             </div>
         </div>
 
@@ -278,6 +414,10 @@ const prodDashboardHTML = `<!DOCTYPE html>
         lucide.createIcons();
 
         let domainChart = null;
+        let graphZoom = null;
+        let graphSvg = null;
+        let graphG = null;
+        let graphSimulation = null;
 
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
@@ -298,8 +438,13 @@ const prodDashboardHTML = `<!DOCTYPE html>
             }
         }
 
-        function openProvisionModal() { document.getElementById('provisionModal').classList.remove('hidden'); }
-        function closeProvisionModal() { document.getElementById('provisionModal').classList.add('hidden'); }
+        function openProvisionModal() {
+            document.getElementById('provisionModal').classList.remove('hidden');
+        }
+
+        function closeProvisionModal() {
+            document.getElementById('provisionModal').classList.add('hidden');
+        }
 
         async function fetchRealData() {
             try {
@@ -408,26 +553,63 @@ const prodDashboardHTML = `<!DOCTYPE html>
             });
         }
 
-        // D3 Graph Rendering
+        // --------------------------------------------------------------
+        // D3 Graph Rendering with Zoom & Fullscreen
+        // --------------------------------------------------------------
+
+        const colorMap = {
+            'struct': '#3b82f6',      // blue
+            'interface': '#8b5cf6',   // violet
+            'function': '#f59e0b',    // amber
+            'method': '#10b981',      // emerald
+            'package': '#ef4444',     // red
+            'file': '#ec4899',        // pink
+            'external': '#6b7280',    // gray
+            'repository': '#f472b6',  // pinkish
+            'directory': '#9ca3af',   // light gray
+            'variable': '#14b8a6',    // teal
+            'constant': '#f97316',    // orange
+            'default': '#94a3b8'
+        };
+
+        function getColor(kind) {
+            return colorMap[kind] || colorMap['default'];
+        }
+
         async function renderGraph() {
             const container = document.getElementById('graph-container');
             if (!container) return;
             const width = container.clientWidth || 800;
-            const height = container.clientHeight || 400;
+            const height = container.clientHeight || 500;
 
             try {
                 const res = await fetch('/api/v1/graph?workspace=my-workspace');
                 if (!res.ok) throw new Error('Failed to fetch graph data');
                 const data = await res.json();
 
-                // Clear previous
                 d3.select(container).selectAll('*').remove();
 
                 const svg = d3.select(container)
                     .append('svg')
                     .attr('width', width)
                     .attr('height', height)
-                    .append('g');
+                    .style('cursor', 'grab');
+
+                const zoom = d3.zoom()
+                    .scaleExtent([0.1, 5])
+                    .on('zoom', function(event) {
+                        g.attr('transform', event.transform);
+                        const k = event.transform.k;
+                        document.getElementById('zoom-slider').value = k;
+                        document.getElementById('zoom-level').innerText = Math.round(k * 100) + '%';
+                    });
+
+                svg.call(zoom);
+                graphZoom = zoom;
+                graphSvg = svg;
+
+                const g = svg.append('g');
+                graphG = g;
 
                 const nodes = (data.nodes || []).map(function(n) {
                     return {
@@ -447,39 +629,71 @@ const prodDashboardHTML = `<!DOCTYPE html>
                     };
                 });
 
+                if (nodes.length === 0) {
+                    container.innerHTML = '<div class="text-slate-400 text-sm p-4">No entities found. Run <code>garuda analyze --save</code> first.</div>';
+                    return;
+                }
+
                 const simulation = d3.forceSimulation(nodes)
                     .force('link', d3.forceLink(edges).id(function(d) { return d.id; }).distance(80).strength(0.3))
-                    .force('charge', d3.forceManyBody().strength(-200))
-                    .force('center', d3.forceCenter(width/2, height/2));
+                    .force('charge', d3.forceManyBody().strength(-300))
+                    .force('center', d3.forceCenter(width/2, height/2))
+                    .force('collision', d3.forceCollide().radius(20));
 
-                const link = svg.append('g')
+                graphSimulation = simulation;
+
+                const link = g.append('g')
                     .selectAll('line')
                     .data(edges)
                     .enter().append('line')
-                    .attr('class', 'link');
+                    .attr('class', 'link')
+                    .style('stroke', '#94a3b8')
+                    .style('stroke-opacity', 0.6)
+                    .style('stroke-width', 1.5);
 
-                const colorMap = { 'struct': '#3b82f6', 'interface': '#8b5cf6', 'func': '#f59e0b', 'type': '#10b981' };
-                function getColor(k) { return colorMap[k] || '#ef4444'; }
+                const linkLabel = g.append('g')
+                    .selectAll('text')
+                    .data(edges)
+                    .enter().append('text')
+                    .attr('class', 'link-label')
+                    .text(function(d) { return d.type; })
+                    .style('font-size', '8px')
+                    .style('fill', '#94a3b8')
+                    .style('pointer-events', 'none');
 
-                const node = svg.append('g')
+                const node = g.append('g')
                     .selectAll('g')
                     .data(nodes)
                     .enter().append('g')
                     .call(d3.drag()
-                        .on('start', dragstarted)
-                        .on('drag', dragged)
-                        .on('end', dragended)
+                        .on('start', function(event, d) {
+                            if (!event.active) simulation.alphaTarget(0.3).restart();
+                            d.fx = d.x;
+                            d.fy = d.y;
+                        })
+                        .on('drag', function(event, d) {
+                            d.fx = event.x;
+                            d.fy = event.y;
+                        })
+                        .on('end', function(event, d) {
+                            if (!event.active) simulation.alphaTarget(0);
+                            d.fx = null;
+                            d.fy = null;
+                        })
                     );
 
                 node.append('circle')
-                    .attr('r', 12)
+                    .attr('r', 14)
                     .attr('fill', function(d) { return getColor(d.kind); })
                     .attr('stroke', '#fff')
-                    .attr('stroke-width', 1.5);
+                    .attr('stroke-width', 1.5)
+                    .on('click', function(event, d) {
+                        console.log('Clicked entity:', d.label);
+                    });
 
                 node.append('text')
                     .text(function(d) { return d.label; })
-                    .attr('x', 16)
+                    .attr('x', 18)
                     .attr('y', 4)
                     .attr('class', 'node-label');
 
@@ -489,24 +703,92 @@ const prodDashboardHTML = `<!DOCTYPE html>
                         .attr('y1', function(d) { return d.source.y; })
                         .attr('x2', function(d) { return d.target.x; })
                         .attr('y2', function(d) { return d.target.y; });
-                    node
-                        .attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+
+                    linkLabel
+                        .attr('x', function(d) { return (d.source.x + d.target.x) / 2; })
+                        .attr('y', function(d) { return (d.source.y + d.target.y) / 2 - 4; });
+
+                    node.attr('transform', function(d) {
+                        return 'translate(' + d.x + ',' + d.y + ')';
+                    });
                 });
 
-                function dragstarted(event, d) {
-                    if (!event.active) simulation.alphaTarget(0.3).restart();
-                    d.fx = d.x;
-                    d.fy = d.y;
+                // Legend
+                const legendContainer = document.getElementById('graph-legend');
+                if (legendContainer) {
+                    const kinds = [...new Set(nodes.map(function(n) { return n.kind; }))].sort();
+                    let html = '<div class="legend-item"><span class="legend-color" style="background:#94a3b8;"></span> Default</div>';
+                    kinds.forEach(function(k) {
+                        const color = getColor(k);
+                        html += '<div class="legend-item"><span class="legend-color" style="background:' + color + ';"></span> ' + k + '</div>';
+                    });
+                    legendContainer.innerHTML = html;
                 }
-                function dragged(event, d) {
-                    d.fx = event.x;
-                    d.fy = event.y;
-                }
-                function dragended(event, d) {
-                    if (!event.active) simulation.alphaTarget(0);
-                    d.fx = null;
-                    d.fy = null;
-                }
+
+                // --- Zoom Controls ---
+                document.getElementById('zoom-slider').addEventListener('input', function() {
+                    const val = parseFloat(this.value);
+                    const transform = d3.zoomIdentity.scale(val);
+                    svg.transition().duration(200).call(zoom.transform, transform);
+                    document.getElementById('zoom-level').innerText = Math.round(val * 100) + '%';
+                });
+
+                document.getElementById('zoom-in').addEventListener('click', function() {
+                    const slider = document.getElementById('zoom-slider');
+                    let val = parseFloat(slider.value) + 0.1;
+                    if (val > 5) val = 5;
+                    slider.value = val;
+                    const transform = d3.zoomIdentity.scale(val);
+                    svg.transition().duration(200).call(zoom.transform, transform);
+                    document.getElementById('zoom-level').innerText = Math.round(val * 100) + '%';
+                });
+
+                document.getElementById('zoom-out').addEventListener('click', function() {
+                    const slider = document.getElementById('zoom-slider');
+                    let val = parseFloat(slider.value) - 0.1;
+                    if (val < 0.1) val = 0.1;
+                    slider.value = val;
+                    const transform = d3.zoomIdentity.scale(val);
+                    svg.transition().duration(200).call(zoom.transform, transform);
+                    document.getElementById('zoom-level').innerText = Math.round(val * 100) + '%';
+                });
+
+                document.getElementById('zoom-reset').addEventListener('click', function() {
+                    const slider = document.getElementById('zoom-slider');
+                    slider.value = 1;
+                    const transform = d3.zoomIdentity;
+                    svg.transition().duration(300).call(zoom.transform, transform);
+                    document.getElementById('zoom-level').innerText = '100%';
+                });
+
+                // --- Fullscreen Toggle ---
+                const fullscreenBtn = document.getElementById('fullscreen-btn');
+                fullscreenBtn.addEventListener('click', function() {
+                    if (!document.fullscreenElement) {
+                        container.requestFullscreen().catch(function(err) {
+                            console.warn('Fullscreen not supported:', err);
+                        });
+                    } else {
+                        document.exitFullscreen();
+                    }
+                });
+
+                document.addEventListener('fullscreenchange', function() {
+                    if (document.fullscreenElement) {
+                        container.classList.add('fullscreen');
+                        fullscreenBtn.textContent = '⛶'; // could change to "⛶" or "✕"
+                    } else {
+                        container.classList.remove('fullscreen');
+                    }
+                    // resize after transition
+                    setTimeout(function() {
+                        const newWidth = container.clientWidth;
+                        const newHeight = container.clientHeight;
+                        svg.attr('width', newWidth).attr('height', newHeight);
+                        simulation.force('center', d3.forceCenter(newWidth/2, newHeight/2));
+                        simulation.alpha(0.3).restart();
+                    }, 300);
+                });
 
                 // Resize handler
                 const resizeHandler = function() {
@@ -533,7 +815,6 @@ const prodDashboardHTML = `<!DOCTYPE html>
             if (!rawInput) return;
 
             let title = rawInput;
-
             const titleMatch = rawInput.match(/"([^"]+)"/);
             if (titleMatch) {
                 title = titleMatch[1];
@@ -576,7 +857,6 @@ const prodDashboardHTML = `<!DOCTYPE html>
 
         fetchRealData();
         setInterval(fetchRealData, 5000);
-        // Initial graph render after page load (if workforce tab is active)
         setTimeout(renderGraph, 1000);
     </script>
 </body>
@@ -589,7 +869,6 @@ func (s *Server) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 	data := DashboardData{
 		TenantID: tenantID.String(),
 	}
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = parsedProdDashboardTmpl.Execute(w, data)
 }
@@ -741,9 +1020,7 @@ func (s *Server) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleGraph serves D3 graph data for the dashboard
 func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
-	// Ensure we have a Postgres store (which has Pool() and graph query methods)
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
 		http.Error(w, "Graph data not available", http.StatusServiceUnavailable)
@@ -767,7 +1044,6 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query entities
 	rows, err := pgStore.Pool().Query(ctx, `
 		SELECT id, name, kind, package, file_path, is_exported
 		FROM entities
@@ -796,7 +1072,6 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Query claims
 	rows2, err := pgStore.Pool().Query(ctx, `
 		SELECT from_entity_id, to_entity_id, claim_type
 		FROM claims

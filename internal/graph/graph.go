@@ -1,42 +1,44 @@
 package graph
 
 import (
-	"bytes"
 	"encoding/json"
 	"html/template"
+	"strings"
 )
 
-// Generate returns an HTML page containing the interactive graph.
-func Generate(workspaceName string, nodes []Node, edges []Edge) (string, error) {
-	data := struct {
-		Workspace string
-		DataJSON  string
-	}{
-		Workspace: workspaceName,
-	}
+// TemplateData holds data for the HTML template.
+type TemplateData struct {
+	Workspace string
+	NodesJSON template.JS
+	EdgesJSON template.JS
+}
 
-	// Marshal nodes and edges into JSON for the JavaScript variable
-	payload := struct {
-		Nodes []Node `json:"Nodes"`
-		Edges []Edge `json:"Edges"`
-	}{
-		Nodes: nodes,
-		Edges: edges,
-	}
-	jsonData, err := json.Marshal(payload)
+// Generate produces the full HTML for the graph.
+func Generate(workspaceName string, nodes []Node, edges []Edge) (string, error) {
+	nodesJSON, err := json.Marshal(nodes)
 	if err != nil {
 		return "", err
 	}
-	data.DataJSON = string(jsonData)
+	edgesJSON, err := json.Marshal(edges)
+	if err != nil {
+		return "", err
+	}
 
-	// Parse and execute the template
+	// Use template.JS to safely embed JSON in JavaScript.
+	data := TemplateData{
+		Workspace: workspaceName,
+		NodesJSON: template.JS(nodesJSON),
+		EdgesJSON: template.JS(edgesJSON),
+	}
+
 	tmpl, err := template.New("graph").Parse(htmlTemplate)
 	if err != nil {
 		return "", err
 	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
+
+	var sb strings.Builder
+	if err := tmpl.Execute(&sb, data); err != nil {
 		return "", err
 	}
-	return buf.String(), nil
+	return sb.String(), nil
 }

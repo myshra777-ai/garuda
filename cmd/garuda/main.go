@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -432,6 +431,9 @@ func init() {
 	rootCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(graphCmd)
 	rootCmd.AddCommand(selfDescribeCmd)
+	rootCmd.AddCommand(justifyCmd)
+	rootCmd.AddCommand(judgeCmd)
+	rootCmd.AddCommand(ponytailCmd)
 }
 
 // -----------------------------------------------------------------------------
@@ -471,6 +473,7 @@ func handleAnalyze(path string) {
 		os.Exit(1)
 	}
 
+	// Write JSON if output flag is set
 	if outputFlag != "" {
 		data, _ := json.MarshalIndent(result, "", "  ")
 		if err := os.WriteFile(outputFlag, data, 0644); err != nil {
@@ -502,34 +505,81 @@ func handleAnalyze(path string) {
 		}
 		fmt.Printf("\n🔒 Cryptographic Ledger Update:\n")
 		fmt.Printf("   Decision ID: %s\n", decisionID)
+		fmt.Printf("   Revision ID: %s\n", revisionID)
 		fmt.Printf("   Revision:    #%d\n", rev)
 		fmt.Printf("   Status:      COMMITTED ✓\n")
 		fmt.Printf("   🔗 Run `./garuda explain %s` to inspect.\n", decisionID)
 
-		// --- Semantic Graph (if workspace and repo flags are provided) ---
-		if workspaceFlag != "" && repoFlag != "" {
-			tenantID := getTenantID()
-			var workspaceID, repoID uuid.UUID
+		// --- Semantic Graph (auto-resolve workspace and repo) ---
+		tenantID := getTenantID()
 
-			// Get workspace ID
-			err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantIDStr, workspaceFlag).Scan(&workspaceID)
-			if err != nil {
-				fmt.Printf("⚠️ Workspace '%s' not found, skipping semantic graph.\n", workspaceFlag)
-			} else {
-				// Get repository ID
-				err = st.Pool().QueryRow(ctx, `SELECT id FROM repositories WHERE workspace_id = $1 AND url = $2`, workspaceID, repoFlag).Scan(&repoID)
-				if err != nil {
-					fmt.Printf("⚠️ Repository '%s' not found in workspace '%s', skipping semantic graph.\n", repoFlag, workspaceFlag)
-				} else {
-					// Save semantic graph
-					err = st.SaveSemanticGraph(ctx, tenantID, workspaceID, repoID, revisionID, result)
-					if err != nil {
-						fmt.Printf("⚠️ Failed to save semantic graph: %v\n", err)
-					} else {
-						fmt.Printf("   🧠 Semantic graph saved (%d entities, %d relationships)\n", len(result.Entities), len(result.Relationships))
-					}
-				}
+		// Determine workspace name
+		wsName := workspaceFlag
+		if wsName == "" {
+			wsName = os.Getenv("GARUDA_WORKSPACE")
+			if wsName == "" {
+				wsName = "default"
 			}
+		}
+
+		// Determine repository URL
+		repoURL := repoFlag
+		if repoURL == "" {
+			// Try to get git remote origin
+			cmd := exec.Command("git", "-C", path, "remote", "get-url", "origin")
+			if out, err := cmd.Output(); err == nil {
+				repoURL = strings.TrimSpace(string(out))
+			}
+			if repoURL == "" {
+				// Fallback: use absolute path as file:// URL
+				absPath, _ := filepath.Abs(path)
+				repoURL = "file://" + absPath
+			}
+		}
+
+		// Get or create workspace
+		var workspaceID uuid.UUID
+		err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantIDStr, wsName).Scan(&workspaceID)
+		if err != nil {
+			// Create workspace
+			ws, err := st.CreateWorkspace(ctx, tenantIDStr, wsName, "")
+			if err != nil {
+				fmt.Printf("⚠️ Failed to create workspace '%s': %v\n", wsName, err)
+				return
+			}
+			workspaceID = ws.ID
+			fmt.Printf("   Created workspace: %s\n", wsName)
+		}
+
+		// Get or create repository
+		var repoID uuid.UUID
+		err = st.Pool().QueryRow(ctx, `SELECT id FROM repositories WHERE workspace_id = $1 AND url = $2`, workspaceID, repoURL).Scan(&repoID)
+		if err != nil {
+			// Infer provider
+			provider := "local"
+			if strings.Contains(repoURL, "github.com") {
+				provider = "github"
+			} else if strings.Contains(repoURL, "gitlab.com") {
+				provider = "gitlab"
+			} else if strings.Contains(repoURL, "bitbucket") {
+				provider = "bitbucket"
+			}
+			// AddRepository signature: (ctx, workspaceID, provider, url, defaultBranch, language)
+			repo, err := st.AddRepository(ctx, workspaceID, provider, repoURL, "main", "go")
+			if err != nil {
+				fmt.Printf("⚠️ Failed to create repository: %v\n", err)
+				return
+			}
+			repoID = repo.ID
+			fmt.Printf("   Created repository: %s\n", repoURL)
+		}
+
+		// Save semantic graph
+		err = st.SaveSemanticGraph(ctx, tenantID, workspaceID, repoID, revisionID, result)
+		if err != nil {
+			fmt.Printf("⚠️ Failed to save semantic graph: %v\n", err)
+		} else {
+			fmt.Printf("   🧠 Semantic graph saved (%d entities, %d relationships)\n", len(result.Entities), len(result.Relationships))
 		}
 	}
 }
@@ -546,11 +596,15 @@ func handleDiff(file1, file2 string) {
 		os.Exit(1)
 	}
 	report := analyzer.Diff(before, after)
+
 	if jsonOutputFlag {
 		data, _ := json.MarshalIndent(report, "", "  ")
 		if outputFileFlag != "" {
-			ioutil.WriteFile(outputFileFlag, data, 0644)
-			fmt.Printf("📄 JSON diff written to %s\n", outputFileFlag)
+			if err := os.WriteFile(outputFileFlag, data, 0644); err != nil {
+				fmt.Printf("⚠️ Failed to write diff JSON: %v\n", err)
+			} else {
+				fmt.Printf("📄 JSON diff written to %s\n", outputFileFlag)
+			}
 		} else {
 			fmt.Println(string(data))
 		}
@@ -967,46 +1021,6 @@ func handleInspect(entityName string) {
 
 // --- graph ---
 
-// GraphNode and GraphEdge for interactive visualisation
-
-func toGraphString(value interface{}) string {
-	if value == nil {
-		return ""
-	}
-	if s, ok := value.(string); ok {
-		return s
-	}
-	if sf, ok := value.(fmt.Stringer); ok {
-		return sf.String()
-	}
-	return fmt.Sprintf("%v", value)
-}
-
-func convertStoreGraphData(nodesData []map[string]interface{}, edgesData []map[string]interface{}) ([]GraphNode, []GraphEdge) {
-	graphNodes := make([]GraphNode, 0, len(nodesData))
-	for _, n := range nodesData {
-		graphNodes = append(graphNodes, GraphNode{
-			ID:      toGraphString(n["id"]),
-			Label:   toGraphString(n["label"]),
-			Group:   toGraphString(n["group"]),
-			File:    toGraphString(n["file"]),
-			Package: toGraphString(n["package"]),
-		})
-	}
-
-	graphEdges := make([]GraphEdge, 0, len(edgesData))
-	for _, e := range edgesData {
-		graphEdges = append(graphEdges, GraphEdge{
-			From: toGraphString(e["from"]),
-			To:   toGraphString(e["to"]),
-			Type: toGraphString(e["type"]),
-		})
-	}
-
-	return graphNodes, graphEdges
-}
-
-
 func handleGraph(workspaceName string) {
 	dbURL := getDBURL()
 	tenantIDStr := getTenantIDString()
@@ -1025,7 +1039,6 @@ func handleGraph(workspaceName string) {
 		os.Exit(1)
 	}
 
-	// Get workspace ID
 	var wsID uuid.UUID
 	err = st.Pool().QueryRow(ctx, `
 		SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2
@@ -1035,7 +1048,9 @@ func handleGraph(workspaceName string) {
 		os.Exit(1)
 	}
 
-	// ---- Query entities ----
+	fmt.Printf("🔍 Workspace ID: %s\n", wsID)
+	fmt.Printf("🔍 Tenant ID:    %s\n", tenantUUID)
+
 	rows, err := st.Pool().Query(ctx, `
 		SELECT id, name, kind, package, file_path, is_exported
 		FROM entities
@@ -1047,16 +1062,17 @@ func handleGraph(workspaceName string) {
 	}
 	defer rows.Close()
 
-	// Use the graph package types directly
 	var nodes []graph.Node
 	for rows.Next() {
-		var id, name, kind, pkg, file string
+		var id uuid.UUID
+		var name, kind, pkg, file string
 		var exported bool
 		if err := rows.Scan(&id, &name, &kind, &pkg, &file, &exported); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  Skipping entity row: %v\n", err)
 			continue
 		}
 		nodes = append(nodes, graph.Node{
-			ID:       id,
+			ID:       id.String(),
 			Label:    name,
 			Kind:     kind,
 			Package:  pkg,
@@ -1064,14 +1080,17 @@ func handleGraph(workspaceName string) {
 			Exported: exported,
 		})
 	}
+	if err := rows.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Entity query error: %v\n", err)
+		os.Exit(1)
+	}
 
 	if len(nodes) == 0 {
 		fmt.Printf("📭 No entities found in workspace '%s'.\n", workspaceName)
-		fmt.Println("   Run 'garuda workspace sync my-workspace' to populate entities.")
-		return
+		fmt.Println("   Run 'garuda workspace sync <workspace>' to populate entities.")
+		os.Exit(1)
 	}
 
-	// ---- Query claims ----
 	rows2, err := st.Pool().Query(ctx, `
 		SELECT from_entity_id, to_entity_id, claim_type
 		FROM claims
@@ -1083,23 +1102,39 @@ func handleGraph(workspaceName string) {
 	}
 	defer rows2.Close()
 
-	var edges []graph.Edge
+	edges := make([]graph.Edge, 0)
 	for rows2.Next() {
-		var from, to, typ string
-		if err := rows2.Scan(&from, &to, &typ); err != nil {
+		var fromID, toID uuid.UUID
+		var claimType string
+		if err := rows2.Scan(&fromID, &toID, &claimType); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  Skipping claim row: %v\n", err)
 			continue
 		}
-		edges = append(edges, graph.Edge{From: from, To: to, Type: typ})
+		edges = append(edges, graph.Edge{
+			From: fromID.String(),
+			To:   toID.String(),
+			Type: claimType,
+		})
+	}
+	if err := rows2.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Claims query error: %v\n", err)
+		os.Exit(1)
 	}
 
-	// ---- Generate HTML ----
-func generateGraphHTML(workspaceName string, nodes []graph.Node, edges []graph.Edge) string
+	fmt.Printf("📊 Fetched %d entities and %d relationships\n", len(nodes), len(edges))
+
+	html, err := generateGraphHTML(workspaceName, nodes, edges)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed to generate graph HTML: %v\n", err)
+		os.Exit(1)
+	}
+
 	filename := fmt.Sprintf("garuda_graph_%s.html", workspaceName)
 	if err := os.WriteFile(filename, []byte(html), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to write graph: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Graph written to %s\n", filename)
+	fmt.Printf("✅ Graph written to %s (%d entities, %d edges)\n", filename, len(nodes), len(edges))
 
 	if graphOpenFlag {
 		openFile(filename)

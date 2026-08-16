@@ -3,15 +3,20 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/myshra777-ai/garuda/internal/graph"
 )
 
 func TestGenerateGraphHTMLIncludesGraphData(t *testing.T) {
-	nodes := []GraphNode{
-		{ID: "n1", Label: "MyType", Group: "struct", File: "main.go", Package: "example.com/demo"},
+	nodes := []graph.Node{
+		{ID: "n1", Label: "MyType", Kind: "struct", File: "main.go", Package: "example.com/demo"},
 	}
-	edges := []GraphEdge{{From: "n1", To: "n2", Type: "calls"}}
+	edges := []graph.Edge{{From: "n1", To: "n2", Type: "calls"}}
 
-	html := generateGraphHTML("demo", nodes, edges)
+	html, err := generateGraphHTML("demo", nodes, edges)
+	if err != nil {
+		t.Fatalf("generateGraphHTML failed: %v", err)
+	}
 	if html == "" {
 		t.Fatal("generateGraphHTML returned empty HTML")
 	}
@@ -21,26 +26,25 @@ func TestGenerateGraphHTMLIncludesGraphData(t *testing.T) {
 	if !strings.Contains(html, "calls") {
 		t.Fatal("graph HTML did not include relationship metadata")
 	}
+	if !strings.Contains(html, "d3.v7.min.js") {
+		t.Fatal("graph HTML did not include D3.js")
+	}
 }
 
-func TestConvertStoreGraphData(t *testing.T) {
-	nodesData := []map[string]interface{}{
-		{"id": "n1", "label": "MyType", "group": "struct", "file": "main.go", "package": "example.com/demo"},
+func TestGenerateGraphHTMLEmbedsJSONPayload(t *testing.T) {
+	nodes := []graph.Node{
+		{ID: "n1", Label: "MyType", Kind: "struct", File: "main.go", Package: "example.com/demo", Exported: true},
 	}
-	edgesData := []map[string]interface{}{
-		{"from": "n1", "to": "n2", "type": "calls"},
-	}
+	edges := []graph.Edge{{From: "n1", To: "n2", Type: "calls"}}
 
-	nodes, edges := convertStoreGraphData(nodesData, edgesData)
-	if len(nodes) != 1 || nodes[0].Label != "MyType" {
-		t.Fatalf("expected 1 converted node with label MyType, got %#v", nodes)
+	html, err := generateGraphHTML("demo", nodes, edges)
+	if err != nil {
+		t.Fatalf("generateGraphHTML failed: %v", err)
 	}
-	if len(edges) != 1 || edges[0].Type != "calls" {
-		t.Fatalf("expected 1 converted edge with type calls, got %#v", edges)
+	if !strings.Contains(html, `"label":"MyType"`) {
+		t.Fatal("graph HTML did not embed node JSON")
 	}
-
-	html := generateGraphHTML("demo", nodes, edges)
-	if !strings.Contains(html, "MyType") || !strings.Contains(html, "calls") {
-		t.Fatal("converted graph data did not render into HTML")
+	if !strings.Contains(html, `"type":"calls"`) {
+		t.Fatal("graph HTML did not embed edge JSON")
 	}
 }
