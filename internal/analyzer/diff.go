@@ -97,10 +97,10 @@ func LoadResult(path string) (*Result, error) {
 // Diff compares two results and returns a DiffReport
 func Diff(before, after *Result) *DiffReport {
 	report := &DiffReport{
+		StatsDiff:         StatsDiff{},
+		FingerprintDiff:   FingerprintDiff{},
 		EntityDiffs:       []EntityDiff{},
 		RelationshipDiffs: []RelationshipDiff{},
-		StatsDiff      StatsDiff            `json:"stats_diff"`
-    FingerprintDiff FingerprintDiff      `json:"fingerprint_diff"`
 	}
 
 	// 1. Stats diff

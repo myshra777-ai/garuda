@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -35,9 +36,31 @@ type RealStatsResponse struct {
 	AgentList            []AgentFleetItem  `json:"agent_list"`
 }
 
+// GraphResponse for D3 visualization
+type GraphResponse struct {
+	Nodes []GraphNode `json:"nodes"`
+	Edges []GraphEdge `json:"edges"`
+}
+
+type GraphNode struct {
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Kind     string `json:"kind"`
+	Package  string `json:"package"`
+	File     string `json:"file"`
+	Exported bool   `json:"exported"`
+}
+
+type GraphEdge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	Type string `json:"type"`
+}
+
 const prodDashboardHTML = `<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Garuda — AI Governance Platform</title>
@@ -76,6 +99,9 @@ const prodDashboardHTML = `<!DOCTYPE html>
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #080c14; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+        #graph-container svg { display: block; width: 100%; height: 100%; }
+        .node-label { font-size: 10px; font-weight: 500; fill: #f8fafc; }
+        .link { stroke: #94a3b8; stroke-opacity: 0.5; stroke-width: 1.5; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col selection:bg-brand-500 selection:text-white">
@@ -205,9 +231,8 @@ const prodDashboardHTML = `<!DOCTYPE html>
                     <!-- Real Agents Rendered Dynamically -->
                 </div>
 
-                <div class="relative w-full h-80 bg-slate-950 rounded-lg overflow-hidden border border-slate-800 flex items-center justify-center">
-                    <canvas id="topologyCanvas" class="w-full h-full"></canvas>
-                </div>
+                <!-- D3.js Graph Container -->
+                <div id="graph-container" style="width:100%; height:400px; background:#0f172a; border-radius:12px; border:1px solid #1e293b; overflow:hidden;"></div>
             </div>
         </div>
 
@@ -269,7 +294,7 @@ const prodDashboardHTML = `<!DOCTYPE html>
             }
 
             if (tabId === 'workforce') {
-                renderTopologyCanvas();
+                renderGraph();
             }
         }
 
@@ -383,23 +408,121 @@ const prodDashboardHTML = `<!DOCTYPE html>
             });
         }
 
-        function renderTopologyCanvas() {
-            const canvas = document.getElementById('topologyCanvas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = canvas.parentElement.clientHeight;
+        // D3 Graph Rendering
+        async function renderGraph() {
+            const container = document.getElementById('graph-container');
+            if (!container) return;
+            const width = container.clientWidth || 800;
+            const height = container.clientHeight || 400;
 
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#7c3aed';
-            ctx.beginPath();
-            ctx.arc(canvas.width / 2, canvas.height / 2, 16, 0, Math.PI * 2);
-            ctx.fill();
+            try {
+                const res = await fetch('/api/v1/graph?workspace=my-workspace');
+                if (!res.ok) throw new Error('Failed to fetch graph data');
+                const data = await res.json();
 
-            ctx.fillStyle = '#f8fafc';
-            ctx.font = '11px JetBrains Mono';
-            ctx.textAlign = 'center';
-            ctx.fillText('GARUDA CORE (PostgreSQL)', canvas.width / 2, canvas.height / 2 + 32);
+                // Clear previous
+                d3.select(container).selectAll('*').remove();
+
+                const svg = d3.select(container)
+                    .append('svg')
+                    .attr('width', width)
+                    .attr('height', height)
+                    .append('g');
+
+                const nodes = (data.nodes || []).map(function(n) {
+                    return {
+                        id: n.id || n.ID,
+                        label: n.label || n.Label,
+                        kind: n.kind || n.Kind,
+                        package: n.package || n.Package,
+                        file: n.file || n.File,
+                        exported: Boolean(n.exported ?? n.Exported)
+                    };
+                });
+                const edges = (data.edges || []).map(function(e) {
+                    return {
+                        source: e.from || e.From,
+                        target: e.to || e.To,
+                        type: e.type || e.Type
+                    };
+                });
+
+                const simulation = d3.forceSimulation(nodes)
+                    .force('link', d3.forceLink(edges).id(function(d) { return d.id; }).distance(80).strength(0.3))
+                    .force('charge', d3.forceManyBody().strength(-200))
+                    .force('center', d3.forceCenter(width/2, height/2));
+
+                const link = svg.append('g')
+                    .selectAll('line')
+                    .data(edges)
+                    .enter().append('line')
+                    .attr('class', 'link');
+
+                const colorMap = { 'struct': '#3b82f6', 'interface': '#8b5cf6', 'func': '#f59e0b', 'type': '#10b981' };
+                function getColor(k) { return colorMap[k] || '#ef4444'; }
+
+                const node = svg.append('g')
+                    .selectAll('g')
+                    .data(nodes)
+                    .enter().append('g')
+                    .call(d3.drag()
+                        .on('start', dragstarted)
+                        .on('drag', dragged)
+                        .on('end', dragended)
+                    );
+
+                node.append('circle')
+                    .attr('r', 12)
+                    .attr('fill', function(d) { return getColor(d.kind); })
+                    .attr('stroke', '#fff')
+                    .attr('stroke-width', 1.5);
+
+                node.append('text')
+                    .text(function(d) { return d.label; })
+                    .attr('x', 16)
+                    .attr('y', 4)
+                    .attr('class', 'node-label');
+
+                simulation.on('tick', function() {
+                    link
+                        .attr('x1', function(d) { return d.source.x; })
+                        .attr('y1', function(d) { return d.source.y; })
+                        .attr('x2', function(d) { return d.target.x; })
+                        .attr('y2', function(d) { return d.target.y; });
+                    node
+                        .attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+                });
+
+                function dragstarted(event, d) {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                }
+                function dragged(event, d) {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                }
+                function dragended(event, d) {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                }
+
+                // Resize handler
+                const resizeHandler = function() {
+                    const newWidth = container.clientWidth;
+                    const newHeight = container.clientHeight;
+                    svg.attr('width', newWidth).attr('height', newHeight);
+                    simulation.force('center', d3.forceCenter(newWidth/2, newHeight/2));
+                    simulation.alpha(0.3).restart();
+                };
+                window.removeEventListener('resize', resizeHandler);
+                window.addEventListener('resize', resizeHandler);
+
+            } catch (err) {
+                console.error('Graph error:', err);
+                container.innerHTML = '<div class="text-slate-400 text-sm p-4">Graph data unavailable. Ensure workspace has entities.</div>';
+            }
         }
 
         async function submitRealDecision() {
@@ -453,6 +576,8 @@ const prodDashboardHTML = `<!DOCTYPE html>
 
         fetchRealData();
         setInterval(fetchRealData, 5000);
+        // Initial graph render after page load (if workforce tab is active)
+        setTimeout(renderGraph, 1000);
     </script>
 </body>
 </html>`
@@ -488,7 +613,6 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Fallback resolution for scope domain across top-level fields & struct
 		domain := d.ScopeDomain
 		if domain == "" {
 			domain = d.Scope.Domain
@@ -615,4 +739,85 @@ func (s *Server) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {
 			_ = flushFunc()
 		}
 	}
+}
+
+// HandleGraph serves D3 graph data for the dashboard
+func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
+	// Ensure we have a Postgres store (which has Pool() and graph query methods)
+	pgStore, ok := s.store.(*store.PostgresStore)
+	if !ok || pgStore == nil {
+		http.Error(w, "Graph data not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx := r.Context()
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+	workspace := r.URL.Query().Get("workspace")
+	if workspace == "" {
+		workspace = "my-workspace"
+	}
+
+	var wsID uuid.UUID
+	err := pgStore.Pool().QueryRow(ctx, `
+		SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2
+	`, tenantID, workspace).Scan(&wsID)
+	if err != nil {
+		http.Error(w, "Workspace not found", http.StatusNotFound)
+		return
+	}
+
+	// Query entities
+	rows, err := pgStore.Pool().Query(ctx, `
+		SELECT id, name, kind, package, file_path, is_exported
+		FROM entities
+		WHERE tenant_id = $1 AND workspace_id = $2
+	`, tenantID, wsID)
+	if err != nil {
+		http.Error(w, "Failed to query entities: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var nodes []GraphNode
+	for rows.Next() {
+		var id, name, kind, pkg, file string
+		var exported bool
+		if err := rows.Scan(&id, &name, &kind, &pkg, &file, &exported); err != nil {
+			continue
+		}
+		nodes = append(nodes, GraphNode{
+			ID:       id,
+			Label:    name,
+			Kind:     kind,
+			Package:  pkg,
+			File:     file,
+			Exported: exported,
+		})
+	}
+
+	// Query claims
+	rows2, err := pgStore.Pool().Query(ctx, `
+		SELECT from_entity_id, to_entity_id, claim_type
+		FROM claims
+		WHERE tenant_id = $1 AND workspace_id = $2
+	`, tenantID, wsID)
+	if err != nil {
+		http.Error(w, "Failed to query claims: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows2.Close()
+
+	var edges []GraphEdge
+	for rows2.Next() {
+		var from, to, typ string
+		if err := rows2.Scan(&from, &to, &typ); err != nil {
+			continue
+		}
+		edges = append(edges, GraphEdge{From: from, To: to, Type: typ})
+	}
+
+	resp := GraphResponse{Nodes: nodes, Edges: edges}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
 }
