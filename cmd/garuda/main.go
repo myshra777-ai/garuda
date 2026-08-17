@@ -225,7 +225,8 @@ var repoAddCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		workspaceName := args[0]
 		repoURL := args[1]
-		handleRepoAdd(workspaceName, repoURL)
+		modulePath, _ := cmd.Flags().GetString("module-path")
+		handleRepoAdd(workspaceName, repoURL, modulePath)
 	},
 }
 
@@ -373,12 +374,7 @@ var graphCmd = &cobra.Command{
 	},
 }
 
-func getCurrentDir() string {
-	dir, _ := os.Getwd()
-	return dir
-}
-
-//-----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // 5. INITIALIZATION (flag binding + command assembly)
 // -----------------------------------------------------------------------------
 
@@ -391,16 +387,17 @@ func init() {
 
 	analyzeCmd.Flags().StringVarP(&outputFlag, "output", "o", "", "Write JSON report to file")
 	analyzeCmd.Flags().BoolVarP(&saveFlag, "save", "s", false, "Save analysis snapshot into PostgreSQL ledger")
-
-	// ✅ Only define these ONCE
 	analyzeCmd.Flags().StringVar(&workspaceFlag, "workspace", "", "Workspace name (for provenance)")
 	analyzeCmd.Flags().StringVar(&repoFlag, "repo", "", "Repository URL (for provenance)")
 	analyzeCmd.Flags().String("commit", "", "Commit SHA (auto-detected if not provided)")
 
 	diffCmd.Flags().BoolVar(&jsonOutputFlag, "json", false, "Output diff in JSON format")
 	diffCmd.Flags().StringVarP(&outputFileFlag, "output", "o", "", "Write diff to file")
+
 	graphCmd.Flags().BoolVar(&graphOpenFlag, "open", false, "Open the graph in browser automatically")
-	rootCmd.AddCommand(graphCmd)
+
+	repoAddCmd.Flags().String("module-path", "", "Go module path (e.g., github.com/org/repo)")
+
 	mcpCmd.AddCommand(mcpInstallCmd)
 
 	workspaceCmd.AddCommand(workspaceCreateCmd)
@@ -431,9 +428,9 @@ func init() {
 	rootCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(graphCmd)
 	rootCmd.AddCommand(selfDescribeCmd)
-	rootCmd.AddCommand(justifyCmd)
-	rootCmd.AddCommand(judgeCmd)
-	rootCmd.AddCommand(ponytailCmd)
+	rootCmd.AddCommand(justifyCmd)  // ✅ only registration
+	rootCmd.AddCommand(judgeCmd)    // ✅ only registration
+	rootCmd.AddCommand(ponytailCmd) // ✅ only registration
 }
 
 // -----------------------------------------------------------------------------
@@ -473,7 +470,6 @@ func handleAnalyze(path string) {
 		os.Exit(1)
 	}
 
-	// Write JSON if output flag is set
 	if outputFlag != "" {
 		data, _ := json.MarshalIndent(result, "", "  ")
 		if err := os.WriteFile(outputFlag, data, 0644); err != nil {
@@ -483,7 +479,6 @@ func handleAnalyze(path string) {
 		}
 	}
 
-	// Only connect to DB if we need to save to ledger or use workspace/repo flags
 	if saveFlag || workspaceFlag != "" || repoFlag != "" {
 		dbURL := getDBURL()
 		tenantIDStr := getTenantIDString()
@@ -497,7 +492,6 @@ func handleAnalyze(path string) {
 		}
 		defer st.Close()
 
-		// Save to ledger (returns decisionID, revisionID, revisionNumber)
 		decisionID, revisionID, rev, err := st.SaveAnalysisDecision(ctx, tenantIDStr, result)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "❌ Failed to log decision to ledger: %v\n", err)
@@ -510,10 +504,7 @@ func handleAnalyze(path string) {
 		fmt.Printf("   Status:      COMMITTED ✓\n")
 		fmt.Printf("   🔗 Run `./garuda explain %s` to inspect.\n", decisionID)
 
-		// --- Semantic Graph (auto-resolve workspace and repo) ---
 		tenantID := getTenantID()
-
-		// Determine workspace name
 		wsName := workspaceFlag
 		if wsName == "" {
 			wsName = os.Getenv("GARUDA_WORKSPACE")
@@ -522,26 +513,21 @@ func handleAnalyze(path string) {
 			}
 		}
 
-		// Determine repository URL
 		repoURL := repoFlag
 		if repoURL == "" {
-			// Try to get git remote origin
 			cmd := exec.Command("git", "-C", path, "remote", "get-url", "origin")
 			if out, err := cmd.Output(); err == nil {
 				repoURL = strings.TrimSpace(string(out))
 			}
 			if repoURL == "" {
-				// Fallback: use absolute path as file:// URL
 				absPath, _ := filepath.Abs(path)
 				repoURL = "file://" + absPath
 			}
 		}
 
-		// Get or create workspace
 		var workspaceID uuid.UUID
 		err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantIDStr, wsName).Scan(&workspaceID)
 		if err != nil {
-			// Create workspace
 			ws, err := st.CreateWorkspace(ctx, tenantIDStr, wsName, "")
 			if err != nil {
 				fmt.Printf("⚠️ Failed to create workspace '%s': %v\n", wsName, err)
@@ -551,11 +537,9 @@ func handleAnalyze(path string) {
 			fmt.Printf("   Created workspace: %s\n", wsName)
 		}
 
-		// Get or create repository
 		var repoID uuid.UUID
 		err = st.Pool().QueryRow(ctx, `SELECT id FROM repositories WHERE workspace_id = $1 AND url = $2`, workspaceID, repoURL).Scan(&repoID)
 		if err != nil {
-			// Infer provider
 			provider := "local"
 			if strings.Contains(repoURL, "github.com") {
 				provider = "github"
@@ -564,8 +548,7 @@ func handleAnalyze(path string) {
 			} else if strings.Contains(repoURL, "bitbucket") {
 				provider = "bitbucket"
 			}
-			// AddRepository signature: (ctx, workspaceID, provider, url, defaultBranch, language)
-			repo, err := st.AddRepository(ctx, workspaceID, provider, repoURL, "main", "go")
+			repo, err := st.AddRepository(ctx, workspaceID, provider, repoURL, "main", "go", "")
 			if err != nil {
 				fmt.Printf("⚠️ Failed to create repository: %v\n", err)
 				return
@@ -574,7 +557,6 @@ func handleAnalyze(path string) {
 			fmt.Printf("   Created repository: %s\n", repoURL)
 		}
 
-		// Save semantic graph
 		err = st.SaveSemanticGraph(ctx, tenantID, workspaceID, repoID, revisionID, result)
 		if err != nil {
 			fmt.Printf("⚠️ Failed to save semantic graph: %v\n", err)
@@ -802,35 +784,41 @@ func handleWorkspaceSync(workspaceName string) {
 
 // --- repository handlers ---
 
-func handleRepoAdd(workspaceName, repoURL string) {
+func handleRepoAdd(workspaceName, repoURL, modulePath string) {
 	dbURL := getDBURL()
 	tenantID := getTenantIDString()
 	ctx := context.Background()
+
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect: %v\n", err)
 		os.Exit(1)
 	}
 	defer st.Close()
+
 	var wsID uuid.UUID
 	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
-	fmt.Printf("DEBUG: workspace ID = %s\n", wsID)
+
 	provider := "github"
 	if strings.Contains(repoURL, "gitlab") {
 		provider = "gitlab"
 	} else if strings.Contains(repoURL, "bitbucket") {
 		provider = "bitbucket"
 	}
-	repo, err := st.AddRepository(ctx, wsID, provider, repoURL, "main", "")
+
+	repo, err := st.AddRepository(ctx, wsID, provider, repoURL, "main", "go", modulePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to add repository: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("✅ Repository '%s' added to workspace '%s' (ID: %s)\n", repo.URL, workspaceName, repo.ID)
+	if modulePath != "" {
+		fmt.Printf("   Module path: %s\n", modulePath)
+	}
 }
 
 func handleRepoList(workspaceName string) {
@@ -935,7 +923,6 @@ func handleInspect(entityName string) {
 	}
 	defer st.Close()
 
-	// Query the entity
 	var id string
 	var name, kind, pkg, filePath, signature string
 	var isExported bool
@@ -976,7 +963,6 @@ func handleInspect(entityName string) {
 		}
 	}
 
-	// Query outgoing claims
 	rows, err := st.Pool().Query(ctx, `
 		SELECT claim_type, to_entity_id FROM claims
 		WHERE tenant_id = $1 AND from_entity_id = $2
@@ -997,7 +983,6 @@ func handleInspect(entityName string) {
 		}
 	}
 
-	// Query incoming claims
 	rows, err = st.Pool().Query(ctx, `
 		SELECT claim_type, from_entity_id FROM claims
 		WHERE tenant_id = $1 AND to_entity_id = $2
@@ -1051,8 +1036,15 @@ func handleGraph(workspaceName string) {
 	fmt.Printf("🔍 Workspace ID: %s\n", wsID)
 	fmt.Printf("🔍 Tenant ID:    %s\n", tenantUUID)
 
+	// --- FIX: Use COALESCE to handle NULL values ---
 	rows, err := st.Pool().Query(ctx, `
-		SELECT id, name, kind, package, file_path, is_exported
+		SELECT 
+			id, 
+			COALESCE(name, 'unknown') as name,
+			COALESCE(kind, 'unknown') as kind,
+			COALESCE(package, '') as package,
+			COALESCE(file_path, '') as file_path,
+			COALESCE(is_exported, false) as is_exported
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2
 	`, tenantUUID, wsID)
@@ -1068,7 +1060,8 @@ func handleGraph(workspaceName string) {
 		var name, kind, pkg, file string
 		var exported bool
 		if err := rows.Scan(&id, &name, &kind, &pkg, &file, &exported); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  Skipping entity row: %v\n", err)
+			// Log the error but don't skip silently
+			fmt.Printf("DEBUG: Scan error: %v\n", err)
 			continue
 		}
 		nodes = append(nodes, graph.Node{
@@ -1088,11 +1081,15 @@ func handleGraph(workspaceName string) {
 	if len(nodes) == 0 {
 		fmt.Printf("📭 No entities found in workspace '%s'.\n", workspaceName)
 		fmt.Println("   Run 'garuda workspace sync <workspace>' to populate entities.")
-		os.Exit(1)
+		return
 	}
 
+	// --- Claims query with COALESCE ---
 	rows2, err := st.Pool().Query(ctx, `
-		SELECT from_entity_id, to_entity_id, claim_type
+		SELECT 
+			COALESCE(from_entity_id, '00000000-0000-0000-0000-000000000000')::uuid as from_entity_id,
+			COALESCE(to_entity_id, '00000000-0000-0000-0000-000000000000')::uuid as to_entity_id,
+			COALESCE(claim_type, 'unknown') as claim_type
 		FROM claims
 		WHERE tenant_id = $1 AND workspace_id = $2
 	`, tenantUUID, wsID)
@@ -1102,12 +1099,12 @@ func handleGraph(workspaceName string) {
 	}
 	defer rows2.Close()
 
-	edges := make([]graph.Edge, 0)
+	var edges []graph.Edge
 	for rows2.Next() {
 		var fromID, toID uuid.UUID
 		var claimType string
 		if err := rows2.Scan(&fromID, &toID, &claimType); err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  Skipping claim row: %v\n", err)
+			fmt.Printf("DEBUG: Claims scan error: %v\n", err)
 			continue
 		}
 		edges = append(edges, graph.Edge{
@@ -1139,6 +1136,11 @@ func handleGraph(workspaceName string) {
 	if graphOpenFlag {
 		openFile(filename)
 	}
+}
+
+// generateGraphHTML creates the HTML file using the graph package.
+func generateGraphHTML(workspaceName string, nodes []graph.Node, edges []graph.Edge) (string, error) {
+	return graph.Generate(workspaceName, nodes, edges)
 }
 
 func openFile(filename string) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -1044,6 +1045,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ---- Query Entities ----
 	rows, err := pgStore.Pool().Query(ctx, `
 		SELECT id, name, kind, package, file_path, is_exported
 		FROM entities
@@ -1072,6 +1074,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// ---- Query Local Claims (edges within the same repo) ----
 	rows2, err := pgStore.Pool().Query(ctx, `
 		SELECT from_entity_id, to_entity_id, claim_type
 		FROM claims
@@ -1089,10 +1092,41 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		if err := rows2.Scan(&from, &to, &typ); err != nil {
 			continue
 		}
-		edges = append(edges, GraphEdge{From: from, To: to, Type: typ})
+		edges = append(edges, GraphEdge{
+			From: from,
+			To:   to,
+			Type: typ,
+		})
 	}
 
-	resp := GraphResponse{Nodes: nodes, Edges: edges}
+	// ---- Query Cross-Repo Edges ----
+	rows3, err := pgStore.Pool().Query(ctx, `
+		SELECT from_entity_id, to_entity_id, relationship_type
+		FROM cross_repo_edges
+		WHERE tenant_id = $1 AND workspace_id = $2
+	`, tenantID, wsID)
+	if err != nil {
+		// Log but don't fail – cross-repo may not exist yet
+		slog.Warn("Failed to query cross-repo edges", "error", err)
+	} else {
+		defer rows3.Close()
+		for rows3.Next() {
+			var from, to, typ string
+			if err := rows3.Scan(&from, &to, &typ); err != nil {
+				continue
+			}
+			edges = append(edges, GraphEdge{
+				From: from,
+				To:   to,
+				Type: typ + "_CROSS_REPO", // Mark cross-repo edges distinctively
+			})
+		}
+	}
+
+	resp := GraphResponse{
+		Nodes: nodes,
+		Edges: edges,
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }
