@@ -28,6 +28,12 @@ type Scope struct {
 // DecisionStatus captures the lifecycle state of a governance decision.
 type DecisionStatus string
 
+// Add this struct at the end of the file
+type EvaluationTest struct {
+	ID   string
+	Name string
+}
+
 const (
 	StatusDraft       DecisionStatus = "draft"
 	StatusReview      DecisionStatus = "review"

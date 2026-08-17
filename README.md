@@ -1,359 +1,2893 @@
-# 🛡️ Garuda — Organizational Intelligence Runtime
+# 
 
-**The truth maintenance system and persistent substrate for enterprise AI agents.**
+> 
 
-Garuda separates persistent organizational knowledge, reasoning, and governance from interchangeable foundation models. It operates as a persistent, append-only semantic substrate beneath models, applications, and multi-agent systems—ensuring every decision, evidence artifact, and policy action is **cryptographically verifiable, explainable, and non-repudiable**.
+Generated: 2026-08-16T23:28:23+05:30
+# 🛡️ Garuda — Evidence-Backed Software Intelligence
 
----
+**Understand your codebase as a connected, inspectable, and verifiable system.**
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go)](https://go.dev/)
-[![Architecture](https://img.shields.io/badge/Specification-GAS_v1.0-orange)](docs/GAS_Roadmap.md)
-[![Status](https://img.shields.io/badge/Status-Phase_3_Active-green)](#-current-status--roadmap)
+Garuda analyzes Go repositories, builds a structured semantic model of the software inside them, preserves the evidence behind that model, and provides interactive tools for exploring how the codebase is connected.
 
----
+> **Code → Semantics → Relationships → Evidence → Understanding**
 
-## 🧠 The Story Behind Garuda
+## Overview
 
-> *"I have 100 AI agents running on ChatGPT, Claude, and Gemini. They don't talk to each other. They re-read the same code, re-burn the same tokens, and sometimes contradict each other. That's chaos. That's wasted money. That's the problem Garuda solves."*
 
-This was the problem statement that started Garuda. The boom of AI agentic workflows has been extraordinary. Every engineering team is delegating tasks to autonomous agents. But at scale, multi-agent systems break down fast:
 
-- **Agent A** spends 8 minutes re-reading the codebase to understand context that **Agent B** already figured out an hour ago.
-- **Agent C** quietly overrides a critical security policy that **Agent D** just implemented.
-- Different agents using ChatGPT, Claude, and Gemini operate in silos, wasting **40–60% of your token budget** re-ingesting state and making conflicting decisions.
+## Capabilities
 
-**Garuda was built to solve this.**
+| Capability | Status | Command | Source |
+|------------|--------|---------|--------|
+| main.go | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| ci.go | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| evaluate.go | stable | `-` | /home/rohit/garuda/cmd/garuda/evaluate.go |
+| graph.go | stable | `-` | /home/rohit/garuda/cmd/garuda/graph.go |
+| handoff_cli.go | stable | `-` | /home/rohit/garuda/cmd/garuda/handoff_cli.go |
+| init_wizard.go | stable | `-` | /home/rohit/garuda/cmd/garuda/init_wizard.go |
+| judge.go | stable | `-` | /home/rohit/garuda/cmd/garuda/judge.go |
+| justify.go | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| key_status.go | stable | `-` | /home/rohit/garuda/cmd/garuda/key_status.go |
+| mcp_installer.go | stable | `-` | /home/rohit/garuda/cmd/garuda/mcp_installer.go |
+| plan_cli.go | stable | `-` | /home/rohit/garuda/cmd/garuda/plan_cli.go |
+| policy_cli.go | stable | `-` | /home/rohit/garuda/cmd/garuda/policy_cli.go |
+| ponytail.go | stable | `-` | /home/rohit/garuda/cmd/garuda/ponytail.go |
+| self_describe.go | stable | `-` | /home/rohit/garuda/cmd/garuda/self_describe.go |
+| topology_cli.go | stable | `-` | /home/rohit/garuda/cmd/garuda/topology_cli.go |
+| analyzer.go | stable | `-` | /home/rohit/garuda/internal/analyzer/analyzer.go |
+| ast_extractor.go | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| diff.go | stable | `-` | /home/rohit/garuda/internal/analyzer/diff.go |
+| model.go | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| schema_builder.go | stable | `-` | /home/rohit/garuda/internal/analyzer/schema_builder.go |
+| types.go | stable | `-` | /home/rohit/garuda/internal/analyzer/types.go |
+| audit_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| auth.go | stable | `-` | /home/rohit/garuda/internal/api/auth.go |
+| auth_middleware.go | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| budget_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/budget_handlers.go |
+| budget_middleware.go | stable | `-` | /home/rohit/garuda/internal/api/budget_middleware.go |
+| checkpoint_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| dashboard_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| decision_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| error.go | stable | `-` | /home/rohit/garuda/internal/api/error.go |
+| events_handler.go | stable | `-` | /home/rohit/garuda/internal/api/events_handler.go |
+| graph_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/graph_handlers.go |
+| handler.go | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| handoff_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| helpers.go | stable | `-` | /home/rohit/garuda/internal/api/helpers.go |
+| merkle_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/merkle_handlers.go |
+| metrics.go | stable | `-` | /home/rohit/garuda/internal/api/metrics.go |
+| middleware.go | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| middleware_telemetry.go | stable | `-` | /home/rohit/garuda/internal/api/middleware_telemetry.go |
+| plan_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| policy_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| swagger.go | stable | `-` | /home/rohit/garuda/internal/api/swagger.go |
+| swagger_ui.go | stable | `-` | /home/rohit/garuda/internal/api/swagger_ui.go |
+| system_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/system_handlers.go |
+| temporal_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/temporal_handlers.go |
+| topology_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| verification_handlers.go | stable | `-` | /home/rohit/garuda/internal/api/verification_handlers.go |
+| context.go | stable | `-` | /home/rohit/garuda/internal/auth/context.go |
+| jwt.go | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| memory_store.go | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| service.go | stable | `-` | /home/rohit/garuda/internal/auth/service.go |
+| user.go | stable | `-` | /home/rohit/garuda/internal/auth/user.go |
+| estimator.go | stable | `-` | /home/rohit/garuda/internal/budget/estimator.go |
+| redis.go | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| decision.go | stable | `-` | /home/rohit/garuda/internal/canonical/decision.go |
+| store.go | stable | `-` | /home/rohit/garuda/internal/cas/store.go |
+| budget_estimator.go | stable | `-` | /home/rohit/garuda/internal/engine/budget_estimator.go |
+| consensus.go | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| contradiction.go | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| lineage.go | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| router.go | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| shield.go | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| watchdog.go | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| assess.go | stable | `-` | /home/rohit/garuda/internal/evaluation/assess.go |
+| template.go | stable | `-` | /home/rohit/garuda/internal/graph/template.go |
+| extractor.go | stable | `-` | /home/rohit/garuda/internal/harvester/extractor.go |
+| harvester.go | stable | `-` | /home/rohit/garuda/internal/harvester/harvester.go |
+| promote.go | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| slack.go | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| git_miner.go | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| bridge.go | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| hash.go | stable | `-` | /home/rohit/garuda/internal/merkle/hash.go |
+| garudarules.go | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| pool.go | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| provider.go | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| rate_limiter.go | stable | `-` | /home/rohit/garuda/internal/refund/rate_limiter.go |
+| capabilities.go | stable | `-` | /home/rohit/garuda/internal/selfdescribe/capabilities.go |
+| cli.go | stable | `-` | /home/rohit/garuda/internal/selfdescribe/cli.go |
+| describe.go | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| markdown.go | stable | `-` | /home/rohit/garuda/internal/selfdescribe/markdown.go |
+| product.go | stable | `-` | /home/rohit/garuda/internal/selfdescribe/product.go |
+| roadmap.go | stable | `-` | /home/rohit/garuda/internal/selfdescribe/roadmap.go |
+| semantic.go | stable | `-` | /home/rohit/garuda/internal/selfdescribe/semantic.go |
+| analysis.go | stable | `-` | /home/rohit/garuda/internal/store/analysis.go |
+| artifact_store.go | stable | `-` | /home/rohit/garuda/internal/store/artifact_store.go |
+| audit_store.go | stable | `-` | /home/rohit/garuda/internal/store/audit_store.go |
+| budget.go | stable | `-` | /home/rohit/garuda/internal/store/budget.go |
+| budget_store.go | stable | `-` | /home/rohit/garuda/internal/store/budget_store.go |
+| checkpoint_store.go | stable | `-` | /home/rohit/garuda/internal/store/checkpoint_store.go |
+| contradiction_store.go | stable | `-` | /home/rohit/garuda/internal/store/contradiction_store.go |
+| decision_store.go | stable | `-` | /home/rohit/garuda/internal/store/decision_store.go |
+| expiry.go | stable | `-` | /home/rohit/garuda/internal/store/expiry.go |
+| flusher.go | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| handoff_store.go | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| harvested_store.go | stable | `-` | /home/rohit/garuda/internal/store/harvested_store.go |
+| lineage_store.go | stable | `-` | /home/rohit/garuda/internal/store/lineage_store.go |
+| merkle_store.go | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| migrate.go | stable | `-` | /home/rohit/garuda/internal/store/migrate.go |
+| milestone_store.go | stable | `-` | /home/rohit/garuda/internal/store/milestone_store.go |
+| plan_store.go | stable | `-` | /home/rohit/garuda/internal/store/plan_store.go |
+| policy_store.go | stable | `-` | /home/rohit/garuda/internal/store/policy_store.go |
+| postgres.go | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| refcount.go | stable | `-` | /home/rohit/garuda/internal/store/refcount.go |
+| revision_store.go | stable | `-` | /home/rohit/garuda/internal/store/revision_store.go |
+| semantic_store.go | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| task_store.go | stable | `-` | /home/rohit/garuda/internal/store/task_store.go |
+| temporal_store.go | stable | `-` | /home/rohit/garuda/internal/store/temporal_store.go |
+| topology_store.go | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| user_store.go | stable | `-` | /home/rohit/garuda/internal/store/user_store.go |
+| workspace.go | stable | `-` | /home/rohit/garuda/internal/store/workspace.go |
+| collector.go | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| consent.go | stable | `-` | /home/rohit/garuda/internal/telemetry/consent.go |
+| integration.go | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| sse.go | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| telemetry.go | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| executor.go | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| roles.go | stable | `-` | /home/rohit/garuda/internal/topology/roles.go |
+| checkpoint.go | stable | `-` | /home/rohit/garuda/internal/types/checkpoint.go |
+| merkle.go | stable | `-` | /home/rohit/garuda/internal/types/merkle.go |
+| policy.go | stable | `-` | /home/rohit/garuda/internal/types/policy.go |
+| topology.go | stable | `-` | /home/rohit/garuda/internal/types/topology.go |
+| bytes | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| container/list | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| context | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| crypto/ed25519 | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| crypto/sha256 | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| database/sql | stable | `-` | /home/rohit/garuda/internal/store/checkpoint_store.go |
+| embed | stable | `-` | /home/rohit/garuda/internal/api/swagger.go |
+| encoding/base64 | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| encoding/hex | stable | `-` | /home/rohit/garuda/internal/analyzer/schema_builder.go |
+| encoding/json | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| errors | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| flag | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| fmt | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| github.com/AlecAivazis/survey/v2 | stable | `-` | /home/rohit/garuda/cmd/garuda/init_wizard.go |
+| github.com/BurntSushi/toml | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| github.com/go-git/go-git/v5 | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| github.com/go-git/go-git/v5/plumbing/object | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| github.com/goccy/go-yaml | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| github.com/golang-jwt/jwt/v5 | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| github.com/google/uuid | stable | `-` | /home/rohit/garuda/internal/types/budget.go |
+| github.com/gorilla/mux | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| github.com/jackc/pgx/v5 | stable | `-` | /home/rohit/garuda/internal/store/analysis.go |
+| github.com/jackc/pgx/v5/pgxpool | stable | `-` | /home/rohit/garuda/internal/store/migrate.go |
+| github.com/labstack/echo/v4 | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| github.com/myshra777-ai/garuda | stable | `-` |  |
+| context.Background | stable | `-` | /home/rohit/garuda/test_telemetry.go |
+| err.Error | stable | `-` | /home/rohit/garuda/test_telemetry.go |
+| main | stable | `-` | /home/rohit/garuda/test_telemetry.go |
+| println | stable | `-` | /home/rohit/garuda/test_telemetry.go |
+| telemetry.InitTelemetry | stable | `-` | /home/rohit/garuda/test_telemetry.go |
+| telemetry.RecordDecisionProposedWithModel | stable | `-` | /home/rohit/garuda/test_telemetry.go |
+| telemetry.ShutdownTelemetry | stable | `-` | /home/rohit/garuda/test_telemetry.go |
+| time.Sleep | stable | `-` | /home/rohit/garuda/test_telemetry.go |
+| github.com/myshra777-ai/garuda/cmd/garuda | stable | `-` |  |
+| github.com/myshra777-ai/garuda/cmd/garuda-api | stable | `-` |  |
+| *ast.CallExpr | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| *ast.FuncLit | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| SetupRouter | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| api.NewRateLimiter | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| api.NewServer | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| api.WithAuth | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| api.WithCORS | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| api.WithLogging | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| api.WithRateLimit | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| api.WithRecovery | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| api.WithRequestID | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| auth.NewAuthService | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| auth.NewJWTConfig | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| cancel | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| context.WithTimeout | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| ctx.Done | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| dbStore.Close | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| engine.NewContradictionEngine | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| engine.NewLineageEngine | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| engine.NewPreFlightShield | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| http.NewServeMux | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| httpServer.ListenAndServe | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| httpServer.Shutdown | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| jwtConfig.GetPublicKeyHex | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| lineage.NewGraph | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| mainMux.Handle | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| mainMux.HandleFunc | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| mcp.BridgeHandler | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| os.Exit | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| os.Getenv | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| protectedMux.HandleFunc | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| server.WithMerkleHeader | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| signal.NotifyContext | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| slog.Error | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| slog.Info | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| slog.Warn | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| stop | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| store.Migrate | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| store.NewPostgresStore | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| telemetry.LoadConfigFromEnv | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| topology.NewExecutor | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| topology.NewGenerator | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| w.WriteHeader | stable | `-` | /home/rohit/garuda/cmd/garuda-api/main.go |
+| github.com/myshra777-ai/garuda/cmd/garuda-mcp | stable | `-` |  |
+| *ast.CallExpr.UTC | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| MCPError | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| MCPRequest | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| MCPResponse | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| MCPServer | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| []byte | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| append | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| budget.EstimateTokens | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| checkAndConsumeBudget | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| commitBudget | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| d.ID.String | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| d.Status.String | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| decision.ID.String | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| decision.Status.String | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| decision.TenantID.String | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| decisionID.String | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| errorResponse | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| fmt.Errorf | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| fmt.Println | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| fmt.Sprintf | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| handleDetectContradictions | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| handleGetImpact | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| handleGetLineage | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| handleInitialize | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| handleProposeDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| handleQuery | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| handleRequest | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| handleToolsCall | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| handleToolsList | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| int64 | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| io.ReadAll | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| json.Marshal | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| json.MarshalIndent | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| json.Unmarshal | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| len | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| make | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| mustJSON | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| processProposeDecisionLogic | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| resolveTenant | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.checkAndConsumeBudget | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.errorResponse | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.handleDetectContradictions | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.handleGetImpact | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.handleGetLineage | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.handleInitialize | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.handleProposeDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.handleQuery | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.handleToolsCall | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.handleToolsList | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.processProposeDecisionLogic | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.resolveTenant | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.store.ConsumeBudgetDeduct | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.store.GetDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.store.GetDecisionsByScope | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.store.GetTenantBudget | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.store.ListContradictions | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.store.ListDecisionsByParent | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| s.store.SaveDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| server.handleRequest | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| signal.Notify | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| string | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| strings.Contains | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| strings.ToLower | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| tenantID.String | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| time.Now | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| uuid.New | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| uuid.NewSHA1 | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| uuid.Parse | stable | `-` | /home/rohit/garuda/cmd/garuda-mcp/main.go |
+| github.com/myshra777-ai/garuda/cmd/garuda-slack | stable | `-` |  |
+| *ast.CallExpr.Decode | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| *ast.CallExpr.Format | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| CreateDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| DecisionRequest | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| DecisionResponse | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| GarudaClient | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| GetDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| ProcessRefund | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| RefundRequest | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| RefundResponse | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| TransitionDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| bytes.NewReader | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| fmt.Sscanf | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| garuda.CreateDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| garuda.GetDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| garuda.ProcessRefund | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| garuda.TransitionDecision | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| handleApprove | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| handleCheck | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| handleDecide | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| handleRefund | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| handleSupersede | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| http.DefaultClient.Do | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| http.Error | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| http.HandleFunc | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| http.ListenAndServe | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| http.NewRequest | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| http.Post | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| json.NewDecoder | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| log.Fatal | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| log.New | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| log.Println | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| r.FormValue | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| r.ParseForm | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| req.Header.Set | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| reqHTTP.Header.Set | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| resp.Body.Close | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| sendSlackResponse | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| slack.New | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| slack.OptionAppLevelToken | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| socketClient.Ack | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| socketmode.New | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| socketmode.OptionDebug | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| socketmode.OptionLog | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| github.com/myshra777-ai/garuda/cmd/garuda-worker | stable | `-` |  |
+| WorkerConfig | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| context.WithCancel | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| dbStore.GetLatestMerkleSnapshot | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| dbStore.GetMerkleRoot | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| dbStore.ListAllTenants | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| dbStore.SaveMerkleSnapshot | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| merkle.SnapshotHash | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| now.Unix | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| runWorker | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| snapshotAllTenants | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| snapshotTenant | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| ticker.Stop | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| time.NewTicker | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| time.ParseDuration | stable | `-` | /home/rohit/garuda/cmd/garuda-worker/main.go |
+| *ast.CallExpr.BoolVar | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| *ast.CallExpr.BoolVarP | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| *ast.CallExpr.Exec | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| *ast.CallExpr.Int64 | stable | `-` | /home/rohit/garuda/cmd/garuda/topology_cli.go |
+| *ast.CallExpr.Query | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| *ast.CallExpr.QueryRow | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| *ast.CallExpr.Scan | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| *ast.CallExpr.Start | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| *ast.CallExpr.String | stable | `-` | /home/rohit/garuda/cmd/garuda/handoff_cli.go |
+| *ast.CallExpr.StringSlice | stable | `-` | /home/rohit/garuda/cmd/garuda/plan_cli.go |
+| *ast.CallExpr.StringVar | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| *ast.CallExpr.StringVarP | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| MCPConfig | stable | `-` | /home/rohit/garuda/cmd/garuda/mcp_installer.go |
+| ProposeRequest | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| analyzeCmd.CombinedOutput | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| analyzeCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| analyzer.Analyze | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| analyzer.Diff | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| analyzer.LoadResult | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| apiCmd.Process.Kill | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| apiCmd.Start | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| bytes.Equal | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| bytes.NewBuffer | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| ciCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| client.Do | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| client.Get | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| cmd.Help | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| cmd.Output | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| cmd.Run | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| cmd.Start | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| cobra.ExactArgs | stable | `-` | /home/rohit/garuda/cmd/garuda/judge.go |
+| cobra.MaximumNArgs | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| commitCmd.Output | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| conn.Close | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| createdAt.Format | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| dbStore.SaveHarvestedDecision | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| diffCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| exec.Command | stable | `exec.command` | /home/rohit/garuda/cmd/garuda/main.go |
+| exec.CommandContext | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| fetchEndpoint | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| filepath.Abs | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| filepath.Dir | stable | `-` | /home/rohit/garuda/cmd/garuda/mcp_installer.go |
+| filepath.Join | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| flag.NewFlagSet | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| fmt.Fprintf | stable | `-` | /home/rohit/garuda/cmd/garuda/judge.go |
+| fmt.Fprintln | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| fmt.Printf | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| fromID.String | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| getAuthToken | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| getCurrentDir | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| getDBURL | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| getTenantID | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| getTenantIDString | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| graph.Generate | stable | `-` | /home/rohit/garuda/cmd/garuda/graph.go |
+| graphCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleAnalyze | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleDiff | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleDown | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleExplain | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleGraph | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleIngest | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleInit | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleInspect | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleJudge | stable | `-` | /home/rohit/garuda/cmd/garuda/judge.go |
+| handleJustify | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| handleMCPInstall | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handlePonytail | stable | `-` | /home/rohit/garuda/cmd/garuda/ponytail.go |
+| handlePropose | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleRepoAdd | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleRepoEnable | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleRepoList | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleRepoRemove | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleStatus | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleUp | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleVerify | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleWorkspaceCreate | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleWorkspaceDelete | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleWorkspaceList | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handleWorkspaceSync | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| handoffCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/handoff_cli.go |
+| http.Get | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| id.String | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| info.IsDir | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| ingest.NewGitMiner | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| init | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| injectMCPConfig | stable | `-` | /home/rohit/garuda/cmd/garuda/mcp_installer.go |
+| json.Indent | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| judge.Judge | stable | `-` | /home/rohit/garuda/cmd/garuda/judge.go |
+| judgeCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/judge.go |
+| justify.Justify | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| justifyCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| loadBaseline | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| mcpCmd.AddCommand | stable | `mcpcmd.addcommand` | /home/rohit/garuda/cmd/garuda/main.go |
+| migCmd.Run | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| miner.Mine | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| net.DialTimeout | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| openDashboard | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| openFile | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| os.Environ | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| os.Executable | stable | `-` | /home/rohit/garuda/cmd/garuda/mcp_installer.go |
+| os.Getwd | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| os.IsNotExist | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| os.MkdirAll | stable | `-` | /home/rohit/garuda/cmd/garuda/mcp_installer.go |
+| os.ReadFile | stable | `-` | /home/rohit/garuda/cmd/garuda/mcp_installer.go |
+| os.Stat | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| os.TempDir | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| os.WriteFile | stable | `-` | /home/rohit/garuda/cmd/garuda/init_wizard.go |
+| planCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/plan_cli.go |
+| policiesCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/policy_cli.go |
+| ponytailCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/ponytail.go |
+| postEndpoint | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| prettyJSON.String | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| printCIReport | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| printDiffReport | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| printJudgeReport | stable | `-` | /home/rohit/garuda/cmd/garuda/judge.go |
+| printJustification | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| proposeFlags.Parse | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| proposeFlags.String | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rememberCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/policy_cli.go |
+| repo.ID.String | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| repoCmd.AddCommand | stable | `repocmd.addcommand` | /home/rohit/garuda/cmd/garuda/main.go |
+| rootCmd.AddCommand | stable | `rootcmd.addcommand` | /home/rohit/garuda/cmd/garuda/ci.go |
+| rootCmd.Execute | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rootCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rows.Close | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rows.Err | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rows.Next | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rows.Scan | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rows2.Close | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rows2.Err | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rows2.Next | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| rows2.Scan | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| runAnalysis | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| runInitWizard | stable | `-` | /home/rohit/garuda/cmd/garuda/init_wizard.go |
+| selfDescribeCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/self_describe.go |
+| st.AddRepository | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| st.Close | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| st.CreateWorkspace | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| st.GetEntity | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| st.GetEntityRelationships | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| st.GetGraphData | stable | `-` | /home/rohit/garuda/cmd/garuda/ponytail.go |
+| st.ListEntities | stable | `-` | /home/rohit/garuda/cmd/garuda/ponytail.go |
+| st.ListRepositories | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| st.ListWorkspaces | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| st.Pool | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| st.SaveAnalysisDecision | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| st.SaveSemanticGraph | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| st.UpdateRepositorySyncStatus | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| statusText | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| strings.HasPrefix | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| strings.Join | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| strings.ToUpper | stable | `-` | /home/rohit/garuda/cmd/garuda/init_wizard.go |
+| strings.TrimSpace | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| supersedePolicyCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/policy_cli.go |
+| survey.AskOne | stable | `-` | /home/rohit/garuda/cmd/garuda/init_wizard.go |
+| toID.String | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| topologyExecuteCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/topology_cli.go |
+| topologyRecommendCmd.Flags | stable | `-` | /home/rohit/garuda/cmd/garuda/topology_cli.go |
+| uuid.MustParse | stable | `-` | /home/rohit/garuda/cmd/garuda/justify.go |
+| workerCmd.Process.Kill | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| workerCmd.Start | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| workspaceCmd.AddCommand | stable | `workspacecmd.addcommand` | /home/rohit/garuda/cmd/garuda/main.go |
+| github.com/myshra777-ai/garuda/cmd/migrate | stable | `-` |  |
+| log.Fatalf | stable | `-` | /home/rohit/garuda/cmd/migrate/main.go |
+| github.com/myshra777-ai/garuda/cmd/telemetry-collector | stable | `-` |  |
+| *ast.CallExpr.Set | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| CollectorServer | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| TelemetryBatch | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| TelemetryEvent | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| c.getPool | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| c.mu.Lock | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| c.mu.RLock | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| c.mu.RUnlock | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| c.mu.Unlock | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| collector.getPool | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| collector.setPool | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| getPool | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| initDatabaseWithRetry | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| mux.HandleFunc | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| pgxpool.New | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| pool.Begin | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| pool.Close | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| pool.Exec | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| r.Context | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| server.ListenAndServe | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| server.Shutdown | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| setPool | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| tx.Commit | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| tx.Exec | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| tx.Rollback | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| w.Header | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| w.Write | stable | `-` | /home/rohit/garuda/cmd/telemetry-collector/main.go |
+| github.com/myshra777-ai/garuda/internal/analyzer | stable | `-` |  |
+| Analyze | stable | `-` | /home/rohit/garuda/internal/analyzer/analyzer.go |
+| Diff | stable | `-` | /home/rohit/garuda/internal/analyzer/diff.go |
+| DiffReport | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| DiffSummary | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| Entity | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| EntityDiff | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| Evidence | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| Extract | stable | `-` | /home/rohit/garuda/internal/analyzer/analyzer.go |
+| Field | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| FieldDiff | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| FieldsDiff | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| FingerprintDiff | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| LoadResult | stable | `-` | /home/rohit/garuda/internal/analyzer/diff.go |
+| Method | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| MethodsDiff | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| Provenance | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| Relationship | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| RelationshipDiff | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| Result | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| RevisionSummary | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| Stats | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| StatsDiff | stable | `-` | /home/rohit/garuda/internal/analyzer/model.go |
+| addEntity | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| addRelation | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| ast.Inspect | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| countByKind | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| diffEntity | stable | `-` | /home/rohit/garuda/internal/analyzer/diff.go |
+| exprToString | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| field.Pos | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| fieldsEqual | stable | `-` | /home/rohit/garuda/internal/analyzer/diff.go |
+| filepath.Base | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| fset.Position | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| getCommit | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| getEntityID | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| hex.EncodeToString | stable | `-` | /home/rohit/garuda/internal/analyzer/schema_builder.go |
+| ioutil.ReadFile | stable | `-` | /home/rohit/garuda/internal/analyzer/diff.go |
+| packages.Load | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| parser.ParseFile | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| sha256.Sum256 | stable | `-` | /home/rohit/garuda/internal/analyzer/schema_builder.go |
+| sort.Slice | stable | `-` | /home/rohit/garuda/internal/analyzer/schema_builder.go |
+| strings.HasSuffix | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| strings.Trim | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| token.NewFileSet | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| x.Name.IsExported | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| x.Pos | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| github.com/myshra777-ai/garuda/internal/api | stable | `-` |  |
+| (*store.HandoffResponse) | stable | `-` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| *ast.CallExpr.Add | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| *ast.CallExpr.Done | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| *ast.CallExpr.Encode | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| *ast.CallExpr.Get | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| *ast.CallExpr.Methods | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| *ast.CallExpr.Milliseconds | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| *ast.CallExpr.Subrouter | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| *ast.CallExpr.Value | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| APIError | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| AgentCheckpointRequest | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| AgentFleetItem | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| Allow | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| AuthMiddleware | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| AuthResponse | stable | `-` | /home/rohit/garuda/internal/api/auth.go |
+| BudgetExceededError | stable | `-` | /home/rohit/garuda/internal/api/budget_middleware.go |
+| BudgetMiddleware | stable | `-` | /home/rohit/garuda/internal/api/budget_middleware.go |
+| CheckpointRecord | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| CheckpointRequest | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| Client | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ClientInterface | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ClientWithResponses | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ClientWithResponsesInterface | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ConsumeBudgetForRequest | stable | `-` | /home/rohit/garuda/internal/api/budget_middleware.go |
+| ContentType | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| DashboardData | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| DashboardStatsResponse | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| Decision | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| DecisionProposalRequest | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| EchoRouter | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| Error | stable | `-` | /home/rohit/garuda/internal/api/budget_middleware.go |
+| EvaluateRouteRequest | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| ExecuteHandoff | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ExecuteHandoffJSONBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ExecuteHandoffResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ExecuteHandoffResponse200Headers | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ExecuteHandoffWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ExecuteHandoffWithBodyWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ExecuteHandoffWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetAuditExport | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetAuditExportParams | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetAuditExportResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetAuditExportWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetAuditVerify | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetAuditVerifyParams | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetAuditVerifyResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetAuditVerifyWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetBudget | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetBudgetResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetBudgetWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDashboard | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDashboardResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDashboardWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDebugToken | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDebugTokenParams | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDebugTokenResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDebugTokenWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDecisionsIdLineage | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDecisionsIdLineageResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetDecisionsIdLineageWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetJSON200 | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetJSON201 | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetJSON402 | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetJSON409 | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetSystemBootstrap | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetSystemBootstrapResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetSystemBootstrapWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetSystemDiscover | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetSystemDiscoverResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetSystemDiscoverWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetSystemHealth | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetSystemHealthResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GetSystemHealthWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| GraphEdge | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| GraphNode | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| GraphResponse | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| HandleAgentCheckpoint | stable | `agentcheckpoint` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| HandleAgentHandoff | stable | `agenthandoff` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| HandleAgentResume | stable | `agentresume` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| HandleAgentWarmup | stable | `agentwarmup` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| HandleAuditVerify | stable | `auditverify` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| HandleConsumeBudget | stable | `consumebudget` | /home/rohit/garuda/internal/api/budget_handlers.go |
+| HandleDashboard | stable | `dashboard` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| HandleDashboardStats | stable | `dashboardstats` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| HandleDebugToken | stable | `debugtoken` | /home/rohit/garuda/internal/api/handler.go |
+| HandleDecisionHistory | stable | `decisionhistory` | /home/rohit/garuda/internal/api/temporal_handlers.go |
+| HandleDecisionLineage | stable | `decisionlineage` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| HandleDecisionsActiveAt | stable | `decisionsactiveat` | /home/rohit/garuda/internal/api/temporal_handlers.go |
+| HandleEvaluateRoute | stable | `evaluateroute` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| HandleExportAuditLogs | stable | `exportauditlogs` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| HandleGetAgentCheckpoint | stable | `getagentcheckpoint` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| HandleGetBudget | stable | `getbudget` | /home/rohit/garuda/internal/api/budget_handlers.go |
+| HandleGetLineage | stable | `getlineage` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| HandleGetPlan | stable | `getplan` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| HandleGraph | stable | `graph` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| HandleHandoff | stable | `handoff` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| HandleHealth | stable | `health` | /home/rohit/garuda/internal/api/handler.go |
+| HandleListMerkleSnapshots | stable | `listmerklesnapshots` | /home/rohit/garuda/internal/api/merkle_handlers.go |
+| HandleListPolicies | stable | `listpolicies` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| HandleLiveEvents | stable | `liveevents` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| HandleOpenAPISpec | stable | `openapispec` | /home/rohit/garuda/internal/api/swagger.go |
+| HandleProposeDecision | stable | `proposedecision` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| HandleRememberPolicy | stable | `rememberpolicy` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| HandleResume | stable | `resume` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| HandleSandbox | stable | `sandbox` | /home/rohit/garuda/internal/api/system_handlers.go |
+| HandleSignIn | stable | `signin` | /home/rohit/garuda/internal/api/auth.go |
+| HandleSignOut | stable | `signout` | /home/rohit/garuda/internal/api/auth.go |
+| HandleSignUp | stable | `signup` | /home/rohit/garuda/internal/api/auth.go |
+| HandleSupersedePolicy | stable | `supersedepolicy` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| HandleSwaggerUI | stable | `swaggerui` | /home/rohit/garuda/internal/api/swagger_ui.go |
+| HandleSystemBootstrap | stable | `systembootstrap` | /home/rohit/garuda/internal/api/system_handlers.go |
+| HandleSystemDiscover | stable | `systemdiscover` | /home/rohit/garuda/internal/api/system_handlers.go |
+| HandleSystemPromptContext | stable | `systempromptcontext` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| HandleTopologyExecute | stable | `topologyexecute` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| HandleTopologyRecommend | stable | `topologyrecommend` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| HandleTopologyStatus | stable | `topologystatus` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| HandleVerifyAuditLog | stable | `verifyauditlog` | /home/rohit/garuda/internal/api/handler.go |
+| HandleVerifyDecision | stable | `verifydecision` | /home/rohit/garuda/internal/api/verification_handlers.go |
+| HandleWorkspaceGraph | stable | `workspacegraph` | /home/rohit/garuda/internal/api/graph_handlers.go |
+| HandoffRequest | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| HttpRequestDoer | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewClient | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewClientWithResponses | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewExecuteHandoffRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewExecuteHandoffRequestWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewGetAuditExportRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewGetAuditVerifyRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewGetBudgetRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewGetDashboardRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewGetDebugTokenRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewGetDecisionsIdLineageRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewGetSystemBootstrapRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewGetSystemDiscoverRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewGetSystemHealthRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewPostAgentsResumeRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewPostAgentsResumeRequestWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewPostBudgetConsumeRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewPostBudgetConsumeRequestWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewPostRouterEvaluateRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewPostRouterEvaluateRequestWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewPostSandboxRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewPostSandboxRequestWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewProposeDecisionRequest | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewProposeDecisionRequestWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| NewRateLimiter | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| NewServer | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| ParseExecuteHandoffResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseGetAuditExportResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseGetAuditVerifyResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseGetBudgetResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseGetDashboardResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseGetDebugTokenResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseGetDecisionsIdLineageResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseGetSystemBootstrapResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseGetSystemDiscoverResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseGetSystemHealthResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParsePostAgentsResumeResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParsePostBudgetConsumeResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParsePostRouterEvaluateResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParsePostSandboxResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ParseProposeDecisionResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PassiveModeMiddleware | stable | `-` | /home/rohit/garuda/internal/api/middleware_telemetry.go |
+| PostAgentsResume | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostAgentsResumeJSONBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostAgentsResumeResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostAgentsResumeWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostAgentsResumeWithBodyWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostAgentsResumeWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostBudgetConsume | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostBudgetConsumeJSONBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostBudgetConsumeResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostBudgetConsumeWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostBudgetConsumeWithBodyWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostBudgetConsumeWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostRouterEvaluate | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostRouterEvaluateJSONBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostRouterEvaluateResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostRouterEvaluateWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostRouterEvaluateWithBodyWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostRouterEvaluateWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostSandbox | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostSandboxJSONBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostSandboxResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostSandboxWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostSandboxWithBodyWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| PostSandboxWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ProblemDetails | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ProposeDecision | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ProposeDecisionJSONBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ProposeDecisionParams | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ProposeDecisionResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ProposeDecisionResponse201Headers | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ProposeDecisionWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ProposeDecisionWithBodyWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ProposeDecisionWithResponse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| RateLimiter | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| RealStatsResponse | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| RegisterHandlers | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| RegisterHandlersOptions | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| RegisterHandlersWithBaseURL | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| RegisterHandlersWithOptions | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| RegisterRoutes | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| RespondWithError | stable | `-` | /home/rohit/garuda/internal/api/error.go |
+| RespondWithProblemDetails | stable | `-` | /home/rohit/garuda/internal/api/error.go |
+| ServeHTTP | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| Server | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| ServerInterface | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ServerInterfaceWrapper | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| SignInRequest | stable | `-` | /home/rohit/garuda/internal/api/auth.go |
+| SignUpRequest | stable | `-` | /home/rohit/garuda/internal/api/auth.go |
+| Status | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| StatusCode | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| Valid | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| WithAuth | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| WithBaseURL | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| WithCORS | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| WithDetails | stable | `-` | /home/rohit/garuda/internal/api/error.go |
+| WithErrorDomain | stable | `-` | /home/rohit/garuda/internal/api/error.go |
+| WithHTTPClient | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| WithLogging | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| WithMerkleHeader | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| WithRateLimit | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| WithRecovery | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| WithRemediation | stable | `-` | /home/rohit/garuda/internal/api/error.go |
+| WithRequestEditorFn | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| WithRequestID | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| Write | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| WriteHeader | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| api.Handle | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| api.HandleFunc | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| api.Use | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| applyEditors | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| auth.ActorFromContext | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| auth.ContextWithActorAndTenant | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| auth.TenantIDFromContext | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| bytes.TrimSpace | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| c.Client.Do | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.ExecuteHandoff | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.ExecuteHandoffWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.GetAuditExport | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.GetAuditVerify | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.GetBudget | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.GetDashboard | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.GetDebugToken | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.GetDecisionsIdLineage | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.GetSystemBootstrap | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.GetSystemDiscover | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.GetSystemHealth | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.PostAgentsResume | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.PostAgentsResumeWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.PostBudgetConsume | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.PostBudgetConsumeWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.PostRouterEvaluate | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.PostRouterEvaluateWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.PostSandbox | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.PostSandboxWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.ProposeDecision | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.ProposeDecisionWithBody | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.applyEditors | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| c.order.Back | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| c.order.MoveToFront | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| c.order.PushFront | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| c.order.Remove | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| cacheItem | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| checkpoint.CreatedAt.Format | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| checkpoint.ID.String | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| context.WithValue | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| ctx.Param | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ctx.QueryParams | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ctx.Request | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| ctx.Value | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| d.ValidTo.Format | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| delete | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| duration.Milliseconds | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| echo.NewHTTPError | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| engine.NewDynamicRouter | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| estimateTokensSaved | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| float64 | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| flushFunc | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| flusher.Flush | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| get | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| getActorFromContext | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| getGraphQueryStore | stable | `-` | /home/rohit/garuda/internal/api/graph_handlers.go |
+| getModelInfo | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| getRequestID | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| graphQueryStore | stable | `-` | /home/rohit/garuda/internal/api/graph_handlers.go |
+| gstore.Pool | stable | `-` | /home/rohit/garuda/internal/api/graph_handlers.go |
+| h.ID.String | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| http.CanonicalHeaderKey | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| http.HandlerFunc | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| http.NewResponseController | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| http.StatusText | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| int | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| json.NewEncoder | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| jwtConfig.ValidateToken | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| latestSnap.ParentSnapshotID.String | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| limiter.Allow | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| list.New | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| lruCache | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| ls.GetLineageDAG | stable | `-` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| m.DueDate.Format | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| mux.NewRouter | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| mux.Vars | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| newBaseURL.String | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| newCheckpoint.ID.String | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| newLRUCache | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| newPolicy.ID.String | stable | `-` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| next.ServeHTTP | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| now.Add | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| now.Sub | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| o | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| opt | stable | `-` | /home/rohit/garuda/internal/api/error.go |
+| p.GeneratedAt.Format | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| parsedProdDashboardTmpl.Execute | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| pgStore.Pool | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| policy.ID.String | stable | `-` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| policyID.String | stable | `-` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| prompt.String | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| prompt.WriteString | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| ps.ExecuteHandoffTransaction | stable | `-` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| queryURL.Query | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| queryURL.String | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| queryValues.Encode | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| r | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| r.HTTPResponse.Header.Get | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| r.HandleFunc | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| r.Header.Get | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| r.Header.Set | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| r.PathPrefix | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| r.PathValue | stable | `-` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| r.URL.Query | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| r.WithContext | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| rc.Flush | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| recover | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| renderPlanMarkdown | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| req.Header.Add | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| req.WithContext | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| resolveTenantID | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| responseWriter | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| result.DecisionID.String | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| result.RevisionID.String | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| rl.cache.get | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| rl.cache.set | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| router.ClassifyAndRoute | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| router.GET | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| router.POST | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| rs.ResumeAgent | stable | `-` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| rsp.Body.Close | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| rsp.Header.Get | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| rsp.Header.Values | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| rune | stable | `-` | /home/rohit/garuda/internal/api/system_handlers.go |
+| runtime.BindQueryParameterWithOptions | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| runtime.BindStyledParameterWithOptions | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| runtime.StyleParamWithOptions | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| rw.ResponseWriter.Write | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| rw.ResponseWriter.WriteHeader | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| rw.WriteHeader | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| s.HandleGetAgentCheckpoint | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| s.RegisterRoutes | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| s.RespondWithError | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| s.RespondWithProblemDetails | stable | `-` | /home/rohit/garuda/internal/api/error.go |
+| s.authService.SignIn | stable | `-` | /home/rohit/garuda/internal/api/auth.go |
+| s.authService.SignUp | stable | `-` | /home/rohit/garuda/internal/api/auth.go |
+| s.contradictionEngine.ValidateDecision | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| s.getGraphQueryStore | stable | `-` | /home/rohit/garuda/internal/api/graph_handlers.go |
+| s.jwtConfig.GenerateToken | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| s.router.ServeHTTP | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| s.sseBroker.Publish | stable | `-` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| s.store.GetActivePolicies | stable | `-` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| s.store.GetCheckpoint | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| s.store.GetDecisionHistory | stable | `-` | /home/rohit/garuda/internal/api/temporal_handlers.go |
+| s.store.GetDecisionsActiveAt | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| s.store.GetLatestMerkleSnapshot | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| s.store.GetMerkleRoot | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| s.store.GetPlan | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| s.store.GetTasksByTopology | stable | `-` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| s.store.GetTopology | stable | `-` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| s.store.ListAuditEvents | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| s.store.ListMerkleSnapshots | stable | `-` | /home/rohit/garuda/internal/api/merkle_handlers.go |
+| s.store.SaveCheckpoint | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| s.store.SavePolicy | stable | `-` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| s.store.SaveTopology | stable | `-` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| s.store.SubmitDecision | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| s.store.SupersedePolicy | stable | `-` | /home/rohit/garuda/internal/api/policy_handlers.go |
+| s.store.VerifyAuditEvent | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| s.topologyExecutor.Execute | stable | `-` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| s.topologyGenerator.Recommend | stable | `-` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| sb.String | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| sb.WriteString | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| serverURL.Parse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| set | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| since.Format | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| strconv.Atoi | stable | `-` | /home/rohit/garuda/internal/api/merkle_handlers.go |
+| strings.Fields | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| strings.Split | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| strings.TrimPrefix | stable | `-` | /home/rohit/garuda/internal/api/auth_middleware.go |
+| t.Format | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| t.ID.String | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| t.OwnerAgentID.String | stable | `-` | /home/rohit/garuda/internal/api/plan_handlers.go |
+| telemetry.EventType | stable | `-` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| telemetry.NewSSEBroker | stable | `-` | /home/rohit/garuda/internal/api/handler.go |
+| telemetry.RecordAPILatency | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| telemetry.RecordDecisionProposed | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| telemetry.RecordError | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| telemetry.RecordFeatureUsage | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| telemetry.RecordHandoffWithModel | stable | `-` | /home/rohit/garuda/internal/api/handoff_handlers.go |
+| telemetry.RecordVerificationWithModel | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| telemetry.RecordWarmStartWithModel | stable | `-` | /home/rohit/garuda/internal/api/decision_handlers.go |
+| time.Duration | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| time.Parse | stable | `-` | /home/rohit/garuda/internal/api/audit_handlers.go |
+| time.Since | stable | `-` | /home/rohit/garuda/internal/api/checkpoint_handlers.go |
+| tokenBucket | stable | `-` | /home/rohit/garuda/internal/api/middleware.go |
+| topologyID.String | stable | `-` | /home/rohit/garuda/internal/api/topology_handlers.go |
+| unwrapper.Unwrap | stable | `-` | /home/rohit/garuda/internal/api/dashboard_handlers.go |
+| url.Parse | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.ExecuteHandoff | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.GetAuditExport | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.GetAuditVerify | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.GetBudget | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.GetDashboard | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.GetDebugToken | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.GetDecisionsIdLineage | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.GetSystemBootstrap | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.GetSystemDiscover | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.GetSystemHealth | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.PostAgentsResume | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.PostBudgetConsume | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.PostRouterEvaluate | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.PostSandbox | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| w.Handler.ProposeDecision | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| github.com/myshra777-ai/garuda/internal/auth | stable | `-` |  |
+| ActorFromContext | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| AuthService | stable | `-` | /home/rohit/garuda/internal/auth/service.go |
+| CheckPassword | stable | `-` | /home/rohit/garuda/internal/auth/user.go |
+| ContextWithActorAndTenant | stable | `-` | /home/rohit/garuda/internal/auth/context.go |
+| CreateUser | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| CustomClaims | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| GetPrivateKeyHex | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| GetPublicKeyHex | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| GetUserByEmail | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| HashPassword | stable | `-` | /home/rohit/garuda/internal/auth/user.go |
+| JWTConfig | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| JWTMiddleware | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| MemoryUserStore | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| NewAuthService | stable | `-` | /home/rohit/garuda/internal/auth/service.go |
+| NewJWTConfig | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| NewJWTConfigFromHex | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| NewMemoryUserStore | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| SignIn | stable | `-` | /home/rohit/garuda/internal/auth/service.go |
+| SignUp | stable | `-` | /home/rohit/garuda/internal/auth/service.go |
+| TenantIDFromContext | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| User | stable | `-` | /home/rohit/garuda/internal/auth/user.go |
+| UserError | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| UserStore | stable | `-` | /home/rohit/garuda/internal/auth/user.go |
+| ValidateRefreshToken | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| ValidateToken | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| WithActor | stable | `-` | /home/rohit/garuda/internal/auth/context.go |
+| WithTenantID | stable | `-` | /home/rohit/garuda/internal/auth/context.go |
+| bcrypt.CompareHashAndPassword | stable | `-` | /home/rohit/garuda/internal/auth/user.go |
+| bcrypt.GenerateFromPassword | stable | `-` | /home/rohit/garuda/internal/auth/user.go |
+| c.GenerateRefreshToken | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| c.GenerateToken | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| c.ValidateToken | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| config.ValidateToken | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| ed25519.GenerateKey | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| ed25519.PrivateKey | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| ed25519.PublicKey | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| errors.New | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| hex.DecodeString | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| jwt.NewNumericDate | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| jwt.NewWithClaims | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| jwt.ParseWithClaims | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| s.mu.Lock | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| s.mu.RLock | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| s.mu.RUnlock | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| s.mu.Unlock | stable | `-` | /home/rohit/garuda/internal/auth/memory_store.go |
+| strings.EqualFold | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| strings.SplitN | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| token.SignedString | stable | `-` | /home/rohit/garuda/internal/auth/jwt.go |
+| github.com/myshra777-ai/garuda/internal/budget | stable | `-` |  |
+| EstimateTokens | stable | `-` | /home/rohit/garuda/internal/budget/estimator.go |
+| estimateProposeDecision | stable | `-` | /home/rohit/garuda/internal/budget/estimator.go |
+| estimateQuery | stable | `-` | /home/rohit/garuda/internal/budget/estimator.go |
+| extractString | stable | `-` | /home/rohit/garuda/internal/budget/estimator.go |
+| github.com/myshra777-ai/garuda/internal/cache | stable | `-` |  |
+| *ast.CallExpr.Err | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| *ast.CallExpr.Result | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| CachedDecisionStore | stable | `-` | /home/rohit/garuda/internal/cache/middleware.go |
+| Close | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| Delete | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| DeletePattern | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| Exists | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| Get | stable | `-` | /home/rohit/garuda/internal/cache/middleware.go |
+| NewCachedDecisionStore | stable | `-` | /home/rohit/garuda/internal/cache/middleware.go |
+| NewRedisCache | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| RedisCache | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| Save | stable | `-` | /home/rohit/garuda/internal/cache/middleware.go |
+| Set | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| c.client.Close | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| c.client.Del | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| c.client.Exists | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| c.client.Get | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| c.client.Keys | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| c.client.Set | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| c.client.SetEx | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| client.Ping | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| redis.NewClient | stable | `-` | /home/rohit/garuda/internal/cache/redis.go |
+| github.com/myshra777-ai/garuda/internal/canonical | stable | `-` |  |
+| CanonicalJSON | stable | `-` | /home/rohit/garuda/internal/canonical/decision.go |
+| DecisionContent | stable | `-` | /home/rohit/garuda/internal/canonical/decision.go |
+| Hash | stable | `-` | /home/rohit/garuda/internal/canonical/decision.go |
+| MustHash | stable | `-` | /home/rohit/garuda/internal/canonical/decision.go |
+| c.CanonicalJSON | stable | `-` | /home/rohit/garuda/internal/canonical/decision.go |
+| c.Hash | stable | `-` | /home/rohit/garuda/internal/canonical/decision.go |
+| panic | stable | `-` | /home/rohit/garuda/internal/canonical/decision.go |
+| github.com/myshra777-ai/garuda/internal/cas | stable | `-` |  |
+| BlockStore | stable | `-` | /home/rohit/garuda/internal/cas/store.go |
+| github.com/myshra777-ai/garuda/internal/engine | stable | `-` |  |
+| *ast.CallExpr.UnixNano | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| BudgetResult | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| CheckPolicyViolation | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| ClassifyAndRoute | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| ConsensusEngine | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| ConsensusResult | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| ContradictionEngine | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| DecisionLineage | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| DetectAndQuarantine | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| DynamicRouter | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| EstimateOperationTokens | stable | `-` | /home/rohit/garuda/internal/engine/budget_estimator.go |
+| EvaluateConsensus | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| GetDecisionLineage | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| GetImpactSet | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| LineageEngine | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| NewConsensusEngine | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| NewContradictionEngine | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| NewDynamicRouter | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| NewLineageEngine | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| NewPreFlightShield | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| NewShieldEngine | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| NewWatchdogEngine | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| PreFlightShield | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| RecordActivity | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| Redact | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| RegisterDecision | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| SessionActivity | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| ShieldEngine | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| ShieldRequest | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| ShieldResult | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| StartIdleWatchdog | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| Validate | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| ValidateDecision | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| ValidateTask | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| WatchdogEngine | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| buildSupersedingChain | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| checkIdleSessions | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| checkRoleCapability | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| checkRoleScope | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| classifyDomain | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| conflictingDecision.ID.String | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| detectTechnologyToken | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| e.GetImpactSet | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| e.ValidateDecision | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| e.buildSupersedingChain | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| e.store.GetActivePolicies | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| e.store.GetDecision | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| e.store.GetDecisionsByScope | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| e.store.ListDecisionsByParent | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| e.store.QuarantineDecision | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| isContradictory | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| isProposalViolatingPolicy | stable | `-` | /home/rohit/garuda/internal/engine/contradiction.go |
+| math.Ceil | stable | `-` | /home/rohit/garuda/internal/engine/budget_estimator.go |
+| mu.Lock | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| mu.Unlock | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| pattern.FindAllString | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| pattern.ReplaceAllString | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| r.classifyDomain | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| r.rng.Float64 | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| r.selectModels | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| r.shield.Redact | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| rand.New | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| rand.NewSource | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| regexp.MustCompile | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| s.checkRoleCapability | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| s.checkRoleScope | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| s.shieldEngine.Redact | stable | `-` | /home/rohit/garuda/internal/engine/shield.go |
+| selectModels | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| visit | stable | `-` | /home/rohit/garuda/internal/engine/lineage.go |
+| w.checkIdleSessions | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| w.cpStore.CreateCheckpoint | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| w.mu.Lock | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| w.mu.Unlock | stable | `-` | /home/rohit/garuda/internal/engine/watchdog.go |
+| wg.Add | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| wg.Done | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| wg.Wait | stable | `-` | /home/rohit/garuda/internal/engine/consensus.go |
+| github.com/myshra777-ai/garuda/internal/evaluation | stable | `-` |  |
+| AssessChange | stable | `-` | /home/rohit/garuda/internal/evaluation/assess.go |
+| Assessment | stable | `-` | /home/rohit/garuda/internal/evaluation/assess.go |
+| github.com/myshra777-ai/garuda/internal/graph | stable | `-` |  |
+| *ast.CallExpr.Parse | stable | `-` | /home/rohit/garuda/internal/graph/graph.go |
+| Edge | stable | `-` | /home/rohit/garuda/internal/graph/types.go |
+| Node | stable | `-` | /home/rohit/garuda/internal/graph/types.go |
+| TemplateData | stable | `-` | /home/rohit/garuda/internal/graph/graph.go |
+| template.JS | stable | `-` | /home/rohit/garuda/internal/graph/graph.go |
+| template.New | stable | `-` | /home/rohit/garuda/internal/graph/graph.go |
+| tmpl.Execute | stable | `-` | /home/rohit/garuda/internal/graph/graph.go |
+| github.com/myshra777-ai/garuda/internal/harvester | stable | `-` |  |
+| ExtractWithContext | stable | `-` | /home/rohit/garuda/internal/harvester/extractor.go |
+| Extractor | stable | `-` | /home/rohit/garuda/internal/harvester/extractor.go |
+| Harvest | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| HarvestedDecision | stable | `-` | /home/rohit/garuda/internal/harvester/harvester.go |
+| Harvester | stable | `-` | /home/rohit/garuda/internal/harvester/harvester.go |
+| Name | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| NewExtractor | stable | `-` | /home/rohit/garuda/internal/harvester/extractor.go |
+| NewPromoter | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| NewSlackHarvester | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| PromoteAllHighConfidence | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| PromoteToDecision | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| Promoter | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| SlackConfig | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| SlackHarvester | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| Store | stable | `-` | /home/rohit/garuda/internal/harvester/harvester.go |
+| Watch | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| callback | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| ctx.Err | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| e.Extract | stable | `-` | /home/rohit/garuda/internal/harvester/extractor.go |
+| e.decisionRegex.FindAllStringSubmatch | stable | `-` | /home/rohit/garuda/internal/harvester/extractor.go |
+| fetchMessages | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| getChannels | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| h.Harvest | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| h.client.GetConversationHistoryContext | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| h.client.GetConversationInfoContext | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| h.client.GetConversationsContext | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| h.extractor.Extract | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| h.fetchMessages | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| h.getChannels | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| h.store.SaveHarvestedDecision | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| p.PromoteToDecision | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| p.store.GetHarvestedDecision | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| p.store.ListHarvestedDecisions | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| p.store.SaveDecision | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| p.store.SaveHarvestedDecision | stable | `-` | /home/rohit/garuda/internal/harvester/promote.go |
+| since.Unix | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| strings.Replace | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| github.com/myshra777-ai/garuda/internal/ingest | stable | `-` |  |
+| GitMiner | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| Mine | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| NewGitMiner | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| c.Hash.String | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| c.Tree | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| checkADRs | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| commitIter.ForEach | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| extractFromCommit | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| file.Contents | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| git.PlainOpen | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| head.Hash | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| m.checkADRs | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| m.extractFromCommit | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| m.tenantID.String | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| parseADR | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| repo.Head | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| repo.Log | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| slog.Debug | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| tree.File | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| tree.Files | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| walker.ForEach | stable | `-` | /home/rohit/garuda/internal/ingest/git_miner.go |
+| github.com/myshra777-ai/garuda/internal/judge | stable | `-` |  |
+| BreakingChange | stable | `-` | /home/rohit/garuda/internal/judge/judge.go |
+| DeadCode | stable | `-` | /home/rohit/garuda/internal/judge/judge.go |
+| Duplication | stable | `-` | /home/rohit/garuda/internal/judge/judge.go |
+| Judge | stable | `-` | /home/rohit/garuda/internal/judge/judge.go |
+| Report | stable | `-` | /home/rohit/garuda/internal/judge/judge.go |
+| StdLibAlt | stable | `-` | /home/rohit/garuda/internal/judge/judge.go |
+| github.com/myshra777-ai/garuda/internal/justify | stable | `-` |  |
+| ContractImpact | stable | `-` | /home/rohit/garuda/internal/justify/justify.go |
+| Justification | stable | `-` | /home/rohit/garuda/internal/justify/justify.go |
+| Justify | stable | `-` | /home/rohit/garuda/internal/justify/justify.go |
+| Necessity | stable | `-` | /home/rohit/garuda/internal/justify/justify.go |
+| Simplicity | stable | `-` | /home/rohit/garuda/internal/justify/justify.go |
+| StdLib | stable | `-` | /home/rohit/garuda/internal/justify/justify.go |
+| github.com/myshra777-ai/garuda/internal/lineage | stable | `-` |  |
+| AddEdge | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| GetChildren | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| GetParents | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| GetSupersedingChain | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| Graph | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| NewGraph | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| RemoveDecision | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| String | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| ValidateIntegrity | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| collectImpact | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| dfs | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| dfsCycle | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| edgeExists | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.collectImpact | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.dfs | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.edgeExists | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.getChildrenInternal | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.mu.Lock | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.mu.RLock | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.mu.RUnlock | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.mu.Unlock | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.overlapCount | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| g.wouldCreateCycle | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| getChildrenInternal | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| overlapCount | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| wouldCreateCycle | stable | `-` | /home/rohit/garuda/internal/lineage/graph.go |
+| github.com/myshra777-ai/garuda/internal/mcp | stable | `-` |  |
+| *ast.CallExpr.ReplaceAllString | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| BridgeHandler | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| CommandRequest | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| CommandResponse | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| ParseSlashCommand | stable | `parseslashcommand` | /home/rohit/garuda/internal/mcp/bridge.go |
+| ParsedProposal | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| domainRegex.FindStringSubmatch | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| fetchAuthToken | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| handleLineage | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| parseCommandArgs | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| strings.Index | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| systemRegex.FindStringSubmatch | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| titleRegex.FindStringSubmatch | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| writeError | stable | `-` | /home/rohit/garuda/internal/mcp/bridge.go |
+| github.com/myshra777-ai/garuda/internal/merkle | stable | `-` |  |
+| ChainHash | stable | `-` | /home/rohit/garuda/internal/merkle/hash.go |
+| HashDecision | stable | `-` | /home/rohit/garuda/internal/merkle/hash.go |
+| SnapshotHash | stable | `-` | /home/rohit/garuda/internal/merkle/hash.go |
+| VerifyChain | stable | `-` | /home/rohit/garuda/internal/merkle/hash.go |
+| github.com/myshra777-ai/garuda/internal/model | stable | `-` |  |
+| AnalysisArtifact | stable | `-` | /home/rohit/garuda/internal/model/types.go |
+| Claim | stable | `-` | /home/rohit/garuda/internal/model/types.go |
+| RepositorySnapshot | stable | `-` | /home/rohit/garuda/internal/model/types.go |
+| github.com/myshra777-ai/garuda/internal/parser | stable | `-` |  |
+| ConvertToPolicies | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| NewParser | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| ParseBytes | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| ParseFile | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| Parser | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| RuleEntry | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| RuleSet | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| bytes.TrimPrefix | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| inferConditionType | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| p.ParseBytes | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| p.parseTOML | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| p.parseYAML | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| p.validate | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| parseTOML | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| parseYAML | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| toml.Unmarshal | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| validate | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| yaml.Unmarshal | stable | `-` | /home/rohit/garuda/internal/parser/garudarules.go |
+| github.com/myshra777-ai/garuda/internal/pool | stable | `-` |  |
+| AddSlot | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| BaseURL | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| DeepSeekClient | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| GeminiClient | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| GetActiveSlot | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| GetStatus | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| HealthCheck | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| HealthCheckAll | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| HealthResult | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| KeyPool | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| KeySlot | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| LoadFromEnv | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| NewKeyPool | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| NewProviderClient | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| OpenAIClient | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| ProviderClient | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| QuotaInfo | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| RateLimitTracker | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| RotateToNextActive | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| client.HealthCheck | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| d.BaseURL | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| g.BaseURL | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| getPriority | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| healthCheckSlot | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| http.NewRequestWithContext | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| o.BaseURL | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| p.AddSlot | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| p.cancel | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| p.healthCheckSlot | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| p.mu.Lock | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| p.mu.RLock | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| p.mu.RUnlock | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| p.mu.Unlock | stable | `-` | /home/rohit/garuda/internal/pool/pool.go |
+| github.com/myshra777-ai/garuda/internal/refund | stable | `-` |  |
+| rl.mu.Lock | stable | `-` | /home/rohit/garuda/internal/refund/rate_limiter.go |
+| rl.mu.Unlock | stable | `-` | /home/rohit/garuda/internal/refund/rate_limiter.go |
+| github.com/myshra777-ai/garuda/internal/repository | stable | `-` |  |
+| Commit | stable | `-` | /home/rohit/garuda/internal/repository/types.go |
+| Repository | stable | `-` | /home/rohit/garuda/internal/repository/types.go |
+| Workspace | stable | `-` | /home/rohit/garuda/internal/repository/types.go |
+| github.com/myshra777-ai/garuda/internal/selfdescribe | stable | `-` |  |
+| BenchmarkInfo | stable | `-` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| CLICommand | stable | `clicommand` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| CLIInfo | stable | `-` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| Capability | stable | `-` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| ExtractCapabilities | stable | `-` | /home/rohit/garuda/internal/selfdescribe/capabilities.go |
+| Options | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| ParseCLICommands | stable | `-` | /home/rohit/garuda/internal/selfdescribe/cli.go |
+| ProductInfo | stable | `-` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| ProductYAML | stable | `-` | /home/rohit/garuda/internal/selfdescribe/product.go |
+| ReadProductMetadata | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| ReadRoadmap | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| RoadmapInfo | stable | `-` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| RoadmapYAML | stable | `-` | /home/rohit/garuda/internal/selfdescribe/roadmap.go |
+| Run | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| SelfDescription | stable | `-` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| SemanticInfo | stable | `-` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| SourceInfo | stable | `-` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| TrustInfo | stable | `-` | /home/rohit/garuda/internal/selfdescribe/types.go |
+| b.String | stable | `-` | /home/rohit/garuda/internal/selfdescribe/markdown.go |
+| b.WriteString | stable | `-` | /home/rohit/garuda/internal/selfdescribe/markdown.go |
+| db.Close | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| db.Pool | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| filepath.Walk | stable | `-` | /home/rohit/garuda/internal/selfdescribe/cli.go |
+| getGitMetadata | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| getSemanticStats | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| getTrustEvidence | stable | `-` | /home/rohit/garuda/internal/selfdescribe/describe.go |
+| isInternal | stable | `-` | /home/rohit/garuda/internal/selfdescribe/capabilities.go |
+| strings.TrimSuffix | stable | `-` | /home/rohit/garuda/internal/selfdescribe/capabilities.go |
+| github.com/myshra777-ai/garuda/internal/store | stable | `-` |  |
+| *ast.CallExpr.Unix | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| AddEvidenceBlock | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| AddRepository | stable | `-` | /home/rohit/garuda/internal/store/workspace.go |
+| AppendMerkleChain | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| ConsumeBudget | stable | `-` | /home/rohit/garuda/internal/store/budget.go |
+| ConsumeBudgetDeduct | stable | `-` | /home/rohit/garuda/internal/store/budget_store.go |
+| CreateWorkspace | stable | `-` | /home/rohit/garuda/internal/store/workspace.go |
+| EmitReferenceChange | stable | `-` | /home/rohit/garuda/internal/store/refcount.go |
+| EnsureStreamGroup | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| ExecuteHandoffTransaction | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| GetActivePolicies | stable | `-` | /home/rohit/garuda/internal/store/policy_store.go |
+| GetActivePoliciesByScope | stable | `-` | /home/rohit/garuda/internal/store/policy_store.go |
+| GetArtifact | stable | `-` | /home/rohit/garuda/internal/store/artifact_store.go |
+| GetCheckpoint | stable | `-` | /home/rohit/garuda/internal/store/checkpoint_store.go |
+| GetContradiction | stable | `-` | /home/rohit/garuda/internal/store/contradiction_store.go |
+| GetDecisionHistory | stable | `-` | /home/rohit/garuda/internal/store/temporal_store.go |
+| GetDecisionRevisions | stable | `-` | /home/rohit/garuda/internal/store/decision_store.go |
+| GetDecisionsActiveAt | stable | `-` | /home/rohit/garuda/internal/store/temporal_store.go |
+| GetDecisionsByScope | stable | `-` | /home/rohit/garuda/internal/store/decision_store.go |
+| GetEntity | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| GetEntityRelationships | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| GetGraphData | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| GetHarvestedDecision | stable | `-` | /home/rohit/garuda/internal/store/harvested_store.go |
+| GetLatestArtifact | stable | `-` | /home/rohit/garuda/internal/store/artifact_store.go |
+| GetLatestMerkleSnapshot | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| GetLineageDAG | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| GetMerkleRoot | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| GetPlan | stable | `-` | /home/rohit/garuda/internal/store/plan_store.go |
+| GetTask | stable | `-` | /home/rohit/garuda/internal/store/task_store.go |
+| GetTasksByTopology | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| GetTenantBudget | stable | `-` | /home/rohit/garuda/internal/store/budget_store.go |
+| GetTopology | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| HandoffResponse | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| IngestBlocks | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| IngestEvidence | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| ListAllTenants | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| ListArtifactsByRepo | stable | `-` | /home/rohit/garuda/internal/store/artifact_store.go |
+| ListAuditEvents | stable | `-` | /home/rohit/garuda/internal/store/audit_store.go |
+| ListByScope | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| ListCheckpointsByAgent | stable | `-` | /home/rohit/garuda/internal/store/checkpoint_store.go |
+| ListContradictions | stable | `-` | /home/rohit/garuda/internal/store/contradiction_store.go |
+| ListDecisions | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| ListDecisionsByParent | stable | `-` | /home/rohit/garuda/internal/store/decision_store.go |
+| ListEntities | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| ListHandoffsByScope | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| ListHarvestedDecisions | stable | `-` | /home/rohit/garuda/internal/store/harvested_store.go |
+| ListLineageEdgesByTasks | stable | `-` | /home/rohit/garuda/internal/store/lineage_store.go |
+| ListMerkleSnapshots | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| ListMilestonesByScope | stable | `-` | /home/rohit/garuda/internal/store/milestone_store.go |
+| ListRepositories | stable | `-` | /home/rohit/garuda/internal/store/workspace.go |
+| ListTasksByScope | stable | `-` | /home/rohit/garuda/internal/store/task_store.go |
+| ListUnresolvedContradictions | stable | `-` | /home/rohit/garuda/internal/store/contradiction_store.go |
+| ListWorkspaces | stable | `-` | /home/rohit/garuda/internal/store/workspace.go |
+| LogAuditEvent | stable | `-` | /home/rohit/garuda/internal/store/audit_store.go |
+| LogPolicyViolation | stable | `-` | /home/rohit/garuda/internal/store/policy_store.go |
+| Migrate | stable | `-` | /home/rohit/garuda/internal/store/migrate.go |
+| NewPostgresStore | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| NewRefCountManager | stable | `-` | /home/rohit/garuda/internal/store/refcount.go |
+| Pool | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| PostgresStore | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| PreflightCheckAndReserve | stable | `-` | /home/rohit/garuda/internal/store/budget_store.go |
+| QuarantineDecision | stable | `-` | /home/rohit/garuda/internal/store/contradiction_store.go |
+| RefCountManager | stable | `-` | /home/rohit/garuda/internal/store/refcount.go |
+| ResolveContradiction | stable | `-` | /home/rohit/garuda/internal/store/contradiction_store.go |
+| ResumeAgent | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| SaveAnalysisDecision | stable | `-` | /home/rohit/garuda/internal/store/analysis.go |
+| SaveArtifact | stable | `-` | /home/rohit/garuda/internal/store/artifact_store.go |
+| SaveCheckpoint | stable | `-` | /home/rohit/garuda/internal/store/checkpoint_store.go |
+| SaveDecision | stable | `-` | /home/rohit/garuda/internal/store/decision_store.go |
+| SaveHarvestedDecision | stable | `-` | /home/rohit/garuda/internal/store/harvested_store.go |
+| SaveMerkleSnapshot | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| SaveMilestone | stable | `-` | /home/rohit/garuda/internal/store/milestone_store.go |
+| SavePolicy | stable | `-` | /home/rohit/garuda/internal/store/policy_store.go |
+| SaveSemanticGraph | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| SaveTask | stable | `-` | /home/rohit/garuda/internal/store/task_store.go |
+| SaveTaskManifest | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| SaveTopology | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| StartExpiryWorker | stable | `-` | /home/rohit/garuda/internal/store/expiry.go |
+| StartRefCountFlusher | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| SubmitDecision | stable | `-` | /home/rohit/garuda/internal/store/revision_store.go |
+| SupersedePolicy | stable | `-` | /home/rohit/garuda/internal/store/policy_store.go |
+| SyncWorkspace | stable | `-` | /home/rohit/garuda/internal/store/workspace.go |
+| UpdateRepositorySyncStatus | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| UpdateTask | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| UpdateTopologyStatus | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| UpdateTopologyTokens | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| VerifyAuditEvent | stable | `-` | /home/rohit/garuda/internal/store/audit_store.go |
+| agentID.String | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| analyzer.RelationshipType | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| batch.Queue | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| br.Close | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| br.Exec | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| commitEvidenceDeltas | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| computeStateHash | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| consumeBudgetTx | stable | `-` | /home/rohit/garuda/internal/store/budget.go |
+| content.CanonicalJSON | stable | `-` | /home/rohit/garuda/internal/store/revision_store.go |
+| content.Hash | stable | `-` | /home/rohit/garuda/internal/store/revision_store.go |
+| createGenesisMerkleRoot | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| createdAt.IsZero | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| d.ValidFrom.IsZero | stable | `-` | /home/rohit/garuda/internal/store/decision_store.go |
+| errors.Is | stable | `-` | /home/rohit/garuda/internal/store/analysis.go |
+| eventID.String | stable | `-` | /home/rohit/garuda/internal/store/audit_store.go |
+| filepath.Glob | stable | `-` | /home/rohit/garuda/internal/store/migrate.go |
+| flush | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| getDecisionByidempotencyKey | stable | `-` | /home/rohit/garuda/internal/store/revision_store.go |
+| h.Sum | stable | `-` | /home/rohit/garuda/internal/store/audit_store.go |
+| h.Write | stable | `-` | /home/rohit/garuda/internal/store/audit_store.go |
+| lockAgent | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| lockTask | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| markExpiredTasks | stable | `-` | /home/rohit/garuda/internal/store/expiry.go |
+| merkle.ChainHash | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| merkle.HashDecision | stable | `-` | /home/rohit/garuda/internal/store/decision_store.go |
+| parseStatus | stable | `-` | /home/rohit/garuda/internal/store/decision_store.go |
+| parseStatuses | stable | `-` | /home/rohit/garuda/internal/store/plan_store.go |
+| pool.QueryRow | stable | `-` | /home/rohit/garuda/internal/store/migrate.go |
+| rdb.XAck | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| rdb.XGroupCreateMkStream | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| rdb.XReadGroup | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| repoID.String | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| req.SourceAgentID.String | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| rm.rdb.XAdd | stable | `-` | /home/rohit/garuda/internal/store/refcount.go |
+| s.AppendMerkleChain | stable | `-` | /home/rohit/garuda/internal/store/audit_store.go |
+| s.GetDecisionsActiveAt | stable | `-` | /home/rohit/garuda/internal/store/plan_store.go |
+| s.GetMerkleRoot | stable | `-` | /home/rohit/garuda/internal/store/decision_store.go |
+| s.GetTenantBudget | stable | `-` | /home/rohit/garuda/internal/store/budget_store.go |
+| s.ListDecisions | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| s.ListHandoffsByScope | stable | `-` | /home/rohit/garuda/internal/store/plan_store.go |
+| s.ListLineageEdgesByTasks | stable | `-` | /home/rohit/garuda/internal/store/plan_store.go |
+| s.ListMilestonesByScope | stable | `-` | /home/rohit/garuda/internal/store/plan_store.go |
+| s.ListRepositories | stable | `-` | /home/rohit/garuda/internal/store/workspace.go |
+| s.ListTasksByScope | stable | `-` | /home/rohit/garuda/internal/store/plan_store.go |
+| s.commitEvidenceDeltas | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| s.consumeBudgetTx | stable | `-` | /home/rohit/garuda/internal/store/budget.go |
+| s.createGenesisMerkleRoot | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| s.flush | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| s.getDecisionByidempotencyKey | stable | `-` | /home/rohit/garuda/internal/store/revision_store.go |
+| s.lockAgent | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| s.lockTask | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| s.markExpiredTasks | stable | `-` | /home/rohit/garuda/internal/store/expiry.go |
+| s.pool.Begin | stable | `-` | /home/rohit/garuda/internal/store/analysis.go |
+| s.pool.BeginTx | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| s.pool.Close | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| s.pool.Exec | stable | `-` | /home/rohit/garuda/internal/store/artifact_store.go |
+| s.pool.Query | stable | `-` | /home/rohit/garuda/internal/store/artifact_store.go |
+| s.pool.QueryRow | stable | `-` | /home/rohit/garuda/internal/store/artifact_store.go |
+| s.storeCheckpointInCAS | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| s.updateAgentStatus | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| sha256.New | stable | `-` | /home/rohit/garuda/internal/store/audit_store.go |
+| snapshot.EpochTimestamp.IsZero | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| snapshot.EpochTimestamp.Unix | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| storeCheckpointInCAS | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| syncFunc | stable | `-` | /home/rohit/garuda/internal/store/workspace.go |
+| time.Unix | stable | `-` | /home/rohit/garuda/internal/store/merkle_store.go |
+| tx.QueryRow | stable | `-` | /home/rohit/garuda/internal/store/analysis.go |
+| tx.SendBatch | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| types.AgentRole | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| types.DecisionStatus | stable | `-` | /home/rohit/garuda/internal/store/postgres.go |
+| types.TaskStatus | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| types.TopologyStatus | stable | `-` | /home/rohit/garuda/internal/store/topology_store.go |
+| updateAgentStatus | stable | `-` | /home/rohit/garuda/internal/store/handoff_store.go |
+| workspaceID.String | stable | `-` | /home/rohit/garuda/internal/store/semantic_store.go |
+| github.com/myshra777-ai/garuda/internal/telemetry | stable | `-` |  |
+| Collector | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| Config | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| Consent | stable | `-` | /home/rohit/garuda/internal/telemetry/consent.go |
+| ContradictionMetrics | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| CostMetrics | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| DecisionMetrics | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| DefaultConfig | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| Emit | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| ErrorEntry | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| Flush | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| InitTelemetry | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| IsConsentGiven | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| LoadConfigFromEnv | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| NewCollector | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| NewSSEBroker | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| PerformanceMetrics | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| Publish | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| RecordAPILatency | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordBudgetExhausted | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordColdStart | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordContradiction | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| RecordContradictionDetected | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordContradictionDetectedDefault | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordCostSaving | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| RecordDecision | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| RecordDecisionProposed | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordDecisionProposedWithModel | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordDecisionRejected | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordError | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordFeatureUsage | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordHandoff | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordHandoffWithModel | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordHandoffWithTelemetry | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordLatency | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| RecordVerification | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordVerificationWithModel | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordWarmStart | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| RecordWarmStartWithModel | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| SSEBroker | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| SSEEvent | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| SaveConsent | stable | `-` | /home/rohit/garuda/internal/telemetry/consent.go |
+| Scope | stable | `-` | /home/rohit/garuda/internal/telemetry/metrics.go |
+| ShowConsentPrompt | stable | `-` | /home/rohit/garuda/internal/telemetry/consent.go |
+| Shutdown | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| ShutdownTelemetry | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| TelemetryPayload | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| anonymizeSessionID | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| anonymizeTenant | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| b.mu.Lock | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| b.mu.RLock | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| b.mu.RUnlock | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| b.mu.Unlock | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| backgroundFlusher | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| base64.StdEncoding.EncodeToString | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| broker.start | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| buildErrorEntries | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| c.Flush | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| c.calculatePercentiles | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| c.client.Do | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| c.flush | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| c.flushBatch | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| c.percentile | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| c.sendBatch | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| c.wg.Add | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| c.wg.Done | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| c.wg.Wait | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| c.worker | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| calculatePercentiles | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| close | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| computeInstanceHash | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| copy | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| d.Milliseconds | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| flushBatch | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| globalCollector.Emit | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| globalCollector.RecordContradiction | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| globalCollector.RecordDecision | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| globalCollector.RecordError | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| globalCollector.RecordFeatureUsage | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| globalCollector.RecordLatency | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| globalCollector.Shutdown | stable | `-` | /home/rohit/garuda/internal/telemetry/integration.go |
+| os.Hostname | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| os.UserHomeDir | stable | `-` | /home/rohit/garuda/internal/telemetry/consent.go |
+| parseBoolEnv | stable | `-` | /home/rohit/garuda/internal/telemetry/consent.go |
+| percentile | stable | `-` | /home/rohit/garuda/internal/telemetry/telemetry.go |
+| sendBatch | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| start | stable | `-` | /home/rohit/garuda/internal/telemetry/sse.go |
+| worker | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| github.com/myshra777-ai/garuda/internal/topology | stable | `-` |  |
+| Agent | stable | `-` | /home/rohit/garuda/internal/topology/roles.go |
+| AgentPermissions | stable | `-` | /home/rohit/garuda/internal/topology/roles.go |
+| Execute | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| Executor | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| Handoff | stable | `-` | /home/rohit/garuda/internal/topology/roles.go |
+| NewExecutor | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| NewGenerator | stable | `-` | /home/rohit/garuda/internal/topology/generator.go |
+| Recommend | stable | `-` | /home/rohit/garuda/internal/topology/generator.go |
+| Shield | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| Task | stable | `-` | /home/rohit/garuda/internal/topology/roles.go |
+| Topology | stable | `-` | /home/rohit/garuda/internal/topology/roles.go |
+| TopologyStore | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| determineRoles | stable | `-` | /home/rohit/garuda/internal/topology/generator.go |
+| e.executeTask | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| e.getTaskByID | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| e.shield.ValidateTask | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| e.store.GetTasksByTopology | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| e.store.GetTopology | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| e.store.UpdateTask | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| e.store.UpdateTopologyStatus | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| e.store.UpdateTopologyTokens | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| executeTask | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| getTaskByID | stable | `-` | /home/rohit/garuda/internal/topology/executor.go |
+| getTaskTitleDesc | stable | `-` | /home/rohit/garuda/internal/topology/generator.go |
+| github.com/myshra777-ai/garuda/internal/types | stable | `-` |  |
+| AgentCheckpoint | stable | `-` | /home/rohit/garuda/internal/types/checkpoint.go |
+| AuditEvent | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| AuditVerification | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| Block | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| BudgetConsumptionRequest | stable | `-` | /home/rohit/garuda/internal/types/budget.go |
+| BudgetConsumptionResponse | stable | `-` | /home/rohit/garuda/internal/types/budget.go |
+| Checkpoint | stable | `-` | /home/rohit/garuda/internal/types/checkpoint.go |
+| CheckpointData | stable | `-` | /home/rohit/garuda/internal/types/checkpoint.go |
+| CheckpointRepository | stable | `-` | /home/rohit/garuda/internal/types/checkpoint.go |
+| Contradiction | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| DecisionRevision | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| DecisionStore | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| DiscoveredFact | stable | `-` | /home/rohit/garuda/internal/types/checkpoint.go |
+| EvaluationTest | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| EvidenceBlock | stable | `-` | /home/rohit/garuda/internal/types/merkle.go |
+| HandoffRecord | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| IsScopeAllowed | stable | `-` | /home/rohit/garuda/internal/types/topology.go |
+| LineageEdge | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| MerkleProof | stable | `-` | /home/rohit/garuda/internal/types/merkle.go |
+| MerkleRoot | stable | `-` | /home/rohit/garuda/internal/types/merkle.go |
+| MerkleSnapshot | stable | `-` | /home/rohit/garuda/internal/types/merkle.go |
+| Milestone | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| PlanRequest | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| PlanResult | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| Policy | stable | `-` | /home/rohit/garuda/internal/types/policy.go |
+| PolicyViolation | stable | `-` | /home/rohit/garuda/internal/types/policy.go |
+| RouteTarget | stable | `-` | /home/rohit/garuda/internal/types/router.go |
+| RoutingDecision | stable | `-` | /home/rohit/garuda/internal/types/router.go |
+| SubmitDecisionRequest | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| SubmitDecisionResult | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| TaskManifest | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| TemplateTask | stable | `-` | /home/rohit/garuda/internal/types/topology.go |
+| TemporalMetadata | stable | `-` | /home/rohit/garuda/internal/types/types.go |
+| TenantBudget | stable | `-` | /home/rohit/garuda/internal/types/budget.go |
+| TopologyAudit | stable | `-` | /home/rohit/garuda/internal/types/topology.go |
+| TopologyTemplate | stable | `-` | /home/rohit/garuda/internal/types/topology.go |
+| github.com/oapi-codegen/runtime | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| github.com/redis/go-redis/v9 | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| github.com/slack-go/slack | stable | `-` | /home/rohit/garuda/internal/harvester/slack.go |
+| github.com/slack-go/slack/socketmode | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| github.com/spf13/cobra | stable | `-` | /home/rohit/garuda/cmd/garuda/ci.go |
+| go/ast | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| go/parser | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| go/token | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| golang.org/x/crypto/bcrypt | stable | `-` | /home/rohit/garuda/internal/auth/user.go |
+| golang.org/x/tools/go/packages | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| gopkg.in/yaml.v3 | stable | `-` | /home/rohit/garuda/internal/selfdescribe/product.go |
+| html/template | stable | `-` | /home/rohit/garuda/internal/graph/graph.go |
+| io | stable | `-` | /home/rohit/garuda/internal/pool/provider.go |
+| io/ioutil | stable | `-` | /home/rohit/garuda/internal/analyzer/diff.go |
+| log | stable | `-` | /home/rohit/garuda/cmd/garuda-slack/main.go |
+| log/slog | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| math | stable | `-` | /home/rohit/garuda/internal/engine/budget_estimator.go |
+| math/rand | stable | `-` | /home/rohit/garuda/internal/engine/router.go |
+| net | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| net/http | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| net/url | stable | `-` | /home/rohit/garuda/internal/api/generated.go |
+| os | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| os/exec | stable | `-` | /home/rohit/garuda/internal/analyzer/ast_extractor.go |
+| os/signal | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| path/filepath | stable | `-` | /home/rohit/garuda/internal/telemetry/consent.go |
+| regexp | stable | `-` | /home/rohit/garuda/internal/harvester/extractor.go |
+| runtime | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| sort | stable | `-` | /home/rohit/garuda/internal/analyzer/schema_builder.go |
+| strconv | stable | `-` | /home/rohit/garuda/internal/store/flusher.go |
+| strings | stable | `-` | /home/rohit/garuda/internal/telemetry/consent.go |
+| sync | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
+| syscall | stable | `-` | /home/rohit/garuda/cmd/garuda/main.go |
+| time | stable | `-` | /home/rohit/garuda/internal/telemetry/collector.go |
 
-It is not just another MCP tool. It is the **central brain and governance layer** for your entire fleet of AI agents. It doesn't matter if half your team is using Claude, some are using GPT-4o, or others are on Gemini. You install Garuda with a single command, and it immediately organizes your team of AI agents so they work as a single, coordinated unit.
-
----
-
-## 🌟 Why Garuda?
-
-### The Problem
-- **Context Loss & Friction:** AI agents forget context between sessions, causing 8-minute cold starts and redundant execution cycles.
-- **Token Inefficiency:** Uncoordinated multi-agent deployments duplicate work, leading to 40%–60% token budget waste.
-- **Semantic Drift & Contradictions:** Unmonitored models output conflicting decisions, introducing operational risk and data corruption.
-- **Compliance & Audit Blindspots:** Traditional model calls lack deterministic, tamper-proof execution trails required for enterprise governance.
-
-### The Solution
-
-Garuda gives every agent a **permanent, auditable, shareable memory**:
-
-| Feature | Function & Impact |
-| :--- | :--- |
-| **Cryptographic Evidence Chain** | Every decision is SHA‑256 hashed and linked into a per‑tenant Merkle tree – tamper‑proof, auditable, legally verifiable. |
-| **Autonomous Contradiction Quarantine** | Real‑time conflict detection within `(scope_domain, scope_system)` – zero‑trust governance, conflicting proposals quarantined before they corrupt truth. |
-| **Token & Cost Metering** | Pre-flight budget enforcement and token savings heuristics prevent runaway model costs. |
-| **Agent State Checkpoint & Handoff** | Enables cross-model and cross-agent execution handoffs with zero-downtime state resumption – Claude ↔ GPT ↔ Gemini seamless. |
-| **Bitemporal & Replayable Truth** | Stores decisions as append-only revisions, allowing point-in-time state reconstruction and audit replay. |
-| **Native MCP Integration** | `/garuda` slash commands inside Cursor, Claude Desktop, or any MCP‑compatible client – zero‑learning‑curve for agents and humans. |
-
----
-
-## Features
-<!-- FEATURES_START -->
-### 🚀 Latest Capabilities (Updated 2026-08-09)
-
-- **Decision Registry & Immutable Truth Foundation** – versioned, append-only ledger with full metadata (who, when, why, evidence).
-- **Directed Lineage Graph (DAG)** – full traceability of dependencies, supersession, and impact analysis.
-- **Autonomous Contradiction Quarantine Engine** – real‑time detection and isolation of conflicting decisions.
-- **Multi‑Agent Handoff & Checkpointing** – atomic, crash‑safe transfer of tasks with CAS‑deduplicated context.
-- **Cryptographic Merkle Audit Ledger** – SHA‑256 hashed event chaining; every API response includes `X-Garuda-Merkle-Root`.
-- **Token Budget Metering & Circuit Breakers** – real‑time tracking with pre‑flight checks and automatic fallback.
-- **Bitemporal Validity Queries** – point‑in‑time truth reconstruction: "What was the state on 2026‑06‑01?"
-- **Automatic Checkpointing & Idle Watchdog** – token exhaustion and 60‑min inactivity auto‑checkpoint.
-- **Dynamic Model Router & Pre‑Flight Classifier** – intelligent task routing based on intent, token depth, budget, and SLA.
-- **Secret Redaction & PII Protection** – real‑time regex‑based detection and masking of API keys, certificates, personal data.
-- **Native MCP Integration** – slash commands inside Cursor, Claude Desktop, Gemini CLI, etc.
-- **Mission Control Dashboard** – embedded dark‑mode web UI with live SSE metrics, lineage, contradictions, and budget.
-- **Single‑Turn Agent Bootstrapper** – `/system/bootstrap` returns endpoints, Merkle state, budget, and MCP tools in one call.
-- **Self‑Healing Error Remediation** – error responses include machine‑actionable remediation hints.
-- **OpenAPI 3.0.3 Specification & Swagger UI** – interactive API docs at `/docs`.
-
----
-_This section is auto-generated by AI from the latest commits._
-<!-- FEATURES_END -->
-
----
-
-## 🏗️ Architecture & Component Design
-
-<!-- AUTO-GENERATED:DIAGRAM:START -->
-```
-┌──────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                 GARUDA RUNTIME ENGINE                                        │
-├──────────────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │  Layer 7/8 – Intent Governance & Continuous Runtime                                  │   │
-│  │  ├─ Cryptographic Merkle Attestation Engine                                         │   │
-│  │  ├─ Model‑Attributed Telemetry Collector (Async Batch Ingestor)                     │   │
-│  │  ├─ Token Budget Metering & Pre‑Flight Ledger                                       │   │
-│  │  └─ MCP Bridge & Slash‑Command Router                                               │   │
-│  └──────────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │  Layer 0/1/6 – Truth Foundation, Directed Graph & Cognition                          │   │
-│  │  ├─ Autonomous Contradiction Pre‑Flight Shield                                       │   │
-│  │  ├─ Append‑Only Immutable Revisions & Decision Store                                  │   │
-│  │  ├─ SHA‑256 Hash‑Chained Evidence Ledger                                             │   │
-│  │  └─ Agent State Checkpoint & Handoff Engine                                          │   │
-│  └──────────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │  Storage Layer                                                                        │   │
-│  │  ├─ PostgreSQL / Supabase (Decisions, Evidence, Telemetry Events)                    │   │
-│  │  ├─ Redis (State Cache & SSE Broker Stream)                                          │   │
-│  │  └─ Merkle Roots (Per‑Tenant Cryptographic State)                                    │   │
-│  └──────────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────────────────────┐   │
-│  │  Background Daemons                                                                    │   │
-│  │  ├─ Merkle Snapshot Worker (Epochic SHA‑256 parent‑chained snapshots)                │   │
-│  │  └─ Telemetry Collector (Async, batched ingestion)                                   │   │
-│  └──────────────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                              │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
-```
-<!-- AUTO-GENERATED:DIAGRAM:END -->
-
----
-
-## 📊 Live Observability & Telemetry Metrics
-
-Garuda continuously captures model‑attributed operational metrics to evaluate execution efficiency, policy compliance, and resource usage.
-
-<!-- AUTO-GENERATED:METRICS:START -->
-| Metric Category | Metrics Tracked |
-| :--- | :--- |
-| **Instance Context** | `instance_hash`, `session_id`, `garuda_version`, `agent_runtime` |
-| **Decision Lifecycle** | `decision_status`, `scope_domain`, `scope_system`, `decision_confidence`, `contradictions_caught` |
-| **Model Attribution** | `model_name`, `model_provider`, `model_route` |
-| **Cost & Efficiency** | `tokens_estimated`, `tokens_saved`, `estimated_cost_usd`, `budget_remaining` |
-| **Performance (ms)** | `cold_start_latency_p50/p95/p99`, `warm_start_latency_p50/p95/p99`, `api_latency_p50/p95/p99`, `handoff_latency` |
-| **Efficacy Rates** | `handoff_success_rate`, `contradiction_reduction_rate`, `token_reuse_rate`, `hallucinations_prevented` |
-<!-- AUTO-GENERATED:METRICS:END -->
-
----
-
-## ⚡ Quickstart Guide
-
-### Prerequisites
-* **Go** `1.25` or higher
-* **PostgreSQL** `14` or higher (or Supabase / Render Postgres)
-* **Redis** `7` or higher (optional, for caching)
-* **Docker & Docker Compose** (Optional, for containerized deployments)
-
-### 1. One‑Command Install (Recommended)
+## CLI Commands
 
 ```bash
-# Install Garuda globally (like Ollama, npm, or go install)
-curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | sh
-
-# Start the full runtime
-garuda up
+garuda ci  # Garuda command
+garuda evaluate [baseline.json] [proposed.json]  # Garuda command
+garuda handoff <task_id> <source_agent_id> <target_agent_id>  # Garuda command
+garuda lineage <task_id>  # Garuda command
+garuda init-wizard  # Garuda command
+garuda judge <baseline.json> <proposed.json>  # Garuda command
+garuda justify <entity-name>  # Garuda command
+garuda key status  # Garuda command
+garuda analyze [path]  # Garuda command
+garuda diff [json1] [json2]  # Garuda command
+garuda workspace  # Garuda command
+garuda create [name]  # Garuda command
+garuda list  # Garuda command
+garuda delete [name]  # Garuda command
+garuda sync [workspace-name]  # Garuda command
+garuda repo  # Garuda command
+garuda add [workspace-name] [repo-url]  # Garuda command
+garuda list [workspace-name]  # Garuda command
+garuda remove [workspace-name] [repo-url]  # Garuda command
+garuda enable [workspace-name] [repo-url]  # Garuda command
+garuda disable [workspace-name] [repo-url]  # Garuda command
+garuda init  # Garuda command
+garuda up  # Garuda command
+garuda down  # Garuda command
+garuda status  # Garuda command
+garuda propose [title]  # Garuda command
+garuda verify  # Garuda command
+garuda explain [decision-id]  # Garuda command
+garuda mcp  # Garuda command
+garuda install  # Garuda command
+garuda ingest [repo-path]  # Garuda command
+garuda dashboard  # Garuda command
+garuda inspect <entity>  # Garuda command
+garuda graph [workspace-name]  # Garuda command
+garuda plan  # Garuda command
+garuda remember <statement>  # Garuda command
+garuda policies  # Garuda command
+garuda supersede <policy_id> <new_statement>  # Garuda command
+garuda ponytail [path]  # Garuda command
+garuda self-describe [path]  # Garuda command
+garuda recommend <goal>  # Garuda command
+garuda execute --topology <id>  # Garuda command
 ```
 
-That's it. You now have:
-- ✅ PostgreSQL + Redis (managed via Docker)
-- ✅ API Gateway on `:8080`
-- ✅ Merkle snapshot worker
-- ✅ Mission Control dashboard at `http://localhost:8080/dashboard`
-- ✅ MCP bridge for slash commands
+## Semantic Model
 
-### 2. Manual Build (Without Docker)
+- **Entities:** ऄ
+- **Relationships:** ᎕
+- **Evidence:** 
+- **Lineage:** ✅
+
+## Trust & Integrity
+
+- **Immutable Ledger:** ✅
+- **Merkle Root:** `c48ee5e16fbc621b8505acd7c9fcc66a8ce7c85662813f6b46001d8fd53d0891`
+- **Revisions:** 
+
+## Roadmap
+
+- **Current Phase:** P2
+- **Next Phase:** P3
+- **Phases:** P0: Foundation, P1: Semantic Core, P2: Go Analyzer, P3: CLI & Artifacts
+
+## Installation
+
+```bash
+go install github.com/myshra777-ai/garuda@latest
+```
+
+## Quick Start
+
+```bash
+garuda analyze .
+garuda inspect <entity>
+garuda graph . --open
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
+
+---
+
+*Generated by `garuda self describe` on 2026-08-16T23:28:23+05:30*
+Garuda is being built incrementally: **single-repository correctness first, multi-repository intelligence next, Company Graph later.**
+
+---
+
+## 🧭 What Garuda Does
+
+Modern codebases are not just collections of files.
+
+A single repository can contain thousands of interconnected:
+
+* 📦 Packages
+* 📄 Files
+* 🧱 Structs
+* 🔌 Interfaces
+* ⚙️ Functions
+* 🧩 Methods
+* 🔗 Dependencies
+* 📞 Calls
+* 🔍 References
+* 🧬 Implementations
+
+The difficult part is not finding a file.
+
+The difficult part is understanding **how everything connects**.
+
+Garuda builds a semantic representation of those connections so developers can move from:
+
+```text
+Repository
+    ↓
+Package
+    ↓
+File
+    ↓
+Entity
+    ↓
+Relationship
+    ↓
+Evidence
+    ↓
+Source
+```
+
+Instead of manually reconstructing the architecture, you can explore it.
+
+---
+
+# 🧠 The Core Idea
+
+```text
+                         SOURCE CODE
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │   Go Analyzer    │
+                    │                  │
+                    │ AST / Types      │
+                    │ Imports / Calls  │
+                    │ Dependencies     │
+                    └────────┬─────────┘
+                             │
+                             ▼
+                  ┌───────────────────────┐
+                  │     SEMANTIC CORE     │
+                  │                       │
+                  │ Entities              │
+                  │ Relationships         │
+                  │ Claims                │
+                  │ Observations          │
+                  └───────────┬───────────┘
+                              │
+                              ▼
+                     ┌────────────────┐
+                     │    EVIDENCE    │
+                     │                │
+                     │ File           │
+                     │ Location       │
+                     │ Commit         │
+                     │ Content / Hash │
+                     └───────┬────────┘
+                             │
+                             ▼
+                  ┌──────────────────────┐
+                  │ IMMUTABLE ANALYSIS   │
+                  │       HISTORY        │
+                  │                      │
+                  │ Revisions            │
+                  │ Merkle Integrity     │
+                  │ Provenance           │
+                  └──────────┬───────────┘
+                             │
+                ┌────────────┼────────────┐
+                ▼            ▼            ▼
+             CLI          GRAPH       ARTIFACTS
+                │            │            │
+                └────────────┼────────────┘
+                             ▼
+                    DEVELOPERS + AI
+```
+
+### The principle
+
+> **Build structured truth first. Put generative intelligence on top of it later.**
+
+Garuda does not start with an LLM guessing what your repository means.
+
+It starts with the source code.
+
+---
+
+# 🔗 A Codebase as a Web
+
+Garuda's graph is designed to represent software as an interconnected system.
+
+For example:
+
+```text
+                         ┌───────────────┐
+                         │   Package     │
+                         └───────┬───────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              │                  │                  │
+              ▼                  ▼                  ▼
+        ┌──────────┐       ┌──────────┐       ┌──────────┐
+        │   File   │       │  Struct  │       │ Function │
+        └────┬─────┘       └────┬─────┘       └────┬─────┘
+             │                  │                  │
+             │             ┌────┴────┐             │
+             │             │         │             │
+             ▼             ▼         ▼             ▼
+        ┌─────────┐   ┌─────────┐ ┌────────┐ ┌────────────┐
+        │ Method  │   │Interface│ │ Type   │ │ Dependency │
+        └────┬────┘   └────┬────┘ └────────┘ └─────┬──────┘
+             │             │                       │
+             └─────────────┼───────────────────────┘
+                           ▼
+                     ┌────────────┐
+                     │  External  │
+                     │  Package   │
+                     └────────────┘
+```
+
+Relationships are represented explicitly rather than being inferred only by the visualization layer.
+
+Examples include:
+
+```text
+CALLS
+IMPORTS
+REFERENCES
+CONTAINS
+DEFINES
+IMPLEMENTS
+EMBEDS
+DEPENDS_ON
+```
+
+A relationship can therefore be explored as:
+
+```text
+PaymentService
+      │
+      ├── CONTAINS ──────► ProcessPayment()
+      │
+      ├── CALLS ─────────► ValidatePayment()
+      │
+      ├── DEPENDS_ON ────► PaymentRepository
+      │
+      └── REFERENCES ────► PaymentRequest
+```
+
+The objective is simple:
+
+> **Turn the codebase into something developers can navigate as a system, not merely as a directory tree.**
+
+---
+
+# 🔍 Evidence Is Part of the Graph
+
+Garuda is not intended to be a graph of unexplained assertions.
+
+Semantic information is tied back to evidence.
+
+```text
+Entity / Relationship
+        │
+        ▼
+      Claim
+        │
+        ▼
+     Evidence
+        │
+        ├── Repository
+        ├── Commit
+        ├── File
+        ├── Location
+        └── Content / Hash
+```
+
+This creates a critical distinction.
+
+Garuda should be able to represent:
+
+> **What exists**
+
+and, where supported:
+
+> **Why Garuda believes it exists**
+
+and:
+
+> **Where the supporting evidence came from**
+
+This is the foundation for trustworthy software intelligence.
+
+---
+
+# 🔐 Immutable Analysis & Integrity
+
+Garuda preserves analysis history instead of treating every analysis as disposable output.
+
+```text
+Repository
+    │
+    ▼
+ Commit
+    │
+    ▼
+Analysis
+    │
+    ▼
+Snapshot
+    │
+    ├────────► Entities
+    │
+    ├────────► Relationships
+    │
+    ├────────► Claims
+    │
+    └────────► Evidence
+```
+
+The trust layer is designed around:
+
+* 🔒 Immutable revisions
+* 🔗 Cryptographic integrity
+* 🌳 Merkle-backed verification
+* 📍 Provenance
+* 📦 Reproducible analysis artifacts
+
+The result is an analysis history that can be inspected and verified rather than silently overwritten.
+
+---
+
+# 🧩 Garuda's Semantic Model
+
+Garuda deliberately separates different kinds of information.
+
+For example:
+
+```text
+OBSERVATION
+
+"Service A imports package B"
+
+
+        ≠
+
+
+INFERENCE
+
+"Service A probably depends on Service B"
+
+
+        ≠
+
+
+DECISION
+
+"Service A must use Service B"
+```
+
+This distinction matters.
+
+A code analyzer can observe relationships in source code.
+
+It should not automatically turn those observations into organizational policies or decisions.
+
+> **Observed software state is not the same thing as organizational truth.**
+
+---
+
+# 🗂️ What Garuda Understands
+
+The semantic model is designed around explicit entities, relationships, claims, observations, and evidence.
+
+### Entities
+
+Depending on analyzer coverage:
+
+| Entity       | Description                     |
+| ------------ | ------------------------------- |
+| 📦 Package   | Go package                      |
+| 📄 File      | Source file                     |
+| 🧱 Struct    | Struct/type definition          |
+| 🔌 Interface | Interface definition            |
+| ⚙️ Function  | Function declaration            |
+| 🧩 Method    | Method associated with a type   |
+| 🏷️ Type     | Other semantic type definitions |
+| 🌐 External  | External dependency or package  |
+
+### Relationships
+
+| Relationship | Meaning                                |
+| ------------ | -------------------------------------- |
+| `CALLS`      | One function or method invokes another |
+| `IMPORTS`    | A package/file imports another package |
+| `REFERENCES` | An entity references another entity    |
+| `CONTAINS`   | One entity contains another            |
+| `DEFINES`    | A file/package defines an entity       |
+| `IMPLEMENTS` | A type implements an interface         |
+| `EMBEDS`     | A type embeds another type             |
+| `DEPENDS_ON` | A semantic dependency exists           |
+
+The exact set of relationships grows with analyzer coverage and validation.
+
+---
+
+# 🖥️ Interactive Graph
+
+Garuda's graph interface is designed around **progressive exploration**.
+
+A user should be able to move from:
+
+```text
+Repository
+     ↓
+Package
+     ↓
+File
+     ↓
+Entity
+     ↓
+Relationship
+     ↓
+Evidence
+     ↓
+Source
+```
+
+The intended interaction model includes:
+
+* 🔎 Search
+* 🖱️ Click-to-select
+* 🧭 Progressive exploration
+* 🔗 Relationship traversal
+* 🔍 Zoom and pan
+* 🧩 Entity filtering
+* 📋 Detailed entity information
+* 🧾 Relationship information
+* 📍 Evidence/provenance inspection
+
+The graph is not meant to replace the underlying semantic model.
+
+It is a **visual interface over it**.
+
+---
+
+# ⚙️ CLI
+
+Garuda is designed to be useful directly from the command line.
+
+## Stable Core Commands
+
+| Command                           | Purpose                                 |
+| --------------------------------- | --------------------------------------- |
+| `garuda analyze . --save`         | Analyze and persist semantic state      |
+| `garuda analyze . -o v1.json`     | Generate a semantic snapshot            |
+| `garuda inspect <entity>`         | Inspect a semantic entity               |
+| `garuda diff v1.json v2.json`     | Compare semantic snapshots              |
+| `garuda graph <workspace> --open` | Open the interactive graph              |
+| `garuda verify`                   | Verify analysis integrity               |
+| `garuda explain <id>`             | Trace available evidence                |
+| `garuda self-describe`            | Generate structured product information |
+
+## Active Development
+
+These capabilities are being developed and validated separately from the stable semantic-analysis core:
+
+| Command                        | Purpose                                |
+| ------------------------------ | -------------------------------------- |
+| `garuda justify <entity>`      | Explain why an entity/code path exists |
+| `garuda judge v1.json v2.json` | Governance-oriented comparison         |
+| `garuda ponytail .`            | Code-quality and hygiene analysis      |
+
+## Planned
+
+| Capability             | Direction                                          |
+| ---------------------- | -------------------------------------------------- |
+| Cross-repository graph | Connect semantic models across repositories        |
+| CI integration         | Bring semantic analysis into development workflows |
+| Policy evaluation      | Evaluate software state against explicit policies  |
+
+> Command maturity is intentionally documented separately so experimental capabilities are not presented as production guarantees.
+
+---
+
+# 🚀 Quick Start
+
+## 1. Clone Garuda
 
 ```bash
 git clone https://github.com/myshra777-ai/garuda.git
 cd garuda
-go mod tidy
-go build ./...
-export DATABASE_URL="postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable"
-export JWT_SECRET="your-256-bit-production-secret"
-export GARUDA_TELEMETRY_ENABLED="true"
-go run cmd/migrate/main.go
-go run cmd/garuda-api/main.go
+```
+
+## 2. Build
+
+```bash
+go build -o garuda cmd/garuda/*.go
+```
+
+## 3. Start the stack
+
+```bash
+./garuda up
+```
+
+## 4. Analyze a repository
+
+```bash
+./garuda analyze . --save
+```
+
+## 5. Inspect an entity
+
+```bash
+./garuda inspect PaymentService
+```
+
+## 6. Generate the graph
+
+```bash
+./garuda graph my-workspace --open
+```
+
+## 7. Generate a snapshot
+
+```bash
+./garuda analyze . -o v1.json
+```
+
+## 8. Change the code and analyze again
+
+```bash
+./garuda analyze . -o v2.json
+```
+
+## 9. Compare the semantic state
+
+```bash
+./garuda diff v1.json v2.json
+```
+
+## 10. Verify the analysis history
+
+```bash
+./garuda verify
 ```
 
 ---
 
-## 🧪 Verification Walkthrough
-
-Validate decision submission, policy validation, and Merkle inclusion proofs using `curl`:
-
-### Step 1: Issue Debug Auth Token
-
-```bash
-TOKEN=$(curl -s "http://localhost:8080/debug/token?actor=verifier&tenant_id=00000000-0000-0000-0000-000000000001" | jq -r '.token')
-```
-
-### Step 2: Propose Policy Decision
-
-```bash
-DECISION_RESP=$(curl -s -X POST http://localhost:8080/api/v1/decisions/submit \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -H "X-Model: claude-3-5-sonnet" \
-  -H "X-Model-Provider: anthropic" \
-  -d '{
-    "tenant_id": "00000000-0000-0000-0000-000000000001",
-    "title": "Enforce TLS 1.3 across external endpoints",
-    "scope_domain": "security",
-    "scope_system": "network"
-  }')
-
-echo "$DECISION_RESP" | jq .
-DECISION_ID=$(echo "$DECISION_RESP" | jq -r '.id')
-```
-
-### Step 3: Verify Cryptographic Merkle Inclusion
-
-```bash
-curl -s -X GET "http://localhost:8080/api/v1/evidence/verify/$DECISION_ID" \
-  -H "Authorization: Bearer $TOKEN" | jq .
-```
-
-### Step 4: Try a Contradictory Proposal (Quarantine Test)
-
-```bash
-curl -s -X POST http://localhost:8080/api/v1/decisions/submit \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tenant_id": "00000000-0000-0000-0000-000000000001",
-    "title": "Disable TLS 1.3 for legacy endpoints",
-    "scope_domain": "security",
-    "scope_system": "network"
-  }' | jq .
-# Expected output: {"status":"quarantined","reason":"contradiction with existing decision"}
-```
-
----
-
-## 📡 Gateway API Reference
-
-| Method | Path | Function |
-| :--- | :--- | :--- |
-| `POST` | `/api/v1/decisions/submit` | Propose a new decision; executes pre‑flight contradiction check and records Merkle evidence. |
-| `GET` | `/api/v1/evidence/verify/{id}` | Retrieve cryptographic Merkle inclusion proofs for target decision. |
-| `GET` | `/api/v1/decisions/{id}/lineage` | Query parent and child decision lineage relationships (DAG). |
-| `POST` | `/api/v1/agents/checkpoint` | Persist execution agent state for thinking cycles. |
-| `GET` | `/api/v1/agents/checkpoint/{id}` | Retrieve a saved execution state checkpoint. |
-| `POST` | `/api/v1/agents/handoff` | Atomically transfer task execution across runtime agents. |
-| `POST` | `/api/v1/agents/warmup` | Pre‑heat runtime states and context buffers. |
-| `POST` | `/api/v1/budget/consume` | Record token/execution unit consumption against tenant balance. |
-| `GET` | `/api/v1/budget` | Fetch active budget allocation and remaining limits. |
-| `GET` | `/api/v1/decisions/active?at=...` | Point‑in‑time truth reconstruction. |
-| `GET` | `/api/v1/audit/verify` | Verify an audit event's Merkle inclusion. |
-| `POST` | `/mcp/bridge` | Execute quote‑aware slash commands (`/garuda propose`, etc.). |
-| `GET` | `/dashboard` | Mission Control dark‑mode web dashboard. |
-| `GET` | `/docs` | Swagger UI interactive API documentation. |
-
----
-
-## 🧠 MCP Integration – Slash Commands
-
-Garuda speaks MCP (Model Context Protocol). Inside **Cursor, Claude Desktop, or any MCP‑compatible client**, you can use slash commands:
+# 🔄 The Garuda Workflow
 
 ```text
-/garuda propose "Use Redis for caching" --scope-domain infrastructure --scope-system cache
-/garuda verify <decision_id>
-/garuda lineage <decision_id>
-/garuda status
-/garuda handoff <task_id> <source_agent> <target_agent>
+             ┌───────────────┐
+             │  SOURCE CODE  │
+             └───────┬───────┘
+                     │
+                     ▼
+              ┌─────────────┐
+              │   ANALYZE   │
+              └──────┬──────┘
+                     │
+                     ▼
+             ┌───────────────┐
+             │   SEMANTIC    │
+             │     MODEL     │
+             └───────┬───────┘
+                     │
+          ┌──────────┼──────────┐
+          ▼          ▼          ▼
+       INSPECT      GRAPH      SNAPSHOT
+          │          │          │
+          └──────────┼──────────┘
+                     ▼
+                  CHANGE
+                     │
+                     ▼
+                  ANALYZE
+                     │
+                     ▼
+                   DIFF
+                     │
+                     ▼
+                  VERIFY
 ```
 
-No new APIs to learn – your agents just talk to Garuda.
+The central loop is:
+
+> **Analyze → Understand → Explore → Change → Re-analyze → Diff → Verify**
 
 ---
 
-## 🧩 CLI Reference
+# 📦 Data Model
 
-| Command | Description |
-| :--- | :--- |
-| `garuda init` | Set up your local environment. |
-| `garuda up` | Start all services (API, Worker, Dashboard). |
-| `garuda down` | Stop everything. |
-| `garuda status` | Check health, budget, and Merkle root. |
-| `garuda propose "<title>" [--scope-domain domain] [--scope-system system]` | Add a new decision to the brain. |
-| `garuda verify <id>` | Get cryptographic proof of a decision. |
-| `garuda lineage <id>` | See the full family tree of a decision. |
-| `garuda handoff <task_id> <source> <target>` | Handoff task between agents. |
-| `garuda resume <agent_id>` | Resume agent from checkpoint. |
-| `garuda dashboard` | Open Mission Control. |
-| `garuda --version` | Show version. |
+At a high level:
 
----
+```text
+Workspace
+    │
+    └── Repository
+           │
+           └── Commit
+                  │
+                  └── Analysis
+                         │
+                         └── Snapshot
+                                │
+                    ┌───────────┼───────────┐
+                    ▼           ▼           ▼
+                 Entities  Relationships  Claims
+                                             │
+                                             ▼
+                                          Evidence
+```
 
-## 🗺️ Current Status & Roadmap
+Core concepts:
 
-| Layer | Component | Status |
-| :--- | :--- | :--- |
-| Layer 0 | Truth Foundation (Decisions, Revisions, Evidence, Merkle Trees) | ✅ 100% Operational |
-| Layer 1 | Directed Truth Graph (Nodes, Edges, Lineage DAGs) | ✅ 100% Operational |
-| Layer 2 | Temporal Intelligence (Snapshots, Bitemporal Replay) | 🟡 65% Operational |
-| Layer 6 | Distributed Cognition (MCP Tools, Workspaces) | 🟡 40% Operational |
-| Layer 7 | Intent Governance (Contradiction Shield, Policy Enforcement) | ✅ 90% Operational |
-| Layer 8 | Runtime Gateway & Telemetry (API Gateway, Telemetry Ingestor) | ✅ 100% Operational |
-
-**Overall Platform: ~70% of Full GAS Roadmap**
-
----
-
-## 📊 Live Dashboard
-
-Mission Control (`/dashboard`) shows:
-- **Active decisions** – what the brain knows.
-- **Quarantined conflicts** – catch contradictions before they cause damage.
-- **Token budget & ROI** – real‑time cost savings.
-- **Merkle snapshot chain** – cryptographic proof of everything.
-- **SSE event stream** – live telemetry feed.
+| Concept      | Purpose                                      |
+| ------------ | -------------------------------------------- |
+| Workspace    | Logical analysis boundary                    |
+| Repository   | Source system being analyzed                 |
+| Commit       | Source state associated with analysis        |
+| Analysis     | One execution of the analyzer                |
+| Snapshot     | Structured representation of analysis output |
+| Entity       | Identifiable software element                |
+| Relationship | Typed connection between entities            |
+| Claim        | Semantic statement represented by Garuda     |
+| Evidence     | Source information supporting that statement |
 
 ---
 
-## 🔐 Security & Trust
+# 🗄️ Storage Architecture
 
-- JWT authentication with tenant isolation.
-- Ed25519 signing for non‑repudiation.
-- Cryptographic Merkle hashing prevents tampering.
-- Append‑only ledger – no destructive updates.
-- Built‑in secret redaction for API keys and PII.
-- GDPR/DPDP‑compliant telemetry with explicit consent and opt‑out.
+Garuda uses PostgreSQL for structured persistence.
 
----
+Conceptually:
 
-## 🌍 Why Garuda Over Competitors?
+```text
+PostgreSQL
+│
+├── Workspaces
+├── Repositories
+├── Commits
+├── Analyses
+├── Entities
+├── Relationships
+├── Claims
+├── Observations
+└── Evidence Metadata
+```
 
-| Competitor | Their Focus | Garuda's Edge |
-| :--- | :--- | :--- |
-| **Hyper** | Temporal knowledge graphs | Contradiction detection + multi‑agent handoff |
-| **Trace** | Workflow orchestration | Decision lineage + cryptographic proof |
-| **Graphify** | Code graph extraction | Business decision linking + MCP governance tools |
-| **Glen** | Metric consistency | Tribal knowledge harvesting + handoff |
-| **Coasty** | RPA + SOP | Thinking Mode + contradiction resolution |
+The graph experience is a semantic projection of this underlying information.
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please ensure all code additions:
-
-- Follow the **Garuda Architecture Specification (GAS)** laws.
-- Maintain **append‑only immutability** principles.
-- Include relevant SQL migrations in `migrations/`.
-- Pass `go build ./...` and `go test ./...`.
-- Update the README (auto‑generated by AI, or manually).
+It is not intended to become a disconnected visualization layer.
 
 ---
 
-## 📄 License
+# 🏗️ Architecture
 
-Garuda is released under the **Apache 2.0 License**. See the [LICENSE](LICENSE) file for details.
+```text
+┌──────────────────────────────────────────────┐
+│                  SOURCES                     │
+│                                              │
+│       Git • Code • Commits • Documents       │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│              ANALYSIS LAYER                  │
+│                                              │
+│        Go AST • Types • Dependencies         │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│               SEMANTIC CORE                  │
+│                                              │
+│ Entities │ Relationships │ Claims │ Evidence │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│               TRUST LAYER                    │
+│                                              │
+│ Immutable Revisions • Merkle • Provenance    │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│              EXPERIENCE LAYER                │
+│                                              │
+│        CLI • Graph • API • Artifacts         │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+                 DEVELOPERS + AI
+```
 
 ---
 
-**Star ⭐ us on GitHub** and help build the memory layer for enterprise AI.
+# 🎯 Current MVP
 
-**🔗 https://github.com/myshra777-ai/garuda**
+Garuda is currently focused on **single-repository Go software intelligence**.
+
+The current MVP prioritizes:
+
+* ✅ Go source analysis
+* ✅ Semantic entity extraction
+* ✅ Relationship modeling
+* ✅ Repository snapshots
+* ✅ Semantic inspection
+* ✅ Semantic diffing
+* ✅ Evidence and provenance
+* ✅ Immutable analysis history
+* ✅ Cryptographic integrity
+* ✅ Interactive graph exploration
+
+Go is the first language target.
+
+Additional languages are intentionally deferred until the Go semantic model and evaluation process are mature enough to justify expansion.
+
+---
+
+# 🧪 Why Single Repository First?
+
+Garuda is deliberately following:
+
+```text
+        1 Repository
+             │
+             ▼
+       Validate Semantics
+             │
+             ▼
+        Benchmark
+             │
+             ▼
+       10 Repositories
+             │
+             ▼
+       25 Repositories
+             │
+             ▼
+      Company Graph
+```
+
+A weak semantic analyzer becomes a much bigger problem when multiplied across hundreds of repositories.
+
+Garuda therefore follows a simple rule:
+
+> **Correctness before scale.**
+
+The objective of the MVP is not to claim that Garuda already understands an entire company.
+
+The objective is to make Garuda understand **one repository extremely well**.
+
+---
+
+# 🧭 Roadmap
+
+## Phase 0 — Trust Foundation
+
+**Status: ✅ Complete**
+
+* Immutable revisions
+* Cryptographic integrity
+* Merkle-backed history
+* Provenance
+* Audit foundations
+
+---
+
+## Phase 1 — Semantic Core
+
+**Status: ✅ Complete**
+
+* Entity model
+* Relationship model
+* Claims
+* Observations
+* Evidence model
+* Workspace/repository foundations
+
+---
+
+## Phase 2 — Go Analyzer
+
+**Status: 🧪 MVP / Active Refinement**
+
+* Go AST analysis
+* Semantic entity extraction
+* Relationship extraction
+* Repository-level semantic model
+* Analysis snapshots
+* Accuracy validation
+
+---
+
+## Phase 3 — CLI & Interactive Exploration
+
+**Status: 🧪 MVP / Active Refinement**
+
+* `analyze`
+* `inspect`
+* `diff`
+* `verify`
+* `explain`
+* `graph`
+* Interactive semantic exploration
+
+---
+
+## Phase 4 — Multi-Repository
+
+**Status: 🔜 Next Major Expansion**
+
+```text
+Repository A ─────┐
+Repository B ─────┤
+Repository C ─────┼────► Company Semantic Graph
+Repository D ─────┤
+Repository E ─────┘
+```
+
+Focus:
+
+* Repository synchronization
+* Cross-repository entities
+* Cross-repository relationships
+* Dependency mapping
+* Company-level graph exploration
+
+---
+
+## Phase 5 — Contract Intelligence
+
+**Status: 📋 Planned**
+
+Move from understanding code structure toward understanding contracts between systems.
+
+Potential areas include:
+
+* API relationships
+* producer/consumer relationships
+* missing dependencies
+* contractual gaps
+* impact analysis
+
+---
+
+## Phase 6 — Runtime Intelligence
+
+**Status: 📋 Planned**
+
+Combine static semantic understanding with runtime evidence.
+
+```text
+STATIC CODE
+     │
+     ├──────────┐
+     │          │
+     ▼          ▼
+Semantic     Runtime
+Graph       Evidence
+     │          │
+     └────┬─────┘
+          ▼
+     Richer System
+     Understanding
+```
+
+---
+
+## Phase 7+ — Governance & Trusted Organizational Intelligence
+
+**Status: 📋 Future**
+
+Long-term areas include:
+
+* policy evaluation
+* agent governance
+* decision intelligence
+* business-state integrity
+* temporal analysis
+* AI-assisted reasoning over evidence-backed software state
+
+These are future layers, not claims about the current MVP.
+
+---
+
+# 🧠 Garuda's Design Principles
+
+### 01 — Deterministic First
+
+If a fact can be reliably extracted from source code, prefer deterministic analysis over probabilistic interpretation.
+
+### 02 — Evidence Before Confidence
+
+A claim should be traceable to the evidence supporting it.
+
+### 03 — Structured Truth Before Generative Intelligence
+
+Build the semantic model first.
+
+Use AI on top of structured information rather than asking AI to reconstruct everything from raw code.
+
+### 04 — Observation ≠ Inference ≠ Decision
+
+Different epistemic categories must remain distinguishable.
+
+### 05 — Immutable History
+
+Changes in semantic state should be inspectable over time.
+
+### 06 — Progressive Disclosure
+
+Do not overwhelm the developer with the entire graph.
+
+Move naturally from:
+
+```text
+Repository
+    ↓
+Package
+    ↓
+File
+    ↓
+Entity
+    ↓
+Relationship
+    ↓
+Evidence
+    ↓
+Source
+```
+
+### 07 — Scale Only After Correctness
+
+The Company Graph is the destination.
+
+A trustworthy single-repository graph is the foundation.
+
+---
+
+# 🤖 AI + Garuda
+
+Garuda's long-term AI architecture is intentionally different from:
+
+```text
+Code → LLM → Answer
+```
+
+The intended model is:
+
+```text
+                   SOURCE CODE
+                       │
+                       ▼
+              DETERMINISTIC ANALYSIS
+                       │
+                       ▼
+               SEMANTIC KNOWLEDGE
+                       │
+                       ▼
+                    EVIDENCE
+                       │
+                       ▼
+                      AI
+                       │
+                       ▼
+              REASONING / UX
+```
+
+This allows AI systems to reason over structured and traceable software information.
+
+The AI should not become the source of truth.
+
+> **Garuda provides the substrate. Models provide reasoning.**
+
+---
+
+# 📚 Documentation as Code
+
+Garuda is also building a documentation pipeline around explicit product contracts.
+
+```text
+product.yaml
+      │
+      ├──────────────┐
+      ▼              ▼
+capabilities.yaml  roadmap.yaml
+      │              │
+      └──────┬───────┘
+             ▼
+      docs-context.json
+             │
+             ▼
+       Documentation AI
+             │
+       ┌─────┼─────┐
+       ▼     ▼     ▼
+    README  API  CHANGELOG
+```
+
+The important rule is:
+
+> **AI generates documentation. AI does not define product reality.**
+
+Product positioning, capability maturity, and roadmap state remain explicitly controlled by project contracts.
+
+---
+
+# 🔎 Product Self-Description
+
+Garuda can generate a machine-readable description of the product:
+
+```bash
+./garuda self-describe --workspace my-workspace
+```
+
+And a Markdown representation:
+
+```bash
+./garuda self-describe \
+  --workspace my-workspace \
+  --markdown \
+  --output README.md
+```
+
+This is intended to become part of an automated documentation workflow so that README, API documentation, changelogs, and related material remain synchronized with the project.
+
+---
+
+# 📊 What Garuda Is — and Isn't
+
+| Garuda is                             | Garuda is not                                            |
+| ------------------------------------- | -------------------------------------------------------- |
+| 🧠 Semantic software intelligence     | ❌ Merely a code search tool                              |
+| 🕸️ An interconnected code graph      | ❌ Just a static visualization                            |
+| 🔍 Evidence-aware analysis            | ❌ An unexplained AI answer engine                        |
+| 🔐 Integrity-aware analysis history   | ❌ Disposable analysis output                             |
+| 🧩 A structured semantic substrate    | ❌ A replacement for your source code                     |
+| 🚧 Building toward a Company Graph    | ❌ Already a complete company-wide brain                  |
+| 🤖 Designed for AI-assisted reasoning | ❌ Dependent on an LLM to understand basic code structure |
+
+---
+
+# 🚧 What Is Not the MVP
+
+Garuda intentionally does **not** treat the following as completed capabilities:
+
+* Full multi-language support
+* Large-scale multi-repository analysis
+* Complete cross-repository dependency resolution
+* Company-wide semantic intelligence
+* Runtime-informed analysis
+* Full natural-language graph querying
+* Advanced policy governance
+* Business-state integrity
+* Mature autonomous agent governance
+
+These are part of the longer-term architecture.
+
+The MVP stays focused.
+
+---
+
+# 🛠️ Development
+
+## Requirements
+
+* Go 1.21+
+* PostgreSQL 16+
+* Git
+
+## Build
+
+```bash
+go build -o garuda cmd/garuda/*.go
+```
+
+## Test
+
+```bash
+go test ./...
+```
+
+---
+
+# 🤝 Contributing
+
+Contributions are welcome.
+
+When contributing to Garuda:
+
+1. Keep semantic behavior deterministic where possible.
+2. Add tests for new behavior.
+3. Preserve evidence and provenance.
+4. Avoid silently changing existing semantic meanings.
+5. Keep documentation aligned with implemented capabilities.
+6. Clearly distinguish experimental functionality from stable functionality.
+
+For larger architectural changes, open an issue or discussion before implementation.
+
+---
+
+# 📜 License
+
+Apache License 2.0
+
+---
+
+# 🦅 Garuda
+
+**Understand the code.**
+
+**See the connections.**
+
+**Trace the evidence.**
+
+**Build the Company Graph.**
+
+<p align="center">
+
+### `Code → Semantics → Graph → Evidence → Intelligence`
+
+</p>

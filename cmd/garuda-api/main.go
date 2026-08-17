@@ -35,6 +35,7 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 
 	// Documentation & Dashboard
 	mainMux.HandleFunc("GET /dashboard", server.HandleDashboard)
+	mainMux.HandleFunc("GET /api/v1/graph", server.HandleGraph)
 	mainMux.HandleFunc("GET /docs", server.HandleSwaggerUI)
 	mainMux.HandleFunc("GET /openapi.yaml", server.HandleOpenAPISpec)
 	mainMux.HandleFunc("GET /openapi.json", server.HandleOpenAPISpec)
@@ -90,6 +91,10 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	protectedMux.HandleFunc("POST /api/v1/policies", server.HandleRememberPolicy)
 	protectedMux.HandleFunc("GET /api/v1/policies", server.HandleListPolicies)
 	protectedMux.HandleFunc("POST /api/v1/policies/{id}/supersede", server.HandleSupersedePolicy)
+
+	// Graph handeling route
+
+	protectedMux.HandleFunc("GET /api/v1/graph", server.HandleWorkspaceGraph)
 
 	// ----------------------------------------------------------------
 	// C. MIDDLEWARE PIPELINE

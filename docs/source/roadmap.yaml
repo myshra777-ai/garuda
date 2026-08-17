@@ -1,0 +1,196 @@
+schema_version: '1.0'
+schema_version: "1.0"
+
+roadmap:
+  current_phase: "P2"
+  current_phase_status: "active"
+
+  strategic_sequence:
+    - "Understand one repository"
+    - "Connect 10–25 repositories"
+    - "Detect cross-repo contradictions"
+    - "Ground AI in evidence"
+    - "Reconcile code with runtime"
+    - "Govern decisions and policies"
+    - "Expand into trusted business state"
+
+  phases:
+
+    P0:
+      name: "Trust Cleanup"
+      status: "complete"
+      focus:
+        - "Schemas"
+        - "Authentication"
+        - "Error model"
+        - "Artifact IDs"
+        - "Threat model"
+      exit_gate:
+        - "No critical integrity or security failures"
+
+    P1:
+      name: "Semantic Core"
+      status: "complete"
+      focus:
+        - "Claims"
+        - "Evidence"
+        - "Fingerprints"
+        - "Lineage"
+        - "CAS"
+        - "Redaction"
+      exit_gate:
+        - "Deterministic evidence-backed snapshots"
+
+    P2:
+      name: "Go Analyzer"
+      status: "active"
+      focus:
+        - "AST extraction"
+        - "Type extraction"
+        - "API extraction"
+        - "Schema extraction"
+        - "Benchmarking"
+      exit_gate:
+        - "Measured useful extraction"
+      current_priorities:
+        - "Improve Go semantic extraction"
+        - "Build benchmark corpus"
+        - "Measure entity precision and recall"
+        - "Measure edge precision and recall"
+        - "Measure lineage accuracy"
+        - "Measure evidence accuracy"
+
+    P3:
+      name: "CLI and Artifacts"
+      status: "next"
+      focus:
+        - "garuda analyze"
+        - "garuda inspect"
+        - "garuda explain"
+        - "garuda diff"
+        - "garuda self-describe"
+        - "garuda graph"
+      exit_gate:
+        - "Developer can understand one repository"
+
+    P4:
+      name: "Multi-repository Intelligence"
+      status: "planned"
+      focus:
+        - "10–25 repositories"
+        - "Bounded workers"
+        - "Incremental synchronization"
+        - "Cross-repository resolution"
+        - "Cross-repo claims"
+        - "garuda deps"
+        - "Workspace graph"
+      exit_gate:
+        - "Reliable workspace graph with cross-repo dependencies"
+
+    P5:
+      name: "Contract Intelligence"
+      status: "planned"
+      focus:
+        - "Ghost dependencies"
+        - "Contractual holes"
+        - "Impact analysis"
+        - "API contract extraction"
+        - "garuda contract"
+      exit_gate:
+        - "Real mismatches with evidence"
+
+    P6:
+      name: "Company Brain"
+      status: "planned"
+      focus:
+        - "Company summary"
+        - "Meeting mode"
+        - "Graph drill-down"
+        - "garuda overview"
+        - "garuda graph --company"
+      exit_gate:
+        - "Architecture understood quickly by humans and agents"
+
+    P7:
+      name: "Runtime and CI"
+      status: "planned"
+      focus:
+        - "OpenTelemetry integration"
+        - "Runtime correlation"
+        - "PR impact analysis"
+        - "Advisory policy"
+        - "garuda ci"
+      exit_gate:
+        - "Static/runtime reconciliation"
+
+    P8:
+      name: "Governance"
+      status: "planned"
+      focus:
+        - "Policies"
+        - "Decisions"
+        - "Conflicts"
+        - "Corrections"
+        - "Drift detection"
+        - "garuda justify"
+        - "garuda judge"
+        - "garuda policy"
+      exit_gate:
+        - "Evidence-backed governance loop"
+
+    P9:
+      name: "Enterprise"
+      status: "planned"
+      focus:
+        - "Compliance exports"
+        - "Retention"
+        - "Time travel"
+        - "Read projections"
+        - "Business-state extensions"
+        - "garuda time-travel"
+        - "garuda compliance"
+      exit_gate:
+        - "Enterprise pilot readiness"
+
+  deferred:
+    - "Unlimited repositories"
+    - "Every programming language"
+    - "Multiple graph databases"
+    - "Autonomous code changes"
+    - "Full compliance automation"
+    - "Universal payments/refunds/booking enforcement"
+    - "Complex multi-agent orchestration"
+    - "Zero-knowledge proofs"
+
+  strategic_moats:
+    - name: "Evidence-backed Company Graph"
+      horizon: "MVP"
+      status: "active"
+
+    - name: "Contractual Hole Detection"
+      horizon: "MVP+"
+      status: "planned"
+
+    - name: "Knowledge Drift Detection"
+      horizon: "MVP+"
+      status: "planned"
+
+    - name: "Static Runtime Reconciliation"
+      horizon: "post-MVP"
+      status: "planned"
+
+    - name: "Cryptographic Time Travel"
+      horizon: "post-MVP"
+      status: "planned"
+
+    - name: "Decision-to-Code Contradiction"
+      horizon: "post-MVP"
+      status: "planned"
+
+    - name: "Permission-aware AI Context"
+      horizon: "MVP"
+      status: "active"
+
+    - name: "Human Correction Ledger"
+      horizon: "post-MVP"
+      status: "planned"

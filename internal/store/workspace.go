@@ -22,21 +22,17 @@ type Workspace struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-type Repository struct {
-	ID             uuid.UUID  `json:"id"`
-	WorkspaceID    uuid.UUID  `json:"workspace_id"`
-	Provider       string     `json:"provider"`
-	URL            string     `json:"url"`
-	DefaultBranch  string     `json:"default_branch"`
-	Language       string     `json:"language"`
-	CurrentCommit  *string    `json:"current_commit,omitempty"` // ✅ pointer to handle NULL
-	Enabled        bool       `json:"enabled"`
-	AnalysisStatus string     `json:"analysis_status"`
-	LastAnalyzedAt *time.Time `json:"last_analyzed_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+// getTenantIDFromWorkspace retrieves the tenant ID for a given workspace.
+func (s *PostgresStore) getTenantIDFromWorkspace(ctx context.Context, workspaceID uuid.UUID) (uuid.UUID, error) {
+	var tenantID uuid.UUID
+	err := s.pool.QueryRow(ctx, `SELECT tenant_id FROM workspaces WHERE id = $1`, workspaceID).Scan(&tenantID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to get tenant ID for workspace: %w", err)
+	}
+	return tenantID, nil
 }
 
+// CreateWorkspace creates a new workspace or returns existing one.
 func (s *PostgresStore) CreateWorkspace(ctx context.Context, tenantIDStr, name, description string) (*Workspace, error) {
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
@@ -87,6 +83,7 @@ func (s *PostgresStore) CreateWorkspace(ctx context.Context, tenantIDStr, name, 
 	return ws, nil
 }
 
+// ListWorkspaces lists all workspaces for a tenant.
 func (s *PostgresStore) ListWorkspaces(ctx context.Context, tenantIDStr string) ([]*Workspace, error) {
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
@@ -113,30 +110,51 @@ func (s *PostgresStore) ListWorkspaces(ctx context.Context, tenantIDStr string) 
 	return workspaces, nil
 }
 
-func (s *PostgresStore) AddRepository(ctx context.Context, workspaceID uuid.UUID, provider, url, defaultBranch, language string) (*Repository, error) {
-	var repo Repository
-	query := `
-        INSERT INTO repositories (id, workspace_id, provider, url, default_branch, language, enabled, analysis_status, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+// AddRepository adds a repository to a workspace.
+func (s *PostgresStore) AddRepository(
+	ctx context.Context,
+	workspaceID uuid.UUID,
+	provider, url, defaultBranch, language, modulePath string,
+) (*Repository, error) {
+	if _, err := s.getTenantIDFromWorkspace(ctx, workspaceID); err != nil {
+		return nil, fmt.Errorf("failed to get tenant: %w", err)
+	}
+
+	id := uuid.New()
+	_, err := s.pool.Exec(ctx, `
+        INSERT INTO repositories (
+            id, workspace_id, provider, url, default_branch, language, module_path,
+            enabled, analysis_status, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'pending', NOW(), NOW())
         ON CONFLICT (workspace_id, url) DO UPDATE
         SET provider = EXCLUDED.provider,
             default_branch = EXCLUDED.default_branch,
             language = EXCLUDED.language,
-            enabled = EXCLUDED.enabled,
+            module_path = EXCLUDED.module_path,
             updated_at = NOW()
-        RETURNING id, workspace_id, provider, url, default_branch, language, enabled, analysis_status, created_at, updated_at
-    `
-	repoID := uuid.New()
-	err := s.pool.QueryRow(ctx, query,
-		repoID, workspaceID, provider, url, defaultBranch, language, true, "pending",
-	).Scan(&repo.ID, &repo.WorkspaceID, &repo.Provider, &repo.URL, &repo.DefaultBranch,
-		&repo.Language, &repo.Enabled, &repo.AnalysisStatus, &repo.CreatedAt, &repo.UpdatedAt)
+    `, id, workspaceID, provider, url, defaultBranch, language, modulePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add repository: %w", err)
 	}
-	return &repo, nil
+
+	return &Repository{
+		ID:             id,
+		WorkspaceID:    workspaceID,
+		Provider:       provider,
+		URL:            url,
+		DefaultBranch:  defaultBranch,
+		Language:       language,
+		ModulePath:     modulePath,
+		Enabled:        true,
+		AnalysisStatus: "pending",
+		CurrentCommit:  nil,
+		LastAnalyzedAt: nil,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}, nil
 }
 
+// ListRepositories lists all repositories in a workspace.
 func (s *PostgresStore) ListRepositories(ctx context.Context, workspaceID uuid.UUID) ([]*Repository, error) {
 	var repos []*Repository
 	query := `
@@ -155,7 +173,7 @@ func (s *PostgresStore) ListRepositories(ctx context.Context, workspaceID uuid.U
 
 	for rows.Next() {
 		var repo Repository
-		var currentCommit *string // ✅ use pointer for scan
+		var currentCommit *string
 		err := rows.Scan(
 			&repo.ID, &repo.WorkspaceID, &repo.Provider, &repo.URL, &repo.DefaultBranch,
 			&repo.Language, &currentCommit, &repo.Enabled, &repo.AnalysisStatus,
@@ -170,35 +188,47 @@ func (s *PostgresStore) ListRepositories(ctx context.Context, workspaceID uuid.U
 	return repos, nil
 }
 
+// UpdateRepositorySyncStatus updates the sync status and commit SHA of a repository.
 func (s *PostgresStore) UpdateRepositorySyncStatus(ctx context.Context, tenantIDStr string, repoID uuid.UUID, commitSHA, status string) error {
-	tenantID, err := uuid.Parse(tenantIDStr)
-	if err != nil {
+	if _, err := uuid.Parse(tenantIDStr); err != nil {
 		return fmt.Errorf("invalid tenant ID: %w", err)
 	}
-	_, err = s.pool.Exec(ctx, `
-		UPDATE repositories r
+	_, err := s.pool.Exec(ctx, `
+		UPDATE repositories
 		SET current_commit = $1, analysis_status = $2, last_analyzed_at = NOW()
-		FROM workspaces w
-		WHERE r.id = $3
-		  AND r.workspace_id = w.id
-		  AND w.tenant_id = $4
-	`, commitSHA, status, repoID, tenantID)
-	return err
+		WHERE id = $3
+	`, commitSHA, status, repoID)
+	if err != nil {
+		return fmt.Errorf("failed to update repository sync status: %w", err)
+	}
+	return nil
 }
+
+// UpdateRepositoryModulePath updates the module path of a repository.
+func (s *PostgresStore) UpdateRepositoryModulePath(ctx context.Context, repoID uuid.UUID, modulePath string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE repositories SET module_path = $1 WHERE id = $2
+	`, modulePath, repoID)
+	if err != nil {
+		return fmt.Errorf("failed to update module path: %w", err)
+	}
+	return nil
+}
+
+// SyncWorkspace executes a sync function for each repository in a workspace.
 func (s *PostgresStore) SyncWorkspace(ctx context.Context, workspaceID uuid.UUID, syncFunc func(repo *Repository, path string) error) error {
 	repos, err := s.ListRepositories(ctx, workspaceID)
 	if err != nil {
 		return fmt.Errorf("failed to list repositories: %w", err)
 	}
 	for _, repo := range repos {
-		// Clone repo to a temp directory
+		if !repo.Enabled {
+			continue
+		}
 		tempDir := filepath.Join(os.TempDir(), "garuda-sync", workspaceID.String(), repo.ID.String())
 		if err := os.MkdirAll(tempDir, 0755); err != nil {
 			return fmt.Errorf("failed to create temp dir: %w", err)
 		}
-		// Clone or pull
-		// ... git clone/pull logic ...
-		// Run analysis
 		if err := syncFunc(repo, tempDir); err != nil {
 			// Log error but continue with other repos
 			continue

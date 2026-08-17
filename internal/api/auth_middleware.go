@@ -23,8 +23,10 @@ const (
 // AuthMiddleware handles request authentication for headers and SSE query parameters
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Bypass authentication for public dashboard UI & debug endpoints
-		if r.URL.Path == "/dashboard" || r.URL.Path == "/favicon.ico" || r.URL.Path == "/debug/token" || strings.HasPrefix(r.URL.Path, "/dashboard/") {
+		// Bypass authentication for public dashboard UI and read-only dashboard data endpoints.
+		if r.URL.Path == "/dashboard" || r.URL.Path == "/favicon.ico" || r.URL.Path == "/debug/token" ||
+			strings.HasPrefix(r.URL.Path, "/dashboard/") || r.URL.Path == "/api/v1/dashboard/stats" ||
+			r.URL.Path == "/api/v1/graph" || r.URL.Path == "/api/v1/events" {
 			next.ServeHTTP(w, r)
 			return
 		}
