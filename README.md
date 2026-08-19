@@ -486,12 +486,19 @@ bin/garuda diff v1.json v2.json
 
 ### Configuration Variables
 
+#### Core Runtime Variables
+
 | Variable | Description | Default |
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL connection string | `postgres://test:test@localhost:5433/garuda_test?sslmode=disable` |
 | `GARUDA_TENANT_ID` | Active tenant UUID for multi-tenant isolation | *Required for DB writes* |
 | `GARUDA_WORKSPACE` | Active workspace name or UUID | `default` |
-| `GEMINI_API_KEY` | Key for AI-assisted changelog and docgen scripts | *Required for docgen scripts* |
+
+#### Developer Tooling Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `GEMINI_API_KEY` | Key for AI-assisted changelog and docgen scripts (`scripts/`) | *Optional; only needed for doc generation* |
 
 ---
 
@@ -638,7 +645,7 @@ go test -v -race ./...
 # Regenerate capabilities matrix from YAML schema
 python3 scripts/generate_capabilities.py
 
-# Generate release changelog using Gemini 3.6 Flash
+# Generate release changelog (requires GEMINI_API_KEY)
 python3 scripts/generate_changelog.py --context docs/generated/docs-context.json --output CHANGELOG.md
 ```
 
@@ -795,7 +802,7 @@ garuda/
 ├── test/
 │   └── benchmark/       # 10-fixture truth benchmark suite
 ├── migrations/          # Idempotent PostgreSQL migrations (000-041)
-├── scripts/             # Gemini 3.6 Flash docgen and capabilities scripts
+├── scripts/             # Documentation generation scripts
 ├── docs/
 │   └── CAPABILITIES.md  # Generated capabilities matrix
 └── go.mod
