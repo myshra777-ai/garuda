@@ -1,0 +1,11 @@
+{
+  "entities": [
+    { "name": "Reader", "kind": "interface" },
+    { "name": "CustomBuffer", "kind": "struct" },
+    { "name": "Read", "kind": "method" }
+  ],
+  "relationships": [
+    { "from": "CustomBuffer", "to": "Read", "type": "DEFINES" },
+    { "from": "CustomBuffer", "to": "Reader", "type": "IMPLEMENTS" }
+  ]
+}

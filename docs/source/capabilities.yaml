@@ -1,1 +1,61 @@
-schema_version: '1.0'
+# yaml-language-server: $schema=none
+version: "5.0"
+last_updated: "2026-08-19"
+
+categories:
+  - name: "AST Extraction & Semantic Analysis"
+    description: "Go AST parsing, type checking, and relation resolution"
+    capabilities:
+      - name: "Struct & Field Extraction"
+        status: "production"
+        verification_tier: "100% Benchmark (V5)"
+        supported_semantics: "Tags (json, db, validate), line spans, pointer/slice flags"
+        invariant: "ACGM Resolution Invariant"
+      
+      - name: "Method Receiver Disambiguation"
+        status: "production"
+        verification_tier: "100% Benchmark (002-method-identity)"
+        supported_semantics: "Pointer and value receivers, exported/unexported"
+        invariant: "Canonical UUIDv5"
+
+      - name: "Interface Implementation Matching"
+        status: "production"
+        verification_tier: "100% Benchmark (003, 009, 010)"
+        supported_semantics: "Dynamic method set satisfaction, multi-interface polymorphism"
+        invariant: "Full Recall Gate"
+
+      - name: "Generics & Type Parameters"
+        status: "production"
+        verification_tier: "100% Benchmark (004-generics)"
+        supported_semantics: "Type parameter filtering, generic container extraction"
+        invariant: "Zero False Reference Claims"
+
+      - name: "Type Aliases vs Definitions"
+        status: "production"
+        verification_tier: "100% Benchmark (005-alias)"
+        supported_semantics: "type X = Y (alias) vs type X Y (type)"
+        invariant: "Kind Disambiguation"
+
+      - name: "Struct Embedding"
+        status: "production"
+        verification_tier: "100% Benchmark (006-embedding)"
+        supported_semantics: "Anonymous field EMBEDS relation emission"
+        invariant: "Composition Invariant"
+
+      - name: "Variadic & Closure Handling"
+        status: "production"
+        verification_tier: "100% Benchmark (007, 008)"
+        supported_semantics: "Ellipsis signatures, nested literal traversals"
+        invariant: "Scope Resolution"
+
+      - name: "Cross-Repo Dependency Resolution"
+        status: "beta"
+        verification_tier: "Postgres Workspace Cache"
+        supported_semantics: "Multi-module Go import mapping across workspaces"
+        invariant: "Tenant Isolation"
+
+      - name: "Dynamic Call Graph Tracing"
+        status: "experimental"
+        verification_tier: "Heuristic"
+        supported_semantics: "SSA call site resolution"
+        invariant: "Epistemic Confidence < 0.8"

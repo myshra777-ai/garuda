@@ -1,0 +1,9 @@
+{
+  "entities": [
+    { "name": "Config", "kind": "struct" },
+    { "name": "NewConfig", "kind": "function" }
+  ],
+  "relationships": [
+    { "from": "NewConfig", "to": "Config", "type": "REFERENCES" }
+  ]
+}

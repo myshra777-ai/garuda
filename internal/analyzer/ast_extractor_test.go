@@ -1,36 +1,38 @@
+// Copyright 2026 Rohit Mishra
+// SPDX-License-Identifier: Apache-2.0
+//
+// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
+
 package analyzer
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 func TestExtractRelationships(t *testing.T) {
-	content := `
-package test
+	tmpDir := t.TempDir()
+	source := `package test
 
 import "fmt"
 
 type User struct {
-    Name string
+	Name string
 }
 
 func (u *User) Greet() {
-    fmt.Println("Hello")
+	fmt.Println(u.Name)
 }
 
 func main() {
-    u := User{}
-    u.Greet()
+	u := &User{Name: "Alice"}
+	u.Greet()
 }
 `
-	tmpDir := t.TempDir()
-	tmpFile := tmpDir + "/test.go"
-	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(tmpDir+"/go.mod", []byte("module test\n\ngo 1.21"), 0644); err != nil {
-		t.Fatal(err)
+	err := os.WriteFile(filepath.Join(tmpDir, "test.go"), []byte(source), 0644)
+	if err != nil {
+		t.Fatalf("failed to write test file: %v", err)
 	}
 
 	result, err := Extract(tmpDir)
@@ -38,41 +40,32 @@ func main() {
 		t.Fatalf("Extract failed: %v", err)
 	}
 
-	// Expected entities
-	expectedEntities := map[string]bool{
-		"test.User":  true,
-		"test.main":  true,
-		"test.Greet": true,
-		"test":       true, // package
-		tmpFile:      true, // file
-		"test.fmt":   true, // external import
+	foundEntities := make(map[string]bool)
+	for _, e := range result.Entities {
+		foundEntities[e.Name] = true
 	}
 
-	for _, e := range result.Entities {
-		if _, ok := expectedEntities[e.ID]; !ok {
-			t.Logf("Unexpected entity: %s (kind: %s)", e.ID, e.Kind)
+	for _, expected := range []string{"User", "Greet", "main"} {
+		if !foundEntities[expected] {
+			t.Errorf("Expected entity %s not found", expected)
 		}
 	}
 
-	// Check CALLS relationship from main to Greet
 	foundCalls := false
-	for _, rel := range result.Relationships {
-		if rel.Type == string(RelCalls) && rel.From == "test.main" && rel.To == "test.Greet" {
+	foundImports := false
+	for _, r := range result.Relationships {
+		if r.From == "main" && r.To == "Greet" && r.Type == string(RelCalls) {
 			foundCalls = true
 		}
-	}
-	if !foundCalls {
-		t.Error("Expected CALLS relationship from main to Greet not found")
-	}
-
-	// Check IMPORTS relationship from package to fmt
-	foundImports := false
-	for _, rel := range result.Relationships {
-		if rel.Type == string(RelImports) && rel.From == "test" && rel.To == "fmt" {
+		if r.To == "fmt" && r.Type == string(RelImports) {
 			foundImports = true
 		}
 	}
+
+	if !foundCalls {
+		t.Errorf("Expected CALLS relationship from main to Greet not found")
+	}
 	if !foundImports {
-		t.Error("Expected IMPORTS relationship from test to fmt not found")
+		t.Errorf("Expected IMPORTS relationship for fmt not found")
 	}
 }

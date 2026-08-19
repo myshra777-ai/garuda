@@ -1,0 +1,9 @@
+{
+  "entities": [
+    { "name": "Event", "kind": "struct" },
+    { "name": "Emit", "kind": "function" }
+  ],
+  "relationships": [
+    { "from": "Emit", "to": "Event", "type": "REFERENCES" }
+  ]
+}
