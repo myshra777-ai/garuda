@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS api_contracts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Idempotent index creation
 CREATE INDEX IF NOT EXISTS idx_api_contracts_tenant ON api_contracts (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_api_contracts_workspace ON api_contracts (workspace_id);
 CREATE INDEX IF NOT EXISTS idx_api_contracts_repo ON api_contracts (repository_id);
@@ -36,7 +35,6 @@ CREATE INDEX IF NOT EXISTS idx_impact_assessments_tenant ON impact_assessments (
 CREATE INDEX IF NOT EXISTS idx_impact_assessments_entity ON impact_assessments (entity_id);
 CREATE INDEX IF NOT EXISTS idx_impact_assessments_created ON impact_assessments (created_at DESC);
 
--- Trigger to auto-update updated_at
 CREATE OR REPLACE FUNCTION update_api_contracts_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN

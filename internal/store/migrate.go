@@ -10,24 +10,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"sort"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Migrate runs all SQL migration files in the migrations directory.
-// It creates the migrations table if it doesn't exist and applies
-// each migration file in order.
+// Migrate runs all SQL migration files in the migrations directory in sorted order.
+// Each migration file is executed inside an atomic transaction.
 func Migrate(connString string, migrationsDir string) error {
-	// Connect to the database
-	pool, err := pgxpool.New(context.Background(), connString)
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, connString)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 	defer pool.Close()
 
-	// Create migrations table if it doesn't exist
-	_, err = pool.Exec(context.Background(), `
+	// 1. Create tracking table
+	_, err = pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS migrations (
 			id SERIAL PRIMARY KEY,
 			name TEXT UNIQUE NOT NULL,
@@ -38,24 +38,19 @@ func Migrate(connString string, migrationsDir string) error {
 		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
-	// Read migration files
+	// 2. Discover and sort migration files
 	files, err := filepath.Glob(filepath.Join(migrationsDir, "*.sql"))
 	if err != nil {
 		return fmt.Errorf("failed to list migration files: %w", err)
 	}
+	sort.Strings(files)
 
-	// Sort files by name (assuming numeric prefix like 001_)
-	// For simplicity, we'll just apply them in alphabetical order
-	// In production, use a proper migration tool like goose or migrate
-
+	// 3. Apply migrations in order
 	for _, file := range files {
 		name := filepath.Base(file)
 
-		// Check if migration has already been applied
 		var exists bool
-		err := pool.QueryRow(context.Background(),
-			"SELECT EXISTS(SELECT 1 FROM migrations WHERE name = $1)", name).
-			Scan(&exists)
+		err := pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM migrations WHERE name = $1)", name).Scan(&exists)
 		if err != nil {
 			return fmt.Errorf("failed to check migration %s: %w", name, err)
 		}
@@ -63,30 +58,30 @@ func Migrate(connString string, migrationsDir string) error {
 			continue
 		}
 
-		// Read and execute the migration
 		content, err := os.ReadFile(file)
 		if err != nil {
 			return fmt.Errorf("failed to read migration %s: %w", name, err)
 		}
 
-		// Split by semicolon to handle multiple statements
-		statements := strings.Split(string(content), ";")
-		for _, stmt := range statements {
-			stmt = strings.TrimSpace(stmt)
-			if stmt == "" {
-				continue
-			}
-			_, err = pool.Exec(context.Background(), stmt)
-			if err != nil {
-				return fmt.Errorf("failed to execute migration %s: %w", name, err)
-			}
+		// Execute the entire migration file inside an atomic transaction
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction for %s: %w", name, err)
 		}
 
-		// Record the migration
-		_, err = pool.Exec(context.Background(),
-			"INSERT INTO migrations (name) VALUES ($1)", name)
-		if err != nil {
+		if _, err := tx.Exec(ctx, string(content)); err != nil {
+			_ = tx.Rollback(ctx)
+			return fmt.Errorf("failed to execute migration %s: %w", name, err)
+		}
+
+		// Record the migration in the same transaction
+		if _, err := tx.Exec(ctx, "INSERT INTO migrations (name) VALUES ($1)", name); err != nil {
+			_ = tx.Rollback(ctx)
 			return fmt.Errorf("failed to record migration %s: %w", name, err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("failed to commit transaction for %s: %w", name, err)
 		}
 
 		fmt.Printf("Applied migration: %s\n", name)
