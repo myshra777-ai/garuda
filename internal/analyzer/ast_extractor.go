@@ -67,7 +67,7 @@ func Extract(root string) (*Result, error) {
 		return "main"
 	}
 
-	getEntityID := func(pkg, name, kind string) string {
+	getEntityID := func(pkg, name string, kind EntityKind) string {
 		if pkg == "" {
 			pkg = "main"
 		}
@@ -80,7 +80,7 @@ func Extract(root string) (*Result, error) {
 		}
 	}
 
-	addRelation := func(from, to string, relType RelationshipType, line int, file string) {
+	addRelation := func(from, to string, relType string, line int, file string) {
 		if from == "" || to == "" {
 			fmt.Printf("DEBUG: addRelation skipped (from=%q, to=%q)\n", from, to)
 			return
@@ -132,7 +132,7 @@ func Extract(root string) (*Result, error) {
 				Exported: true,
 			}
 		}
-		addRelation(pkgEntityID, fileID, RelContains, 0, filename)
+		addRelation(pkgEntityID, fileID, string(RelContains), 0, filename)
 
 		fset := token.NewFileSet()
 		content, err := os.ReadFile(filename)
@@ -146,53 +146,62 @@ func Extract(root string) (*Result, error) {
 			continue
 		}
 
-		var currentFuncName, currentFuncPkg string
+		importedNames := make(map[string]bool)
+		var currentFuncName string
+		var currentFuncPkg string
 
 		ast.Inspect(fileAst, func(n ast.Node) bool {
 			if n == nil {
 				return true
 			}
-			// Debug: print node type
-			fmt.Printf("DEBUG: node type %T\n", n)
 
 			switch x := n.(type) {
 			case *ast.FuncDecl:
 				funcName := x.Name.Name
 				funcPkg := pkgPath
-				funcKind := KindFunction
-				funcID := getEntityID(funcPkg, funcName, string(funcKind))
-				fmt.Printf("DEBUG: Found function %s in package %s\n", funcName, funcPkg)
+				var funcKind EntityKind = KindFunction
+
+				startPos := fset.Position(x.Pos())
+				endPos := fset.Position(x.End())
+
+				fmt.Printf("DEBUG: Found function %s at line %d-%d in package %s\n", funcName, startPos.Line, endPos.Line, funcPkg)
+
 				if x.Recv != nil {
 					funcKind = KindMethod
-					funcID = getEntityID(funcPkg, funcName, string(KindMethod))
+					funcID := getEntityID(funcPkg, funcName, funcKind)
 					addEntity(Entity{
 						ID:        funcID,
-						Kind:      KindMethod,
+						Kind:      funcKind,
 						Name:      funcName,
 						Package:   funcPkg,
 						File:      filename,
-						Line:      fset.Position(x.Pos()).Line,
+						Line:      startPos.Line,
+						LineStart: startPos.Line,
+						LineEnd:   endPos.Line,
 						Exported:  x.Name.IsExported(),
 						Signature: exprToString(x.Type),
 					})
-					addRelation(fileID, funcID, RelContains, fset.Position(x.Pos()).Line, filename)
+					addRelation(fileID, funcID, string(RelContains), startPos.Line, filename)
 					if recv := x.Recv; recv != nil && len(recv.List) > 0 {
 						recvType := exprToString(recv.List[0].Type)
-						recvID := getEntityID(funcPkg, recvType, string(KindStruct))
-						addRelation(funcID, recvID, RelReferences, fset.Position(x.Pos()).Line, filename)
+						recvID := getEntityID(funcPkg, recvType, KindStruct)
+						addRelation(funcID, recvID, string(RelReferences), startPos.Line, filename)
 					}
 				} else {
+					funcID := getEntityID(funcPkg, funcName, funcKind)
 					addEntity(Entity{
 						ID:        funcID,
-						Kind:      KindFunction,
+						Kind:      funcKind,
 						Name:      funcName,
 						Package:   funcPkg,
 						File:      filename,
-						Line:      fset.Position(x.Pos()).Line,
+						Line:      startPos.Line,
+						LineStart: startPos.Line,
+						LineEnd:   endPos.Line,
 						Exported:  x.Name.IsExported(),
 						Signature: exprToString(x.Type),
 					})
-					addRelation(fileID, funcID, RelContains, fset.Position(x.Pos()).Line, filename)
+					addRelation(fileID, funcID, string(RelContains), startPos.Line, filename)
 				}
 				currentFuncName = funcName
 				currentFuncPkg = funcPkg
@@ -202,7 +211,15 @@ func Extract(root string) (*Result, error) {
 				if importPath == "" {
 					return true
 				}
-				fmt.Printf("DEBUG: Direct ImportSpec: %s\n", importPath)
+				line := fset.Position(x.Pos()).Line
+				fmt.Printf("DEBUG: Direct ImportSpec: %s at line %d\n", importPath, line)
+				name := importPath
+				if x.Name != nil {
+					name = x.Name.Name
+				} else {
+					name = filepath.Base(importPath)
+				}
+				importedNames[name] = true
 				extPkgID := importPath
 				if _, exists := entityMap[extPkgID]; !exists {
 					entityMap[extPkgID] = Entity{
@@ -214,7 +231,7 @@ func Extract(root string) (*Result, error) {
 						Exported: true,
 					}
 				}
-				addRelation(pkgEntityID, extPkgID, RelImports, fset.Position(x.Pos()).Line, filename)
+				addRelation(pkgEntityID, extPkgID, string(RelImports), line, filename)
 
 			case *ast.GenDecl:
 				if x.Tok == token.IMPORT {
@@ -225,7 +242,8 @@ func Extract(root string) (*Result, error) {
 							if importPath == "" {
 								continue
 							}
-							fmt.Printf("DEBUG: Import path: %s\n", importPath)
+							line := fset.Position(impSpec.Pos()).Line
+							fmt.Printf("DEBUG: Import path: %s at line %d\n", importPath, line)
 							extPkgID := importPath
 							if _, exists := entityMap[extPkgID]; !exists {
 								entityMap[extPkgID] = Entity{
@@ -237,69 +255,70 @@ func Extract(root string) (*Result, error) {
 									Exported: true,
 								}
 							}
-							addRelation(pkgEntityID, extPkgID, RelImports, fset.Position(impSpec.Pos()).Line, filename)
+							addRelation(pkgEntityID, extPkgID, string(RelImports), line, filename)
 						}
 					}
 				}
 
 			case *ast.TypeSpec:
+				startPos := fset.Position(x.Pos())
+				endPos := fset.Position(x.End())
+
 				switch t := x.Type.(type) {
 				case *ast.StructType:
 					structName := x.Name.Name
-					structID := getEntityID(pkgPath, structName, string(KindStruct))
+					structID := getEntityID(pkgPath, structName, KindStruct)
 					addEntity(Entity{
-						ID:       structID,
-						Kind:     KindStruct,
-						Name:     structName,
-						Package:  pkgPath,
-						File:     filename,
-						Line:     fset.Position(x.Pos()).Line,
-						Exported: x.Name.IsExported(),
+						ID:        structID,
+						Kind:      KindStruct,
+						Name:      structName,
+						Package:   pkgPath,
+						File:      filename,
+						Line:      startPos.Line,
+						LineStart: startPos.Line,
+						LineEnd:   endPos.Line,
+						Exported:  x.Name.IsExported(),
 					})
-					addRelation(fileID, structID, RelDefines, fset.Position(x.Pos()).Line, filename)
+					addRelation(fileID, structID, string(RelDefines), startPos.Line, filename)
+
 					for _, field := range t.Fields.List {
 						if field.Type != nil {
 							fieldType := exprToString(field.Type)
+							fieldLine := fset.Position(field.Pos()).Line
 							if fieldType != "" {
-								fieldID := getEntityID(pkgPath, fieldType, string(KindExternal))
-								addRelation(structID, fieldID, RelReferences, fset.Position(field.Pos()).Line, filename)
+								fieldID := getEntityID(pkgPath, fieldType, KindExternal)
+								addRelation(structID, fieldID, string(RelReferences), fieldLine, filename)
 							}
 						}
 					}
 				case *ast.InterfaceType:
 					ifaceName := x.Name.Name
-					ifaceID := getEntityID(pkgPath, ifaceName, string(KindInterface))
+					ifaceID := getEntityID(pkgPath, ifaceName, KindInterface)
 					addEntity(Entity{
-						ID:       ifaceID,
-						Kind:     KindInterface,
-						Name:     ifaceName,
-						Package:  pkgPath,
-						File:     filename,
-						Line:     fset.Position(x.Pos()).Line,
-						Exported: x.Name.IsExported(),
+						ID:        ifaceID,
+						Kind:      KindInterface,
+						Name:      ifaceName,
+						Package:   pkgPath,
+						File:      filename,
+						Line:      startPos.Line,
+						LineStart: startPos.Line,
+						LineEnd:   endPos.Line,
+						Exported:  x.Name.IsExported(),
 					})
-					addRelation(fileID, ifaceID, RelDefines, fset.Position(x.Pos()).Line, filename)
+					addRelation(fileID, ifaceID, string(RelDefines), startPos.Line, filename)
 				}
 
 			case *ast.CallExpr:
 				if currentFuncName == "" {
-					fmt.Printf("DEBUG: CallExpr but currentFuncName empty\n")
 					return true
 				}
-				var calledName string
-				switch fun := x.Fun.(type) {
-				case *ast.Ident:
-					calledName = fun.Name
-				case *ast.SelectorExpr:
-					calledName = exprToString(fun)
-				default:
-					calledName = exprToString(fun)
-				}
+				calledName := resolveCallTarget(x.Fun, importedNames)
 				if calledName == "" {
 					return true
 				}
-				fmt.Printf("DEBUG: CallExpr in function %s -> %s\n", currentFuncName, calledName)
-				calledID := getEntityID(currentFuncPkg, calledName, string(KindFunction))
+				line := fset.Position(x.Pos()).Line
+				fmt.Printf("DEBUG: CallExpr in function %s -> %s at line %d\n", currentFuncName, calledName, line)
+				calledID := getEntityID(currentFuncPkg, calledName, KindExternal)
 				if _, exists := entityMap[calledID]; !exists {
 					entityMap[calledID] = Entity{
 						ID:       calledID,
@@ -310,8 +329,8 @@ func Extract(root string) (*Result, error) {
 						Exported: false,
 					}
 				}
-				callerID := getEntityID(currentFuncPkg, currentFuncName, string(KindFunction))
-				addRelation(callerID, calledID, RelCalls, fset.Position(x.Pos()).Line, filename)
+				callerID := getEntityID(currentFuncPkg, currentFuncName, KindFunction)
+				addRelation(callerID, calledID, string(RelCalls), line, filename)
 			}
 			return true
 		})
@@ -357,7 +376,7 @@ func countPackages(entities []Entity) int {
 func countImports(rels []Relationship) int {
 	c := 0
 	for _, r := range rels {
-		if r.Type == RelImports {
+		if r.Type == string(RelImports) {
 			c++
 		}
 	}
@@ -381,6 +400,26 @@ func getCommit(root string) string {
 		return "unknown"
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func resolveCallTarget(expr ast.Expr, importedNames map[string]bool) string {
+	switch fun := expr.(type) {
+	case *ast.Ident:
+		return fun.Name
+	case *ast.SelectorExpr:
+		base := resolveCallTarget(fun.X, importedNames)
+		if base == "" {
+			return fun.Sel.Name
+		}
+		if importedNames[base] {
+			return base + "." + fun.Sel.Name
+		}
+		return fun.Sel.Name
+	case *ast.IndexExpr:
+		return resolveCallTarget(fun.X, importedNames)
+	default:
+		return exprToString(expr)
+	}
 }
 
 func exprToString(expr ast.Expr) string {

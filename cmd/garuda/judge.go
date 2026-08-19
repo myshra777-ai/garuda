@@ -79,8 +79,7 @@ func handleJudge(baselineFile, proposedFile string) {
 
 func printJudgeReport(r *judge.Report) {
 	fmt.Println("⚖️ GOVERNANCE JUDGEMENT")
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-
+	fmt.Println("🧠 Judge analysis complete.")
 	fmt.Printf("📊 Summary:\n")
 	fmt.Printf("  • Total changes: %d\n", r.TotalChanges)
 	fmt.Printf("  • Breaking: %d ⚠️\n", r.BreakingCount)

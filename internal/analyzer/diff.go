@@ -3,12 +3,12 @@ package analyzer
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 )
 
 // LoadResult loads an AnalysisResult from a JSON file
 func LoadResult(path string) (*Result, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", path, err)
 	}
@@ -21,11 +21,16 @@ func LoadResult(path string) (*Result, error) {
 
 // Diff compares two results and returns a DiffReport
 func Diff(before, after *Result) *DiffReport {
+	if before == nil || after == nil {
+		return &DiffReport{}
+	}
+
 	report := &DiffReport{
 		StatsDiff:         StatsDiff{},
 		FingerprintDiff:   FingerprintDiff{},
 		EntityDiffs:       []EntityDiff{},
 		RelationshipDiffs: []RelationshipDiff{},
+		Summary:           DiffSummary{},
 	}
 
 	// 1. Stats diff
@@ -63,7 +68,7 @@ func Diff(before, after *Result) *DiffReport {
 				EntityID: id,
 				Kind:     e.Kind,
 				Name:     e.Name,
-				File:     e.File, // added
+				File:     e.File,
 				Status:   "added",
 				Impact:   0,
 			})
@@ -74,15 +79,20 @@ func Diff(before, after *Result) *DiffReport {
 	// Removed entities
 	for id, e := range beforeEntities {
 		if _, exists := afterEntities[id]; !exists {
+			impact := len(e.Fields) + len(e.Methods)
 			report.EntityDiffs = append(report.EntityDiffs, EntityDiff{
 				EntityID: id,
 				Kind:     e.Kind,
 				Name:     e.Name,
-				File:     e.File, // added
+				File:     e.File,
 				Status:   "removed",
-				Impact:   len(e.Fields) + len(e.Methods),
+				Impact:   impact,
 			})
 			report.Summary.Removals++
+			// Removed entities are breaking changes
+			if impact > 0 || e.Kind == KindStruct || e.Kind == KindInterface {
+				report.Summary.BreakingChanges++
+			}
 		}
 	}
 
@@ -102,18 +112,25 @@ func Diff(before, after *Result) *DiffReport {
 					EntityID:    id,
 					Kind:        beforeEntity.Kind,
 					Name:        beforeEntity.Name,
-					File:        beforeEntity.File, // added
+					File:        beforeEntity.File,
 					Status:      "modified",
 					FieldsDiff:  fieldsDiff,
 					MethodsDiff: methodsDiff,
 					Impact:      impact,
 				})
 				report.Summary.Modified++
-				if fieldsDiff != nil && len(fieldsDiff.Removed) > 0 {
-					report.Summary.BreakingChanges++
+
+				// Classify breaking changes
+				if fieldsDiff != nil {
+					if len(fieldsDiff.Removed) > 0 {
+						report.Summary.BreakingChanges++
+					}
+					if len(fieldsDiff.Modified) > 0 {
+						report.Summary.Warnings++
+					}
 				}
-				if fieldsDiff != nil && len(fieldsDiff.Modified) > 0 {
-					report.Summary.Warnings++
+				if methodsDiff != nil && len(methodsDiff.Removed) > 0 {
+					report.Summary.BreakingChanges++
 				}
 			}
 		}
@@ -122,12 +139,12 @@ func Diff(before, after *Result) *DiffReport {
 	// 4. Relationship diff
 	beforeRels := make(map[string]Relationship)
 	for _, r := range before.Relationships {
-		key := r.From + "|" + r.To + "|" + string(r.Type)
+		key := fmt.Sprintf("%s|%s|%s", r.From, r.To, r.Type)
 		beforeRels[key] = r
 	}
 	afterRels := make(map[string]Relationship)
 	for _, r := range after.Relationships {
-		key := r.From + "|" + r.To + "|" + string(r.Type)
+		key := fmt.Sprintf("%s|%s|%s", r.From, r.To, r.Type)
 		afterRels[key] = r
 	}
 
@@ -136,7 +153,7 @@ func Diff(before, after *Result) *DiffReport {
 			report.RelationshipDiffs = append(report.RelationshipDiffs, RelationshipDiff{
 				From:   r.From,
 				To:     r.To,
-				Type:   r.Type,
+				Type:   RelationshipType(r.Type),
 				Status: "added",
 			})
 			report.Summary.Additions++
@@ -147,10 +164,28 @@ func Diff(before, after *Result) *DiffReport {
 			report.RelationshipDiffs = append(report.RelationshipDiffs, RelationshipDiff{
 				From:   r.From,
 				To:     r.To,
-				Type:   r.Type,
+				Type:   RelationshipType(r.Type),
 				Status: "removed",
 			})
 			report.Summary.Removals++
+			// Removed relationships can be breaking
+			if r.Type == string(RelImplements) {
+				report.Summary.BreakingChanges++
+			}
+		}
+	}
+
+	// 5. Detect signature changes (additional breaking change detection)
+	for _, ed := range report.EntityDiffs {
+		if ed.Status == "modified" && ed.Kind == KindFunction {
+			beforeEntity := beforeEntities[ed.EntityID]
+			afterEntity := afterEntities[ed.EntityID]
+			if beforeEntity.Signature != afterEntity.Signature {
+				// Signature change is breaking for exported functions
+				if beforeEntity.Exported || afterEntity.Exported {
+					report.Summary.BreakingChanges++
+				}
+			}
 		}
 	}
 
@@ -236,7 +271,7 @@ func diffEntity(before, after Entity) (*FieldsDiff, *MethodsDiff, bool) {
 	return fieldsDiff, methodsDiff, modified
 }
 
-// fieldsEqual compares two fields for equality (ignoring comments)
+// fieldsEqual compares two fields for equality
 func fieldsEqual(a, b Field) bool {
 	if a.Name != b.Name {
 		return false
@@ -259,5 +294,21 @@ func fieldsEqual(a, b Field) bool {
 	if a.IsSlice != b.IsSlice {
 		return false
 	}
+	if a.Tag != b.Tag {
+		return false
+	}
+	if a.Comment != b.Comment {
+		return false
+	}
 	return true
+}
+
+// HasBreakingChanges returns true if the diff has any breaking changes
+func (r *DiffReport) HasBreakingChanges() bool {
+	return r.Summary.BreakingChanges > 0
+}
+
+// HasWarnings returns true if the diff has any warnings
+func (r *DiffReport) HasWarnings() bool {
+	return r.Summary.Warnings > 0
 }

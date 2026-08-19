@@ -40,7 +40,9 @@ type Entity struct {
 	Name      string     `json:"name"`
 	Package   string     `json:"package"`
 	File      string     `json:"file"`
-	Line      int        `json:"line"`
+	Line      int        `json:"line"`       // Single line (for backward compatibility)
+	LineStart int        `json:"line_start"` // Start line
+	LineEnd   int        `json:"line_end"`   // End line
 	Exported  bool       `json:"exported"`
 	Fields    []Field    `json:"fields,omitempty"`
 	Methods   []Method   `json:"methods,omitempty"`
@@ -59,6 +61,8 @@ type Field struct {
 	Comment     string `json:"comment,omitempty"`
 	IsPointer   bool   `json:"is_pointer"`
 	IsSlice     bool   `json:"is_slice"`
+	LineStart   int    `json:"line_start"`
+	LineEnd     int    `json:"line_end"`
 }
 
 // Method represents a method on a struct or interface
@@ -66,16 +70,19 @@ type Method struct {
 	Name       string   `json:"name"`
 	Signature  string   `json:"signature"`
 	Parameters []string `json:"parameters,omitempty"`
+	Returns    []string `json:"returns,omitempty"`
 	IsExported bool     `json:"is_exported"`
+	LineStart  int      `json:"line_start"`
+	LineEnd    int      `json:"line_end"`
 }
 
 // Relationship represents a dependency
 type Relationship struct {
-	From       string           `json:"from"`
-	To         string           `json:"to"`
-	Type       RelationshipType `json:"type"`
-	Confidence float64          `json:"confidence"`
-	Evidence   Evidence         `json:"evidence"`
+	From       string   `json:"from"`
+	To         string   `json:"to"`
+	Type       string   `json:"type"`
+	Confidence float64  `json:"confidence,omitempty"`
+	Evidence   Evidence `json:"evidence,omitempty"`
 }
 
 // Evidence anchors a relationship to source code and provenance.

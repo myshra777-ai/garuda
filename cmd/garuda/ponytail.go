@@ -160,7 +160,7 @@ func handlePonytail(path string) {
 
 	// Human output
 	fmt.Println("🔍 PONYTAIL REPORT")
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Println("📊 Ponytail report generated.")
 	fmt.Printf("Entities: %d, Relationships: %d\n\n", report.Entities, report.Relationships)
 
 	if len(deadCode) > 0 {
