@@ -429,6 +429,9 @@ func init() {
 	repoCmd.AddCommand(repoEnableCmd)
 	repoCmd.AddCommand(repoDisableCmd)
 
+	// Register CI command
+	rootCmd.AddCommand(ciCmd)
+
 	// REGISTER ALL COMMANDS
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(upCmd)
