@@ -6,11 +6,14 @@ Garuda is a deterministic code intelligence and governance platform. It analyzes
 
 > **Code → Semantics → Relationships → Evidence → Understanding**
 
+> 🧠 **Building the Company Brain**: Garuda is the foundation for a continuously updated, cryptographically verifiable semantic model of your entire software ecosystem.
+
 ---
 
 ## 📋 Table of Contents
 
 - [The Core Philosophy](#the-core-philosophy)
+- [Company Brain — The North Star](#company-brain--the-north-star)
 - [Capabilities Matrix](#capabilities-matrix)
 - [System Architecture](#system-architecture)
 - [The Epistemic Model](#the-epistemic-model)
@@ -42,6 +45,68 @@ Instead of relying on an LLM to guess what your codebase does via probabilistic 
 | 🔐 A cryptographically verified analysis ledger | ❌ A disposable, memoryless linter |
 | 🚧 A foundation for cross-repo governance | ❌ An autonomous code-rewriting bot |
 | 📊 Blast-radius impact analysis | ❌ A code search tool |
+| 🧠 A foundation for the Company Brain | ❌ A complete company-wide brain today |
+
+---
+
+## 🧠 Company Brain — The North Star
+
+Garuda's long-term destination is the **Company Brain**: a continuously updated, cryptographically verifiable semantic model of your entire software ecosystem. It's the foundation for answering questions like:
+
+- *"What services depend on this API?"*
+- *"Which repositories implement this business capability?"*
+- *"What breaks if we change this schema?"*
+- *"Does our code match our architecture decisions?"*
+
+### Evolution to Company Brain
+
+```mermaid
+flowchart LR
+    subgraph Current[✅ Current: Single Repo Intelligence]
+        C1[Semantic Graph] --> C2[Blast Radius] --> C3[Evidence Backing]
+    end
+    
+    subgraph Growing[🧪 Growing: Multi-Repo Foundation]
+        G1[Workspace Sync] --> G2[Cross-Repo Detection] --> G3[Company Graph Alpha]
+    end
+    
+    subgraph Future[📋 Future: Company Brain]
+        F1[Cross-Repo Impact] --> F2[Policy Enforcement] --> F3[AI Reasoning]
+    end
+    
+    Current --> Growing --> Future
+```
+
+### What's Already Built (The Foundation)
+
+| Component | Status | What It Does |
+|-----------|--------|--------------|
+| **Semantic Graph** | ✅ Stable | Entities (structs, functions, APIs) + relationships (calls, imports, dependencies) |
+| **Blast Radius Impact** | ✅ Stable | BFS traversal to find who depends on what |
+| **Multi-Repository Sync** | ✅ Stable | Analyze 10-25 repositories in one workspace |
+| **Evidence Backing** | ✅ Stable | Every claim traces to source lines + commit SHA |
+| **Cross-Repo Detection** | 🧪 Alpha | Detect imports across repository boundaries |
+
+### What's Growing (Ongoing)
+
+| Component | Status | What It's Becoming |
+|-----------|--------|-------------------|
+| **Cross-Repo Impact** | 🧪 Alpha | Impact analysis across repository boundaries |
+| **Contract Extraction** | 🧪 Alpha | HTTP routes, SQL migrations, API schemas |
+| **Company Graph** | 📋 Planned | Unified graph of all repositories in an organization |
+
+### What Garuda Can Answer Today
+
+| Question | Status |
+|----------|--------|
+| What entities exist in this repository? | ✅ Yes |
+| What calls/depends on entity X? | ✅ Yes |
+| What breaks if I change entity X? | ✅ Yes |
+| Which repositories import package Y? | 🧪 Alpha |
+| How does service A depend on service B? | 📋 Planned |
+| Does this change violate our architecture policy? | 📋 Planned |
+
+> **The Company Brain is being built incrementally. We're starting with one repository at a time, proving correctness before scaling.**
 
 ---
 
@@ -90,21 +155,24 @@ Garuda's capabilities are explicitly categorized by maturity. This reflects the 
 
 ## System Architecture
 
-Garuda operates through a strict, multi-tiered pipeline ensuring that source truth is never corrupted by inference.
+### Complete Pipeline
 
 ```mermaid
 graph TD
-    subgraph Source Layer
-        Git[Git Repository] --> |Checkout Commit| AST[Go AST Analyzer]
+    subgraph Source["Source Layer"]
+        Git[Git Repository] --> Checkout[Checkout Commit]
+        Checkout --> AST[Go AST Analyzer]
     end
 
-    subgraph Semantic Core
+    subgraph Semantic["Semantic Core"]
         AST --> |Extracts| E[Entities<br/>Packages, Structs, APIs]
         AST --> |Maps| R[Relationships<br/>Calls, Imports, Implements]
         R --> |BFS Traversal| Impact[Blast Radius Engine]
+        E --> Graph[Semantic Graph]
+        R --> Graph
     end
 
-    subgraph Trust Layer
+    subgraph Trust["Trust Layer"]
         E --> Hash[SHA-256 Hashing]
         R --> Hash
         Hash --> |Anchors to| Ev[Evidence Contract<br/>Line, File, Commit]
@@ -112,12 +180,13 @@ graph TD
         Ev --> JSONB[(Immutable Artifacts)]
     end
 
-    subgraph Experience Layer
+    subgraph Experience["Experience Layer"]
         Postgres --> CLI{Garuda CLI}
         Postgres --> CI[CI/PR Bots]
         Postgres --> GUI[Web Graph]
         Impact --> CLI
         Impact --> CI
+        Graph --> GUI
     end
 ```
 
@@ -154,6 +223,66 @@ flowchart LR
     Graph --> Evidence --> GraphViz
     Entities --> Diff
     Claims --> Diff
+```
+
+### Blast Radius Impact Engine
+
+```mermaid
+flowchart TD
+    Start[Entity Change] --> BFS[BFS Traversal]
+    
+    BFS --> Depth1[Depth 1: Direct Consumers]
+    BFS --> Depth2[Depth 2: Indirect Consumers]
+    BFS --> DepthN[Depth N: Transitive Consumers]
+    
+    Depth1 --> Classify[Severity Classification]
+    Depth2 --> Classify
+    DepthN --> Classify
+    
+    Classify --> Critical[CRITICAL<br/>Public API/Contract]
+    Classify --> High[HIGH<br/>Depth 1 Non-Test]
+    Classify --> Medium[MEDIUM<br/>Depth 2 Public Route]
+    Classify --> Low[LOW<br/>Test/Confidence<0.7]
+    
+    Critical --> Report[Impact Report]
+    High --> Report
+    Medium --> Report
+    Low --> Report
+    
+    Report --> JSON[JSON Output]
+    Report --> Human[Human-Readable]
+```
+
+### Future Company Brain Architecture
+
+```mermaid
+flowchart LR
+    subgraph Today["Today: Single Repo"]
+        R1[Repo 1] --> G1[Semantic Graph]
+    end
+    
+    subgraph Tomorrow["Tomorrow: Multi-Repo"]
+        R1[Repo 1] --> WS[Workspace]
+        R2[Repo 2] --> WS
+        R3[Repo 3] --> WS
+        WS --> G2[Company Graph Alpha]
+    end
+    
+    subgraph Future["Future: Company Brain"]
+        R1[Repo 1] --> CB[Company Brain]
+        R2[Repo 2] --> CB
+        R3[Repo 3] --> CB
+        R4[Repo 4] --> CB
+        R5[Repo 5] --> CB
+        R25[Repo 25] --> CB
+        
+        CB --> Policy[Policy Enforcement]
+        CB --> Impact[Cross-Repo Impact]
+        CB --> AI[AI Reasoning]
+        CB --> Governance[Governance]
+    end
+    
+    Today --> Tomorrow --> Future
 ```
 
 ---
@@ -362,21 +491,21 @@ garuda entities
 
 ## Multi-Repository Scaling Model
 
-Garuda explicitly follows a 1→10→25 scaling model. Each gate must pass before advancing.
+Garuda explicitly follows an incremental 1→10→25 scaling model. Each gate must pass before advancing.
 
 ```mermaid
 flowchart LR
-    subgraph Gate1[Gate 1: Single Repository]
+    subgraph Gate1["Gate 1: Single Repository"]
         G1_1[Deterministic Extraction] --> G1_2[Evidence Accuracy >95%]
         G1_2 --> G1_3[Developer AHA Moment]
     end
     
-    subgraph Gate2[Gate 2: 10 Repositories]
+    subgraph Gate2["Gate 2: 10 Repositories"]
         G2_1[Workspace Sync Durable] --> G2_2[Cross-Repo Edges Precise]
         G2_2 --> G2_3[Permissions Enforced]
     end
     
-    subgraph Gate3[Gate 3: 25 Repositories]
+    subgraph Gate3["Gate 3: 25 Repositories"]
         G3_1[Query Latency Practical] --> G3_2[CI Impact Actionable]
         G3_2 --> G3_3[Storage Economically Viable]
     end
@@ -465,7 +594,7 @@ Every important answer can walk this chain backward.
 | **P6** | Governance | 📋 Planned |
 | **P7** | Business Integrity | 📋 Planned |
 
-### What's Next (90 Days)
+### What's Next (Planned)
 
 1. **Cross-Repo Impact** — Enhance blast radius across repository boundaries
 2. **Contract Extraction** — HTTP routes, SQL migrations, API schemas
@@ -528,7 +657,7 @@ Apache License 2.0
 **Understand the code.**  
 **See the connections.**  
 **Trace the evidence.**  
-**Build the Company Graph.**
+**Build the Company Brain.**
 
 ---
 
