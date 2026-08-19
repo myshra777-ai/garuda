@@ -1,5 +1,10 @@
 # 🦅 Garuda — Evidence-Backed Software Intelligence
 
+[![Release](https://img.shields.io/github/v/release/myshra777-ai/garuda?style=flat-square&color=blue)](https://github.com/myshra777-ai/garuda/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/myshra777-ai/garuda/garuda-ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/myshra777-ai/garuda/actions)
+[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square)](LICENSE)
+
 **Understand your codebase as a connected, inspectable, and verifiable system.**
 
 Garuda is a deterministic code intelligence and governance platform. It analyzes Go repositories to build a structured semantic graph of your software, preserves cryptographically hashed evidence behind every claim, and provides high-speed CLI tools for blast-radius impact analysis, architectural validation, and agentic code quality.
@@ -15,6 +20,7 @@ Garuda is a deterministic code intelligence and governance platform. It analyzes
 - [The Core Philosophy](#the-core-philosophy)
 - [Company Brain — The North Star](#company-brain--the-north-star)
 - [Capabilities Matrix](#capabilities-matrix)
+- [AST Semantic Benchmark Suite](#ast-semantic-benchmark-suite)
 - [System Architecture](#system-architecture)
 - [The Epistemic Model](#the-epistemic-model)
 - [The 10 Immutable Engineering Laws](#the-10-immutable-engineering-laws)
@@ -62,15 +68,15 @@ Garuda's long-term destination is the **Company Brain**: a continuously updated,
 
 ```mermaid
 flowchart LR
-    subgraph Current[✅ Current: Single Repo Intelligence]
+    subgraph Current["✅ Current: Single Repo Intelligence"]
         C1[Semantic Graph] --> C2[Blast Radius] --> C3[Evidence Backing]
     end
     
-    subgraph Growing[🧪 Growing: Multi-Repo Foundation]
+    subgraph Growing["🧪 Growing: Multi-Repo Foundation"]
         G1[Workspace Sync] --> G2[Cross-Repo Detection] --> G3[Company Graph Alpha]
     end
     
-    subgraph Future[📋 Future: Company Brain]
+    subgraph Future["📋 Future: Company Brain"]
         F1[Cross-Repo Impact] --> F2[Policy Enforcement] --> F3[AI Reasoning]
     end
     
@@ -82,9 +88,11 @@ flowchart LR
 | Component | Status | What It Does |
 |-----------|--------|--------------|
 | **Semantic Graph** | ✅ Stable | Entities (structs, functions, APIs) + relationships (calls, imports, dependencies) |
+| **Canonical UUIDv5 Identity** | ✅ Stable | Deterministic identity across commits, renames, and package moves |
 | **Blast Radius Impact** | ✅ Stable | BFS traversal to find who depends on what |
 | **Multi-Repository Sync** | ✅ Stable | Analyze 10-25 repositories in one workspace |
 | **Evidence Backing** | ✅ Stable | Every claim traces to source lines + commit SHA |
+| **Truth Benchmark Suite** | ✅ Stable | 10-fixture semantic extraction verification |
 | **Cross-Repo Detection** | 🧪 Alpha | Detect imports across repository boundaries |
 
 ### What's Growing (Ongoing)
@@ -112,20 +120,22 @@ flowchart LR
 
 ## Capabilities Matrix
 
-Garuda's capabilities are explicitly categorized by maturity. This reflects the V4 roadmap doctrine: **evidence before confidence, stable before experimental.**
+Garuda's capabilities follow the V4 roadmap doctrine: **evidence before confidence, stable before experimental**.
+
+> 📄 **Complete Capabilities Reference**: See [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) for the full machine-generated matrix of analyzers, invariants, and CLI commands.
 
 ### ✅ Stable — Production Ready
 
 | Capability | Description | Command |
 |------------|-------------|---------|
 | **Semantic Analysis** | Extracts entities (structs, functions, interfaces, packages) with line-level evidence | `garuda analyze` |
-| **Entity Inspection** | View entity details: package, file, kind, fields, methods, incoming/outgoing relationships | `garuda inspect` |
+| **Canonical Identity (UUIDv5)** | Deterministic identity hashing across structs, methods, and functions | Core AST Engine |
+| **Truth Benchmark Verification** | Automated validation against 10 semantic truth fixtures | `go test ./...` |
+| **Entity Inspection** | View entity details: package, file, kind, fields, methods, relationships | `garuda inspect` |
 | **Graph Visualization** | Interactive HTML graph of workspace architecture with D3.js | `garuda graph` |
 | **Snapshot Diff** | Compare two semantic snapshots with breaking change detection | `garuda diff` |
 | **Blast Radius Impact** | BFS traversal to find all consumers of an entity with severity scoring | `garuda impact` |
 | **Diff Impact** | Compare impact between two snapshots | `garuda impact-diff` |
-| **Code Quality (Ponytail)** | Dead code detection, duplicates, standard-library alternatives | `garuda ponytail` |
-| **Governance Judge** | Breaking change detection with blocking decisions for CI | `garuda judge` |
 | **Immutable Ledger** | Merkle tree-backed audit trail with cryptographic integrity | `garuda verify` |
 | **Workspace Management** | Create, list, delete workspaces | `garuda workspace` |
 | **Repository Management** | Add, list, enable, disable repositories | `garuda repo` |
@@ -138,8 +148,9 @@ Garuda's capabilities are explicitly categorized by maturity. This reflects the 
 | **Cross-Repo Impact** | Impact analysis across repository boundaries | Alpha |
 | **Contract Extraction** | HTTP routes, API schemas, SQL migrations | Alpha |
 | **Schema Discovery** | Unify Go structs, JSON tags, OpenAPI, SQL | In Progress |
-| **Line Number Extraction** | Precise line ranges for evidence | ✅ Complete |
-| **AI Guardrails** | Ponytail principles for AI code generation | Planned |
+| **Code Quality (Ponytail)** | Dead code detection, duplicates, standard-library alternatives | Alpha |
+| **Governance Judge** | Breaking change detection with blocking decisions | Alpha |
+| **Topology Management** | Multi-agent task execution and handoff lineage | Alpha |
 
 ### 📋 Planned — Future
 
@@ -150,6 +161,73 @@ Garuda's capabilities are explicitly categorized by maturity. This reflects the 
 | **Policy Enforcement** | Evaluate code against organizational policies | Phase 6 |
 | **Runtime Intelligence** | Combine static analysis with runtime evidence | Phase 6 |
 | **Business State Integrity** | Idempotency keys, business rule enforcement | Phase 7 |
+
+---
+
+## 🔬 AST Semantic Benchmark Suite
+
+Garuda's semantic extraction is evaluated against a **10-fixture synthetic and real-world ground-truth test suite** (`test/benchmark/truth_fixtures`). Every release is gated on 100% deterministic precision across semantic AST extraction invariants.
+
+```mermaid
+flowchart LR
+    subgraph Suite["Truth Benchmark Suite"]
+        F1[001-basic] --> V[Verification Engine]
+        F2[002-method-identity] --> V
+        F3[003-interface] --> V
+        F4[004-generics] --> V
+        F5[005-alias] --> V
+        F6[006-embedding] --> V
+        F7[007-cross-package] --> V
+        F8[008-cross-module] --> V
+        F9[009-same-symbol-names] --> V
+        F10[010-api-contract] --> V
+    end
+    
+    V --> R[Report]
+    R --> G[Gate: 100% Precision]
+```
+
+### Snapshot Extraction Metrics
+
+| Metric | Count |
+| :--- | :--- |
+| **Parsed Files** | `177` |
+| **Packages** | `32` |
+| **Discovered Structs** | `279` |
+| **Discovered Interfaces** | `20` |
+| **Functions & Methods** | `327` |
+| **Total Struct Fields** | `1401` |
+
+### Feature Verification & Status
+
+| Benchmark Target | Fixtures | Invariant Verified | Metric |
+|---|---|---|---|
+| **Package Resolution** | 10 | Fully qualified package path resolution | ✅ 100% Accuracy |
+| **Entity Fingerprinting** | 10 | Receiver types, structs, interfaces, and methods | ✅ 100% Match |
+| **Call-Graph Edges** | 10 | Deterministic `CALLS` relationship extraction | ✅ 0 False Edges |
+| **Import Graph** | 10 | Cross-package and internal module import tracing | ✅ 100% Recall |
+| **Canonical UUIDv5** | 10 | Stable identity across file moves and renames | ✅ Deterministic |
+
+### Truth Fixture Coverage
+
+| Fixture | Target Scenario | Key Invariant Tested |
+|---|---|---|
+| `001-basic` | Standard struct & function declarations | Canonical UUIDv5 hashing |
+| `002-method-identity` | Value vs. pointer receiver methods | Disambiguated method identity |
+| `003-interface` | Explicit & implicit interface implementation | `IMPLEMENTS` edge emission |
+| `004-generics` | Parameterized types & generic constraints | Type parameter erasure consistency |
+| `005-alias` | Type definitions vs. type aliases (`type A = B`) | Target identity resolution |
+| `006-embedding` | Struct & interface field embedding | Promoted field/method resolution |
+| `007-cross-package` | Internal multi-package dependencies | Fully qualified package path lookup |
+| `008-cross-module` | External Go module dependencies | Module boundary edge classification |
+| `009-same-symbol-names` | Identical identifier names across packages | Zero-collision UUIDv5 guarantee |
+| `010-api-contract` | HTTP handler routes & SQL query strings | Contract edge extraction |
+
+### Run the Benchmark Suite
+
+```bash
+go test -v -run TestTruthBenchmarks ./test/benchmark/...
+```
 
 ---
 
@@ -349,44 +427,71 @@ Garuda's development and execution are governed by strict V4 architectural doctr
 
 ### Requirements
 
-- Go 1.21+
+- Go 1.22+
 - PostgreSQL 16+
-- Docker (optional, for `garuda up`)
+- Docker & Docker Compose (optional, for local testing)
+
+### Download Pre-built Binary
+
+Download the pre-compiled binary for your architecture from [GitHub Releases](https://github.com/myshra777-ai/garuda/releases):
+
+```bash
+# Example: Linux AMD64
+curl -sL https://github.com/myshra777-ai/garuda/releases/latest/download/garuda-linux-amd64 -o garuda
+chmod +x garuda
+sudo mv garuda /usr/local/bin/
+```
 
 ### Build from Source
 
 ```bash
 git clone https://github.com/myshra777-ai/garuda.git
 cd garuda
-go build -o garuda cmd/garuda/*.go
+go build -o bin/garuda cmd/garuda/main.go
+
+# Optional: add to PATH
+export PATH=$PATH:$(pwd)/bin
 ```
 
 ### Quick Workflow
 
 ```bash
-# 1. Set tenant ID
+# 1. Start PostgreSQL (Docker)
+docker run --name garuda-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=garuda -p 5432:5432 -d postgres:16-alpine
+
+# 2. Run idempotent database migrations (000-041)
+DATABASE_URL="postgres://postgres:postgres@localhost:5432/garuda?sslmode=disable" go run cmd/migrate/main.go
+
+# 3. Set environment variables
 export GARUDA_TENANT_ID=$(uuidgen)
+export DATABASE_URL="postgres://postgres:postgres@localhost:5432/garuda?sslmode=disable"
 
-# 2. Start the PostgreSQL stack
-./garuda up
-
-# 3. Create a workspace
-./garuda workspace create my-workspace
+# 4. Create a workspace
+bin/garuda workspace create my-workspace
 export GARUDA_WORKSPACE=my-workspace
 
-# 4. Analyze and persist
-./garuda analyze . --save
+# 5. Analyze and persist
+bin/garuda analyze . --save
 
-# 5. Explore
-./garuda inspect User
-./garuda graph my-workspace --open
+# 6. Explore
+bin/garuda inspect User
+bin/garuda graph my-workspace --open
 
-# 6. Make a change, then compare
-./garuda analyze . -o v1.json
+# 7. Make a change, then compare
+bin/garuda analyze . -o v1.json
 # ... make code changes ...
-./garuda analyze . -o v2.json
-./garuda diff v1.json v2.json
+bin/garuda analyze . -o v2.json
+bin/garuda diff v1.json v2.json
 ```
+
+### Configuration Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://test:test@localhost:5433/garuda_test?sslmode=disable` |
+| `GARUDA_TENANT_ID` | Active tenant UUID for multi-tenant isolation | *Required for DB writes* |
+| `GARUDA_WORKSPACE` | Active workspace name or UUID | `default` |
+| `GEMINI_API_KEY` | Key for AI-assisted changelog and docgen scripts | *Required for docgen scripts* |
 
 ---
 
@@ -420,6 +525,22 @@ garuda impact --workspace <uuid> --target <entity-id> --depth 5 --min-confidence
 
 # CI-ready diff impact analysis
 garuda impact-diff v1.json v2.json --json
+```
+
+**Sample Output:**
+
+```text
+$ garuda impact --target e8b9c2a1-0f4e-4b2a-9e12-4c9a8f23b123 --depth 3
+
+Target: internal/store.Migrate (Function)
+Blast Radius: 14 impacted entities across 3 packages (Max Depth: 3)
+
+[CRITICAL] (Depth 1) cmd/garuda/main.go:42 - main()
+[HIGH]     (Depth 1) internal/server/handler.go:108 - HandleWorkspaceSync()
+[MEDIUM]   (Depth 2) internal/router/routes.go:54 - RegisterAdminRoutes()
+[LOW]      (Depth 3) internal/store/migrate_test.go:19 - TestMigrateIdempotency()
+
+Confidence Score: 0.98 | Evidence Hash: 4f8b9e... (SHA-256)
 ```
 
 **Severity Classification:**
@@ -474,6 +595,27 @@ garuda repo enable my-workspace https://github.com/org/repo
 garuda workspace sync my-workspace
 ```
 
+### 🌐 Topology & Handoff Management (`garuda topology`)
+
+Manage multi-agent task execution, topology sequences, and verifiable handoff lineages.
+
+```bash
+# List active topologies
+garuda topology list
+
+# Inspect topology task execution status
+garuda topology inspect <topology-id>
+```
+
+### 📜 Policy Engine (`garuda policy`)
+
+Validate codebase architecture against declarative constraints and detect violations.
+
+```bash
+# Check policy violations across workspace
+garuda policy check --workspace <workspace-id>
+```
+
 ### 🔒 Trust & Integrity
 
 ```bash
@@ -485,6 +627,19 @@ garuda explain <decision-id>
 
 # List entities
 garuda entities
+```
+
+### 🛠️ Developer Tooling & Verification
+
+```bash
+# Run the 10-fixture ground truth AST benchmark suite
+go test -v -race ./...
+
+# Regenerate capabilities matrix from YAML schema
+python3 scripts/generate_capabilities.py
+
+# Generate release changelog using Gemini 3.6 Flash
+python3 scripts/generate_changelog.py --context docs/generated/docs-context.json --output CHANGELOG.md
 ```
 
 ---
@@ -585,21 +740,21 @@ Every important answer can walk this chain backward.
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| **P0** | Trust Foundation | ✅ Complete |
-| **P1** | Semantic Core | ✅ Complete |
-| **P2** | Go Analyzer | ✅ Complete |
-| **P3** | CLI & Artifacts | ✅ Complete |
-| **P4** | Multi-Repo Sync | 🧪 Alpha |
-| **P5** | CI Integration | 📋 Planned |
-| **P6** | Governance | 📋 Planned |
-| **P7** | Business Integrity | 📋 Planned |
+| **P0** | Trust Foundation & Merkle Verification | ✅ Complete |
+| **P1** | Semantic Core & Canonical UUIDv5 Identity | ✅ Complete |
+| **P2** | Go AST Analyzer & Truth Benchmarks (10 Fixtures) | ✅ Complete |
+| **P3** | CLI, Artifacts & Automated Docgen Pipeline | ✅ Complete |
+| **P4** | Multi-Repo Sync & Cross-Repo Edges | 🧪 Alpha |
+| **P5** | CI Integration (GitHub Action PR Impact) | 📋 Planned |
+| **P6** | Governance & Policy Enforcement | 📋 Planned |
+| **P7** | Business State Integrity | 📋 Planned |
 
 ### What's Next (Planned)
 
-1. **Cross-Repo Impact** — Enhance blast radius across repository boundaries
-2. **Contract Extraction** — HTTP routes, SQL migrations, API schemas
-3. **CI Integration** — GitHub Action wrapper for `garuda diff` and `garuda impact`
-4. **Benchmark Suite** — Precision/recall metrics for semantic extraction
+1. **Cross-Repo Impact Radius** — Expand BFS traversal across cross-repository boundary edges.
+2. **Contract Extraction** — Deep schema extraction for HTTP routes, SQL migrations, and OpenAPI definitions.
+3. **CI Action Wrapper** — GitHub Action for automated PR impact and architecture drift comments.
+4. **Interactive Mind Map Explorer** — Enhanced UI disclosure for complex dependency paths.
 
 ---
 
@@ -623,24 +778,26 @@ docker-compose up -d postgres
 DATABASE_URL="postgres://test:test@localhost:5433/garuda_test" go test ./...
 
 # Build
-go build -o garuda cmd/garuda/*.go
+go build -o bin/garuda cmd/garuda/main.go
 ```
 
 ### Project Structure
 
 ```
 garuda/
-├── cmd/garuda/          # CLI (30+ commands)
+├── cmd/garuda/          # CLI entry points and command definitions
 ├── internal/
-│   ├── analyzer/        # Go AST parsing
-│   ├── store/           # PostgreSQL operations
-│   ├── impact/          # Blast radius engine
-│   ├── graph/           # Visualization
-│   ├── engine/          # Governance
-│   └── ...              # 25+ internal packages
-├── migrations/          # 70+ SQL migrations
-├── docs/                # Documentation
-├── .github/workflows/   # CI/CD
+│   ├── analyzer/        # Go AST parsing and UUIDv5 canonical identity
+│   ├── store/           # PostgreSQL migrations and atomic transactions
+│   ├── impact/          # BFS blast-radius engine
+│   ├── graph/           # Visualization and mind maps
+│   └── engine/          # Governance judge and epistemic classification
+├── test/
+│   └── benchmark/       # 10-fixture truth benchmark suite
+├── migrations/          # Idempotent PostgreSQL migrations (000-041)
+├── scripts/             # Gemini 3.6 Flash docgen and capabilities scripts
+├── docs/
+│   └── CAPABILITIES.md  # Generated capabilities matrix
 └── go.mod
 ```
 
@@ -648,7 +805,9 @@ garuda/
 
 ## License
 
-Apache License 2.0
+Copyright 2026 Rohit Mishra.
+
+Garuda is licensed under the [Apache License 2.0](LICENSE).
 
 ---
 
