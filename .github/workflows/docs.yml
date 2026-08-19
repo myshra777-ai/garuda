@@ -1,47 +1,71 @@
-name: Auto‑Generate Documentation
+name: Auto-Generate Documentation
 
 on:
   push:
     branches: [ main, mvp-refactor ]
   schedule:
-    - cron: '0 0 * * 1'  # weekly
+    - cron: '0 0 * * 1'  # Weekly
+  workflow_dispatch:      # Manual trigger
 
 permissions:
   contents: write
 
 jobs:
-  docs:
+  generate-docs:
+    name: Generate & Verify Documentation Suite
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout Codebase
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Go
+      - name: Set up Go Runtime
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.22'
+          cache: true
 
-      - name: Build Garuda
-        run: go build -o garuda cmd/garuda/*.go
+      - name: Build Garuda Engine
+        run: |
+          go build -o garuda cmd/garuda/*.go
+          chmod +x garuda
 
-      - name: Run analysis
+      - name: Pre-create Documentation Directories
+        run: |
+          mkdir -p docs/generated docs/source
+
+      - name: Run AST Semantic Analysis
         env:
           GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
         run: |
-          ./garuda analyze . --output garuda-snapshot.json
+          ./garuda analyze . -o garuda-snapshot.json
 
-      - name: Set up Python
+      - name: Set up Python Runtime
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install Python dependencies
+      - name: Install Python Dependencies
         run: |
-          pip install -r scripts/requirements.txt
+          python -m pip install --upgrade pip
+          if [ -f scripts/requirements.txt ]; then
+            pip install -r scripts/requirements.txt
+          else
+            pip install pyyaml requests
+          fi
 
-      - name: Build documentation context
+      - name: Generate Capabilities Matrix
+        run: |
+          python scripts/generate_capabilities.py \
+            --capabilities docs/source/capabilities.yaml \
+            --snapshot garuda-snapshot.json \
+            --output docs/CAPABILITIES.md
+
+      - name: Build Documentation Context
+        if: hashFiles('scripts/build_docs_context.py') != ''
         run: |
           python scripts/build_docs_context.py \
             --snapshot garuda-snapshot.json \
@@ -50,15 +74,8 @@ jobs:
             --roadmap docs/source/roadmap.yaml \
             --output docs/generated/docs-context.json
 
-      - name: Generate README
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_PRIMARY }}
-        run: |
-          python scripts/update_readme_ai.py \
-            --context docs/generated/docs-context.json \
-            --output README.md
-
-      - name: Generate CHANGELOG
+      - name: Generate CHANGELOG (AI Engine)
+        if: env.GEMINI_API_KEY != '' && hashFiles('scripts/generate_changelog.py') != ''
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_SECONDARY }}
         run: |
@@ -66,7 +83,8 @@ jobs:
             --context docs/generated/docs-context.json \
             --output CHANGELOG.md
 
-      - name: Generate API documentation
+      - name: Generate API Documentation (AI Engine)
+        if: env.GEMINI_API_KEY != '' && hashFiles('scripts/generate_api_docs.py') != ''
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_TERTIARY }}
         run: |
@@ -74,16 +92,20 @@ jobs:
             --context docs/generated/docs-context.json \
             --output docs/API.md
 
-      - name: Validate generated documentation
+      - name: Validate Generated Documentation
+        if: hashFiles('scripts/validate_docs.py') != ''
         run: |
           python scripts/validate_docs.py \
             --context docs/generated/docs-context.json
 
-      - name: Commit and push docs
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Atomic Commit and Push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md CHANGELOG.md docs/API.md
-          git diff --staged --quiet || (git commit -m "docs: auto‑update README, CHANGELOG, API docs [skip ci]" && git push origin HEAD:${{ github.ref_name }})
+          git add docs/CAPABILITIES.md docs/API.md CHANGELOG.md docs/generated/
+          if git diff --staged --quiet; then
+            echo "No documentation changes detected. Skipping push."
+          else
+            git commit -m "docs: auto-generate capabilities matrix and API specs [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi

@@ -1,3 +1,8 @@
+// Copyright 2026 Rohit Mishra
+// SPDX-License-Identifier: Apache-2.0
+//
+// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
+
 package main
 
 import (
@@ -30,14 +35,12 @@ import (
 const version = "v0.4.0-multi-repo"
 const defaultAPIAddr = "http://localhost:8080"
 
-// -----------------------------------------------------------------------------
 // 1. GLOBAL HELPERS (Tenant, DB, Auth)
-// -----------------------------------------------------------------------------
 
 func getDBURL() string {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		fmt.Fprintln(os.Stderr, "⚠️  WARNING: DATABASE_URL not set. Using default local dev string.")
+		fmt.Fprintln(os.Stderr, "⚠️ WARNING: DATABASE_URL not set. Using default local dev string.")
 		url = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
 	}
 	return url
@@ -49,7 +52,7 @@ func getTenantIDString() string {
 		fmt.Fprintln(os.Stderr, "❌ FATAL: GARUDA_TENANT_ID environment variable is required.")
 		os.Exit(1)
 	}
-	_, err := uuid.Parse(tenantID)
+	err := uuid.Validate(tenantID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ FATAL: Invalid GARUDA_TENANT_ID format: %v\n", err)
 		os.Exit(1)
@@ -65,7 +68,8 @@ func getAuthToken() string {
 	if token := os.Getenv("GARUDA_API_KEY"); token != "" {
 		return token
 	}
-	fmt.Fprintln(os.Stderr, "⚠️  WARNING: GARUDA_API_KEY not set. Using debug token endpoint (insecure).")
+
+	fmt.Fprintln(os.Stderr, "⚠️ WARNING: GARUDA_API_KEY not set. Using debug token endpoint (insecure).")
 	req, err := http.NewRequest("GET", defaultAPIAddr+"/debug/token?actor=cli-operator&tenant_id=00000000-0000-0000-0000-000000000001", nil)
 	if err != nil {
 		return ""
@@ -76,6 +80,7 @@ func getAuthToken() string {
 		return ""
 	}
 	defer resp.Body.Close()
+
 	var tokenData struct {
 		Token string `json:"token"`
 	}
@@ -85,9 +90,7 @@ func getAuthToken() string {
 	return tokenData.Token
 }
 
-// -----------------------------------------------------------------------------
 // 2. GLOBAL FLAGS
-// -----------------------------------------------------------------------------
 
 var (
 	summaryFlag    bool
@@ -95,6 +98,7 @@ var (
 	checkpointFlag string
 	agentIDFlag    string
 	versionFlag    bool
+
 	outputFlag     string
 	saveFlag       bool
 	jsonOutputFlag bool
@@ -106,13 +110,14 @@ var (
 	graphRepoFlag  string
 )
 
-// -----------------------------------------------------------------------------
+// External Commands (Assumed to be defined in other package main files)
+//Since impactCmd, impactDiffCmd, justifyCmd, judgeCmd, ciCmd, ponytailCmd, and selfDescribeCmd are already exported package-level variables in their respective files (impact.go, justify.go, etc.), delete their duplicate variable declarations in main.go. Only keep them in rootCmd.AddCommand(...)
+
 // 3. ROOT COMMAND
-// -----------------------------------------------------------------------------
 
 var rootCmd = &cobra.Command{
 	Use:   "garuda",
-	Short: "Garuda — Organizational Intelligence & Governance Runtime",
+	Short: "Garuda Organizational Intelligence & Governance Runtime",
 	Long: `Garuda is a multi-repository intelligence platform that builds a semantic Company Brain.
 It analyzes code, extracts schemas, detects dependencies, and maintains cryptographic audit trails.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -120,19 +125,22 @@ It analyzes code, extracts schemas, detects dependencies, and maintains cryptogr
 			fmt.Printf("Garuda Runtime Engine %s (%s/%s)\n", version, runtime.GOOS, runtime.GOARCH)
 			return
 		}
+
 		if summaryFlag {
 			fmt.Println("📊 Querying Executive Summary Metrics...")
 			fetchEndpoint("/api/v1/dashboard/stats")
 			return
 		}
+
 		if progressFlag {
-			fmt.Println("⚡ Querying Active Agent Progress & Tasks...")
+			fmt.Println("🔄 Querying Active Agent Progress & Tasks...")
 			atTime := time.Now().UTC().Format(time.RFC3339)
 			fetchEndpoint(fmt.Sprintf("/api/v1/decisions/active?at=%s", atTime))
 			return
 		}
+
 		if checkpointFlag != "" {
-			fmt.Printf("🔒 Triggering Manual Merkle Checkpoint '%s'...\n", checkpointFlag)
+			fmt.Printf("🛡️ Triggering Manual Merkle Checkpoint '%s'...\n", checkpointFlag)
 			postEndpoint("/api/v1/agents/checkpoint", map[string]string{
 				"agent_id":        agentIDFlag,
 				"checkpoint_name": checkpointFlag,
@@ -140,17 +148,17 @@ It analyzes code, extracts schemas, detects dependencies, and maintains cryptogr
 			})
 			return
 		}
+
 		if len(args) > 0 && strings.HasPrefix(args[0], "/") {
-			fmt.Printf("💡 Slash command detected. Invoking MCP bridge for '%s'...\n", args[0])
+			fmt.Printf("⚡ Slash command detected. Invoking MCP bridge for '%s'...\n", args[0])
 			return
 		}
+
 		_ = cmd.Help()
 	},
 }
 
-// -----------------------------------------------------------------------------
 // 4. COMMAND DECLARATIONS
-// -----------------------------------------------------------------------------
 
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze [path]",
@@ -340,7 +348,7 @@ var mcpInstallCmd = &cobra.Command{
 
 var ingestCmd = &cobra.Command{
 	Use:   "ingest [repo-path]",
-	Short: "Extract decisions from a Git repository (commit messages, ADRs, .garudarules)",
+	Short: "Extract decisions from a Git repository (commit messages, ADRs, garudarules)",
 	Run: func(cmd *cobra.Command, args []string) {
 		repoPath := "."
 		if len(args) > 0 {
@@ -384,13 +392,7 @@ var entitiesCmd = &cobra.Command{
 	},
 }
 
-// The impact, justify, judge, ponytail, self-describe commands are in separate files
-// Do NOT redeclare them here — they are already defined in:
-//   impact.go, justify.go, judge.go, ponytail.go, self_describe.go
-
-// -----------------------------------------------------------------------------
 // 5. INITIALIZATION (flag binding + command assembly)
-// -----------------------------------------------------------------------------
 
 func init() {
 	rootCmd.Flags().BoolVar(&summaryFlag, "summary", false, "Fetch executive metrics")
@@ -414,8 +416,6 @@ func init() {
 
 	repoAddCmd.Flags().String("module-path", "", "Go module path (e.g., github.com/org/repo)")
 
-	// Impact flags - these are defined in impact.go
-
 	mcpCmd.AddCommand(mcpInstallCmd)
 
 	workspaceCmd.AddCommand(workspaceCreateCmd)
@@ -429,10 +429,6 @@ func init() {
 	repoCmd.AddCommand(repoEnableCmd)
 	repoCmd.AddCommand(repoDisableCmd)
 
-	// Register CI command
-	rootCmd.AddCommand(ciCmd)
-
-	// REGISTER ALL COMMANDS
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(upCmd)
 	rootCmd.AddCommand(downCmd)
@@ -450,21 +446,32 @@ func init() {
 	rootCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(graphCmd)
 	rootCmd.AddCommand(entitiesCmd)
-	rootCmd.AddCommand(impactCmd)     // ← Workspace-based
-	rootCmd.AddCommand(impactDiffCmd) // ← Diff-based
 
-	// ← Workspace-based
-
-	// These are defined in separate files
-	rootCmd.AddCommand(ponytailCmd)
-	rootCmd.AddCommand(justifyCmd)
-	rootCmd.AddCommand(judgeCmd)
-	rootCmd.AddCommand(selfDescribeCmd)
+	// Note: External commands must be defined in other files within 'main' package.
+	if impactCmd != nil {
+		rootCmd.AddCommand(impactCmd)
+	}
+	if impactDiffCmd != nil {
+		rootCmd.AddCommand(impactDiffCmd)
+	}
+	if ponytailCmd != nil {
+		rootCmd.AddCommand(ponytailCmd)
+	}
+	if justifyCmd != nil {
+		rootCmd.AddCommand(justifyCmd)
+	}
+	if judgeCmd != nil {
+		rootCmd.AddCommand(judgeCmd)
+	}
+	if selfDescribeCmd != nil {
+		rootCmd.AddCommand(selfDescribeCmd)
+	}
+	if ciCmd != nil {
+		rootCmd.AddCommand(ciCmd)
+	}
 }
 
-// -----------------------------------------------------------------------------
 // 6. MAIN ENTRY
-// -----------------------------------------------------------------------------
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
@@ -473,9 +480,7 @@ func main() {
 	}
 }
 
-// -----------------------------------------------------------------------------
 // 7. CORE HANDLERS
-// -----------------------------------------------------------------------------
 
 func handleAnalyze(path string) {
 	info, err := os.Stat(path)
@@ -500,8 +505,10 @@ func handleAnalyze(path string) {
 	}
 
 	if outputFlag != "" {
-		data, _ := json.MarshalIndent(result, "", "  ")
-		if err := os.WriteFile(outputFlag, data, 0644); err != nil {
+		data, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fmt.Printf("⚠️ Failed to marshal JSON snapshot: %v\n", err)
+		} else if err := os.WriteFile(outputFlag, data, 0644); err != nil {
 			fmt.Printf("⚠️ Failed to write JSON: %v\n", err)
 		} else {
 			fmt.Printf("📄 JSON report saved to %s\n", outputFlag)
@@ -511,6 +518,12 @@ func handleAnalyze(path string) {
 	if saveFlag || workspaceFlag != "" || repoFlag != "" {
 		dbURL := getDBURL()
 		tenantIDStr := getTenantIDString()
+		tenantUUID, err := uuid.Parse(tenantIDStr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Invalid tenant UUID '%s': %v\n", tenantIDStr, err)
+			os.Exit(1)
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
@@ -533,7 +546,6 @@ func handleAnalyze(path string) {
 		fmt.Printf("   Status:      COMMITTED ✓\n")
 		fmt.Printf("   🔗 Run `./garuda explain %s` to inspect.\n", decisionID)
 
-		tenantID := getTenantID()
 		wsName := workspaceFlag
 		if wsName == "" {
 			wsName = os.Getenv("GARUDA_WORKSPACE")
@@ -554,12 +566,26 @@ func handleAnalyze(path string) {
 			}
 		}
 
+		modulePath := modulePathFlag
+		if modulePath == "" {
+			goModPath := filepath.Join(path, "go.mod")
+			if modData, err := os.ReadFile(goModPath); err == nil {
+				for _, line := range strings.Split(string(modData), "\n") {
+					line = strings.TrimSpace(line)
+					if strings.HasPrefix(line, "module ") {
+						modulePath = strings.TrimSpace(strings.TrimPrefix(line, "module "))
+						break
+					}
+				}
+			}
+		}
+
 		var workspaceID uuid.UUID
-		err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantIDStr, wsName).Scan(&workspaceID)
+		err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantUUID, wsName).Scan(&workspaceID)
 		if err != nil {
 			ws, err := st.CreateWorkspace(ctx, tenantIDStr, wsName, "")
 			if err != nil {
-				fmt.Printf("⚠️ Failed to create workspace '%s': %v\n", wsName, err)
+				fmt.Fprintf(os.Stderr, "⚠️ Failed to create workspace '%s': %v\n", wsName, err)
 				return
 			}
 			workspaceID = ws.ID
@@ -577,31 +603,41 @@ func handleAnalyze(path string) {
 			} else if strings.Contains(repoURL, "bitbucket") {
 				provider = "bitbucket"
 			}
-			repo, err := st.AddRepository(ctx, workspaceID, provider, repoURL, "main", "go", "")
+			repo, err := st.AddRepository(ctx, workspaceID, provider, repoURL, "main", "go", modulePath)
 			if err != nil {
-				fmt.Printf("⚠️ Failed to create repository: %v\n", err)
+				fmt.Fprintf(os.Stderr, "⚠️ Failed to create repository: %v\n", err)
 				return
 			}
 			repoID = repo.ID
 			fmt.Printf("   Created repository: %s\n", repoURL)
 		}
 
-		if modulePathFlag != "" {
-			_, err = st.Pool().Exec(ctx, `UPDATE repositories SET module_path = $1 WHERE id = $2`, modulePathFlag, repoID)
-			if err != nil {
-				fmt.Printf("⚠️ Failed to update module_path: %v\n", err)
-			} else {
-				fmt.Printf("   Module path set: %s\n", modulePathFlag)
-			}
+		if modulePath != "" {
+			_, _ = st.Pool().Exec(ctx, `UPDATE repositories SET module_path = $1 WHERE id = $2`, modulePath, repoID)
+			fmt.Printf("   Module path: %s\n", modulePath)
 		}
 
-		err = st.SaveSemanticGraph(ctx, tenantID, workspaceID, repoID, revisionID, result)
+		commitSHA := "local-uncommitted"
+		gitCmd := exec.Command("git", "-C", path, "rev-parse", "HEAD")
+		if out, err := gitCmd.Output(); err == nil {
+			commitSHA = strings.TrimSpace(string(out))
+		}
+
+		err = st.SaveSemanticGraph(ctx, tenantUUID, workspaceID, repoID, revisionID, result, commitSHA)
 		if err != nil {
 			fmt.Printf("⚠️ Failed to save semantic graph: %v\n", err)
 		} else {
-			fmt.Printf("   🧠 Semantic graph saved (%d entities, %d relationships)\n", len(result.Entities), len(result.Relationships))
+			fmt.Printf("   🧠 Semantic graph saved (%d entities, %d relationships, commit: %s)\n",
+				len(result.Entities), len(result.Relationships), commitSHA[:min(8, len(commitSHA))])
 		}
 	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func handleDiff(file1, file2 string) {
@@ -615,13 +651,17 @@ func handleDiff(file1, file2 string) {
 		fmt.Printf("❌ Failed to load new snapshot: %v\n", err)
 		os.Exit(1)
 	}
-	report := analyzer.Diff(before, after)
 
+	report := analyzer.Diff(before, after)
 	if jsonOutputFlag {
-		data, _ := json.MarshalIndent(report, "", "  ")
+		data, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			fmt.Printf("❌ Failed to marshal JSON: %v\n", err)
+			return
+		}
 		if outputFileFlag != "" {
 			if err := os.WriteFile(outputFileFlag, data, 0644); err != nil {
-				fmt.Printf("⚠️ Failed to write diff JSON: %v\n", err)
+				fmt.Printf("❌ Failed to write diff JSON: %v\n", err)
 			} else {
 				fmt.Printf("📄 JSON diff written to %s\n", outputFileFlag)
 			}
@@ -635,22 +675,23 @@ func handleDiff(file1, file2 string) {
 
 func printDiffReport(report *analyzer.DiffReport) {
 	fmt.Println("📊 SCHEMA DIFF")
-	fmt.Println("────────────────────")
+	fmt.Println("-------------")
 	fmt.Println()
 	fmt.Printf("Stats:\n")
-	fmt.Printf("  Files:     %+d\n", report.StatsDiff.Files)
-	fmt.Printf("  Packages:  %+d\n", report.StatsDiff.Packages)
-	fmt.Printf("  Structs:   %+d\n", report.StatsDiff.Structs)
+	fmt.Printf("  Files:      %+d\n", report.StatsDiff.Files)
+	fmt.Printf("  Packages:   %+d\n", report.StatsDiff.Packages)
+	fmt.Printf("  Structs:    %+d\n", report.StatsDiff.Structs)
 	fmt.Printf("  Interfaces: %+d\n", report.StatsDiff.Interfaces)
-	fmt.Printf("  Functions: %+d\n", report.StatsDiff.Functions)
-	fmt.Printf("  Imports:   %+d\n", report.StatsDiff.Imports)
+	fmt.Printf("  Functions:  %+d\n", report.StatsDiff.Functions)
+	fmt.Printf("  Imports:    %+d\n", report.StatsDiff.Imports)
 	fmt.Println()
-	fmt.Printf("Fingerprint: %t\n", report.FingerprintDiff.Match)
+	fmt.Printf("Fingerprint Match: %t\n", report.FingerprintDiff.Match)
 	fmt.Println()
+
 	if len(report.EntityDiffs) > 0 {
 		fmt.Println("Entities:")
 		for _, ed := range report.EntityDiffs {
-			fmt.Printf("  %s %s %s", ed.Status, ed.Kind, ed.Name)
+			fmt.Printf("  [%s] %s %s", ed.Status, ed.Kind, ed.Name)
 			if ed.Status == "modified" {
 				if ed.FieldsDiff != nil {
 					fmt.Printf(" (fields: +%d -%d ~%d)", len(ed.FieldsDiff.Added), len(ed.FieldsDiff.Removed), len(ed.FieldsDiff.Modified))
@@ -666,61 +707,68 @@ func printDiffReport(report *analyzer.DiffReport) {
 		}
 		fmt.Println()
 	}
+
 	if len(report.RelationshipDiffs) > 0 {
 		fmt.Println("Relationships:")
 		for _, rd := range report.RelationshipDiffs {
-			fmt.Printf("  %s %s %s -> %s\n", rd.Status, rd.Type, rd.From, rd.To)
+			fmt.Printf("  [%s] %s %s -> %s\n", rd.Status, rd.Type, rd.From, rd.To)
 		}
 		fmt.Println()
 	}
+
 	fmt.Println("Summary:")
-	fmt.Printf("  Breaking changes:  %d\n", report.Summary.BreakingChanges)
-	fmt.Printf("  Warnings:          %d\n", report.Summary.Warnings)
-	fmt.Printf("  Additions:         %d\n", report.Summary.Additions)
-	fmt.Printf("  Removals:          %d\n", report.Summary.Removals)
-	fmt.Printf("  Modified:          %d\n", report.Summary.Modified)
+	fmt.Printf("  Breaking changes: %d\n", report.Summary.BreakingChanges)
+	fmt.Printf("  Warnings:         %d\n", report.Summary.Warnings)
+	fmt.Printf("  Additions:        %d\n", report.Summary.Additions)
+	fmt.Printf("  Removals:         %d\n", report.Summary.Removals)
+	fmt.Printf("  Modified:         %d\n", report.Summary.Modified)
 }
 
-// --- workspace handlers ---
+// --- Workspace handlers ---
 
 func handleWorkspaceCreate(name string) {
 	dbURL := getDBURL()
 	tenantID := getTenantIDString()
 	ctx := context.Background()
+
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect: %v\n", err)
 		os.Exit(1)
 	}
 	defer st.Close()
+
 	ws, err := st.CreateWorkspace(ctx, tenantID, name, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to create workspace: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Workspace '%s' created (ID: %s)\n", ws.Name, ws.ID)
+	fmt.Printf("✓ Workspace '%s' created (ID: %s)\n", ws.Name, ws.ID)
 }
 
 func handleWorkspaceList() {
 	dbURL := getDBURL()
 	tenantID := getTenantIDString()
 	ctx := context.Background()
+
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect: %v\n", err)
 		os.Exit(1)
 	}
 	defer st.Close()
+
 	workspaces, err := st.ListWorkspaces(ctx, tenantID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to list: %v\n", err)
 		os.Exit(1)
 	}
 	if len(workspaces) == 0 {
-		fmt.Println("📭 No workspaces found. Create one with: garuda workspace create <name>")
+		fmt.Println("📂 No workspaces found. Create one with: garuda workspace create <name>")
 		return
 	}
-	fmt.Printf("📁 Workspaces (%d):\n", len(workspaces))
+
+	fmt.Printf("📂 Workspaces (%d):\n", len(workspaces))
 	for _, w := range workspaces {
 		fmt.Printf("  • %s (ID: %s)\n", w.Name, w.ID)
 	}
@@ -730,24 +778,27 @@ func handleWorkspaceDelete(name string) {
 	dbURL := getDBURL()
 	tenantID := getTenantIDString()
 	ctx := context.Background()
+
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect: %v\n", err)
 		os.Exit(1)
 	}
 	defer st.Close()
+
 	var wsID string
 	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, name).Scan(&wsID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", name)
 		os.Exit(1)
 	}
+
 	_, err = st.Pool().Exec(ctx, `DELETE FROM workspaces WHERE id = $1`, wsID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to delete: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Workspace '%s' deleted.\n", name)
+	fmt.Printf("✓ Workspace '%s' deleted.\n", name)
 }
 
 func handleWorkspaceSync(workspaceName string) {
@@ -775,33 +826,29 @@ func handleWorkspaceSync(workspaceName string) {
 		os.Exit(1)
 	}
 	if len(repos) == 0 {
-		fmt.Printf("📭 No repositories in workspace '%s'.\n", workspaceName)
+		fmt.Printf("⚠️ No repositories in workspace '%s'.\n", workspaceName)
 		return
 	}
 
 	fmt.Printf("🔄 Syncing workspace '%s' (%d repos)...\n", workspaceName, len(repos))
-
 	for i, repo := range repos {
 		fmt.Printf("[%d/%d] %s\n", i+1, len(repos), repo.URL)
-
 		if !repo.Enabled {
 			fmt.Printf("  ⏭️ Skipping disabled repository\n")
 			continue
 		}
 
 		tempDir := filepath.Join(os.TempDir(), "garuda-sync", workspaceName, repo.ID.String())
-
 		if _, err := os.Stat(tempDir); os.IsNotExist(err) {
 			if strings.HasPrefix(repo.URL, "file://") {
 				localPath := strings.TrimPrefix(repo.URL, "file://")
 				if !filepath.IsAbs(localPath) {
-					absPath, err := filepath.Abs(localPath)
-					if err == nil {
+					if absPath, err := filepath.Abs(localPath); err == nil {
 						localPath = absPath
 					}
 				}
 				if _, err := os.Stat(localPath); err == nil {
-					fmt.Printf("  📁 Copying local repo from %s\n", localPath)
+					fmt.Printf("  📂 Copying local repo from %s\n", localPath)
 					if err := os.MkdirAll(filepath.Dir(tempDir), 0755); err != nil {
 						fmt.Printf("  ❌ Failed to create directory: %v\n", err)
 						continue
@@ -849,32 +896,32 @@ func handleWorkspaceSync(workspaceName string) {
 			fmt.Printf("  📦 Module path: %s\n", modulePath)
 		}
 
-		fmt.Printf("  🔍 Analysing...")
-		analyzeCmd := exec.Command("./garuda", "analyze", tempDir, "--save", "--workspace", workspaceName, "--repo", repo.URL, "--commit", commitSHA)
+		fmt.Printf("  🔍 Analysing...\n")
+		analyzeArgs := []string{"analyze", tempDir, "--save", "--workspace", workspaceName, "--repo", repo.URL, "--commit", commitSHA}
 		if modulePath != "" {
-			analyzeCmd.Args = append(analyzeCmd.Args, "--module-path", modulePath)
+			analyzeArgs = append(analyzeArgs, "--module-path", modulePath)
 		}
-		analyzeCmd.Env = append(os.Environ(),
-			"DATABASE_URL="+os.Getenv("DATABASE_URL"),
-			"GARUDA_TENANT_ID="+tenantID,
-		)
+
+		analyzeCmd := exec.Command("./garuda", analyzeArgs...)
+		analyzeCmd.Env = append(os.Environ(), "DATABASE_URL="+os.Getenv("DATABASE_URL"), "GARUDA_TENANT_ID="+tenantID)
+
 		output, err := analyzeCmd.CombinedOutput()
 		if err != nil {
-			fmt.Printf(" ❌ Failed: %v\n", err)
+			fmt.Printf("  ❌ Failed: %v\n", err)
 			fmt.Printf("  Output: %s\n", string(output))
 			continue
 		}
-		fmt.Printf(" ✅ Done\n")
+		fmt.Printf("  ✅ Done\n")
 
 		err = st.UpdateRepositorySyncStatus(ctx, tenantID, repo.ID, commitSHA, "synced")
 		if err != nil {
 			fmt.Printf("  ⚠️ Failed to update status: %v\n", err)
 		}
 	}
-	fmt.Println("✅ Sync completed.")
+	fmt.Println("🎉 Sync completed.")
 }
 
-// --- repository handlers ---
+// --- Repository handlers ---
 
 func handleRepoAdd(workspaceName, repoURL, modulePath string) {
 	dbURL := getDBURL()
@@ -907,9 +954,9 @@ func handleRepoAdd(workspaceName, repoURL, modulePath string) {
 		fmt.Fprintf(os.Stderr, "❌ Failed to add repository: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Repository '%s' added to workspace '%s' (ID: %s)\n", repo.URL, workspaceName, repo.ID)
+	fmt.Printf("✓ Repository '%s' added to workspace '%s' (ID: %s)\n", repo.URL, workspaceName, repo.ID)
 	if modulePath != "" {
-		fmt.Printf("   Module path: %s\n", modulePath)
+		fmt.Printf("  📦 Module path: %s\n", modulePath)
 	}
 }
 
@@ -917,36 +964,39 @@ func handleRepoList(workspaceName string) {
 	dbURL := getDBURL()
 	tenantID := getTenantIDString()
 	ctx := context.Background()
+
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect: %v\n", err)
 		os.Exit(1)
 	}
 	defer st.Close()
+
 	var wsID uuid.UUID
 	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
+
 	repos, err := st.ListRepositories(ctx, wsID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to list: %v\n", err)
 		os.Exit(1)
 	}
 	if len(repos) == 0 {
-		fmt.Printf("📭 No repositories in workspace '%s'.\n", workspaceName)
-		fmt.Printf("   Add one with: garuda repo add %s <url>\n", workspaceName)
+		fmt.Printf("⚠️ No repositories in workspace '%s'.\n", workspaceName)
+		fmt.Printf("  Add one with: garuda repo add %s <url>\n", workspaceName)
 		return
 	}
-	fmt.Printf("📁 Repositories in workspace '%s':\n", workspaceName)
+
+	fmt.Printf("📂 Repositories in workspace '%s':\n", workspaceName)
 	for _, r := range repos {
 		commit := "N/A"
 		if r.CurrentCommit != nil {
 			commit = *r.CurrentCommit
 		}
-		fmt.Printf("  • %s (branch: %s, commit: %s, status: %s)\n",
-			r.URL, r.DefaultBranch, commit, r.AnalysisStatus)
+		fmt.Printf("  • %s (branch: %s, commit: %s, status: %s)\n", r.URL, r.DefaultBranch, commit, r.AnalysisStatus)
 	}
 }
 
@@ -954,55 +1004,62 @@ func handleRepoRemove(workspaceName, repoURL string) {
 	dbURL := getDBURL()
 	tenantID := getTenantIDString()
 	ctx := context.Background()
+
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect: %v\n", err)
 		os.Exit(1)
 	}
 	defer st.Close()
+
 	var wsID string
 	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
+
 	_, err = st.Pool().Exec(ctx, `DELETE FROM repositories WHERE workspace_id = $1 AND url = $2`, wsID, repoURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to remove: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Repository '%s' removed from workspace '%s'.\n", repoURL, workspaceName)
+	fmt.Printf("✓ Repository '%s' removed from workspace '%s'.\n", repoURL, workspaceName)
 }
 
 func handleRepoEnable(workspaceName, repoURL string, enable bool) {
 	dbURL := getDBURL()
 	tenantID := getTenantIDString()
 	ctx := context.Background()
+
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect: %v\n", err)
 		os.Exit(1)
 	}
 	defer st.Close()
+
 	var wsID string
 	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
+
 	_, err = st.Pool().Exec(ctx, `UPDATE repositories SET enabled = $1 WHERE workspace_id = $2 AND url = $3`, enable, wsID, repoURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to update: %v\n", err)
 		os.Exit(1)
 	}
+
 	state := "enabled"
 	if !enable {
 		state = "disabled"
 	}
-	fmt.Printf("✅ Repository '%s' %s.\n", repoURL, state)
+	fmt.Printf("✓ Repository '%s' %s.\n", repoURL, state)
 }
 
-// --- entities ---
+// --- Entities Handlers ---
 
 func handleListEntities() {
 	dbURL := getDBURL()
@@ -1022,12 +1079,10 @@ func handleListEntities() {
 	}
 
 	var wsID uuid.UUID
-	err = st.Pool().QueryRow(ctx, `
-		SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2
-	`, tenantID, workspaceName).Scan(&wsID)
+	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
 	if err != nil {
 		fmt.Printf("❌ Workspace '%s' not found.\n", workspaceName)
-		fmt.Println("   Create one with: garuda workspace create " + workspaceName)
+		fmt.Println("  Create one with: garuda workspace create " + workspaceName)
 		os.Exit(1)
 	}
 
@@ -1037,6 +1092,7 @@ func handleListEntities() {
 		WHERE tenant_id = $1 AND workspace_id = $2
 		ORDER BY package, name
 	`, tenantID, wsID)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to list entities: %v\n", err)
 		os.Exit(1)
@@ -1061,28 +1117,28 @@ func handleListEntities() {
 	}
 
 	if len(entities) == 0 {
-		fmt.Printf("📭 No entities found in workspace '%s'.\n", workspaceName)
-		fmt.Println("   Run: garuda analyze . --save")
+		fmt.Printf("⚠️ No entities found in workspace '%s'.\n", workspaceName)
+		fmt.Println("  Run: garuda analyze --save")
 		return
 	}
 
-	fmt.Printf("📋 Entities in workspace '%s' (%d):\n", workspaceName, len(entities))
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("🔍 Entities in workspace '%s' (%d):\n", workspaceName, len(entities))
 	for _, e := range entities {
-		exported := " "
+		exported := ""
 		if e.Exported {
-			exported = "🔓"
+			exported = "*"
 		}
-		fmt.Printf("  %s %s.%s (%s) [%s]\n", exported, e.Package, e.Name, e.Kind, e.File)
+		fmt.Printf("  • %s%s.%s (%s) [%s]\n", exported, e.Package, e.Name, e.Kind, e.File)
 	}
 }
 
-// --- inspect ---
+// --- Inspect Handlers ---
 
 func handleInspect(entityName string) {
 	dbURL := getDBURL()
 	tenantID := getTenantIDString()
 	ctx := context.Background()
+
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect: %v\n", err)
@@ -1099,34 +1155,41 @@ func handleInspect(entityName string) {
 		SELECT id, name, kind, package, file_path, fields, methods, signature, is_exported
 		FROM entities
 		WHERE tenant_id = $1 AND name = $2
+		LIMIT 1
 	`, tenantID, entityName).Scan(&id, &name, &kind, &pkg, &filePath, &fieldsJSON, &methodsJSON, &signature, &isExported)
+
 	if err != nil {
 		fmt.Printf("❌ Entity '%s' not found.\n", entityName)
 		os.Exit(1)
 	}
 
-	fmt.Printf("📦 Entity: %s\n", name)
-	fmt.Printf("  Package:    %s\n", pkg)
-	fmt.Printf("  Kind:       %s\n", kind)
-	fmt.Printf("  File:       %s\n", filePath)
-	fmt.Printf("  Exported:   %v\n", isExported)
+	fmt.Printf("🔍 Entity: %s\n", name)
+	fmt.Printf("   Package:  %s\n", pkg)
+	fmt.Printf("   Kind:     %s\n", kind)
+	fmt.Printf("   File:     %s\n", filePath)
+	fmt.Printf("   Exported: %v\n", isExported)
+
 	if signature != "" {
-		fmt.Printf("  Signature:  %s\n", signature)
+		fmt.Printf("   Signature: %s\n", signature)
 	}
+
 	if len(fieldsJSON) > 0 {
-		fmt.Printf("  Fields:\n")
+		fmt.Printf("\n   Fields:\n")
 		var fields []analyzer.Field
-		json.Unmarshal(fieldsJSON, &fields)
-		for _, f := range fields {
-			fmt.Printf("    %s: %s\n", f.Name, f.Type)
+		if err := json.Unmarshal(fieldsJSON, &fields); err == nil {
+			for _, f := range fields {
+				fmt.Printf("     • %s: %s\n", f.Name, f.Type)
+			}
 		}
 	}
+
 	if len(methodsJSON) > 0 {
-		fmt.Printf("  Methods:\n")
+		fmt.Printf("\n   Methods:\n")
 		var methods []analyzer.Method
-		json.Unmarshal(methodsJSON, &methods)
-		for _, m := range methods {
-			fmt.Printf("    %s %s\n", m.Name, m.Signature)
+		if err := json.Unmarshal(methodsJSON, &methods); err == nil {
+			for _, m := range methods {
+				fmt.Printf("     • %s %s\n", m.Name, m.Signature)
+			}
 		}
 	}
 
@@ -1134,16 +1197,18 @@ func handleInspect(entityName string) {
 		SELECT claim_type, to_entity_id FROM claims
 		WHERE tenant_id = $1 AND from_entity_id = $2
 	`, tenantID, id)
+
 	if err == nil {
 		defer rows.Close()
 		var outgoing []string
 		for rows.Next() {
 			var typ, toID string
-			rows.Scan(&typ, &toID)
-			outgoing = append(outgoing, fmt.Sprintf("  %s -> %s", typ, toID))
+			if err := rows.Scan(&typ, &toID); err == nil {
+				outgoing = append(outgoing, fmt.Sprintf("     • %s -> %s", typ, toID))
+			}
 		}
 		if len(outgoing) > 0 {
-			fmt.Printf("  Claims (outgoing):\n")
+			fmt.Printf("\n   Claims (outgoing):\n")
 			for _, c := range outgoing {
 				fmt.Println(c)
 			}
@@ -1154,16 +1219,18 @@ func handleInspect(entityName string) {
 		SELECT claim_type, from_entity_id FROM claims
 		WHERE tenant_id = $1 AND to_entity_id = $2
 	`, tenantID, id)
+
 	if err == nil {
 		defer rows.Close()
 		var incoming []string
 		for rows.Next() {
 			var typ, fromID string
-			rows.Scan(&typ, &fromID)
-			incoming = append(incoming, fmt.Sprintf("  %s -> %s", fromID, typ))
+			if err := rows.Scan(&typ, &fromID); err == nil {
+				incoming = append(incoming, fmt.Sprintf("     • %s -> %s", fromID, typ))
+			}
 		}
 		if len(incoming) > 0 {
-			fmt.Printf("  Claims (incoming):\n")
+			fmt.Printf("\n   Claims (incoming):\n")
 			for _, c := range incoming {
 				fmt.Println(c)
 			}
@@ -1171,7 +1238,7 @@ func handleInspect(entityName string) {
 	}
 }
 
-// --- graph ---
+// --- Graph Handlers ---
 
 func handleGraph(workspaceName string) {
 	dbURL := getDBURL()
@@ -1192,17 +1259,15 @@ func handleGraph(workspaceName string) {
 	}
 
 	var wsID uuid.UUID
-	err = st.Pool().QueryRow(ctx, `
-		SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2
-	`, tenantUUID, workspaceName).Scan(&wsID)
+	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantUUID, workspaceName).Scan(&wsID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
 
 	query := `
-		SELECT 
-			id, 
+		SELECT
+			id,
 			COALESCE(name, 'unknown') as name,
 			COALESCE(kind, 'unknown') as kind,
 			COALESCE(package, '') as package,
@@ -1214,7 +1279,7 @@ func handleGraph(workspaceName string) {
 	args := []interface{}{tenantUUID, wsID}
 
 	if graphRepoFlag != "" {
-		if _, err := uuid.Parse(graphRepoFlag); err == nil {
+		if err := uuid.Validate(graphRepoFlag); err == nil {
 			query += ` AND repository_id = $3`
 			args = append(args, graphRepoFlag)
 		} else {
@@ -1223,8 +1288,9 @@ func handleGraph(workspaceName string) {
 				SELECT id FROM repositories
 				WHERE workspace_id = $1 AND (url LIKE $2 OR module_path = $3)
 			`, wsID, "%"+graphRepoFlag+"%", graphRepoFlag).Scan(&repoID)
+
 			if err == nil {
-				query += ` AND repository_id = $4`
+				query += ` AND repository_id = $3`
 				args = append(args, repoID)
 			} else {
 				fmt.Printf("⚠️ Repository '%s' not found, ignoring filter\n", graphRepoFlag)
@@ -1256,18 +1322,19 @@ func handleGraph(workspaceName string) {
 			Exported: exported,
 		})
 	}
+
 	if err := rows.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Entity query error: %v\n", err)
 		os.Exit(1)
 	}
 
 	if len(nodes) == 0 {
-		fmt.Printf("📭 No entities found in workspace '%s'", workspaceName)
+		fmt.Printf("⚠️ No entities found in workspace '%s'", workspaceName)
 		if graphRepoFlag != "" {
 			fmt.Printf(" for repo '%s'", graphRepoFlag)
 		}
 		fmt.Println(".")
-		fmt.Println("   Run 'garuda workspace sync <workspace>' to populate entities.")
+		fmt.Println("  Run 'garuda workspace sync <workspace>' to populate entities.")
 		return
 	}
 
@@ -1276,6 +1343,7 @@ func handleGraph(workspaceName string) {
 		FROM claims
 		WHERE tenant_id = $1 AND workspace_id = $2
 	`, tenantUUID, wsID)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to query claims: %v\n", err)
 		os.Exit(1)
@@ -1298,6 +1366,7 @@ func handleGraph(workspaceName string) {
 			Type: claimType,
 		})
 	}
+
 	if err := rows2.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Claims query error: %v\n", err)
 		os.Exit(1)
@@ -1308,6 +1377,7 @@ func handleGraph(workspaceName string) {
 		FROM cross_repo_edges
 		WHERE tenant_id = $1 AND workspace_id = $2
 	`, tenantUUID, wsID)
+
 	if err == nil {
 		defer rows3.Close()
 		for rows3.Next() {
@@ -1341,14 +1411,13 @@ func handleGraph(workspaceName string) {
 		fmt.Fprintf(os.Stderr, "❌ Failed to write graph: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Graph written to %s (%d entities, %d edges)\n", filename, len(nodes), len(edges))
 
+	fmt.Printf("✓ Graph written to %s (%d entities, %d edges)\n", filename, len(nodes), len(edges))
 	if graphOpenFlag {
 		openFile(filename)
 	}
 }
 
-// generateGraphHTML creates the HTML file using the graph package.
 func generateGraphHTML(workspaceName string, nodes []graph.Node, edges []graph.Edge) (string, error) {
 	return graph.Generate(workspaceName, nodes, edges)
 }
@@ -1367,16 +1436,14 @@ func openFile(filename string) {
 		return
 	}
 	if err := cmd.Start(); err != nil {
-		fmt.Printf("⚠️ Failed to open browser: %v\n", err)
+		fmt.Printf("❌ Failed to open browser: %v\n", err)
 	}
 }
 
-// -----------------------------------------------------------------------------
-// 8. REMAINING HANDLERS (init, up, down, status, propose, verify, explain, ingest, mcp, dashboard)
-// -----------------------------------------------------------------------------
+// 8. REMAINING HANDLERS
 
 func handleInit() {
-	fmt.Println("🛡️ Initializing Garuda Local Runtime Environment...")
+	fmt.Println("⚙️ Initializing Garuda Local Runtime Environment...")
 	composeContent := `services:
   postgres:
     image: postgres:16-alpine
@@ -1396,7 +1463,7 @@ volumes:
 		fmt.Fprintf(os.Stderr, "❌ Failed to write compose file: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("✅ Generated docker-compose.garuda.yml successfully.")
+	fmt.Println("✓ Generated docker-compose.garuda.yml successfully.")
 }
 
 func handleUp() {
@@ -1404,6 +1471,7 @@ func handleUp() {
 	if _, err := os.Stat("docker-compose.garuda.yml"); os.IsNotExist(err) {
 		handleInit()
 	}
+
 	cmd := exec.Command("docker-compose", "-f", "docker-compose.garuda.yml", "up", "-d")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -1411,6 +1479,7 @@ func handleUp() {
 		fmt.Fprintf(os.Stderr, "❌ Failed to start containers: %v\n", err)
 		os.Exit(1)
 	}
+
 	dbURL := getDBURL()
 	fmt.Println("⏳ Waiting for Postgres to be ready...")
 	ready := false
@@ -1423,11 +1492,13 @@ func handleUp() {
 		}
 		time.Sleep(1 * time.Second)
 	}
+
 	if !ready {
 		fmt.Fprintln(os.Stderr, "❌ Postgres did not become ready in 30 seconds.")
 		os.Exit(1)
 	}
-	fmt.Println("📦 Running database migrations...")
+
+	fmt.Println("🛠️ Running database migrations...")
 	migCmd := exec.Command("go", "run", "cmd/migrate/main.go")
 	migCmd.Env = append(os.Environ(), "DATABASE_URL="+dbURL)
 	migCmd.Stdout = os.Stdout
@@ -1436,8 +1507,10 @@ func handleUp() {
 		fmt.Fprintf(os.Stderr, "❌ Migration failed: %v\n", err)
 		os.Exit(1)
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	apiCmd := exec.CommandContext(ctx, "go", "run", "cmd/garuda-api/main.go")
 	apiCmd.Env = append(os.Environ(), "DATABASE_URL="+dbURL)
 	apiCmd.Stdout = os.Stdout
@@ -1446,6 +1519,7 @@ func handleUp() {
 		fmt.Fprintf(os.Stderr, "❌ Failed to start API: %v\n", err)
 		os.Exit(1)
 	}
+
 	workerCmd := exec.CommandContext(ctx, "go", "run", "cmd/garuda-worker/main.go")
 	workerCmd.Env = append(os.Environ(), "DATABASE_URL="+dbURL)
 	workerCmd.Stdout = os.Stdout
@@ -1455,7 +1529,8 @@ func handleUp() {
 		_ = apiCmd.Process.Kill()
 		os.Exit(1)
 	}
-	fmt.Println("⏳ Waiting for API to come online...")
+
+	fmt.Println("📡 Waiting for API to come online...")
 	apiReady := false
 	for i := 0; i < 20; i++ {
 		resp, err := http.Get(defaultAPIAddr + "/health")
@@ -1466,18 +1541,23 @@ func handleUp() {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+
 	if !apiReady {
-		fmt.Fprintln(os.Stderr, "⚠️  API health check timed out. It may still be starting.")
+		fmt.Fprintln(os.Stderr, "⚠️ API health check timed out. It may still be starting.")
 	}
+
 	fmt.Println("\n✅ Garuda runtime is ONLINE!")
-	fmt.Println("📊 Mission Control: http://localhost:8080/dashboard")
+	fmt.Println("🌐 Mission Control: http://localhost:8080/dashboard")
 	openDashboard()
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
+
 	fmt.Println("\n🛑 Shutting down gracefully...")
 	cancel()
 	time.Sleep(2 * time.Second)
+
 	_ = apiCmd.Process.Kill()
 	_ = workerCmd.Process.Kill()
 	fmt.Println("✅ Garuda stopped.")
@@ -1488,7 +1568,7 @@ func handleDown() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "⚠️ Error stopping containers: %v\n", err)
+		fmt.Fprintf(os.Stderr, "❌ Error stopping containers: %v\n", err)
 	}
 	fmt.Println("✅ Garuda containers stopped.")
 }
@@ -1497,15 +1577,16 @@ func handleStatus() {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(defaultAPIAddr + "/health")
 	if err != nil {
-		fmt.Println("🔴 Garuda Gateway OFFLINE. Run 'garuda up' to boot services.")
+		fmt.Println("❌ Garuda Gateway OFFLINE. Run 'garuda up' to boot services.")
 		return
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("🔴 Garuda Gateway UNHEALTHY (status %d).\n", resp.StatusCode)
+		fmt.Printf("⚠️ Garuda Gateway UNHEALTHY (status %d).\n", resp.StatusCode)
 		return
 	}
-	fmt.Println("🟢 Garuda Gateway: ONLINE (:8080)")
+	fmt.Println("✅ Garuda Gateway: ONLINE (:8080)")
 }
 
 type ProposeRequest struct {
@@ -1518,10 +1599,12 @@ func handlePropose(args []string) {
 	proposeFlags := flag.NewFlagSet("propose", flag.ExitOnError)
 	domain := proposeFlags.String("scope-domain", "general", "Domain boundary for proposal")
 	system := proposeFlags.String("scope-system", "cli", "System boundary for proposal")
+
 	if len(args) < 1 {
 		fmt.Println("❌ Usage: garuda propose \"<title>\" [--scope-domain <domain>] [--scope-system <system>]")
 		return
 	}
+
 	var title string
 	var flagArgs []string
 	for i := 0; i < len(args); i++ {
@@ -1532,13 +1615,16 @@ func handlePropose(args []string) {
 			title = args[i]
 		}
 	}
+
 	if len(flagArgs) > 0 {
 		_ = proposeFlags.Parse(flagArgs)
 	}
+
 	if title == "" {
 		fmt.Println("❌ Usage: garuda propose \"<title>\" [--scope-domain <domain>] [--scope-system <system>]")
 		return
 	}
+
 	reqBody := ProposeRequest{
 		Title:       title,
 		ScopeDomain: *domain,
@@ -1555,22 +1641,27 @@ func handleVerify() {
 		os.Exit(1)
 	}
 	defer st.Close()
+
 	ctx := context.Background()
 	tid := getTenantID()
+
 	rows, err := st.Pool().Query(ctx, `
-        SELECT id, decision_hash, previous_revision_hash
-        FROM decision_revisions
-        WHERE tenant_id = $1
-        ORDER BY created_at ASC
-    `, tid)
+		SELECT id, decision_hash, previous_revision_hash
+		FROM decision_revisions
+		WHERE tenant_id = $1
+		ORDER BY created_at ASC
+	`, tid)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Query failed: %v\n", err)
 		os.Exit(1)
 	}
 	defer rows.Close()
+
 	var count int
 	var prevHash []byte
 	chainValid := true
+
 	for rows.Next() {
 		var id uuid.UUID
 		var currHash, prevHashStored []byte
@@ -1578,6 +1669,7 @@ func handleVerify() {
 			fmt.Fprintf(os.Stderr, "❌ Row scan failed: %v\n", err)
 			os.Exit(1)
 		}
+
 		if count == 0 {
 			for _, b := range prevHashStored {
 				if b != 0 {
@@ -1593,29 +1685,32 @@ func handleVerify() {
 		prevHash = currHash
 		count++
 	}
+
 	if err := rows.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Row iteration error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("🔍 GARUDA INTEGRITY CHECK")
-	fmt.Printf("Revisions:             %d\n", count)
-	fmt.Printf("Hash chain:            %s\n", statusText(chainValid))
-	fmt.Printf("Audit events:          %d ✓\n", count)
-	fmt.Printf("Evidence references:   %s\n", statusText(chainValid))
-	fmt.Printf("Immutable history:     %s\n", statusText(chainValid))
-	fmt.Printf("Tenant isolation:      %s\n", statusText(chainValid))
+
+	fmt.Println("🛡️ GARUDA INTEGRITY CHECK")
+	fmt.Printf("Revisions:           %d\n", count)
+	fmt.Printf("Hash chain:          %s\n", statusText(chainValid))
+	fmt.Printf("Audit events:        %d\n", count)
+	fmt.Printf("Evidence references: %s\n", statusText(chainValid))
+	fmt.Printf("Immutable history:   %s\n", statusText(chainValid))
+	fmt.Printf("Tenant isolation:    %s\n", statusText(chainValid))
+
 	if chainValid {
-		fmt.Println("Integrity: PASS")
+		fmt.Println("Integrity: PASS ✅")
 	} else {
-		fmt.Println("Integrity: FAIL")
+		fmt.Println("Integrity: FAIL ❌")
 	}
 }
 
 func statusText(valid bool) string {
 	if valid {
-		return "VALID ✓"
+		return "VALID "
 	}
-	return "INVALID ❌"
+	return "INVALID"
 }
 
 func handleExplain(decisionIDStr string) {
@@ -1626,6 +1721,7 @@ func handleExplain(decisionIDStr string) {
 		os.Exit(1)
 	}
 	defer st.Close()
+
 	ctx := context.Background()
 	decisionID, err := uuid.Parse(decisionIDStr)
 	if err != nil {
@@ -1633,48 +1729,56 @@ func handleExplain(decisionIDStr string) {
 		os.Exit(1)
 	}
 	tid := getTenantID()
+
 	var revNumber int
 	var canonicalJSON []byte
 	var hash, prevHash []byte
 	var createdAt time.Time
+
 	err = st.Pool().QueryRow(ctx, `
-        SELECT revision_number, canonical_json, decision_hash, previous_revision_hash, created_at
-        FROM decision_revisions
-        WHERE tenant_id = $1 AND decision_id = $2
-        ORDER BY revision_number DESC LIMIT 1
-    `, tid, decisionID).Scan(&revNumber, &canonicalJSON, &hash, &prevHash, &createdAt)
+		SELECT revision_number, canonical_json, decision_hash, previous_revision_hash, created_at
+		FROM decision_revisions
+		WHERE tenant_id = $1 AND decision_id = $2
+		ORDER BY revision_number DESC LIMIT 1
+	`, tid, decisionID).Scan(&revNumber, &canonicalJSON, &hash, &prevHash, &createdAt)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Decision not found: %v\n", err)
 		os.Exit(1)
 	}
+
 	var content map[string]interface{}
 	if err := json.Unmarshal(canonicalJSON, &content); err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to parse decision content: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("🧠 DECISION EXPLANATION\n")
-	fmt.Printf("Decision ID:          %s\n", decisionID)
-	fmt.Printf("Revision:             %d\n", revNumber)
-	fmt.Printf("Statement:            %v\n", content["title"])
-	fmt.Printf("Scope:                %v\n", content["scope"])
-	fmt.Printf("Owner:                %v\n", content["owner"])
-	fmt.Printf("Confidence:           %.2f\n", func() float64 {
+
+	fmt.Printf("📄 DECISION EXPLANATION\n")
+	fmt.Printf("Decision ID:       %s\n", decisionID)
+	fmt.Printf("Revision:          %d\n", revNumber)
+	fmt.Printf("Statement:         %v\n", content["title"])
+	fmt.Printf("Scope:             %v\n", content["scope"])
+	fmt.Printf("Owner:             %v\n", content["owner"])
+	fmt.Printf("Confidence:        %.2f\n", func() float64 {
 		if c, ok := content["confidence"].(float64); ok {
 			return c
 		}
 		return 0.0
 	}())
-	fmt.Printf("Created:              %s\n", createdAt.Format(time.RFC3339))
-	fmt.Printf("Content Hash:         %x\n", hash)
-	fmt.Printf("Previous Revision:    %x\n", prevHash)
+	fmt.Printf("Created:           %s\n", createdAt.Format(time.RFC3339))
+	fmt.Printf("Content Hash:      %x\n", hash)
+	fmt.Printf("Previous Revision: %x\n", prevHash)
+
 	var merkleRoot []byte
 	_ = st.Pool().QueryRow(ctx, `SELECT root_hash FROM merkle_roots WHERE tenant_id = $1`, tid).Scan(&merkleRoot)
-	fmt.Printf("Merkle Root:          %x\n", merkleRoot)
+	fmt.Printf("Merkle Root:       %x\n", merkleRoot)
+
 	rows, err := st.Pool().Query(ctx, `
-        SELECT content FROM evidence_store e
-        JOIN decision_revisions dr ON dr.decision_hash = e.block_hash
-        WHERE dr.tenant_id = $1 AND dr.decision_id = $2
-    `, tid, decisionID)
+		SELECT content FROM evidence_store e
+		JOIN decision_revisions dr ON dr.decision_hash = e.block_hash
+		WHERE dr.tenant_id = $1 AND dr.decision_id = $2
+	`, tid, decisionID)
+
 	if err == nil {
 		defer rows.Close()
 		var evidence []string
@@ -1685,7 +1789,7 @@ func handleExplain(decisionIDStr string) {
 			}
 		}
 		if len(evidence) > 0 {
-			fmt.Printf("Evidence:             \n")
+			fmt.Printf("\nEvidence:\n")
 			for _, e := range evidence {
 				fmt.Printf("  • %s\n", e)
 			}
@@ -1696,19 +1800,23 @@ func handleExplain(decisionIDStr string) {
 func handleIngest(repoPath string) {
 	tid := getTenantID()
 	dbURL := getDBURL()
+
 	dbStore, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to connect to database: %v\n", err)
 		os.Exit(1)
 	}
 	defer dbStore.Close()
+
 	miner := ingest.NewGitMiner(repoPath, dbStore, tid)
 	ctx := context.Background()
+
 	decisions, err := miner.Mine(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Mining failed: %v\n", err)
 		os.Exit(1)
 	}
+
 	saved := 0
 	for _, d := range decisions {
 		if err := dbStore.SaveHarvestedDecision(ctx, d); err != nil {
@@ -1717,18 +1825,20 @@ func handleIngest(repoPath string) {
 		}
 		saved++
 	}
+
 	fmt.Printf("✅ Ingested %d decisions from %s\n", saved, repoPath)
 }
 
 func handleMCPInstall() {
 	fmt.Println("🔌 Registering Garuda MCP Bridge...")
-	fmt.Println("✅ Injection complete (placeholder).")
+	fmt.Println("✓ Injection complete (placeholder).")
 }
 
 func openDashboard() {
 	url := defaultAPIAddr + "/dashboard"
-	fmt.Printf("🌐 Opening %s ...\n", url)
+	fmt.Printf("🌐 Opening %s...\n", url)
 	var err error
+
 	switch runtime.GOOS {
 	case "linux":
 		err = exec.Command("xdg-open", url).Start()
@@ -1740,14 +1850,13 @@ func openDashboard() {
 		fmt.Printf("⚠️ Unsupported OS. Please open %s manually.\n", url)
 		return
 	}
+
 	if err != nil {
-		fmt.Printf("⚠️ Failed to open browser: %v. Visit %s manually.\n", err, url)
+		fmt.Printf("❌ Failed to open browser: %v. Visit %s manually.\n", err, url)
 	}
 }
 
-// -----------------------------------------------------------------------------
 // 9. HTTP HELPERS
-// -----------------------------------------------------------------------------
 
 func fetchEndpoint(path string) {
 	authToken := getAuthToken()
@@ -1759,6 +1868,7 @@ func fetchEndpoint(path string) {
 	if authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1766,6 +1876,7 @@ func fetchEndpoint(path string) {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
+
 	body, _ := io.ReadAll(resp.Body)
 	var prettyJSON bytes.Buffer
 	if err := json.Indent(&prettyJSON, body, "", "  "); err == nil {
@@ -1781,6 +1892,7 @@ func postEndpoint(path string, payload interface{}) {
 		fmt.Fprintf(os.Stderr, "❌ Failed to marshal payload: %v\n", err)
 		os.Exit(1)
 	}
+
 	authToken := getAuthToken()
 	req, err := http.NewRequest("POST", defaultAPIAddr+path, bytes.NewBuffer(data))
 	if err != nil {
@@ -1791,6 +1903,7 @@ func postEndpoint(path string, payload interface{}) {
 	if authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1798,6 +1911,7 @@ func postEndpoint(path string, payload interface{}) {
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
+
 	body, _ := io.ReadAll(resp.Body)
 	var prettyJSON bytes.Buffer
 	if err := json.Indent(&prettyJSON, body, "", "  "); err == nil {

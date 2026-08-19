@@ -1,3 +1,8 @@
+// Copyright 2026 Rohit Mishra
+// SPDX-License-Identifier: Apache-2.0
+//
+// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
+
 package analyzer
 
 import "time"
@@ -16,6 +21,8 @@ const (
 	KindMethod     EntityKind = "method"
 	KindVariable   EntityKind = "variable"
 	KindConstant   EntityKind = "constant"
+	KindType       EntityKind = "type"
+	KindAlias      EntityKind = "alias"
 	KindExternal   EntityKind = "external"
 )
 
@@ -33,24 +40,27 @@ const (
 	RelDependsOn  RelationshipType = "DEPENDS_ON"
 )
 
-// Entity represents a discovered type (struct, interface, or function)
+// Entity represents a discovered type, container, or function.
 type Entity struct {
-	ID        string     `json:"id"`
-	Kind      EntityKind `json:"kind"`
-	Name      string     `json:"name"`
-	Package   string     `json:"package"`
-	File      string     `json:"file"`
-	Line      int        `json:"line"`       // Single line (for backward compatibility)
-	LineStart int        `json:"line_start"` // Start line
-	LineEnd   int        `json:"line_end"`   // End line
-	Exported  bool       `json:"exported"`
-	Fields    []Field    `json:"fields,omitempty"`
-	Methods   []Method   `json:"methods,omitempty"`
-	Signature string     `json:"signature,omitempty"`
-	Comments  string     `json:"comments,omitempty"`
+	ID           string     `json:"id"`
+	Kind         EntityKind `json:"kind"`
+	Name         string     `json:"name"`
+	Package      string     `json:"package"`
+	ModulePath   string     `json:"module_path,omitempty"`
+	PackagePath  string     `json:"package_path,omitempty"`
+	ReceiverType string     `json:"receiver_type,omitempty"`
+	File         string     `json:"file"`
+	Line         int        `json:"line"`
+	LineStart    int        `json:"line_start"`
+	LineEnd      int        `json:"line_end"`
+	Exported     bool       `json:"exported"`
+	Fields       []Field    `json:"fields,omitempty"`
+	Methods      []Method   `json:"methods,omitempty"`
+	Signature    string     `json:"signature,omitempty"`
+	Comments     string     `json:"comments,omitempty"`
 }
 
-// Field represents a struct field or interface method parameter
+// Field represents a struct field or interface method parameter.
 type Field struct {
 	Name        string `json:"name"`
 	Type        string `json:"type"`
@@ -65,7 +75,7 @@ type Field struct {
 	LineEnd     int    `json:"line_end"`
 }
 
-// Method represents a method on a struct or interface
+// Method represents a method on a struct or interface.
 type Method struct {
 	Name       string   `json:"name"`
 	Signature  string   `json:"signature"`
@@ -76,25 +86,28 @@ type Method struct {
 	LineEnd    int      `json:"line_end"`
 }
 
-// Relationship represents a dependency
-type Relationship struct {
-	From       string   `json:"from"`
-	To         string   `json:"to"`
-	Type       string   `json:"type"`
-	Confidence float64  `json:"confidence,omitempty"`
-	Evidence   Evidence `json:"evidence,omitempty"`
-}
-
-// Evidence anchors a relationship to source code and provenance.
+// Evidence anchors a relationship claim to source code and provenance.
 type Evidence struct {
-	File     string `json:"file"`
-	Line     int    `json:"line"`
-	Commit   string `json:"commit"`
-	Analyzer string `json:"analyzer"`
-	Snapshot string `json:"snapshot,omitempty"`
+	File      string `json:"file"`
+	Line      int    `json:"line,omitempty"`
+	LineStart int    `json:"line_start,omitempty"`
+	LineEnd   int    `json:"line_end,omitempty"`
+	Commit    string `json:"commit,omitempty"`
+	Analyzer  string `json:"analyzer,omitempty"`
+	Snapshot  string `json:"snapshot,omitempty"`
 }
 
-// Stats holds summary counts
+// Relationship represents a semantic dependency between entities.
+type Relationship struct {
+	From           string   `json:"from"`
+	To             string   `json:"to"`
+	Type           string   `json:"type"`
+	Confidence     float64  `json:"confidence,omitempty"`
+	EpistemicClass string   `json:"epistemic_class,omitempty"`
+	Evidence       Evidence `json:"evidence,omitempty"`
+}
+
+// Stats holds high-level extraction metrics.
 type Stats struct {
 	Files       int `json:"files"`
 	Packages    int `json:"packages"`
@@ -105,18 +118,18 @@ type Stats struct {
 	TotalFields int `json:"total_fields"`
 }
 
-// Result is the top-level analysis output
+// Result is the top-level analysis container.
 type Result struct {
 	Entities      []Entity       `json:"entities"`
 	Relationships []Relationship `json:"relationships"`
-	Fingerprint   string         `json:"fingerprint"`
+	Fingerprint   string         `json:"fingerprint,omitempty"`
 	AnalyzedAt    time.Time      `json:"analyzed_at"`
-	Package       string         `json:"package"`
-	Source        string         `json:"source"`
+	Package       string         `json:"package,omitempty"`
+	Source        string         `json:"source,omitempty"`
 	Stats         Stats          `json:"stats"`
 }
 
-// RevisionSummary is the lightweight summary stored in canonical_json
+// RevisionSummary is the lightweight summary stored in canonical revisions.
 type RevisionSummary struct {
 	Fingerprint string     `json:"fingerprint"`
 	Stats       Stats      `json:"stats"`
@@ -127,7 +140,7 @@ type RevisionSummary struct {
 	Claims      int        `json:"claims"`
 }
 
-// Provenance tracks where the analysis came from
+// Provenance tracks source metadata and execution context.
 type Provenance struct {
 	WorkspaceID  string `json:"workspace_id,omitempty"`
 	RepositoryID string `json:"repository_id,omitempty"`
@@ -139,7 +152,7 @@ type Provenance struct {
 // Diff-related types
 // ----------------------------------------------------------------------------
 
-// DiffReport holds the complete diff result
+// DiffReport holds the complete semantic diff result.
 type DiffReport struct {
 	StatsDiff         StatsDiff          `json:"stats_diff"`
 	FingerprintDiff   FingerprintDiff    `json:"fingerprint_diff"`
@@ -148,7 +161,7 @@ type DiffReport struct {
 	Summary           DiffSummary        `json:"summary"`
 }
 
-// StatsDiff shows numeric changes
+// StatsDiff shows numeric metric changes.
 type StatsDiff struct {
 	Files       int `json:"files"`
 	Packages    int `json:"packages"`
@@ -159,17 +172,17 @@ type StatsDiff struct {
 	TotalFields int `json:"total_fields"`
 }
 
-// FingerprintDiff shows if fingerprints match
+// FingerprintDiff shows if graph fingerprints match.
 type FingerprintDiff struct {
 	Before string `json:"before"`
 	After  string `json:"after"`
 	Match  bool   `json:"match"`
 }
 
-// EntityDiff represents a change to an entity
+// EntityDiff represents a change to an entity.
 type EntityDiff struct {
 	EntityID    string       `json:"entity_id"`
-	Kind        EntityKind   `json:"kind"` // now EntityKind, not string
+	Kind        EntityKind   `json:"kind"`
 	Name        string       `json:"name"`
 	File        string       `json:"file"`
 	Status      string       `json:"status"`
@@ -178,35 +191,35 @@ type EntityDiff struct {
 	Impact      int          `json:"impact"`
 }
 
-// FieldsDiff shows field changes
+// FieldsDiff shows struct field changes.
 type FieldsDiff struct {
 	Added    []Field     `json:"added"`
 	Removed  []Field     `json:"removed"`
 	Modified []FieldDiff `json:"modified"`
 }
 
-// FieldDiff shows a field change (before/after)
+// FieldDiff shows a field modification (before/after).
 type FieldDiff struct {
 	Name   string `json:"name"`
 	Before Field  `json:"before"`
 	After  Field  `json:"after"`
 }
 
-// MethodsDiff shows method changes
+// MethodsDiff shows receiver method changes.
 type MethodsDiff struct {
 	Added   []Method `json:"added"`
 	Removed []Method `json:"removed"`
 }
 
-// RelationshipDiff represents a change to a relationship
+// RelationshipDiff represents a change to a relationship edge.
 type RelationshipDiff struct {
 	From   string           `json:"from"`
 	To     string           `json:"to"`
-	Type   RelationshipType `json:"type"` // now RelationshipType
+	Type   RelationshipType `json:"type"`
 	Status string           `json:"status"`
 }
 
-// DiffSummary provides a high-level overview
+// DiffSummary provides a high-level overview of detected changes.
 type DiffSummary struct {
 	BreakingChanges int `json:"breaking_changes"`
 	Warnings        int `json:"warnings"`
