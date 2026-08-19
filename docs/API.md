@@ -1,15 +1,13 @@
-# Garuda CLI - API Documentation
+# Garuda CLI API Reference
 
-Welcome to the Garuda CLI API reference documentation. 
+Welcome to the official API documentation for the Garuda Command Line Interface (CLI).
 
 ## Overview
 
-This document provides command specifications, usage patterns, flags, and expected outputs for the Garuda CLI tool.
+This document provides a comprehensive reference for all available and planned Garuda CLI commands.
+
+*Note: There are currently no commands registered or available in the documentation context. As commands are added to Garuda CLI, their documentation, usage examples, flags, and expected outputs will appear below.*
 
 ---
 
-## Commands
-
-*No commands are currently listed or available in the documentation context.*
-
-> **Note:** As commands and capabilities (stable or planned) are added to the context, their usage specifications, flags, and example outputs will be documented here.
+*Document generated for `docs/API.md`.*
