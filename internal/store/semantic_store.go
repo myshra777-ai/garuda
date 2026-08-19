@@ -78,7 +78,6 @@ func (s *PostgresStore) getModuleMap(ctx context.Context, workspaceID uuid.UUID)
 		if err := rows.Scan(&id, &mp); err != nil {
 			continue
 		}
-		// Clean module path: remove trailing slashes
 		mp = strings.TrimSuffix(mp, "/")
 		modules[mp] = id
 	}
@@ -101,8 +100,50 @@ func (s *PostgresStore) findPackageEntityInRepo(ctx context.Context, tenantID, r
 	return &entityID, nil
 }
 
-// SaveSemanticGraph with cross-repo detection
-// SaveSemanticGraph stores entities and claims from an analysis result.
+// SaveEntities stores entities from an analysis result with line numbers
+func (s *PostgresStore) SaveEntities(
+	ctx context.Context,
+	tenantID, workspaceID, repoID, analysisID uuid.UUID,
+	result *analyzer.Result,
+) error {
+	for _, entity := range result.Entities {
+		entityID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(
+			tenantID.String()+workspaceID.String()+repoID.String()+entity.ID,
+		))
+
+		fieldsJSON, _ := json.Marshal(entity.Fields)
+		methodsJSON, _ := json.Marshal(entity.Methods)
+
+		_, err := s.pool.Exec(ctx, `
+            INSERT INTO entities (
+                id, tenant_id, workspace_id, repository_id, analysis_id,
+                name, kind, package, file_path, commit_sha,
+                signature, fields, methods, is_exported,
+                line, line_start, line_end,
+                created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
+            ON CONFLICT (tenant_id, workspace_id, repository_id, name, package) DO UPDATE
+            SET analysis_id = EXCLUDED.analysis_id,
+                fields = EXCLUDED.fields,
+                methods = EXCLUDED.methods,
+                signature = EXCLUDED.signature,
+                is_exported = EXCLUDED.is_exported,
+                line = EXCLUDED.line,
+                line_start = EXCLUDED.line_start,
+                line_end = EXCLUDED.line_end,
+                updated_at = NOW()
+        `, entityID, tenantID, workspaceID, repoID, analysisID,
+			entity.Name, string(entity.Kind), entity.Package, entity.File, "HEAD",
+			entity.Signature, fieldsJSON, methodsJSON, entity.Exported,
+			entity.Line, entity.LineStart, entity.LineEnd)
+		if err != nil {
+			return fmt.Errorf("failed to insert entity %s: %w", entity.Name, err)
+		}
+	}
+	return nil
+}
+
+// SaveSemanticGraph stores entities and claims from an analysis result with cross-repo detection
 func (s *PostgresStore) SaveSemanticGraph(
 	ctx context.Context,
 	tenantID, workspaceID, repoID, analysisID uuid.UUID,
@@ -124,7 +165,7 @@ func (s *PostgresStore) SaveSemanticGraph(
 		if err == nil {
 			// Entity exists, use existing ID
 			entityID = existingID
-			// Update it
+			// Update it with new data including line numbers
 			fieldsJSON, _ := json.Marshal(entity.Fields)
 			methodsJSON, _ := json.Marshal(entity.Methods)
 			_, err = s.pool.Exec(ctx, `
@@ -137,10 +178,14 @@ func (s *PostgresStore) SaveSemanticGraph(
                     fields = $6,
                     methods = $7,
                     is_exported = $8,
+                    line = $9,
+                    line_start = $10,
+                    line_end = $11,
                     updated_at = NOW()
-                WHERE id = $9
+                WHERE id = $12
             `, analysisID, string(entity.Kind), entity.File, "HEAD",
-				entity.Signature, fieldsJSON, methodsJSON, entity.Exported, entityID)
+				entity.Signature, fieldsJSON, methodsJSON, entity.Exported,
+				entity.Line, entity.LineStart, entity.LineEnd, entityID)
 			if err != nil {
 				return fmt.Errorf("failed to update entity %s: %w", entity.Name, err)
 			}
@@ -156,18 +201,24 @@ func (s *PostgresStore) SaveSemanticGraph(
                 INSERT INTO entities (
                     id, tenant_id, workspace_id, repository_id, analysis_id,
                     name, kind, package, file_path, commit_sha,
-                    signature, fields, methods, is_exported, created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+                    signature, fields, methods, is_exported,
+                    line, line_start, line_end,
+                    created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW(), NOW())
                 ON CONFLICT (tenant_id, workspace_id, repository_id, name, package) DO UPDATE
                 SET analysis_id = EXCLUDED.analysis_id,
                     fields = EXCLUDED.fields,
                     methods = EXCLUDED.methods,
                     signature = EXCLUDED.signature,
                     is_exported = EXCLUDED.is_exported,
+                    line = EXCLUDED.line,
+                    line_start = EXCLUDED.line_start,
+                    line_end = EXCLUDED.line_end,
                     updated_at = NOW()
             `, entityID, tenantID, workspaceID, repoID, analysisID,
 				entity.Name, string(entity.Kind), entity.Package, entity.File, "HEAD",
-				entity.Signature, fieldsJSON, methodsJSON, entity.Exported)
+				entity.Signature, fieldsJSON, methodsJSON, entity.Exported,
+				entity.Line, entity.LineStart, entity.LineEnd)
 			if err != nil {
 				return fmt.Errorf("failed to insert entity %s: %w", entity.Name, err)
 			}
@@ -195,7 +246,7 @@ func (s *PostgresStore) SaveSemanticGraph(
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
             ON CONFLICT (tenant_id, from_entity_id, to_entity_id, claim_type) DO NOTHING
         `, uuid.New(), tenantID, workspaceID, repoID, analysisID,
-			fromID, toID, string(rel.Type), rel.Confidence)
+			fromID, toID, rel.Type, rel.Confidence)
 		if err != nil {
 			return fmt.Errorf("failed to insert claim from %s to %s: %w", rel.From, rel.To, err)
 		}
@@ -231,7 +282,6 @@ func (s *PostgresStore) detectCrossRepoImports(
 	thisModulePath = strings.TrimSuffix(thisModulePath, "/")
 
 	// 3. Get the file entity ID map for evidence linking
-	// We'll build a map of file path to entity ID for quick lookup
 	fileEntityMap := make(map[string]uuid.UUID)
 	rows, err := s.pool.Query(ctx, `
         SELECT id, file_path FROM entities
@@ -252,22 +302,20 @@ func (s *PostgresStore) detectCrossRepoImports(
 	}
 
 	// 4. Iterate over import relationships
-	importedModules := make(map[string]bool) // track which modules we've processed
+	importedModules := make(map[string]bool)
 	for _, rel := range result.Relationships {
-		if rel.Type != analyzer.RelImports {
+		if rel.Type != string(analyzer.RelImports) {
 			continue
 		}
 
-		// Get the import path
 		importPath := rel.To
 		if importPath == "" {
 			continue
 		}
 		importPath = strings.TrimSuffix(importPath, "/")
 
-		// Check if this is a local import (starts with this repo's module path)
+		// Check if this is a local import
 		if strings.HasPrefix(importPath, thisModulePath) {
-			// Local import, skip
 			continue
 		}
 
@@ -275,7 +323,6 @@ func (s *PostgresStore) detectCrossRepoImports(
 		var targetRepoID uuid.UUID
 		var found bool
 
-		// Exact match or prefix match with delimiter
 		for modPath, repoID := range moduleMap {
 			modPath = strings.TrimSuffix(modPath, "/")
 			if importPath == modPath || strings.HasPrefix(importPath, modPath+"/") {
@@ -286,11 +333,10 @@ func (s *PostgresStore) detectCrossRepoImports(
 		}
 
 		if !found {
-			// This is an external dependency (not in workspace), skip for MVP
-			continue
+			continue // External dependency, skip for MVP
 		}
 
-		// Deduplicate: only process each module once per analysis run
+		// Deduplicate
 		if importedModules[targetRepoID.String()+"_"+importPath] {
 			continue
 		}
@@ -299,7 +345,6 @@ func (s *PostgresStore) detectCrossRepoImports(
 		// Find the from_entity_id (the file that contains the import)
 		fromEntityID, ok := fileEntityMap[rel.Evidence.File]
 		if !ok {
-			// Try to find the package entity as fallback
 			var pkgID uuid.UUID
 			err := s.pool.QueryRow(ctx, `
                 SELECT id FROM entities
@@ -313,63 +358,52 @@ func (s *PostgresStore) detectCrossRepoImports(
 		}
 
 		// Try to find the target package entity
-		var toEntityID *uuid.UUID
-		// The target package is the import path itself
 		targetPkgID, err := s.findPackageEntityInRepo(ctx, tenantID, targetRepoID, importPath)
+		var toEntityID *uuid.UUID
 		if err == nil && targetPkgID != nil {
 			toEntityID = targetPkgID
-		} else {
-			// Unresolved - we know the repo but not the specific package entity
-			toEntityID = nil
-			slog.Debug("Target package entity not found", "import", importPath, "repo", targetRepoID)
 		}
 
-		// Prepare evidence
 		evidenceJSON, err := json.Marshal(rel.Evidence)
 		if err != nil {
 			slog.Warn("Failed to marshal evidence", "error", err)
 			continue
 		}
 
-		// Insert cross-repo edge with ON CONFLICT
-		// Use a DO UPDATE to avoid duplicate inserts
-		_, err = s.pool.Exec(ctx, `
-            INSERT INTO cross_repo_edges (
-                id, tenant_id, workspace_id, from_repo_id, to_repo_id,
-                from_entity_id, to_entity_id, relationship_type, evidence, resolved, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-            ON CONFLICT (tenant_id, from_repo_id, to_repo_id, from_entity_id, to_entity_id, relationship_type)
-            WHERE to_entity_id IS NOT NULL DO NOTHING
-        `, uuid.New(), tenantID, workspaceID, repoID, targetRepoID,
-			fromEntityID, toEntityID, string(rel.Type), evidenceJSON, toEntityID != nil)
-		if err != nil {
-			// Check if it's a unique violation with NULL (shouldn't happen due to partial index)
-			slog.Warn("Failed to insert cross-repo edge", "error", err)
-			continue
-		}
-
-		// If there's no to_entity_id, we need to check for duplicates manually
-		if toEntityID == nil {
-			// Check if we already have an edge for this (from_repo, to_repo, from_entity) with NULL to_entity_id
+		// Insert cross-repo edge
+		if toEntityID != nil {
+			_, err = s.pool.Exec(ctx, `
+                INSERT INTO cross_repo_edges (
+                    id, tenant_id, workspace_id, from_repo_id, to_repo_id,
+                    from_entity_id, to_entity_id, relationship_type, evidence, resolved, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, NOW(), NOW())
+                ON CONFLICT (tenant_id, from_repo_id, to_repo_id, from_entity_id, to_entity_id, relationship_type)
+                DO NOTHING
+            `, uuid.New(), tenantID, workspaceID, repoID, targetRepoID,
+				fromEntityID, toEntityID, rel.Type, evidenceJSON)
+			if err != nil {
+				slog.Warn("Failed to insert cross-repo edge", "error", err)
+				continue
+			}
+		} else {
+			// Unresolved edge
 			var existingID uuid.UUID
 			err = s.pool.QueryRow(ctx, `
                 SELECT id FROM cross_repo_edges
                 WHERE tenant_id = $1 AND from_repo_id = $2 AND to_repo_id = $3
                 AND from_entity_id = $4 AND to_entity_id IS NULL AND relationship_type = $5
                 LIMIT 1
-            `, tenantID, repoID, targetRepoID, fromEntityID, string(rel.Type)).Scan(&existingID)
+            `, tenantID, repoID, targetRepoID, fromEntityID, rel.Type).Scan(&existingID)
 			if err == nil {
-				// Already exists, skip
-				continue
+				continue // Already exists, skip
 			}
-			// If not found, insert with NULL to_entity_id
 			_, err = s.pool.Exec(ctx, `
                 INSERT INTO cross_repo_edges (
                     id, tenant_id, workspace_id, from_repo_id, to_repo_id,
                     from_entity_id, to_entity_id, relationship_type, evidence, resolved, created_at, updated_at
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false, NOW(), NOW())
             `, uuid.New(), tenantID, workspaceID, repoID, targetRepoID,
-				fromEntityID, nil, string(rel.Type), evidenceJSON)
+				fromEntityID, nil, rel.Type, evidenceJSON)
 			if err != nil {
 				slog.Warn("Failed to insert unresolved cross-repo edge", "error", err)
 			}
@@ -387,13 +421,17 @@ func (s *PostgresStore) GetEntity(ctx context.Context, tenantID, workspaceID uui
 	var pkg, file, signature string
 	var exported bool
 	var fieldsJSON, methodsJSON []byte
+	var line, lineStart, lineEnd int
 
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, kind, package, file_path, signature, fields, methods, is_exported
+		SELECT id, name, kind, package, file_path, signature, fields, methods, is_exported,
+		       line, line_start, line_end
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2 AND name = $3
 	`, tenantID, workspaceID, name).Scan(
-		&entityID, &entity.Name, &kind, &pkg, &file, &signature, &fieldsJSON, &methodsJSON, &exported,
+		&entityID, &entity.Name, &kind, &pkg, &file, &signature,
+		&fieldsJSON, &methodsJSON, &exported,
+		&line, &lineStart, &lineEnd,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("entity %s not found: %w", name, err)
@@ -405,6 +443,9 @@ func (s *PostgresStore) GetEntity(ctx context.Context, tenantID, workspaceID uui
 	entity.File = file
 	entity.Signature = signature
 	entity.Exported = exported
+	entity.Line = line
+	entity.LineStart = lineStart
+	entity.LineEnd = lineEnd
 
 	if len(fieldsJSON) > 0 {
 		var fields []analyzer.Field
@@ -423,7 +464,6 @@ func (s *PostgresStore) GetEntity(ctx context.Context, tenantID, workspaceID uui
 
 // GetEntityRelationships returns incoming and outgoing relationships for an entity.
 func (s *PostgresStore) GetEntityRelationships(ctx context.Context, tenantID, workspaceID uuid.UUID, name, pkg string) ([]analyzer.Relationship, []analyzer.Relationship, error) {
-	// Get entity ID
 	var entityID string
 	err := s.pool.QueryRow(ctx, `
 		SELECT id FROM entities
@@ -451,7 +491,7 @@ func (s *PostgresStore) GetEntityRelationships(ctx context.Context, tenantID, wo
 			}
 			outgoing = append(outgoing, analyzer.Relationship{
 				To:   to,
-				Type: analyzer.RelationshipType(typ),
+				Type: typ, // ✅ CORRECT - typ is already a string
 			})
 		}
 	}
@@ -471,7 +511,7 @@ func (s *PostgresStore) GetEntityRelationships(ctx context.Context, tenantID, wo
 			}
 			incoming = append(incoming, analyzer.Relationship{
 				From: from,
-				Type: analyzer.RelationshipType(typ),
+				Type: typ, // ✅ CORRECT - typ is already a string
 			})
 		}
 	}
@@ -482,7 +522,8 @@ func (s *PostgresStore) GetEntityRelationships(ctx context.Context, tenantID, wo
 // ListEntities returns all entities in a workspace.
 func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID uuid.UUID) ([]analyzer.Entity, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, kind, package, file_path, signature, fields, methods, is_exported
+		SELECT id, name, kind, package, file_path, signature, fields, methods, is_exported,
+		       line, line_start, line_end
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2
 	`, tenantID, workspaceID)
@@ -496,7 +537,10 @@ func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID 
 		var id, name, kind, pkg, file, signature string
 		var exported bool
 		var fieldsJSON, methodsJSON []byte
-		if err := rows.Scan(&id, &name, &kind, &pkg, &file, &signature, &fieldsJSON, &methodsJSON, &exported); err != nil {
+		var line, lineStart, lineEnd int
+		if err := rows.Scan(&id, &name, &kind, &pkg, &file, &signature,
+			&fieldsJSON, &methodsJSON, &exported,
+			&line, &lineStart, &lineEnd); err != nil {
 			continue
 		}
 		entity := analyzer.Entity{
@@ -507,6 +551,9 @@ func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID 
 			File:      file,
 			Signature: signature,
 			Exported:  exported,
+			Line:      line,
+			LineStart: lineStart,
+			LineEnd:   lineEnd,
 		}
 		if len(fieldsJSON) > 0 {
 			var fields []analyzer.Field
@@ -527,7 +574,6 @@ func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID 
 
 // GetGraphData returns nodes and edges for graph visualisation.
 func (s *PostgresStore) GetGraphData(ctx context.Context, tenantID, workspaceID uuid.UUID) ([]map[string]interface{}, []map[string]interface{}, error) {
-	// Nodes
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, kind, package, file_path, is_exported
 		FROM entities
@@ -555,7 +601,6 @@ func (s *PostgresStore) GetGraphData(ctx context.Context, tenantID, workspaceID 
 		})
 	}
 
-	// Edges (claims)
 	rows2, err := s.pool.Query(ctx, `
 		SELECT from_entity_id, to_entity_id, claim_type
 		FROM claims

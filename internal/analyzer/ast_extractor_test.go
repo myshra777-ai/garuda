@@ -6,7 +6,6 @@ import (
 )
 
 func TestExtractRelationships(t *testing.T) {
-	// Create a temporary Go file with sample code
 	content := `
 package test
 
@@ -30,7 +29,6 @@ func main() {
 	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	// Also create a go.mod file (required for go/packages)
 	if err := os.WriteFile(tmpDir+"/go.mod", []byte("module test\n\ngo 1.21"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -40,30 +38,41 @@ func main() {
 		t.Fatalf("Extract failed: %v", err)
 	}
 
-	// Check entities
-	expectedEntityNames := map[string]bool{
-		"test.User":       true,
-		"test.main":       true,
-		"test.Greet":      true,
-		"test":            true, // package
-		tmpFile:           true, // file
-		"test.fmt":        true, // external import
-		"test.User.Greet": true, // method (if we handle)
+	// Expected entities
+	expectedEntities := map[string]bool{
+		"test.User":  true,
+		"test.main":  true,
+		"test.Greet": true,
+		"test":       true, // package
+		tmpFile:      true, // file
+		"test.fmt":   true, // external import
 	}
+
 	for _, e := range result.Entities {
-		if _, ok := expectedEntityNames[e.ID]; !ok {
-			t.Logf("Unexpected entity: %s", e.ID)
+		if _, ok := expectedEntities[e.ID]; !ok {
+			t.Logf("Unexpected entity: %s (kind: %s)", e.ID, e.Kind)
 		}
 	}
 
-	// Check relationships
-	found := false
+	// Check CALLS relationship from main to Greet
+	foundCalls := false
 	for _, rel := range result.Relationships {
-		if rel.Type == RelCalls && rel.From == "test.main" && rel.To == "test.Greet" {
-			found = true
+		if rel.Type == string(RelCalls) && rel.From == "test.main" && rel.To == "test.Greet" {
+			foundCalls = true
 		}
 	}
-	if !found {
+	if !foundCalls {
 		t.Error("Expected CALLS relationship from main to Greet not found")
+	}
+
+	// Check IMPORTS relationship from package to fmt
+	foundImports := false
+	for _, rel := range result.Relationships {
+		if rel.Type == string(RelImports) && rel.From == "test" && rel.To == "fmt" {
+			foundImports = true
+		}
+	}
+	if !foundImports {
+		t.Error("Expected IMPORTS relationship from test to fmt not found")
 	}
 }

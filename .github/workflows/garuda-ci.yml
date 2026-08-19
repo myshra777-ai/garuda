@@ -15,6 +15,22 @@ permissions:
 jobs:
   garuda-ci:
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: garuda_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,26 +41,68 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+      
+      - name: Tidy and download dependencies
+        run: |
+          go mod tidy
+            go mod download
 
       - name: Build Garuda
         run: go build -o garuda cmd/garuda/*.go
 
-      - name: Create baseline from main branch (using git worktree)
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+        run: |
+          go run cmd/migrate/main.go
+
+      - name: Create baseline from main branch
+        env:
+          DATABASE_URL: "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+          GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
         run: |
           # Create a temporary worktree for the baseline
           git worktree add /tmp/garuda-baseline origin/main
           cd /tmp/garuda-baseline
-          # Run analysis on the clean baseline
-          ../garuda analyze . -o ../garuda-baseline.json
+          # Run analysis with --save to populate graph
+          ../garuda analyze . --save -o ../garuda-baseline.json
           cd -
           git worktree remove /tmp/garuda-baseline
 
-      - name: Run Garuda CI (capture exit code)
-        id: garuda_ci
+      - name: Run Garuda analysis on PR branch
+        env:
+          DATABASE_URL: "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+          GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+        run: |
+          ./garuda analyze . --save -o garuda-pr.json
+
+      - name: Generate diff report
+        id: garuda_diff
         continue-on-error: true
         run: |
-          ./garuda ci --baseline garuda-baseline.json --block-on-break --output ci-report.json
+          ./garuda diff ../garuda-baseline.json garuda-pr.json --json -o diff-report.json
           echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Generate impact report (optional)
+        if: always()
+        env:
+          DATABASE_URL: "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+          GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+        run: |
+          # Get workspace ID
+          WORKSPACE_ID=$(psql -U test -h localhost -p 5433 -d garuda_test -t -c "SELECT id FROM workspaces WHERE tenant_id = '00000000-0000-0000-0000-000000000001' AND name = 'default' LIMIT 1;" | tr -d ' ')
+          if [ -n "$WORKSPACE_ID" ]; then
+            # Get an entity ID for impact analysis
+            ENTITY_ID=$(psql -U test -h localhost -p 5433 -d garuda_test -t -c "SELECT id FROM entities WHERE workspace_id = '$WORKSPACE_ID' LIMIT 1;" | tr -d ' ')
+            if [ -n "$ENTITY_ID" ]; then
+              ./garuda impact --workspace "$WORKSPACE_ID" --target "$ENTITY_ID" --json -o impact-report.json || true
+            fi
+          fi
 
       - name: Post comment on PR
         if: github.event_name == 'pull_request' && always()
@@ -54,36 +112,80 @@ jobs:
           script: |
             const fs = require('fs');
             const marker = '<!-- garuda-ci-comment-marker -->';
-            let report = {};
+            
+            // Read diff report
+            let diffReport = {};
             try {
-              report = JSON.parse(fs.readFileSync('ci-report.json', 'utf8'));
+              diffReport = JSON.parse(fs.readFileSync('diff-report.json', 'utf8'));
             } catch (e) {
-              report = { summary: { breaking_changes: 0, warnings: 0, additions: 0, removals: 0, modified: 0 } };
+              diffReport = { summary: { breaking_changes: 0, warnings: 0, additions: 0, removals: 0, modified: 0 } };
             }
-            const summary = report.summary || {};
+            
+            // Read impact report (optional)
+            let impactReport = {};
+            try {
+              impactReport = JSON.parse(fs.readFileSync('impact-report.json', 'utf8'));
+            } catch (e) {
+              impactReport = {};
+            }
+            
+            const summary = diffReport.summary || {};
             let body = `## 🧠 Garuda CI Report\n\n`;
-            body += `**Status:** ${report.status || 'OK'}\n`;
-            body += `**Breaking:** ${summary.breaking_changes || 0}\n`;
+            body += `**Status:** ${diffReport.status || 'OK'}\n`;
+            body += `**Breaking changes:** ${summary.breaking_changes || 0}\n`;
             body += `**Warnings:** ${summary.warnings || 0}\n`;
             body += `**Additions:** ${summary.additions || 0}\n`;
             body += `**Removals:** ${summary.removals || 0}\n`;
             body += `**Modified:** ${summary.modified || 0}\n`;
 
-            const entityDiffs = report.entity_diffs || [];
+            // Entity diffs
+            const entityDiffs = diffReport.entity_diffs || [];
             if (entityDiffs.length > 0) {
               body += `\n### Entity Changes\n`;
-              entityDiffs.forEach(ed => {
-                body += `- ${ed.status} ${ed.kind} ${ed.name}\n`;
-              });
+              const added = entityDiffs.filter(e => e.status === 'added');
+              const removed = entityDiffs.filter(e => e.status === 'removed');
+              const modified = entityDiffs.filter(e => e.status === 'modified');
+              
+              if (added.length > 0) {
+                body += `\n**Added (${added.length}):**\n`;
+                added.forEach(ed => { body += `- ${ed.kind} ${ed.name}\n`; });
+              }
+              if (removed.length > 0) {
+                body += `\n**Removed (${removed.length}):**\n`;
+                removed.forEach(ed => { body += `- ${ed.kind} ${ed.name}\n`; });
+              }
+              if (modified.length > 0) {
+                body += `\n**Modified (${modified.length}):**\n`;
+                modified.forEach(ed => { body += `- ${ed.kind} ${ed.name}\n`; });
+              }
             }
-            const relDiffs = report.relationship_diffs || [];
+
+            // Relationship diffs
+            const relDiffs = diffReport.relationship_diffs || [];
             if (relDiffs.length > 0) {
               body += `\n### Relationship Changes\n`;
               relDiffs.forEach(rd => {
                 body += `- ${rd.status} ${rd.type} ${rd.from} -> ${rd.to}\n`;
               });
             }
-            body += `\n<details><summary>Full report (JSON)</summary>\n\`\`\`json\n${JSON.stringify(report, null, 2)}\n\`\`\`\n</details>\n`;
+
+            // Impact summary
+            if (impactReport.total_affected !== undefined && impactReport.total_affected > 0) {
+              body += `\n### Impact Analysis\n`;
+              body += `**Total affected entities:** ${impactReport.total_affected || 0}\n`;
+              if (impactReport.blast_radius) {
+                const critical = impactReport.blast_radius.filter(e => e.severity === 'CRITICAL');
+                const high = impactReport.blast_radius.filter(e => e.severity === 'HIGH');
+                if (critical.length > 0) {
+                  body += `🚫 **Critical:** ${critical.length}\n`;
+                }
+                if (high.length > 0) {
+                  body += `🔴 **High:** ${high.length}\n`;
+                }
+              }
+            }
+
+            body += `\n<details><summary>Full diff report (JSON)</summary>\n\`\`\`json\n${JSON.stringify(diffReport, null, 2)}\n\`\`\`\n</details>\n`;
             body += marker;
 
             const { data: comments } = await github.rest.issues.listComments({
@@ -91,6 +193,7 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
+            
             const botComment = comments.find(c => c.body.includes(marker));
             if (botComment) {
               await github.rest.issues.updateComment({
@@ -109,7 +212,7 @@ jobs:
             }
 
       - name: Fail job if breaking changes detected
-        if: steps.garuda_ci.outputs.exit_code != '0' && github.event_name == 'pull_request'
+        if: steps.garuda_diff.outputs.exit_code != '0' && github.event_name == 'pull_request'
         run: |
           echo "❌ Breaking changes detected – PR blocked."
           exit 1
