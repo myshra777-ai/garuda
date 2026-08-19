@@ -1,30 +1,32 @@
 ## [Unreleased]
 
 ### Added
-- **Canonical Entity Engine & Benchmarking**: Integrated canonical entity engine, V5 truth benchmark suite, and full Apache 2.0 license compliance (`cc9d745`, `fd6e91b`).
-- **Graph & Visualization Features**: Added progressive disclosure explorer, company graph, interactive mind map, and impact analysis features (`9551b20`, `0054002`, `4b40135`).
-- **CLI Commands**: Introduced CLI commands for interactive graph, policy, topology, and handoff management (`56c7f41`).
-- **Documentation & Matrix Generation**: Added a capabilities matrix generator, linked capabilities matrix in the README, and explicitly declared `google-genai` requirement (`fd6e91b`, `0e7b87d`).
+- **Canonical Entity Engine & V5 Truth Benchmark**: Added V5 truth benchmark suite, canonical entity engine, and complete Apache 2.0 compliance tooling (`cc9d745`).
+- **Semantic Graph & Impact Analysis**: Implemented semantic graph capabilities, impact analysis, and Company Brain MVP integration (`0054002`, `4b40135`).
+- **Graph Explorers & Visualizations**: Added progressive disclosure explorer, company graph visualizer, and interactive mind map (`9551b20`).
+- **CLI Commands**: Introduced interactive commands for graph, policy, topology, and handoff (`56c7f41`).
+- **Documentation Utilities**: Added a capabilities matrix generator and updated license reference links (`fd6e91b`).
 
 ### Changed
-- **Dependency Management**: Transitioned from vendored dependencies to standard Go module cache (`b506889`, `1b8aa4b`).
-- **Documentation**: Revised README for improved structure and clarity (`7435ac8`, `ce46ecb`).
+- Standardized documentation generation scripts on `gemini-3.6-flash` (`99087b7`).
+- Revised and restructured the README for improved clarity (`7435ac8`, `ce46ecb`).
 
 ### Fixed
-- **Database Migrations**: 
-  - Ensured line column exists prior to backfill in migration 035 (`26d6d02`).
-  - Wrapped store migration files in atomic transactions without semicolon splitting (`6221f55`).
+- **Database Migrations & Store**:
+  - Hardened migrations 040 and 041 (`99087b7`).
+  - Ensured line column exists before backfill in migration 035 (`26d6d02`).
+  - Executed migration files in atomic transactions without relying on semicolon splitting (`6221f55`).
   - Added `IF NOT EXISTS` guards to `idx_api_contracts_tenant` and related indexes in migration 033 (`18abfbe`).
-  - Verified `repositories` and `entities` tables exist prior to cross-repository migrations (`ae6156c`).
-- **Analyzer & Telemetry**: Resolved extractor gaps in fingerprint, call, and import extractions, and fixed a Server-Sent Events (SSE) data race (`11dd33d`).
-- **CI & Build Tooling**: 
-  - Tracked `scripts/requirements.txt` and updated `.gitignore` whitelisting (`f3eb3e8`).
-  - Removed `-mod=vendor` flag from CI workflows (`04b3e83`).
+  - Verified `repositories` and `entities` tables exist prior to executing cross-repository migrations (`ae6156c`).
+- **Analyzer & Telemetry**: Resolved extractor gaps for fingerprints, calls, and imports, and fixed a Server-Sent Events (SSE) data race (`11dd33d`).
+- **CI & Dependencies**:
+  - Removed `-mod=vendor` flag from CI workflow (`04b3e83`).
+  - Explicitly added `google-genai` to `requirements.txt` and updated `.gitignore` rules for script tracking (`f3eb3e8`, `0e7b87d`).
+  - Resolved missing `gopkg.in/yaml.v3` dependency (`b6f32a7`, `a2aba4f`).
 
 ### Removed
 - Removed the `vendor/` directory in favor of standard Go module caching (`b506889`).
 
 ### Semantic Changes
-- **Canonical Entity Engine**: Standardized entity processing via a unified canonical engine (`cc9d745`).
-- **Semantic Graph Expansion**: Enhanced semantic graph domain model with impact analysis capabilities, progressive disclosure, and topology management (`0054002`, `9551b20`, `56c7f41`).
-- **Extraction Accuracy**: Fixed AST/code extraction gaps across fingerprinting, call graphs, and import graphs (`11dd33d`).
+- **Canonical Entity Model**: Introduced canonical entity engine powering repository entities, claims, evidence, and lineage tracking.
+- **Graph & Impact Analysis**: Added semantic graph capabilities providing impact analysis and cross-entity relationships across Go packages.
