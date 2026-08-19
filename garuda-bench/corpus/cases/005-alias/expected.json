@@ -1,0 +1,11 @@
+{
+  "entities": [
+    { "name": "UserID", "kind": "alias" },
+    { "name": "OrderID", "kind": "type" },
+    { "name": "ProcessOrder", "kind": "function" }
+  ],
+  "relationships": [
+    { "from": "ProcessOrder", "to": "OrderID", "type": "REFERENCES" },
+    { "from": "ProcessOrder", "to": "UserID", "type": "REFERENCES" }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "entities": [
+    { "name": "Writer", "kind": "interface" },
+    { "name": "Closer", "kind": "interface" },
+    { "name": "FileWriter", "kind": "struct" },
+    { "name": "Write", "kind": "method" },
+    { "name": "Close", "kind": "method" }
+  ],
+  "relationships": [
+    { "from": "FileWriter", "to": "Write", "type": "DEFINES" },
+    { "from": "FileWriter", "to": "Close", "type": "DEFINES" },
+    { "from": "FileWriter", "to": "Writer", "type": "IMPLEMENTS" },
+    { "from": "FileWriter", "to": "Closer", "type": "IMPLEMENTS" }
+  ]
+}

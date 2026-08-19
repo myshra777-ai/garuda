@@ -1,0 +1,12 @@
+{
+  "entities": [
+    { "name": "Server", "kind": "struct" },
+    { "name": "Worker", "kind": "struct" },
+    { "name": "Start", "kind": "method" },
+    { "name": "Start", "kind": "method" }
+  ],
+  "relationships": [
+    { "from": "Server", "to": "Start", "type": "DEFINES" },
+    { "from": "Worker", "to": "Start", "type": "DEFINES" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "entities": [
+    { "name": "Base", "kind": "struct" },
+    { "name": "User", "kind": "struct" }
+  ],
+  "relationships": [
+    { "from": "User", "to": "Base", "type": "EMBEDS" }
+  ]
+}

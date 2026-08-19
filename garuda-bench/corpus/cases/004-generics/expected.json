@@ -1,0 +1,9 @@
+{
+  "entities": [
+    { "name": "Container", "kind": "struct" },
+    { "name": "Wrap", "kind": "function" }
+  ],
+  "relationships": [
+    { "from": "Wrap", "to": "Container", "type": "REFERENCES" }
+  ]
+}

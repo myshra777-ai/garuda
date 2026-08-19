@@ -1,0 +1,9 @@
+{
+  "entities": [
+    { "name": "Response", "kind": "struct" },
+    { "name": "Handler", "kind": "function" }
+  ],
+  "relationships": [
+    { "from": "Handler", "to": "Response", "type": "REFERENCES" }
+  ]
+}

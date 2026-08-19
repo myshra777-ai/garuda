@@ -84,3 +84,5 @@ garuda_truth_index_*.md
 v*.json
 *.bak
 *.sql.bak
+# Allow benchmark test fixtures
+!garuda-bench/**/*.json

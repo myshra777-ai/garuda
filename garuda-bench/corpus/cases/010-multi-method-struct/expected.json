@@ -1,0 +1,19 @@
+{
+  "entities": [
+    { "name": "Service", "kind": "interface" },
+    { "name": "HTTPService", "kind": "struct" },
+    { "name": "GRPCService", "kind": "struct" },
+    { "name": "Start", "kind": "method" },
+    { "name": "Stop", "kind": "method" },
+    { "name": "Start", "kind": "method" },
+    { "name": "Stop", "kind": "method" }
+  ],
+  "relationships": [
+    { "from": "HTTPService", "to": "Start", "type": "DEFINES" },
+    { "from": "HTTPService", "to": "Stop", "type": "DEFINES" },
+    { "from": "GRPCService", "to": "Start", "type": "DEFINES" },
+    { "from": "GRPCService", "to": "Stop", "type": "DEFINES" },
+    { "from": "HTTPService", "to": "Service", "type": "IMPLEMENTS" },
+    { "from": "GRPCService", "to": "Service", "type": "IMPLEMENTS" }
+  ]
+}
