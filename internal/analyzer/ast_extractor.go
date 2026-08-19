@@ -6,6 +6,8 @@
 package analyzer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -21,7 +23,7 @@ func Analyze(root string) (*Result, error) {
 	return Extract(root)
 }
 
-// Extract analyzes a Go repository and returns a semantic Result conforming to model.go.
+// Extract analyzes a Go repository and returns a semantic Result.
 func Extract(root string) (*Result, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -61,6 +63,7 @@ func Extract(root string) (*Result, error) {
 		pkgName := node.Name.Name
 		pkgMap[pkgName] = true
 
+		// File entity
 		entities = append(entities, Entity{
 			ID:        fmt.Sprintf("%s:%s", pkgName, relPath),
 			Name:      filepath.Base(relPath),
@@ -71,6 +74,25 @@ func Extract(root string) (*Result, error) {
 			LineStart: fset.Position(node.Pos()).Line,
 			LineEnd:   fset.Position(node.End()).Line,
 		})
+
+		// Extract IMPORTS
+		for _, imp := range node.Imports {
+			importPath := strings.Trim(imp.Path.Value, `"`)
+			addRelationship(Relationship{
+				From:           pkgName,
+				To:             importPath,
+				Type:           string(RelImports),
+				Confidence:     1.0,
+				EpistemicClass: "OBSERVATION",
+				Evidence: Evidence{
+					File:      relPath,
+					Line:      fset.Position(imp.Pos()).Line,
+					LineStart: fset.Position(imp.Pos()).Line,
+					LineEnd:   fset.Position(imp.End()).Line,
+					Analyzer:  "ast",
+				},
+			})
+		}
 
 		ast.Inspect(node, func(n ast.Node) bool {
 			switch decl := n.(type) {
@@ -91,7 +113,7 @@ func Extract(root string) (*Result, error) {
 										tagVal = f.Tag.Value
 									}
 
-									// Anonymous embedded field
+									// Anonymous embedded struct
 									if len(f.Names) == 0 {
 										cleanEmb := cleanTypeName(fType)
 										if cleanEmb != "" && !isBuiltin(cleanEmb) {
@@ -254,6 +276,7 @@ func Extract(root string) (*Result, error) {
 					})
 				}
 
+				// Parameter and Return references
 				if decl.Type != nil {
 					if decl.Type.Params != nil {
 						for _, p := range decl.Type.Params.List {
@@ -299,10 +322,12 @@ func Extract(root string) (*Result, error) {
 					}
 				}
 
+				// Body inspection: Composite literals and Function/Method Calls
 				if decl.Body != nil {
 					ast.Inspect(decl.Body, func(inner ast.Node) bool {
-						if compLit, ok := inner.(*ast.CompositeLit); ok {
-							tName := cleanTypeName(exprToString(compLit.Type))
+						switch expr := inner.(type) {
+						case *ast.CompositeLit:
+							tName := cleanTypeName(exprToString(expr.Type))
 							if tName != "" && !isBuiltin(tName) && !typeParams[tName] {
 								addRelationship(Relationship{
 									From:           funcName,
@@ -312,12 +337,35 @@ func Extract(root string) (*Result, error) {
 									EpistemicClass: "OBSERVATION",
 									Evidence: Evidence{
 										File:      relPath,
-										Line:      fset.Position(compLit.Pos()).Line,
-										LineStart: fset.Position(compLit.Pos()).Line,
-										LineEnd:   fset.Position(compLit.End()).Line,
+										Line:      fset.Position(expr.Pos()).Line,
+										LineStart: fset.Position(expr.Pos()).Line,
+										LineEnd:   fset.Position(expr.End()).Line,
 										Analyzer:  "ast",
 									},
 								})
+							}
+
+						case *ast.CallExpr:
+							callTarget := exprToString(expr.Fun)
+							if callTarget != "" {
+								parts := strings.Split(callTarget, ".")
+								targetName := parts[len(parts)-1]
+								if !isBuiltin(targetName) && targetName != funcName {
+									addRelationship(Relationship{
+										From:           funcName,
+										To:             targetName,
+										Type:           string(RelCalls),
+										Confidence:     1.0,
+										EpistemicClass: "OBSERVATION",
+										Evidence: Evidence{
+											File:      relPath,
+											Line:      fset.Position(expr.Pos()).Line,
+											LineStart: fset.Position(expr.Pos()).Line,
+											LineEnd:   fset.Position(expr.End()).Line,
+											Analyzer:  "ast",
+										},
+									})
+								}
 							}
 						}
 						return true
@@ -333,6 +381,7 @@ func Extract(root string) (*Result, error) {
 		return nil, err
 	}
 
+	// Interface satisfaction matching
 	for iface, ifaceMethodsList := range interfaceMethods {
 		if len(ifaceMethodsList) == 0 {
 			continue
@@ -366,9 +415,20 @@ func Extract(root string) (*Result, error) {
 		}
 	}
 
+	// Calculate deterministic graph fingerprint
+	hasher := sha256.New()
+	for _, e := range entities {
+		hasher.Write([]byte(fmt.Sprintf("%s:%s:%s;", e.Kind, e.Name, e.File)))
+	}
+	for _, r := range relationships {
+		hasher.Write([]byte(fmt.Sprintf("%s->%s:%s;", r.From, r.To, r.Type)))
+	}
+	fingerprint := hex.EncodeToString(hasher.Sum(nil))
+
 	result := &Result{
 		Entities:      entities,
 		Relationships: relationships,
+		Fingerprint:   fingerprint,
 		AnalyzedAt:    time.Now().UTC(),
 		Stats: Stats{
 			Files:       filesCount,
