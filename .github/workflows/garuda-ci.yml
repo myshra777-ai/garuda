@@ -45,9 +45,15 @@ jobs:
 
       - name: Download dependencies
         run: go mod download
+      
+      - name: Tidy and download dependencies
+        run: |
+          go mod tidy
+            go mod download
 
       - name: Build Garuda
         run: go build -o garuda cmd/garuda/*.go
+
 
       - name: Run database migrations
         env:
