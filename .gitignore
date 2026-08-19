@@ -86,3 +86,6 @@ v*.json
 *.sql.bak
 # Allow benchmark test fixtures
 !garuda-bench/**/*.json
+
+# Track script requirements
+!scripts/requirements.txt
