@@ -48,6 +48,104 @@ type parsedFile struct {
 	content string
 }
 
+// workspaceImporter resolves both stdlib and multi-package workspace imports on demand.
+type workspaceImporter struct {
+	fset        *token.FileSet
+	packages    map[string]*types.Package
+	pkgFilesMap map[string][]parsedFile
+	pkgPathMap  map[string]string
+	defaultImp  types.Importer
+}
+
+func newWorkspaceImporter(fset *token.FileSet, pkgFilesMap map[string][]parsedFile, baseDirName string) *workspaceImporter {
+	imp := &workspaceImporter{
+		fset:        fset,
+		packages:    make(map[string]*types.Package),
+		pkgFilesMap: pkgFilesMap,
+		pkgPathMap:  make(map[string]string),
+		defaultImp:  importer.Default(),
+	}
+
+	for dirPart, pFiles := range pkgFilesMap {
+		if len(pFiles) == 0 {
+			continue
+		}
+		var pkgPath string
+		if dirPart == "." {
+			pkgPath = "example.com/" + pFiles[0].ast.Name.Name
+		} else {
+			pkgPath = fmt.Sprintf("example.com/%s/%s", baseDirName, dirPart)
+		}
+		imp.pkgPathMap[dirPart] = pkgPath
+		imp.pkgPathMap[pkgPath] = pkgPath
+		imp.pkgPathMap[pFiles[0].ast.Name.Name] = pkgPath
+	}
+	return imp
+}
+
+func (w *workspaceImporter) Import(path string) (*types.Package, error) {
+	if pkg, ok := w.packages[path]; ok {
+		return pkg, nil
+	}
+
+	// 1. Check standard library
+	if pkg, err := w.defaultImp.Import(path); err == nil && pkg != nil {
+		w.packages[path] = pkg
+		return pkg, nil
+	}
+
+	// 2. Resolve against workspace packages
+	var targetDirPart string
+	var targetPkgPath string
+
+	for dirPart, pFiles := range w.pkgFilesMap {
+		if len(pFiles) == 0 {
+			continue
+		}
+		cPkgPath := w.pkgPathMap[dirPart]
+		if path == cPkgPath || strings.HasSuffix(path, "/"+dirPart) || strings.HasSuffix(path, "/"+pFiles[0].ast.Name.Name) || path == dirPart {
+			targetDirPart = dirPart
+			targetPkgPath = cPkgPath
+			break
+		}
+	}
+
+	if targetPkgPath == "" {
+		return nil, fmt.Errorf("package %q not found in workspace", path)
+	}
+
+	if pkg, ok := w.packages[targetPkgPath]; ok {
+		w.packages[path] = pkg
+		return pkg, nil
+	}
+
+	pFiles := w.pkgFilesMap[targetDirPart]
+	var astFiles []*ast.File
+	for _, pf := range pFiles {
+		astFiles = append(astFiles, pf.ast)
+	}
+
+	pkgInfo := &types.Info{
+		Types:      make(map[ast.Expr]types.TypeAndValue),
+		Defs:       make(map[*ast.Ident]types.Object),
+		Uses:       make(map[*ast.Ident]types.Object),
+		Selections: make(map[*ast.SelectorExpr]*types.Selection),
+	}
+
+	conf := types.Config{
+		Importer: w,
+		Error:    func(err error) {},
+	}
+
+	pkg, err := conf.Check(targetPkgPath, w.fset, astFiles, pkgInfo)
+	if pkg != nil {
+		w.packages[targetPkgPath] = pkg
+		w.packages[path] = pkg
+		return pkg, nil
+	}
+	return nil, err
+}
+
 func (a *GoAnalyzer) Analyze(ctx context.Context, req AnalysisRequest) (*garudatypes.Snapshot, error) {
 	fset := token.NewFileSet()
 	var allEntities []garudatypes.Entity
@@ -55,7 +153,7 @@ func (a *GoAnalyzer) Analyze(ctx context.Context, req AnalysisRequest) (*garudat
 	fileContents := make(map[string]string)
 
 	baseDirName := filepath.Base(req.Path)
-	pkgFilesMap := make(map[string][]parsedFile) // dirPart -> parsed files
+	pkgFilesMap := make(map[string][]parsedFile)
 
 	// 1. Walk directory and group AST files by package directory
 	err := filepath.Walk(req.Path, func(path string, info os.FileInfo, err error) error {
@@ -72,7 +170,7 @@ func (a *GoAnalyzer) Analyze(ctx context.Context, req AnalysisRequest) (*garudat
 
 		fileAST, err := parser.ParseFile(fset, path, contentBytes, parser.ParseComments)
 		if err != nil {
-			return nil // Skip unparseable noise gracefully
+			return nil
 		}
 
 		relPath, _ := filepath.Rel(req.Path, path)
@@ -88,25 +186,21 @@ func (a *GoAnalyzer) Analyze(ctx context.Context, req AnalysisRequest) (*garudat
 		return nil, err
 	}
 
-	// 2. Process each package directory with authoritative go/types checking
+	wImporter := newWorkspaceImporter(fset, pkgFilesMap, baseDirName)
+
+	// 2. Process each package directory with authoritative workspace type-checking
 	for dirPart, pFiles := range pkgFilesMap {
 		if len(pFiles) == 0 {
 			continue
 		}
 
-		var pkgPath string
-		if dirPart == "." {
-			pkgPath = "example.com/" + pFiles[0].ast.Name.Name
-		} else {
-			pkgPath = fmt.Sprintf("example.com/%s/%s", baseDirName, dirPart)
-		}
+		pkgPath := wImporter.pkgPathMap[dirPart]
 
 		var astFiles []*ast.File
 		for _, pf := range pFiles {
 			astFiles = append(astFiles, pf.ast)
 		}
 
-		// Run compiler-grade type-checking on the package
 		info := &types.Info{
 			Types:      make(map[ast.Expr]types.TypeAndValue),
 			Defs:       make(map[*ast.Ident]types.Object),
@@ -114,12 +208,12 @@ func (a *GoAnalyzer) Analyze(ctx context.Context, req AnalysisRequest) (*garudat
 			Selections: make(map[*ast.SelectorExpr]*types.Selection),
 		}
 		typeConfig := types.Config{
-			Importer: importer.Default(),
-			Error:    func(err error) {}, // Suppress external unresolved imports in isolated test fixtures
+			Importer: wImporter,
+			Error:    func(err error) {},
 		}
 		_, _ = typeConfig.Check(pkgPath, fset, astFiles, info)
 
-		// Extract entities for every file in the package
+		// Extract entities for each file
 		for _, pf := range pFiles {
 			entities := extractEntitiesFromFile(fset, pf.ast, pkgPath, pf.path, pf.content)
 			allEntities = append(allEntities, entities...)
@@ -177,6 +271,53 @@ func (a *GoAnalyzer) AnalyzeWorkspace(ctx context.Context, rootDir string) (*gar
 	return snap, nil
 }
 
+func formatFuncType(ft *ast.FuncType) string {
+	var b strings.Builder
+	b.WriteString("func(")
+	if ft.Params != nil {
+		for i, p := range ft.Params.List {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			var names []string
+			for _, n := range p.Names {
+				names = append(names, n.Name)
+			}
+			typeStr := types.ExprString(p.Type)
+			if len(names) > 0 {
+				b.WriteString(strings.Join(names, ", ") + " " + typeStr)
+			} else {
+				b.WriteString(typeStr)
+			}
+		}
+	}
+	b.WriteString(")")
+	if ft.Results != nil {
+		if len(ft.Results.List) == 1 && len(ft.Results.List[0].Names) == 0 {
+			b.WriteString(" " + types.ExprString(ft.Results.List[0].Type))
+		} else {
+			b.WriteString(" (")
+			for i, r := range ft.Results.List {
+				if i > 0 {
+					b.WriteString(", ")
+				}
+				var names []string
+				for _, n := range r.Names {
+					names = append(names, n.Name)
+				}
+				typeStr := types.ExprString(r.Type)
+				if len(names) > 0 {
+					b.WriteString(strings.Join(names, ", ") + " " + typeStr)
+				} else {
+					b.WriteString(typeStr)
+				}
+			}
+			b.WriteString(")")
+		}
+	}
+	return b.String()
+}
+
 func extractEntitiesFromFile(fset *token.FileSet, file *ast.File, pkgPath, filePath, content string) []garudatypes.Entity {
 	var entities []garudatypes.Entity
 	lines := strings.Split(content, "\n")
@@ -192,10 +333,19 @@ func extractEntitiesFromFile(fset *token.FileSet, file *ast.File, pkgPath, fileP
 					qName := fmt.Sprintf("%s.%s", pkgPath, ts.Name.Name)
 
 					kind := garudatypes.EntityKindTypeAlias
+					var fields []string
 					var methods []string
+
 					switch t := ts.Type.(type) {
 					case *ast.StructType:
 						kind = garudatypes.EntityKindStruct
+						if t.Fields != nil {
+							for _, f := range t.Fields.List {
+								for _, n := range f.Names {
+									fields = append(fields, n.Name)
+								}
+							}
+						}
 					case *ast.InterfaceType:
 						kind = garudatypes.EntityKindInterface
 						if t.Methods != nil {
@@ -224,6 +374,7 @@ func extractEntitiesFromFile(fset *token.FileSet, file *ast.File, pkgPath, fileP
 						FilePath:         filePath,
 						LineStart:        pos.Line,
 						LineEnd:          end.Line,
+						Fields:           fields,
 						Methods:          methods,
 						ContentSnippet:   snippet,
 						EvidenceHash:     evidenceHash,
@@ -249,6 +400,7 @@ func extractEntitiesFromFile(fset *token.FileSet, file *ast.File, pkgPath, fileP
 				qName = fmt.Sprintf("%s.%s", pkgPath, d.Name.Name)
 			}
 
+			sig := formatFuncType(d.Type)
 			entityUUID, canonID := canonical.GenerateEntityUUID(canonical.EntityKeySpec{
 				Kind:         kind,
 				PackagePath:  pkgPath,
@@ -264,6 +416,7 @@ func extractEntitiesFromFile(fset *token.FileSet, file *ast.File, pkgPath, fileP
 				QualifiedName:    qName,
 				Kind:             kind,
 				ReceiverType:     recvType,
+				Signature:        sig,
 				PackagePath:      pkgPath,
 				FilePath:         filePath,
 				LineStart:        pos.Line,
@@ -372,15 +525,15 @@ func ComputeSemanticDiff(snap1, snap2 *garudatypes.Snapshot) *garudatypes.DiffRe
 
 	e1Map := make(map[string]garudatypes.Entity)
 	for _, e := range snap1.Entities {
-		e1Map[e.Name] = e
+		e1Map[e.QualifiedName] = e
 	}
 	e2Map := make(map[string]garudatypes.Entity)
 	for _, e := range snap2.Entities {
-		e2Map[e.Name] = e
+		e2Map[e.QualifiedName] = e
 	}
 
-	for name, e1 := range e1Map {
-		e2, exists := e2Map[name]
+	for qName, e1 := range e1Map {
+		e2, exists := e2Map[qName]
 		if !exists {
 			result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
 				ChangeType:   "REMOVED_ENTITY",
@@ -392,67 +545,90 @@ func ComputeSemanticDiff(snap1, snap2 *garudatypes.Snapshot) *garudatypes.DiffRe
 			continue
 		}
 
-		if e1.Kind == garudatypes.EntityKindStruct && strings.Contains(e1.ContentSnippet, "Currency") && !strings.Contains(e2.ContentSnippet, "Currency") {
-			result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
-				ChangeType:   "REMOVED_STRUCT_FIELD",
-				Severity:     garudatypes.SeverityBreaking,
-				TargetEntity: e1.QualifiedName,
-				FieldName:    "Currency",
-				Description:  "Field Currency was removed from struct UserPaymentRequest",
-			})
-			result.BreakingCount++
-		}
+		switch e1.Kind {
+		case garudatypes.EntityKindStruct:
+			e2Fields := make(map[string]bool)
+			for _, f := range e2.Fields {
+				e2Fields[f] = true
+			}
+			for _, f1 := range e1.Fields {
+				if !e2Fields[f1] {
+					result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
+						ChangeType:   "REMOVED_STRUCT_FIELD",
+						Severity:     garudatypes.SeverityBreaking,
+						TargetEntity: e1.QualifiedName,
+						FieldName:    f1,
+						Description:  fmt.Sprintf("Field %s was removed from struct %s", f1, e1.Name),
+					})
+					result.BreakingCount++
+				}
+			}
 
-		if e1.Kind == garudatypes.EntityKindInterface && strings.Contains(e1.ContentSnippet, "Refund") && !strings.Contains(e2.ContentSnippet, "Refund") {
-			result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
-				ChangeType:   "INTERFACE_METHOD_REMOVED",
-				Severity:     garudatypes.SeverityBreaking,
-				TargetEntity: e1.QualifiedName,
-				Description:  "Method Refund was removed from interface PaymentProcessor",
-			})
-			result.BreakingCount++
-		}
+			e1Fields := make(map[string]bool)
+			for _, f := range e1.Fields {
+				e1Fields[f] = true
+			}
+			for _, f2 := range e2.Fields {
+				if !e1Fields[f2] {
+					result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
+						ChangeType:   "ADDED_STRUCT_FIELD",
+						Severity:     garudatypes.SeverityNonBreaking,
+						TargetEntity: e1.QualifiedName,
+						FieldName:    f2,
+						Description:  fmt.Sprintf("Optional field %s was added to struct %s", f2, e2.Name),
+					})
+				}
+			}
 
-		if e1.Name == "CalculateFee" && strings.Contains(e2.ContentSnippet, "tier string") {
-			result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
-				ChangeType:   "FUNCTION_SIGNATURE_CHANGED",
-				Severity:     garudatypes.SeverityBreaking,
-				TargetEntity: e1.QualifiedName,
-				Description:  "Function CalculateFee added mandatory parameter 'tier'",
-			})
-			result.BreakingCount++
-		}
+		case garudatypes.EntityKindInterface:
+			e2Methods := make(map[string]bool)
+			for _, m := range e2.Methods {
+				e2Methods[m] = true
+			}
+			for _, m1 := range e1.Methods {
+				if !e2Methods[m1] {
+					result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
+						ChangeType:   "INTERFACE_METHOD_REMOVED",
+						Severity:     garudatypes.SeverityBreaking,
+						TargetEntity: e1.QualifiedName,
+						Description:  fmt.Sprintf("Method %s was removed from interface %s", m1, e1.Name),
+					})
+					result.BreakingCount++
+				}
+			}
 
-		if e1.Kind == garudatypes.EntityKindStruct && !strings.Contains(e1.ContentSnippet, "Bio") && strings.Contains(e2.ContentSnippet, "Bio") {
-			result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
-				ChangeType:   "ADDED_STRUCT_FIELD",
-				Severity:     garudatypes.SeverityNonBreaking,
-				TargetEntity: e1.QualifiedName,
-				FieldName:    "Bio",
-				Description:  "Optional field Bio was added to struct AccountProfile",
-			})
-		}
-
-		if e1.Name == "DisplayName" && e1.EvidenceHash != e2.EvidenceHash {
-			result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
-				ChangeType:   "IMPLEMENTATION_CHANGE",
-				Severity:     garudatypes.SeverityNonBreaking,
-				TargetEntity: e1.QualifiedName,
-				Description:  "Method implementation changed without altering method signature or contract",
-			})
+		case garudatypes.EntityKindFunction, garudatypes.EntityKindMethod:
+			if e1.Signature != "" && e2.Signature != "" && e1.Signature != e2.Signature {
+				result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
+					ChangeType:   "FUNCTION_SIGNATURE_CHANGED",
+					Severity:     garudatypes.SeverityBreaking,
+					TargetEntity: e1.QualifiedName,
+					Description:  fmt.Sprintf("Function/Method %s signature changed from %s to %s", e1.Name, e1.Signature, e2.Signature),
+				})
+				result.BreakingCount++
+			} else if e1.EvidenceHash != e2.EvidenceHash {
+				result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
+					ChangeType:   "IMPLEMENTATION_CHANGE",
+					Severity:     garudatypes.SeverityNonBreaking,
+					TargetEntity: e1.QualifiedName,
+					Description:  "Method implementation changed without altering method signature or contract",
+				})
+			}
 		}
 	}
 
-	for name, e2 := range e2Map {
-		if _, exists := e1Map[name]; !exists {
-			if e2.Name == "IsVerified" {
-				result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
-					ChangeType:   "ADDED_METHOD",
-					Severity:     garudatypes.SeverityNonBreaking,
-					TargetEntity: e2.QualifiedName,
-					Description:  "New method IsVerified added to struct AccountProfile",
-				})
+	for qName, e2 := range e2Map {
+		if _, exists := e1Map[qName]; !exists {
+			changeType := "ADDED_ENTITY"
+			if e2.Kind == garudatypes.EntityKindMethod {
+				changeType = "ADDED_METHOD"
 			}
+			result.Changes = append(result.Changes, garudatypes.SemanticDiffChange{
+				ChangeType:   changeType,
+				Severity:     garudatypes.SeverityNonBreaking,
+				TargetEntity: e2.QualifiedName,
+				Description:  fmt.Sprintf("New %s %s added", e2.Kind, e2.Name),
+			})
 		}
 	}
 
@@ -469,30 +645,114 @@ func ComputeImpactRadius(snap *garudatypes.Snapshot, targetMutation string, maxD
 		ImpactedEntities: make([]garudatypes.ImpactedEntity, 0),
 	}
 
-	if strings.Contains(targetMutation, "SaveUser") {
-		report.ImpactedEntities = append(report.ImpactedEntities,
-			garudatypes.ImpactedEntity{
-				QualifiedName: "example.com/013-consumer-impact/store.(*PostgresUserStore).SaveUser",
-				Depth:         1,
-				Severity:      garudatypes.SeverityCritical,
-				Relationship:  "IMPLEMENTS",
-				IsDirect:      true,
-			},
-			garudatypes.ImpactedEntity{
-				QualifiedName: "example.com/013-consumer-impact/service.(*UserService).RegisterUser",
-				Depth:         1,
-				Severity:      garudatypes.SeverityHigh,
-				Relationship:  "CALLS",
-				IsDirect:      true,
-			},
-			garudatypes.ImpactedEntity{
-				QualifiedName: "example.com/013-consumer-impact/api.(*UserHandler).HandleRegisterUser",
-				Depth:         2,
-				Severity:      garudatypes.SeverityMedium,
-				Relationship:  "CALLS",
-				IsDirect:      false,
-			},
-		)
+	if maxDepth <= 0 {
+		maxDepth = 3
+	}
+
+	parts := strings.Split(targetMutation, ".")
+	methodName := parts[len(parts)-1]
+	typeName := ""
+	if len(parts) >= 2 {
+		typeName = strings.Trim(parts[len(parts)-2], "*()")
+	}
+
+	visited := make(map[string]bool)
+
+	type queueItem struct {
+		nodeName string
+		depth    int
+	}
+	var queue []queueItem
+
+	matchesTargetCall := func(targetName string) bool {
+		if targetName == targetMutation || strings.HasSuffix(targetName, targetMutation) {
+			return true
+		}
+		if typeName != "" && strings.HasSuffix(targetName, typeName+"."+methodName) {
+			return true
+		}
+		if typeName != "" && strings.HasSuffix(targetName, "("+typeName+")."+methodName) {
+			return true
+		}
+		if strings.HasSuffix(targetName, "."+methodName) {
+			return true
+		}
+		return false
+	}
+
+	// 1. Hop 1: Direct Interface Implementations (CRITICAL)
+	for _, r := range snap.Relationships {
+		if r.Predicate == garudatypes.PredicateImplements {
+			if typeName == "" || strings.HasSuffix(r.TargetName, typeName) {
+				structRaw := strings.TrimPrefix(r.SourceName, r.TargetName[:strings.LastIndex(r.TargetName, "/")+1])
+				for _, e := range snap.Entities {
+					if e.Kind == garudatypes.EntityKindMethod && e.Name == methodName {
+						normRecv := strings.Trim(canonical.NormalizeReceiver(e.ReceiverType), "*")
+						if strings.HasSuffix(r.SourceName, normRecv) || strings.Contains(structRaw, normRecv) {
+							if !visited[e.QualifiedName] {
+								visited[e.QualifiedName] = true
+								report.ImpactedEntities = append(report.ImpactedEntities, garudatypes.ImpactedEntity{
+									QualifiedName: e.QualifiedName,
+									Depth:         1,
+									Severity:      garudatypes.SeverityCritical,
+									Relationship:  garudatypes.PredicateImplements,
+									IsDirect:      true,
+								})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Hop 1: Direct Callers (HIGH)
+	for _, r := range snap.Relationships {
+		if r.Predicate == garudatypes.PredicateCalls || r.Predicate == garudatypes.PredicateCallsInterface {
+			if matchesTargetCall(r.TargetName) {
+				if !visited[r.SourceName] {
+					visited[r.SourceName] = true
+					report.ImpactedEntities = append(report.ImpactedEntities, garudatypes.ImpactedEntity{
+						QualifiedName: r.SourceName,
+						Depth:         1,
+						Severity:      garudatypes.SeverityHigh,
+						Relationship:  garudatypes.PredicateCalls,
+						IsDirect:      true,
+					})
+					queue = append(queue, queueItem{nodeName: r.SourceName, depth: 1})
+				}
+			}
+		}
+	}
+
+	// 3. BFS Traversal for Transitive Callers (Depth 2: MEDIUM, Depth >= 3: LOW)
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+
+		if curr.depth >= maxDepth {
+			continue
+		}
+
+		for _, r := range snap.Relationships {
+			if (r.Predicate == garudatypes.PredicateCalls || r.Predicate == garudatypes.PredicateCallsInterface) && r.TargetName == curr.nodeName {
+				if !visited[r.SourceName] {
+					visited[r.SourceName] = true
+					sev := garudatypes.SeverityMedium
+					if curr.depth+1 >= 3 {
+						sev = garudatypes.SeverityLow
+					}
+					report.ImpactedEntities = append(report.ImpactedEntities, garudatypes.ImpactedEntity{
+						QualifiedName: r.SourceName,
+						Depth:         curr.depth + 1,
+						Severity:      sev,
+						Relationship:  garudatypes.PredicateCalls,
+						IsDirect:      false,
+					})
+					queue = append(queue, queueItem{nodeName: r.SourceName, depth: curr.depth + 1})
+				}
+			}
+		}
 	}
 
 	return report
