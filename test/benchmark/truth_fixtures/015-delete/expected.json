@@ -1,0 +1,14 @@
+{
+  "fixture_id": "015-delete",
+  "category": "identity_stability",
+  "evolution_type": "ENTITY_DELETE",
+  "tombstoned_entities": [
+    {
+      "qualified_name": "example.com/routing.(*V1Handler).LegacyRoute",
+      "kind": "method",
+      "status": "TOMBSTONED",
+      "preserved_historically": true
+    }
+  ],
+  "active_entities_count": 2
+}

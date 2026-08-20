@@ -1,0 +1,30 @@
+{
+  "fixture_id": "012-non-breaking-change",
+  "category": "diff_correctness",
+  "overall_classification": "NON_BREAKING_CHANGE",
+  "breaking_changes_count": 0,
+  "non_breaking_changes_count": 3,
+  "changes": [
+    {
+      "change_type": "ADDED_STRUCT_FIELD",
+      "severity": "NON_BREAKING",
+      "target_entity": "example.com/profile.AccountProfile",
+      "field_name": "Bio",
+      "new_type": "string",
+      "description": "Optional field Bio was added to struct AccountProfile"
+    },
+    {
+      "change_type": "ADDED_METHOD",
+      "severity": "NON_BREAKING",
+      "target_entity": "example.com/profile.(*AccountProfile).IsVerified",
+      "new_signature": "func() bool",
+      "description": "New method IsVerified added to struct AccountProfile"
+    },
+    {
+      "change_type": "IMPLEMENTATION_CHANGE",
+      "severity": "NON_BREAKING",
+      "target_entity": "example.com/profile.(*AccountProfile).DisplayName",
+      "description": "Method implementation changed without altering method signature or contract"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "fixture_id": "013-consumer-impact",
+  "category": "impact_correctness",
+  "target_mutation": "store.UserStore.SaveUser",
+  "expected_total_impacted": 3,
+  "consumers": [
+    {
+      "depth": 1,
+      "severity": "CRITICAL",
+      "entity": "example.com/013-consumer-impact/store.(*PostgresUserStore).SaveUser",
+      "relationship": "IMPLEMENTS",
+      "is_direct": true
+    },
+    {
+      "depth": 1,
+      "severity": "HIGH",
+      "entity": "example.com/013-consumer-impact/service.(*UserService).RegisterUser",
+      "relationship": "CALLS",
+      "is_direct": true
+    },
+    {
+      "depth": 2,
+      "severity": "MEDIUM",
+      "entity": "example.com/013-consumer-impact/api.(*UserHandler).HandleRegisterUser",
+      "relationship": "CALLS",
+      "is_direct": false
+    }
+  ]
+}

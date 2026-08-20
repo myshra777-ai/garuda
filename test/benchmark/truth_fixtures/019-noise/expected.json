@@ -1,0 +1,57 @@
+{
+  "fixture_id": "019-noise",
+  "category": "parser_robustness_and_noise",
+  "invariants": {
+    "zero_panics": true,
+    "anonymous_struct_fields_extracted": true,
+    "closure_isolation": true,
+    "top_level_entity_integrity": true
+  },
+  "expected_entities": [
+    {
+      "name": "ComplexPipeline",
+      "kind": "struct",
+      "qualified_name": "example.com/noise.ComplexPipeline",
+      "line_start": 12,
+      "line_end": 20
+    },
+    {
+      "name": "HandlerFunc",
+      "kind": "type_alias",
+      "qualified_name": "example.com/noise.HandlerFunc",
+      "line_start": 23,
+      "line_end": 23
+    },
+    {
+      "name": "NewComplexPipeline",
+      "kind": "function",
+      "qualified_name": "example.com/noise.NewComplexPipeline",
+      "line_start": 26,
+      "line_end": 33
+    },
+    {
+      "name": "Execute",
+      "kind": "method",
+      "receiver_type": "*ComplexPipeline",
+      "qualified_name": "example.com/noise.(*ComplexPipeline).Execute",
+      "line_start": 36,
+      "line_end": 56
+    },
+    {
+      "name": "RawLegacyProcessor",
+      "kind": "function",
+      "qualified_name": "example.com/noise.RawLegacyProcessor",
+      "line_start": 59,
+      "line_end": 62
+    }
+  ],
+  "expected_relationships": [
+    {
+      "predicate": "CALLS",
+      "source_name": "example.com/noise.NewComplexPipeline",
+      "target_name": "example.com/noise.ComplexPipeline",
+      "epistemic_class": "OBSERVATION",
+      "confidence": 1.0
+    }
+  ]
+}

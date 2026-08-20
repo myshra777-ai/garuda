@@ -48,7 +48,7 @@ func NewCallGraphExtractor(
 	}
 }
 
-// ExtractRelationships walks the AST files and extracts deterministic CALLS and IMPLEMENTS edges[cite: 1, 2].
+// ExtractRelationships walks the AST files and extracts deterministic CALLS and IMPLEMENTS edges.
 func (c *CallGraphExtractor) ExtractRelationships(files []*ast.File) []garudatypes.Relationship {
 	var relationships []garudatypes.Relationship
 
@@ -89,13 +89,51 @@ func (c *CallGraphExtractor) resolveFuncQualifiedName(fn *ast.FuncDecl) string {
 func (c *CallGraphExtractor) formatReceiver(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.StarExpr:
+		switch x := t.X.(type) {
+		case *ast.Ident:
+			return "*" + x.Name
+		case *ast.IndexExpr:
+			if ident, ok := x.X.(*ast.Ident); ok {
+				return "*" + ident.Name
+			}
+		case *ast.IndexListExpr:
+			if ident, ok := x.X.(*ast.Ident); ok {
+				return "*" + ident.Name
+			}
+		}
+	case *ast.IndexExpr:
 		if ident, ok := t.X.(*ast.Ident); ok {
-			return "*" + ident.Name
+			return ident.Name
+		}
+	case *ast.IndexListExpr:
+		if ident, ok := t.X.(*ast.Ident); ok {
+			return ident.Name
 		}
 	case *ast.Ident:
 		return t.Name
 	}
 	return "Unknown"
+}
+
+func formatTypeReceiver(recv types.Type) (string, bool) {
+	if recv == nil {
+		return "", false
+	}
+	if ptr, ok := recv.(*types.Pointer); ok {
+		elem := ptr.Elem()
+		if named, ok := elem.(*types.Named); ok {
+			return "*" + named.Obj().Name(), false
+		}
+		if types.IsInterface(elem) {
+			return elem.String(), true
+		}
+		return "*" + elem.String(), false
+	}
+	if named, ok := recv.(*types.Named); ok {
+		isIface := types.IsInterface(named)
+		return named.Obj().Name(), isIface
+	}
+	return recv.String(), types.IsInterface(recv)
 }
 
 func (c *CallGraphExtractor) resolveCallExpr(call *ast.CallExpr, callerQualifiedName string) *garudatypes.Relationship {
@@ -110,38 +148,83 @@ func (c *CallGraphExtractor) resolveCallExpr(call *ast.CallExpr, callerQualified
 		switch fun := call.Fun.(type) {
 		case *ast.Ident:
 			if obj, ok := c.info.Uses[fun]; ok && obj != nil {
-				targetPkg := c.pkgPath
-				if obj.Pkg() != nil {
-					targetPkg = obj.Pkg().Path()
+				// Filter out type conversions (e.g. string(x)), built-ins (len, append), and non-funcs
+				fn, isFn := obj.(*types.Func)
+				if !isFn {
+					return nil
 				}
-				targetQualifiedName = fmt.Sprintf("%s.%s", targetPkg, obj.Name())
+
+				targetPkg := c.pkgPath
+				if fn.Pkg() != nil {
+					targetPkg = fn.Pkg().Path()
+				}
+
+				sig, _ := fn.Type().(*types.Signature)
+				if sig != nil && sig.Recv() != nil {
+					recvStr, isIface := formatTypeReceiver(sig.Recv().Type())
+					isInterfaceCall = isIface
+					if isIface {
+						targetQualifiedName = fmt.Sprintf("%s.%s.%s", targetPkg, recvStr, fn.Name())
+					} else {
+						targetQualifiedName = fmt.Sprintf("%s.(%s).%s", targetPkg, recvStr, fn.Name())
+					}
+				} else {
+					targetQualifiedName = fmt.Sprintf("%s.%s", targetPkg, fn.Name())
+				}
 			}
 
 		case *ast.SelectorExpr:
 			if sel, ok := c.info.Selections[fun]; ok && sel != nil {
 				obj := sel.Obj()
+				fn, isFn := obj.(*types.Func)
+				if !isFn {
+					return nil
+				}
+
 				targetPkg := c.pkgPath
-				if obj.Pkg() != nil {
-					targetPkg = obj.Pkg().Path()
+				if fn.Pkg() != nil {
+					targetPkg = fn.Pkg().Path()
 				}
 
 				if sel.Kind() == types.MethodVal || sel.Kind() == types.MethodExpr {
-					recv := sel.Recv()
-					if types.IsInterface(recv) {
+					var recvType types.Type = sel.Recv()
+					if sig, ok := fn.Type().(*types.Signature); ok && sig.Recv() != nil {
+						recvType = sig.Recv().Type()
+					}
+
+					recvStr, isIface := formatTypeReceiver(recvType)
+					if isIface || types.IsInterface(sel.Recv()) {
 						isInterfaceCall = true
-						targetQualifiedName = fmt.Sprintf("%s.%s.%s", targetPkg, recv.String(), obj.Name())
+						targetQualifiedName = fmt.Sprintf("%s.%s.%s", targetPkg, recvStr, fn.Name())
 					} else {
-						targetQualifiedName = fmt.Sprintf("%s.(%s).%s", targetPkg, recv.String(), obj.Name())
+						targetQualifiedName = fmt.Sprintf("%s.(%s).%s", targetPkg, recvStr, fn.Name())
 					}
 				} else {
-					targetQualifiedName = fmt.Sprintf("%s.%s", targetPkg, obj.Name())
+					targetQualifiedName = fmt.Sprintf("%s.%s", targetPkg, fn.Name())
 				}
 			} else if obj, ok := c.info.Uses[fun.Sel]; ok && obj != nil {
-				targetPkg := c.pkgPath
-				if obj.Pkg() != nil {
-					targetPkg = obj.Pkg().Path()
+				fn, isFn := obj.(*types.Func)
+				if !isFn {
+					return nil
 				}
-				targetQualifiedName = fmt.Sprintf("%s.%s", targetPkg, obj.Name())
+
+				targetPkg := c.pkgPath
+				if fn.Pkg() != nil {
+					targetPkg = fn.Pkg().Path()
+				}
+
+				sig, _ := fn.Type().(*types.Signature)
+				if sig != nil && sig.Recv() != nil {
+					recvStr, isIface := formatTypeReceiver(sig.Recv().Type())
+					isInterfaceCall = isIface
+					if isIface {
+						targetQualifiedName = fmt.Sprintf("%s.%s.%s", targetPkg, recvStr, fn.Name())
+					} else {
+						targetQualifiedName = fmt.Sprintf("%s.(%s).%s", targetPkg, recvStr, fn.Name())
+					}
+				} else {
+					targetQualifiedName = fmt.Sprintf("%s.%s", targetPkg, fn.Name())
+				}
 			}
 		}
 	}
@@ -159,7 +242,7 @@ func (c *CallGraphExtractor) resolveCallExpr(call *ast.CallExpr, callerQualified
 		return nil
 	}
 
-	// Calculate deterministic evidence snippet & content hash[cite: 1, 2]
+	// Calculate deterministic evidence snippet & content hash
 	snippet := c.extractSnippet(pos.Filename, pos.Line, end.Line)
 	hash := sha256.Sum256([]byte(snippet))
 	evidenceHash := hex.EncodeToString(hash[:])

@@ -1,0 +1,12 @@
+{
+  "fixture_id": "014-rename",
+  "category": "identity_stability",
+  "evolution_type": "ENTITY_RENAME",
+  "source_entity": "example.com/auth.UserSession",
+  "target_entity": "example.com/auth.AccountSession",
+  "invariants": {
+    "preserve_lineage": true,
+    "continuity_state": "RENAMED",
+    "method_lineage_preserved": true
+  }
+}

@@ -89,3 +89,8 @@ v*.json
 
 # Track script requirements
 !scripts/requirements.txt
+
+# Allow benchmark test fixtures and golden manifests
+!test/benchmark/**/*.json
+test/benchmark/results/
+test/benchmark/results/
