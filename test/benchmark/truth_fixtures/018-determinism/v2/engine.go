@@ -1,3 +1,6 @@
+// Copyright 2026 Rohit Mishra
+// SPDX-License-Identifier: Apache-2.0
+
 // Package pipeline provides core execution engine routines.
 package pipeline
 

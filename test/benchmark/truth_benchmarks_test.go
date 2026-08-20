@@ -1,3 +1,6 @@
+// Copyright 2026 Rohit Mishra
+// SPDX-License-Identifier: Apache-2.0
+
 // Package benchmark executes the automated 20-fixture ground-truth validation suite
 // against strict golden expected JSON manifests across all 6 V5 benchmark layers.
 package benchmark
