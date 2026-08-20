@@ -1,21 +1,18 @@
-# Changelog
-
-All notable changes to Garuda since `v0.1.0` will be documented in this file.
-
 ## [Unreleased]
 
 ### Added
-- **Stage T1 Semantic Truth Gate (v0.1)**: Completed initial Stage T1 truth gate implementation incorporating P0-09 and P0-10 rules (`4afce0b`).
-- **Truth Gate Validation**: Added canonical identity enforcement, deterministic snapshot hashing, and pre-ledger validation checks (`4120623`).
-- **Analysis Manifest & Build Scaffolding**: Introduced the analysis manifest schema, supporting build scripts, and initial scaffolding (`307f64a`).
-- **Integrity Testing**: Added P0-08 evidence integrity tests and source-hash tamper detection test suite (`ebcc60c`).
+- **Truth Gate**: Completed Stage T1 semantic truth gate v0.1 with P0-09 and P0-10 rules.
+- **Truth Gate**: Added pre-ledger validation, canonical identity enforcement, and deterministic snapshot hashing.
+- **Types & Manifests**: Added analysis manifest schema, scripts, and build scaffolding.
+- **Testing**: Added P0-08 evidence integrity and source-hash tamper detection test suites.
 
 ### Changed
-- Updated README and documentation suite to include AST benchmark suite, truth fixtures, CLI reference, automatically generated capabilities matrix, and API specifications (`81068cf`, `72c4204`, `4375b9f`).
+- **Licensing**: Added SPDX Apache 2.0 license headers to all Go source files.
+- **Documentation**: Overhauled README with AST benchmark suite details, truth fixtures, CLI reference, and auto-generated capabilities matrix and API specs.
 
 ### Fixed
-- Stabilized `internal/types` baseline and isolated semantic AST contract definitions (`ea609b6`).
+- **Types**: Stabilized `internal/types` baseline and isolated semantic AST contracts.
 
 ### Semantic Changes
-- **Pre-Ledger Identity & Hashing**: Enforced canonical identity validation and deterministic snapshot hashing prior to ledger entry (`4120623`).
-- **Evidence Integrity Verification**: Established evidence integrity requirements and source-hash tamper detection baseline (`ebcc60c`).
+- Enforced canonical identity and deterministic snapshot hashing prior to ledger ingestion.
+- Implemented Stage T1 semantic truth gate mechanisms (P0-08 evidence integrity, P0-09, P0-10) for source tamper detection and assertion validation.

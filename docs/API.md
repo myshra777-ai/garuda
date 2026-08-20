@@ -4,8 +4,11 @@ Welcome to the Garuda CLI API documentation.
 
 ## Overview
 
-This document provides detailed usage information, available flags, and output examples for the Garuda CLI commands.
+- **Stable Capabilities:** None currently documented
+- **Planned Capabilities:** None currently documented
 
 ---
 
-*No commands are currently available or documented in the specified context.*
+## Commands
+
+*No commands are currently available or defined.*
