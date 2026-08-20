@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// ComplexPipeline models a legacy async processing engine with anonymous types.
 type ComplexPipeline struct {
 	mu     sync.RWMutex
 	Queue  chan func() error
@@ -17,8 +18,10 @@ type ComplexPipeline struct {
 	}
 }
 
+// HandlerFunc is an alias for nested functional transforms.
 type HandlerFunc func(ctx context.Context, payload interface{}) (interface{}, error)
 
+// NewComplexPipeline initializes the processing pipeline.
 func NewComplexPipeline(workers int) *ComplexPipeline {
 	p := &ComplexPipeline{
 		Queue: make(chan func() error, workers*2),
@@ -28,6 +31,7 @@ func NewComplexPipeline(workers int) *ComplexPipeline {
 	return p
 }
 
+// Execute processes payloads using nested closures, defer-recovery, and type switching.
 func (p *ComplexPipeline) Execute(ctx context.Context, input interface{}, transform HandlerFunc) (res interface{}, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -38,6 +42,7 @@ func (p *ComplexPipeline) Execute(ctx context.Context, input interface{}, transf
 		}
 	}()
 
+	// Nested anonymous closure
 	worker := func(innerCtx context.Context) (interface{}, error) {
 		switch v := input.(type) {
 		case string:
@@ -52,6 +57,7 @@ func (p *ComplexPipeline) Execute(ctx context.Context, input interface{}, transf
 	return worker(ctx)
 }
 
+// RawLegacyProcessor exposes an untyped interface for backward compatibility.
 func RawLegacyProcessor(raw map[string]interface{}) (interface{}, error) {
 	var result interface{} = raw["data"]
 	return result, nil

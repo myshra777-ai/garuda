@@ -33,7 +33,7 @@ const (
 	CategoryParserRobustness  FixtureCategory = "parser_robustness_and_noise"
 )
 
-// BenchmarkMetricScoreboard tracks precision and recall across all fixtures[cite: 1, 2].
+// BenchmarkMetricScoreboard tracks precision, recall, and epistemic resolution metrics[cite: 1].
 type BenchmarkMetricScoreboard struct {
 	TotalEntitiesExpected     int
 	TotalEntitiesDiscovered   int
@@ -41,7 +41,8 @@ type BenchmarkMetricScoreboard struct {
 	TotalRelsExpected         int
 	TotalRelsDiscovered       int
 	MatchedRels               int
-	FalseEdgesRejected        int
+	ResolvedRelationships     int
+	AmbiguousRelationships    int
 	DiffClassificationsPassed int
 	ImpactConsumersMatched    int
 	ImpactConsumersExpected   int
@@ -479,6 +480,10 @@ func formatScoreboardSummary(sb *BenchmarkMetricScoreboard) string {
 		b.WriteString(fmt.Sprintf("• Relationship Recall:       %.1f%%\n",
 			float64(sb.MatchedRels)/float64(sb.TotalRelsExpected)*100))
 	}
+	if sb.TotalRelsDiscovered > 0 {
+		coverage := float64(sb.MatchedRels) / float64(sb.TotalRelsDiscovered) * 100
+		b.WriteString(fmt.Sprintf("• Resolution Coverage:       %.1f%%\n", coverage))
+	}
 	if sb.ImpactConsumersExpected > 0 {
 		b.WriteString(fmt.Sprintf("• Impact Precision:          %.1f%%\n",
 			float64(sb.ImpactConsumersMatched)/float64(sb.ImpactConsumersExpected)*100))
@@ -489,6 +494,7 @@ func formatScoreboardSummary(sb *BenchmarkMetricScoreboard) string {
 	b.WriteString("====================================================")
 	return b.String()
 }
+
 func findRelationship(relationships []types.Relationship, sourceName, predicate, targetName string) *types.Relationship {
 	for i := range relationships {
 		r := &relationships[i]
