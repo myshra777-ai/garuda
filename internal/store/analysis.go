@@ -75,11 +75,11 @@ func (s *PostgresStore) SaveAnalysisDecision(
 		INSERT INTO decisions (
 			tenant_id, id, title, rationale, status,
 			scope_domain, scope_system, scope, owner, confidence, fingerprint,
-			created_at, updated_at
+			valid_from, approved_at, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, 'APPROVED',
 			'architecture', 'ast-analyzer', $5, 'garuda-cli', 1.0, $6,
-			NOW(), NOW()
+			NOW(), NOW(), NOW(), NOW()
 		)
 		ON CONFLICT (tenant_id, id) DO UPDATE SET
 			title = EXCLUDED.title,
@@ -88,6 +88,8 @@ func (s *PostgresStore) SaveAnalysisDecision(
 			scope_system = EXCLUDED.scope_system,
 			scope = EXCLUDED.scope,
 			fingerprint = EXCLUDED.fingerprint,
+			valid_from = EXCLUDED.valid_from,
+			approved_at = EXCLUDED.approved_at,
 			updated_at = NOW()
 	`, tenantID, decisionID, title, statement, scopeJSON, result.Fingerprint)
 	if err != nil {
