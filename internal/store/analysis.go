@@ -65,32 +65,31 @@ func (s *PostgresStore) SaveAnalysisDecision(
 	// 4. Deterministic decision ID (v5 SHA‑1)
 	decisionID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("analysis:"+tenantID.String()+":"+result.Fingerprint))
 
-	// 5. Create parent decision row (so the foreign key can be satisfied)
+	// 5. Create parent decision row (so foreign keys can be satisfied)
 	title := fmt.Sprintf("Repository AST Schema Snapshot [%s]", result.Fingerprint[:8])
 	statement := fmt.Sprintf("Extracted %d packages, %d structs, %d interfaces, %d functions",
 		result.Stats.Packages, result.Stats.Structs, result.Stats.Interfaces, result.Stats.Functions)
 	scopeJSON := []byte(`{"domain":"architecture","system":"ast-analyzer"}`)
 
 	_, err = tx.Exec(ctx, `
-        INSERT INTO decisions (
-            id, tenant_id, title, decision, rationale, status,
-            scope_domain, scope_system, scope, owner, fingerprint,
-            created_at, updated_at
-        ) VALUES (
-            $1, $2, $3, $4, $4, 'APPROVED',
-            'architecture', 'ast-analyzer', $5, 'garuda-cli', $6,
-            NOW(), NOW()
-        )
-        ON CONFLICT (tenant_id, id) DO UPDATE SET
-            title = EXCLUDED.title,
-            decision = EXCLUDED.decision,
-            rationale = EXCLUDED.rationale,
-            scope_domain = EXCLUDED.scope_domain,
-            scope_system = EXCLUDED.scope_system,
-            scope = EXCLUDED.scope,
-            fingerprint = EXCLUDED.fingerprint,
-            updated_at = NOW()
-    `, decisionID, tenantID, title, statement, scopeJSON, result.Fingerprint)
+		INSERT INTO decisions (
+			tenant_id, id, title, rationale, status,
+			scope_domain, scope_system, scope, owner, confidence, fingerprint,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, 'APPROVED',
+			'architecture', 'ast-analyzer', $5, 'garuda-cli', 1.0, $6,
+			NOW(), NOW()
+		)
+		ON CONFLICT (tenant_id, id) DO UPDATE SET
+			title = EXCLUDED.title,
+			rationale = EXCLUDED.rationale,
+			scope_domain = EXCLUDED.scope_domain,
+			scope_system = EXCLUDED.scope_system,
+			scope = EXCLUDED.scope,
+			fingerprint = EXCLUDED.fingerprint,
+			updated_at = NOW()
+	`, tenantID, decisionID, title, statement, scopeJSON, result.Fingerprint)
 	if err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to upsert decision: %w", err)
 	}
