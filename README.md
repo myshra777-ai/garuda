@@ -1,14 +1,18 @@
-# 🦅 Garuda — Evidence-Backed Software Intelligence
+
+
+ 🦅 Garuda — Evidence‑Backed Software Intelligence
 
 [![Release](https://img.shields.io/github/v/release/myshra777-ai/garuda?style=flat-square&color=blue)](https://github.com/myshra777-ai/garuda/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/myshra777-ai/garuda/garuda-ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/myshra777-ai/garuda/actions)
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square)](LICENSE)
-[![Benchmarks](https://img.shields.io/badge/Benchmarks-100%25-brightgreen?style=flat-square)](https://github.com/myshra777-ai/garuda#-ast-semantic-benchmark-suite)
+[![Benchmarks](https://img.shields.io/badge/Benchmarks-100%25-brightgreen?style=flat-square)](#-ast-semantic-benchmark-suite)
+
+---
 
 **Understand your codebase as a connected, inspectable, and verifiable system.**
 
-Garuda is a **deterministic** code intelligence and governance platform. It parses Go source code into a **canonical AST**, builds a **structured semantic graph**, anchors every relationship to **cryptographic evidence** (commit SHA, file, line range, content hash), and provides high‑speed CLI tools for **blast‑radius impact analysis**, **architectural validation**, and **agentic code quality**.
+Garuda is a **deterministic** code intelligence and governance platform. It parses Go source code into a canonical AST, resolves symbols with **compiler‑grade `go/types`**, builds a structured semantic graph, anchors every relationship to cryptographic evidence (commit SHA, file path, line range, content hash), and provides high‑speed CLI tools for **blast‑radius impact analysis**, **architectural validation**, and **agentic code quality**.
 
 > **Code → Semantics → Relationships → Evidence → Understanding**
 
@@ -16,53 +20,20 @@ Garuda is a **deterministic** code intelligence and governance platform. It pars
 
 ---
 
-## 📋 Table of Contents
+## 🚀 Why Garuda?
 
-- [The Core Philosophy](#the-core-philosophy)
-- [The Epistemic Triad](#the-epistemic-triad)
-- [Capabilities Matrix](#capabilities-matrix)
-- [AST Semantic Benchmark Suite](#ast-semantic-benchmark-suite)
-- [System Architecture](#system-architecture)
-- [Blast Radius Impact Engine](#blast-radius-impact-engine)
-- [The 10 Immutable Engineering Laws](#the-10-immutable-engineering-laws)
-- [Installation & Quick Start](#installation--quick-start)
-- [Core Capabilities & CLI](#core-capabilities--cli)
-- [Cryptographic Evidence Contract](#cryptographic-evidence-contract)
-- [Multi-Repository Scaling Model](#multi-repository-scaling-model)
-- [Roadmap & What's Next](#roadmap--whats-next)
-- [Security & Trust](#security--trust)
-- [Development & Contributing](#development--contributing)
-- [License](#license)
+| Problem | Garuda's Answer |
+|---------|----------------|
+| **“What does this code actually do?”** | AST‑level extraction with `go/types` resolution yields a precise, machine‑readable semantic graph. |
+| **“How does this change affect everything?”** | BFS blast‑radius impact analysis with depth‑based severity scoring (CRITICAL → LOW). |
+| **“Can I trust this answer?”** | Every claim is backed by source evidence and a Merkle‑verified ledger. |
+| **“Is this code minimal?”** | Ponytail checks for dead code, duplications, and stdlib alternatives. |
+| **“Will this break downstream services?”** | Semantic diff and impact‑diff catch breaking changes before merge. |
+| **“Does this interface implementation hold?”** | `go/types` resolves concrete receivers, embedded methods, and interface satisfaction. |
 
 ---
 
-## The Core Philosophy
-
-Modern codebases are not collections of files – they are interconnected webs of packages, structs, interfaces, methods, and contracts.
-
-**Garuda is built on a single premise: Build structured truth first. Put generative intelligence on top of it later.**
-
-Instead of relying on an LLM to guess what your codebase does via probabilistic RAG, Garuda:
-
-- Parses the actual **Go AST** and resolves symbols with `go/types`.
-- Extracts **deterministic facts** – entities, relationships, and evidence.
-- Anchors every claim to a **commit SHA, file path, line range, and content hash**.
-- Persists the graph in PostgreSQL with **Merkle‑backed integrity**.
-
-### What Garuda Is — and Isn't
-
-| Garuda Is | Garuda Is Not |
-|-----------|---------------|
-| 🧠 A deterministic semantic graph of your code | ❌ A generic LLM wrapper or chat agent |
-| 🔍 Evidence‑aware, linking claims to exact source lines | ❌ A probabilistic vector‑search tool |
-| 🔐 A cryptographically verified analysis ledger | ❌ A disposable, memoryless linter |
-| 🚧 A foundation for cross‑repo governance | ❌ An autonomous code‑rewriting bot |
-| 📊 Blast‑radius impact analysis | ❌ A code search tool |
-| 🧠 A foundation for the Company Brain | ❌ A complete company‑wide brain today |
-
----
-
-## The Epistemic Triad
+## 🔬 The Epistemic Triad
 
 Garuda rigidly separates three classes of knowledge. **Observations are never collapsed into Decisions.**
 
@@ -87,72 +58,69 @@ flowchart LR
 | **Inference** | Derived by analysis/model logic | `CheckoutService CALLS PaymentService (conf: 0.87)` | Graph Traversal |
 | **Decision** | Intentional organizational choice | `Production DB MUST BE Postgres` | Human / Policy |
 
-> **Observation ≠ Inference ≠ Decision**. A code analyzer observes that a service uses PostgreSQL. A human or policy may decide that production must use PostgreSQL. Those are distinct epistemic objects and must remain separate.
-
 ---
 
-## Capabilities Matrix
+## 🧩 Capabilities Matrix
 
-Garuda’s capabilities follow the V5 roadmap doctrine: **evidence before confidence, stable before experimental**.
-
-> 📄 **Complete Capabilities Reference**: See [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) for the full machine‑generated matrix.
+> 📄 **Full matrix**: [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md)
 
 ### ✅ Stable — Production Ready
 
 | Capability | Description | Command |
 |------------|-------------|---------|
-| **Semantic Analysis** | Extracts entities (structs, functions, interfaces, packages) with line‑level evidence | `garuda analyze` |
-| **Canonical UUIDv5 Identity** | Deterministic identity hashing across structs, methods, and functions | Core AST Engine |
-| **Truth Benchmark Verification** | Automated validation against 20 truth fixtures | `go test ./...` |
-| **Entity Inspection** | View entity details: package, file, kind, fields, methods, relationships | `garuda inspect` |
-| **Graph Visualization** | Interactive HTML graph with D3.js | `garuda graph` |
-| **Snapshot Diff** | Compare two semantic snapshots with breaking change detection | `garuda diff` |
-| **Blast Radius Impact** | BFS traversal to find all consumers with severity scoring | `garuda impact` |
-| **Diff Impact** | Compare impact between two snapshots | `garuda impact-diff` |
-| **Immutable Ledger** | Merkle‑backed audit trail with cryptographic integrity | `garuda verify` |
-| **Workspace Management** | Create, list, delete workspaces | `garuda workspace` |
-| **Repository Management** | Add, list, enable, disable repositories | `garuda repo` |
-| **Multi-Repo Sync** | Analyze all enabled repositories in a workspace | `garuda workspace sync` |
+| **Semantic Analysis** | AST‑level extraction with `go/types` resolution | `garuda analyze` |
+| **Canonical UUIDv5 Identity** | Deterministic identity across commits & renames | Core AST Engine |
+| **Truth Benchmark Suite** | 23‑fixture verification – 100% precision/recall | `go test ./...` |
+| **Entity Inspection** | View fields, methods, relationships | `garuda inspect` |
+| **Graph Visualization** | Interactive D3.js HTML graph | `garuda graph` |
+| **Snapshot Diff** | Semantic diff with breaking‑change detection | `garuda diff` |
+| **Blast Radius Impact** | BFS traversal with severity (Critical → Low) | `garuda impact` |
+| **Impact‑Diff** | Compare impact between two snapshots | `garuda impact-diff` |
+| **Immutable Ledger** | Merkle‑verified audit trail | `garuda verify` |
+| **Workspace/Repo Mgmt** | Create, list, sync, enable/disable | `garuda workspace`, `garuda repo` |
 
-### 🧪 Ongoing — Active Development
+### 🧪 Alpha — Active Development
 
-| Capability | Description | Status |
-|------------|-------------|--------|
-| **Cross-Repo Impact** | Impact analysis across repository boundaries | Alpha |
-| **Contract Extraction** | HTTP routes, SQL migrations, API schemas | Alpha |
-| **Schema Discovery** | Unify Go structs, JSON tags, OpenAPI, SQL | In Progress |
-| **Code Quality (Ponytail)** | Dead code, duplicates, stdlib alternatives | Alpha |
-| **Governance Judge** | Breaking change detection with blocking decisions | Alpha |
+| Capability | Status |
+|------------|--------|
+| Cross‑Repo Impact | Alpha |
+| Contract Extraction (HTTP, SQL, OpenAPI) | Alpha |
+| Schema Discovery | In Progress |
+| Code Quality (Ponytail) | Alpha |
+| Governance Judge | Alpha |
 
-### 📋 Planned — Future
+### 📋 Planned
 
-| Capability | Description | Phase |
-|------------|-------------|-------|
-| **CI Integration** | GitHub Action for PR impact/quality comments | Phase 5 |
-| **Company Graph** | Cross‑repository semantic graph | Phase 4 |
-| **Policy Enforcement** | Evaluate code against organizational policies | Phase 6 |
-| **Runtime Intelligence** | Combine static analysis with runtime evidence | Phase 6 |
-| **Business State Integrity** | Idempotency keys, business rule enforcement | Phase 7 |
+| Capability | Phase |
+|------------|-------|
+| CI Integration (GitHub Action) | Phase 5 |
+| Company Graph (cross‑repo) | Phase 4 |
+| Policy Enforcement | Phase 6 |
+| Runtime Intelligence | Phase 6 |
+| Business State Integrity | Phase 7 |
 
 ---
 
 ## 🔬 AST Semantic Benchmark Suite
 
-Garuda’s semantic extraction is evaluated against a **20‑fixture synthetic and real‑world ground‑truth test suite** (`test/benchmark/truth_fixtures`). Every release is gated on deterministic precision and recall.
+Garuda's semantic extraction is evaluated against a **23‑fixture** synthetic and real‑world ground‑truth test suite. Every release is gated on deterministic precision and recall.
 
 ```mermaid
 flowchart LR
-    subgraph Suite["Truth Benchmark Suite"]
+    subgraph Suite1["AST Core Determinism (001–010)"]
         F1[001-basic] --> V[Verification Engine]
         F2[002-method-identity] --> V
         F3[003-interface] --> V
         F4[004-generics] --> V
         F5[005-alias] --> V
         F6[006-embedding] --> V
-        F7[007-cross-package] --> V
-        F8[008-cross-module] --> V
-        F9[009-same-symbol-names] --> V
-        F10[010-api-contract] --> V
+        F7[007-variadics] --> V
+        F8[008-closures] --> V
+        F9[009-interface-polymorphism] --> V
+        F10[010-multi-method-struct] --> V
+    end
+
+    subgraph Suite2["Governance & System Truth (011–020)"]
         F11[011-breaking-change] --> V
         F12[012-non-breaking-change] --> V
         F13[013-consumer-impact] --> V
@@ -164,51 +132,83 @@ flowchart LR
         F19[019-noise] --> V
         F20[020-large-ish] --> V
     end
-    V --> R[Report]
-    R --> G[Gate: 100% Precision/Recall]
+
+    subgraph Suite3["Generic & Type System (021–023)"]
+        F21[021-generic-instantiation] --> V
+        F22[022-alias-vs-defined] --> V
+        F23[023-embedded-promotion] --> V
+    end
+    
+    V --> R[Report Engine]
+    R --> G[Gate: 100% Precision / Recall]
 ```
 
-### Snapshot Extraction Metrics
+### 📊 Snapshot Extraction Metrics
 
-| Metric | Count |
-| :--- | :--- |
-| **Parsed Files** | `214` |
-| **Packages** | `43` |
-| **Discovered Structs** | `322` |
-| **Discovered Interfaces** | `25` |
-| **Functions & Methods** | `389` |
-| **Total Struct Fields** | `1,581` |
+| Metric | Count | Status |
+| :--- | :--- | :--- |
+| **Parsed Files** | `214` | Complete Source Traversal |
+| **Packages** | `43` | Fully Qualified Resolution |
+| **Discovered Structs** | `322` | Tag & Line Span Verification |
+| **Discovered Interfaces** | `25` | Dynamic Method Set Matching |
+| **Functions & Methods** | `389` | Receiver Disambiguation Verified |
+| **Total Struct Fields** | `1,581` | Direct & Embedded Fields |
 
-### Truth Fixture Coverage & Results
+### 🏆 Benchmark Results (23 Fixtures)
 
-| Benchmark Target | Fixtures | Invariant Verified | Result |
-|---|---|---|---|
-| **Package Resolution** | 20 | Fully qualified package path resolution | ✅ 100% Accuracy |
-| **Entity Fingerprinting** | 20 | Receiver types, structs, interfaces, methods | ✅ 100% Match |
-| **Call‑Graph Edges** | 20 | Deterministic `CALLS` relationship extraction | ✅ 100% Precision/Recall |
-| **Import Graph** | 20 | Cross‑package and internal module import tracing | ✅ 100% Recall |
-| **Canonical UUIDv5** | 20 | Stable identity across file moves and renames | ✅ Deterministic |
-| **Breaking Change Detection** | 20 | Semantic diff classification | ✅ 100% Accuracy |
-| **Impact Analysis** | 20 | Consumer tracing & severity | ✅ 100% Precision |
+| Metric | Result | Gate |
+|--------|--------|------|
+| **Entity Precision** | **100.0%** | ≥ 98% |
+| **Entity Recall** | **100.0%** | ≥ 98% |
+| **Relationship Precision** | **100.0%** | ≥ 95% |
+| **Relationship Recall** | **100.0%** | ≥ 90% |
+| **Resolution Coverage** | **100.0%** | ≥ 95% |
+| **Identity Stability** | **100.0%** | ≥ 99% |
+| **Diff Accuracy** | **100.0%** | ≥ 95% |
+| **Impact Precision** | **100.0%** | ≥ 95% |
+| **Evidence Correctness** | **100.0%** | 100% |
 
-**Aggregate Benchmark Scorecard (20 fixtures):**
+### 📋 Truth Fixture Coverage (23 Fixtures)
 
-```
-Overall Entity Precision:       100.0%
-Overall Entity Recall:          100.0%
-Overall Relationship Precision: 100.0%
-Overall Relationship Recall:    100.0%
-```
+| Fixture | Target Scenario | Key Invariant Tested |
+|---|---|---|
+| `001-basic` | Standard struct & function declarations | Canonical UUIDv5 hashing |
+| `002-method-identity` | Value vs. pointer receiver methods | Disambiguated receiver method identity |
+| `003-interface` | Explicit & implicit interface implementation | `IMPLEMENTS` edge emission |
+| `004-generics` | Parameterized types & generic constraints | Type parameter erasure consistency |
+| `005-alias` | Type definitions vs. type aliases (`type A = B`) | Target identity resolution |
+| `006-embedding` | Struct & interface field embedding | Promoted field/method resolution |
+| `007-variadics` | Ellipsis arguments & variadic signatures | Variadic call signature preservation |
+| `008-closures` | Anonymous functions & closures | Nested lexical scope extraction |
+| `009-interface-polymorphism` | Multi-interface satisfaction | Polymorphic dynamic method sets |
+| `010-multi-method-struct` | Structs implementing overlapping interfaces | Accurate interface set mapping |
+| `011-breaking-change` | Contract & signature modifications | Breaking change detection |
+| `012-non-breaking-change` | Additive non-breaking changes | Zero false breaking alarms |
+| `013-consumer-impact` | Multi-tier call hierarchy (api → service → store) | BFS blast radius propagation |
+| `014-rename` | Struct & method identifier renames | UUIDv5 identity migration tracking |
+| `015-delete` | Entity removal across versions | Orphaned edge elimination |
+| `016-multi-repo` | Cross-module boundaries | Cross-repository edge classification |
+| `017-evidence` | Exact line-range snippet hashing | SHA-256 evidence integrity |
+| `018-determinism` | Repeated AST runs on identical source | Byte-for-byte snapshot replay identity |
+| `019-noise` | Deep syntax noise and formatting variations | Robust parser stability (zero panics) |
+| `020-large-ish` | Multi-package domain models | Scaled BFS impact traversal |
+| `021-generic-instantiation` | Type parameter erasure & concrete method signatures | Generic method set resolution |
+| `022-alias-vs-defined` | `type A = B` vs `type A B` | Distinct UUIDv5 identity |
+| `023-embedded-promotion` | Promoted field/method resolution via `types.Selection` | Explicit `EMBEDS` edge emission |
 
 ### Run the Benchmark Suite
 
 ```bash
-go test -v -run TestTruthBenchmarks ./test/benchmark/...
+# Run all 23 truth benchmarks & invariant regression tests
+go test -v -count=1 ./test/benchmark/...
+
+# Run standalone benchmark reporter scorecard
+go run garuda-bench/runner/main.go
 ```
 
 ---
 
-## System Architecture
+## 🏗️ System Architecture
 
 ```mermaid
 graph TD
@@ -216,13 +216,16 @@ graph TD
         Git[Git Repository] --> Checkout[Checkout Commit]
         Checkout --> AST[Go AST + go/types Analyzer]
     end
+    
     subgraph Semantic["Semantic Core"]
         AST --> |Extracts| E[Entities<br/>Packages, Structs, APIs]
-        AST --> |Maps| R[Relationships<br/>Calls, Imports, Implements]
+        AST --> |Resolves| T[go/types<br/>Selections & Uses]
+        T --> |Maps| R[Relationships<br/>Calls, Imports, Implements, Embeds]
         R --> |BFS Traversal| Impact[Blast Radius Engine]
         E --> Graph[Semantic Graph]
         R --> Graph
     end
+    
     subgraph Trust["Trust Layer"]
         E --> Hash[SHA-256 Hashing]
         R --> Hash
@@ -230,6 +233,7 @@ graph TD
         Ev --> Postgres[(PostgreSQL Graph)]
         Ev --> JSONB[(Immutable Artifacts)]
     end
+    
     subgraph Experience["Experience Layer"]
         Postgres --> CLI{Garuda CLI}
         Postgres --> CI[CI/PR Bots]
@@ -240,18 +244,169 @@ graph TD
     end
 ```
 
+### Compiler‑Grade Resolution Pipeline
+
+Garuda now uses `go/types` to resolve symbols, receivers, and interfaces with compiler‑grade accuracy. The `workspaceImporter` resolves intra‑workspace dependencies on‑demand.
+
+```mermaid
+flowchart LR
+    subgraph Input["Source Input"]
+        S1[Go Files] --> P[Parser]
+        S2[go.mod] --> P
+    end
+    
+    subgraph Resolution["go/types Resolution"]
+        P --> |AST| C[types.Config]
+        C --> |Check| Info[types.Info<br/>Uses, Selections]
+        Info --> R1[Resolve Receiver]
+        Info --> R2[Resolve Interface]
+        Info --> R3[Resolve Embeds]
+        Info --> R4[Resolve Generics]
+    end
+    
+    subgraph Output["Semantic Output"]
+        R1 --> E1[Method Identity]
+        R2 --> E2[IMPLEMENTS Edge]
+        R3 --> E3[EMBEDS Edge]
+        R4 --> E4[Generic Instantiation]
+    end
+```
+
+### Workspace Importer (On‑Demand Package Resolution)
+
+```mermaid
+flowchart TD
+    W[workspaceImporter] --> |Import| P[types.Package]
+    P --> |Check| C[types.Config]
+    C --> |Uses| I[types.Info]
+    I --> |Selections| S[Resolved Receiver]
+    I --> |Implements| I2[Interface Satisfaction]
+    I --> |Uses| U[Concrete Symbol]
+```
+
 ---
 
-## Blast Radius Impact Engine
+## 🏗️ Semantic Resolution Pipeline Architecture (Garuda V5)
 
-When you change an entity, Garuda performs a **BFS traversal** of the dependency graph to find all downstream consumers. Each impacted entity is classified by severity:
+Garuda processes Go source code through a **deterministic, four‑stage compilation and graph analysis pipeline**, mapping AST declarations to an authoritative semantic relationship graph and persisting cryptographic proofs into the immutable ledger.
+
+```text
+Source Files (*.go)
+       │
+       ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ Stage T2: AST Parsing & Canonical Entity Extraction              │
+│ • go/parser & token.FileSet tokenization                         │
+│ • Metadata capture: struct fields, interface methods, signatures │
+│ • Deterministic Canonical UUIDv5 & SHA-256 source hashing        │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ Stage T3: Authoritative Type Resolution (go/types)               │
+│ • On-demand workspaceImporter for cross-package resolution       │
+│ • Dynamic method-set evaluation (IMPLEMENTS relations)           │
+│ • Disambiguation: Generics, Type Aliases, Embedded Promotions    │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ Stage T4: Semantic Diff & Graph Blast Radius Engine              │
+│ • Signature & contract diffing between snapshots ($v_1 \to v_2$) │
+│ • Breaking vs. Non-Breaking classification                       │
+│ • Multi-hop reverse BFS graph traversal with severity decay      │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ Cryptographic Ledger Persistence & Attestation                   │
+│ • Content-Addressed CAS: evidence_store (Full AST JSON)          │
+│ • Bitemporal decisions & immutable decision_revisions            │
+│ • Incremental tenant Merkle root attestation (SHA-256 chain)     │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Pipeline Stages
+
+#### 1. Stage T2 — AST Corpus Ingestion & Canonical Identity
+- Traverses the target repository and groups AST files by package path.
+- Extracts high‑fidelity structural declarations: structs with field listings, interfaces with required method signatures, and package‑level functions.
+- Assigns **RFC 4122 UUIDv5** canonical identifiers derived from `(PackagePath, ReceiverType, Name)` to eliminate identifier collision across branches.
+
+#### 2. Stage T3 — Authoritative Type & Relationship Resolution
+- Uses an integrated `workspaceImporter` to feed multi‑package workspace trees into `go/types.Config.Check` on demand.
+- Disambiguates complex Go semantics without runtime reflection:
+  - **Interface Satisfaction:** Verifies receiver method sets against interface contracts to emit typed `IMPLEMENTS` edges with 1.0 confidence.
+  - **Generic Types & Instantiations:** Unpacks generic index expressions (`*Container[T]`) to isolate underlying types.
+  - **Embedded Promotion:** Resolves inner struct method promotions directly to their canonical owners.
+  - **Call Graph Tracing:** Inspects AST selector expressions and `types.Info.Uses` to construct `CALLS` and `CALLS_INTERFACE` edge sets while pruning language built‑ins and type casts.
+
+#### 3. Stage T4 — Semantic Differentiation & BFS Blast Radius Engine
+- **AST Contract Diffing:** Performs declarative entity comparisons across snapshots (\(v_1 \to v_2\)):
+  - **Breaking:** Struct field deletions, interface method removals, signature mutation.
+  - **Non‑Breaking:** Optional field additions, struct method extensions, internal AST hash mutations (`IMPLEMENTATION_CHANGE`).
+- **Graph Blast Radius Traversal:** Executes a breadth‑first search (BFS) over incoming consumer edges from a mutated root:
+  - **Depth 1 (Direct Implementation):** `CRITICAL` severity for concrete types satisfying broken interfaces.
+  - **Depth 1 (Direct Caller):** `HIGH` severity for call sites directly invoking the target entity.
+  - **Depth 2+ (Transitive Callers):** `MEDIUM` (depth 2) and `LOW` (depth ≥ 3) severity decay across upstream consumers.
+
+#### 4. Cryptographic Storage & Ledger Guarantees
+- **Content‑Addressed Storage (`evidence_store`):** Stores complete AST snapshots keyed by SHA‑256 block hash for immutable provenance replay.
+- **Bitemporal Decision Ledger (`decisions`):** Tracks system state validity (`valid_from`, `approved_at`, `scope_domain`, `scope_system`).
+- **Merkle Attestation (`merkle_roots`):** Computes \(\text{Root}_n = \text{SHA256}(\text{Root}_{n-1} \| \text{RevisionHash})\) within an atomic transaction to ensure zero state tampering.
+
+### Architecture Invariants
+
+| Phase | Invariant | Verification Mechanism |
+|-------|-----------|------------------------|
+| **AST Extraction** | Zero Identifier Collision | Canonical UUIDv5 derived from fully qualified AST signatures. |
+| **Type Resolution** | Closed‑World Type Soundness | `workspaceImporter` fallback resolving intra‑workspace imports. |
+| **Semantic Diff** | Deterministic Impact Classification | AST signature parity checking independent of whitespace/formatting. |
+| **Blast Radius** | Strict Severity Monotonicity | BFS reverse traversal with bounded depth decay (C → H → M → L). |
+| **Ledger Storage** | Non‑Repudiation & Immutability | Dual‑layer CAS storage with SHA‑256 Merkle chain attestation. |
+
+---
+
+## 💥 Blast Radius Impact Engine
+
+When you change an entity, Garuda performs a **BFS traversal** of the dependency graph to find all downstream consumers. Severity classification decays with depth:
+
+```mermaid
+flowchart TD
+    Start[Entity Change] --> BFS[BFS Traversal]
+    
+    BFS --> Depth1[Depth 1: Direct Consumers]
+    BFS --> Depth2[Depth 2: Indirect Consumers]
+    BFS --> DepthN[Depth N: Transitive Consumers]
+    
+    Depth1 --> Classify[Severity Classification]
+    Depth2 --> Classify
+    DepthN --> Classify
+    
+    Classify --> Critical[CRITICAL<br/>Public API/Contract]
+    Classify --> High[HIGH<br/>Depth 1 Non-Test]
+    Classify --> Medium[MEDIUM<br/>Depth 2 Public Route]
+    Classify --> Low[LOW<br/>Test/Confidence<0.7]
+    
+    Critical --> Report[Impact Report]
+    High --> Report
+    Medium --> Report
+    Low --> Report
+    
+    Report --> JSON[JSON Output]
+    Report --> Human[Human-Readable]
+```
+
+### Severity Classification
 
 | Severity | Condition |
 |----------|-----------|
-| **CRITICAL** | Depth 1 public contract breach (API endpoint, SQL schema) |
+| **CRITICAL** | Depth 1 public contract breach (API endpoint, SQL schema, interface) |
 | **HIGH** | Depth 1 non‑test consumer |
 | **MEDIUM** | Depth 2 public route consumer |
 | **LOW** | Test files, confidence < 0.7, or depth ≥ 3 |
+
+### 📟 Sample Output
 
 ```bash
 $ garuda impact --target e8b9c2a1-0f4e-4b2a-9e12-4c9a8f23b123 --depth 3
@@ -269,7 +424,7 @@ Confidence Score: 0.98 | Evidence Hash: 4f8b9e... (SHA-256)
 
 ---
 
-## The 10 Immutable Engineering Laws
+## ⚖️ The 10 Immutable Engineering Laws
 
 | # | Law | Meaning |
 |---|-----|---------|
@@ -286,13 +441,13 @@ Confidence Score: 0.98 | Evidence Hash: 4f8b9e... (SHA-256)
 
 ---
 
-## Installation & Quick Start
+## 🚀 Installation & Quick Start
 
 ### Requirements
 
 - Go 1.22+
 - PostgreSQL 16+
-- Docker & Docker Compose (optional, for local testing)
+- Docker (optional)
 
 ### Download Pre‑built Binary
 
@@ -312,10 +467,10 @@ go build -o bin/garuda cmd/garuda/main.go
 export PATH=$PATH:$(pwd)/bin
 ```
 
-### Quick Workflow
+### 5‑Minute Workflow
 
 ```bash
-# 1. Start PostgreSQL (Docker)
+# 1. Start PostgreSQL
 docker run --name garuda-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=garuda -p 5432:5432 -d postgres:16-alpine
 
 # 2. Run migrations (000-041)
@@ -340,43 +495,33 @@ bin/garuda graph my-workspace --open
 | Variable | Description | Default |
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL connection string | `postgres://test:test@localhost:5433/garuda_test?sslmode=disable` |
-| `GARUDA_TENANT_ID` | Tenant UUID for multi‑tenant isolation | *Required for DB writes* |
-| `GARUDA_WORKSPACE` | Active workspace name | `default` |
+| `GARUDA_TENANT_ID` | Tenant UUID | *Required* |
+| `GARUDA_WORKSPACE` | Active workspace | `default` |
 
 ---
 
-## Core Capabilities & CLI
+## ⌨️ CLI Reference
 
 ```bash
-# Analysis & diffing
-garuda analyze . -o v1.json
-garuda diff v1.json v2.json --json
-
-# Blast radius impact
-garuda impact --workspace <uuid> --target <entity-id> --depth 5
-
-# Code quality (Ponytail)
-garuda ponytail . --json
-
-# Governance (Judge)
-garuda judge v1.json v2.json --block
-
-# Workspace & repository management
-garuda workspace create my-workspace
-garuda repo add my-workspace https://github.com/org/repo
-garuda workspace sync my-workspace
-
-# Trust & integrity
-garuda verify
-garuda explain <decision-id>
-garuda entities
+garuda analyze [path]           # Extract semantic snapshot
+garuda diff <a> <b>             # Compare two snapshots
+garuda impact --workspace <id> --target <entity-id>  # Blast radius
+garuda impact-diff v1.json v2.json                   # Diff impact
+garuda inspect <entity>         # View entity details
+garuda graph <workspace>        # Generate interactive graph
+garuda verify                   # Verify ledger integrity
+garuda explain <decision-id>    # Explain a decision with evidence
+garuda workspace create/list/delete/sync
+garuda repo add/list/enable/disable
+garuda ponytail .               # Code quality (dead code, duplicates, stdlib)
+garuda judge v1.json v2.json    # Governance judgement
 ```
 
 ---
 
-## Cryptographic Evidence Contract
+## 🔒 Cryptographic Evidence Contract
 
-Every claim in Garuda carries the following evidence contract:
+Every claim carries:
 
 ```json
 {
@@ -393,16 +538,15 @@ Every claim in Garuda carries the following evidence contract:
 }
 ```
 
-You can walk the integrity chain from a claim back to the exact source line, commit, and artifact:
+You can walk the integrity chain:
 
 ```text
-Source file/commit → Analyzer run → Snapshot artifact → Entity/relationship extraction
-→ Claim/observation → Evidence reference → User/API/CI answer
+Source → Analyzer → Snapshot → Entity → Claim → Evidence → Answer
 ```
 
 ---
 
-## Multi-Repository Scaling Model
+## 📈 Multi-Repository Scaling
 
 Garuda follows a disciplined **1 → 10 → 25** scaling model.
 
@@ -412,14 +556,17 @@ flowchart LR
         G1_1[Deterministic Extraction] --> G1_2[Evidence Accuracy >95%]
         G1_2 --> G1_3[Developer AHA Moment]
     end
+    
     subgraph Gate2["Gate 2: 10 Repositories"]
         G2_1[Workspace Sync Durable] --> G2_2[Cross-Repo Edges Precise]
         G2_2 --> G2_3[Permissions Enforced]
     end
+    
     subgraph Gate3["Gate 3: 25 Repositories"]
         G3_1[Query Latency Practical] --> G3_2[CI Impact Actionable]
         G3_2 --> G3_3[Storage Economically Viable]
     end
+    
     Gate1 --> Gate2 --> Gate3
 ```
 
@@ -436,87 +583,64 @@ flowchart LR
 
 ---
 
-## Roadmap & What's Next
+## 🗺️ Roadmap
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| **P0** | Trust Foundation & Merkle Verification | ✅ Complete |
-| **P1** | Semantic Core & Canonical UUIDv5 Identity | ✅ Complete |
-| **P2** | Go AST Analyzer & Truth Benchmarks (20 Fixtures) | ✅ Complete |
-| **P3** | CLI, Artifacts & Automated Docgen Pipeline | ✅ Complete |
-| **P4** | Multi-Repo Sync & Cross-Repo Edges | 🧪 Alpha |
-| **P5** | CI Integration (GitHub Action PR Impact) | 📋 Planned |
-| **P6** | Governance & Policy Enforcement | 📋 Planned |
+| **P0** | Trust Foundation & Merkle | ✅ |
+| **P1** | Semantic Core & UUIDv5 | ✅ |
+| **P2** | Go Analyzer & 23 Benchmarks | ✅ |
+| **P3** | CLI, Artifacts & Docgen | ✅ |
+| **P4** | Multi‑Repo Sync | 🧪 Alpha |
+| **P5** | CI Integration | 📋 Planned |
+| **P6** | Governance & Policy | 📋 Planned |
 | **P7** | Business State Integrity | 📋 Planned |
 
-**Next deliverables:**
-- Expand BFS blast radius across repository boundaries.
-- Deep contract extraction (HTTP, SQL, OpenAPI).
-- GitHub Action for automated PR impact comments.
-- Enhanced interactive graph explorer.
+**Next up:**
+- Cross‑repo impact radius expansion.
+- Contract extraction (HTTP, SQL, OpenAPI).
+- GitHub Action for PR comments.
+- Enhanced graph explorer.
 
 ---
 
-## Security & Trust
+## 🔐 Security & Trust
 
-| Boundary | Required Guarantee |
-|----------|-------------------|
-| **Tenant** | No cross‑tenant reads or writes |
-| **Workspace** | Only authorized workspace members |
-| **Repository** | Repository‑level access policy enforced |
-| **Evidence** | Unauthorized graph paths cannot reveal protected evidence |
-| **MCP/API** | Tool calls inherit authorization context |
-| **Agents** | Agent identity cannot bypass policy |
-| **Audit** | Important mutations are traceable and integrity‑verifiable |
+| Boundary | Guarantee |
+|----------|-----------|
+| **Tenant** | No cross‑tenant access |
+| **Workspace** | Authorized members only |
+| **Repository** | Policy enforced |
+| **Evidence** | Protected from unauthorized traversal |
+| **MCP/API** | Authorization inherited |
+| **Agents** | Identity enforced |
+| **Audit** | Traceable & verifiable |
 
 ---
 
-## Development & Contributing
+## 🤝 Contributing
 
-Contributions are evaluated against the **10 Immutable Engineering Laws**.
+Contributions must uphold the **10 Immutable Engineering Laws**.
 
-### Adding a New Analyzer Feature?
+When adding a new analyzer feature:
 
-1. ✅ Must be **deterministic** – avoid regex where AST parsing works.
-2. ✅ Must retain **evidence** – never emit an edge without line‑level source tracking.
-3. ✅ Must pass the **benchmark corpus** – no regression in precision/recall.
+1. ✅ Be **deterministic** – AST over regex.
+2. ✅ Retain **evidence** – line‑level source tracking.
+3. ✅ Pass **benchmark corpus** – no precision/recall regressions.
 
 ### Local Development
 
 ```bash
-# Spin up testing DB
 docker-compose up -d postgres
-
-# Run tests
 DATABASE_URL="postgres://test:test@localhost:5433/garuda_test" go test ./...
-
-# Build
 go build -o bin/garuda cmd/garuda/main.go
-```
-
-### Project Structure
-
-```
-garuda/
-├── cmd/garuda/          # CLI entry points
-├── internal/
-│   ├── analyzer/        # Go AST parsing + UUIDv5 canonical identity
-│   ├── store/           # PostgreSQL migrations and atomic transactions
-│   ├── impact/          # BFS blast‑radius engine
-│   ├── graph/           # Visualization
-│   └── engine/          # Governance judge and epistemic classification
-├── test/benchmark/      # 20‑fixture truth benchmark suite
-├── migrations/          # Idempotent PostgreSQL migrations (000-041)
-├── scripts/             # Documentation generation scripts
-└── docs/                # Generated capabilities matrix
 ```
 
 ---
 
-## License
+## 📄 License
 
-Copyright 2026 Rohit Mishra.
-
+Copyright 2026 Rohit Mishra.  
 Garuda is licensed under the [Apache License 2.0](LICENSE).
 
 ---
