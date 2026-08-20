@@ -173,3 +173,35 @@ type ImpactReport struct {
 	TargetMutation   string           `json:"target_mutation"`
 	ImpactedEntities []ImpactedEntity `json:"impacted_entities"`
 }
+
+// AnalysisStatus represents the execution lifecycle of a semantic analysis run.
+type AnalysisStatus string
+
+const (
+	AnalysisStatusPending    AnalysisStatus = "PENDING"
+	AnalysisStatusRunning    AnalysisStatus = "RUNNING"
+	AnalysisStatusSucceeded  AnalysisStatus = "SUCCEEDED"
+	AnalysisStatusFailed     AnalysisStatus = "FAILED"
+	AnalysisStatusSuperseded AnalysisStatus = "SUPERSEDED"
+)
+
+// AnalysisManifest records provenance, versions, and integrity summaries for a snapshot.
+type AnalysisManifest struct {
+	AnalysisID              uuid.UUID      `json:"analysis_id"`
+	TenantID                uuid.UUID      `json:"tenant_id"`
+	WorkspaceID             uuid.UUID      `json:"workspace_id"`
+	RepositoryID            uuid.UUID      `json:"repository_id"`
+	CommitSHA               string         `json:"commit_sha"`
+	AnalyzerVersion         string         `json:"analyzer_version"`
+	SchemaVersion           string         `json:"schema_version"`
+	IdentityVersion         string         `json:"identity_version"`
+	CanonicalizationVersion string         `json:"canonicalization_version"`
+	ConfigHash              string         `json:"config_hash,omitempty"`
+	EntityCount             int            `json:"entity_count"`
+	RelationshipCount       int            `json:"relationship_count"`
+	EvidenceCount           int            `json:"evidence_count"`
+	SnapshotHash            string         `json:"snapshot_hash"`
+	Status                  AnalysisStatus `json:"status"`
+	StartedAt               time.Time      `json:"started_at"`
+	CompletedAt             *time.Time     `json:"completed_at,omitempty"`
+}

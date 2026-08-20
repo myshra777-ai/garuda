@@ -1,0 +1,38 @@
+name: Garuda Semantic Correctness & CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-gate:
+    name: Build, Invariant Test & Strict Benchmark Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go 1.22
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Verify Module Dependencies
+        run: go mod download
+
+      - name: Run Standard Unit Tests
+        run: go test -v -race ./internal/...
+
+      - name: Execute Strict Ground-Truth Benchmark Gate
+        run: make benchmark-strict
+
+      - name: Upload Benchmark Results Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: test/benchmark/results/
