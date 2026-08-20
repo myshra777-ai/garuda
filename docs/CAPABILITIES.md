@@ -1,17 +1,6 @@
 # 🧠 Garuda Capabilities & AST Verification Matrix
 
-> Auto-generated on `2026-08-20 15:03:10 UTC`. Grounded in AST snapshot and benchmark gates.
-
-## Snapshot Extraction Metrics
-
-| Metric | Count |
-| :--- | :--- |
-| **Parsed Files** | `214` |
-| **Packages** | `43` |
-| **Discovered Structs** | `322` |
-| **Discovered Interfaces** | `25` |
-| **Functions & Methods** | `389` |
-| **Total Struct Fields** | `1581` |
+> Auto-generated on `2026-08-20 16:10:28 UTC`. Grounded in AST snapshot and benchmark gates.
 
 ## Feature Verification & Status
 

@@ -1,0 +1,33 @@
+{
+  "fixture_id": "022-alias-vs-defined",
+  "category": "entity_extraction",
+  "entities": [
+    {
+      "name": "RawToken",
+      "kind": "type_alias",
+      "qualified_name": "example.com/identity.RawToken"
+    },
+    {
+      "name": "AccountID",
+      "kind": "type_alias",
+      "qualified_name": "example.com/identity.AccountID"
+    },
+    {
+      "name": "String",
+      "kind": "method",
+      "qualified_name": "example.com/identity.(AccountID).String"
+    },
+    {
+      "name": "ValidateAccount",
+      "kind": "function",
+      "qualified_name": "example.com/identity.ValidateAccount"
+    }
+  ],
+  "relationships": [
+    {
+      "source_name": "example.com/identity.ValidateAccount",
+      "predicate": "CALLS",
+      "target_name": "example.com/identity.(AccountID).String"
+    }
+  ]
+}

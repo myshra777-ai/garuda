@@ -1,0 +1,45 @@
+{
+  "fixture_id": "020-large-ish",
+  "category": "scale_and_throughput",
+  "summary_metrics": {
+    "packages_count": 4,
+    "structs_count": 4,
+    "interfaces_count": 2,
+    "methods_and_functions_count": 9,
+    "relationships_count": 8
+  },
+  "invariants": {
+    "multi_package_traversal": true,
+    "interface_satisfaction_verified": true,
+    "multi_tier_call_graph": true
+  },
+  "expected_interface_implementations": [
+    {
+      "struct": "example.com/020-large-ish/store.PostgresStore",
+      "interface": "example.com/020-large-ish/domain.UserRepository",
+      "predicate": "IMPLEMENTS"
+    },
+    {
+      "struct": "example.com/020-large-ish/store.PostgresStore",
+      "interface": "example.com/020-large-ish/domain.OrderRepository",
+      "predicate": "IMPLEMENTS"
+    }
+  ],
+  "expected_call_graph": [
+    {
+      "caller": "example.com/020-large-ish/transport.(*HTTPHandler).HandleCreateOrder",
+      "callee": "example.com/020-large-ish/service.(*OrderService).PlaceOrder",
+      "predicate": "CALLS"
+    },
+    {
+      "caller": "example.com/020-large-ish/service.(*OrderService).PlaceOrder",
+      "callee": "example.com/020-large-ish/domain.UserRepository.GetUser",
+      "predicate": "CALLS_INTERFACE"
+    },
+    {
+      "caller": "example.com/020-large-ish/service.(*OrderService).PlaceOrder",
+      "callee": "example.com/020-large-ish/domain.OrderRepository.SaveOrder",
+      "predicate": "CALLS_INTERFACE"
+    }
+  ]
+}

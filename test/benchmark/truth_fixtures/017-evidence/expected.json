@@ -1,0 +1,44 @@
+{
+  "fixture_id": "017-evidence",
+  "category": "evidence_correctness",
+  "file_path": "service.go",
+  "expected_entities": [
+    {
+      "name": "AuditLogger",
+      "kind": "struct",
+      "qualified_name": "example.com/auditing.AuditLogger",
+      "line_start": 12,
+      "line_end": 14,
+      "snippet_contains": "type AuditLogger struct {"
+    },
+    {
+      "name": "ComputeHash",
+      "kind": "method",
+      "receiver_type": "*AuditLogger",
+      "qualified_name": "example.com/auditing.(*AuditLogger).ComputeHash",
+      "line_start": 17,
+      "line_end": 20,
+      "snippet_contains": "func (l *AuditLogger) ComputeHash(data []byte) string {"
+    },
+    {
+      "name": "LogSecurityEvent",
+      "kind": "method",
+      "receiver_type": "*AuditLogger",
+      "qualified_name": "example.com/auditing.(*AuditLogger).LogSecurityEvent",
+      "line_start": 23,
+      "line_end": 27,
+      "snippet_contains": "func (l *AuditLogger) LogSecurityEvent(actor, action string) (string, error) {"
+    }
+  ],
+  "expected_relationships": [
+    {
+      "predicate": "CALLS",
+      "source_name": "example.com/auditing.(*AuditLogger).LogSecurityEvent",
+      "target_name": "example.com/auditing.(*AuditLogger).ComputeHash",
+      "line_start": 25,
+      "line_end": 25,
+      "epistemic_class": "OBSERVATION",
+      "confidence": 1.0
+    }
+  ]
+}

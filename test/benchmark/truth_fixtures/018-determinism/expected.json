@@ -1,0 +1,23 @@
+{
+  "fixture_id": "018-determinism",
+  "category": "identity_stability",
+  "comparison": "v1_vs_v2",
+  "invariants": {
+    "canonical_id_equality": true,
+    "entities_count_match": true,
+    "relationships_count_match": true,
+    "semantic_hash_equality": true
+  },
+  "entities_to_verify": [
+    {
+      "qualified_name": "example.com/pipeline.TaskEngine",
+      "kind": "struct",
+      "id_must_match": true
+    },
+    {
+      "qualified_name": "example.com/pipeline.(*TaskEngine).RunTask",
+      "kind": "method",
+      "id_must_match": true
+    }
+  ]
+}

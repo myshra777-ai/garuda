@@ -1,0 +1,33 @@
+{
+  "fixture_id": "023-embedded-promotion",
+  "category": "entity_extraction",
+  "entities": [
+    {
+      "name": "BaseStore",
+      "kind": "struct",
+      "qualified_name": "example.com/service.BaseStore"
+    },
+    {
+      "name": "Query",
+      "kind": "method",
+      "qualified_name": "example.com/service.(*BaseStore).Query"
+    },
+    {
+      "name": "OrderService",
+      "kind": "struct",
+      "qualified_name": "example.com/service.OrderService"
+    },
+    {
+      "name": "FetchOrders",
+      "kind": "method",
+      "qualified_name": "example.com/service.(*OrderService).FetchOrders"
+    }
+  ],
+  "relationships": [
+    {
+      "source_name": "example.com/service.(*OrderService).FetchOrders",
+      "predicate": "CALLS",
+      "target_name": "example.com/service.(*BaseStore).Query"
+    }
+  ]
+}

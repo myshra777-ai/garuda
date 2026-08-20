@@ -1,0 +1,31 @@
+{
+  "fixture_id": "016-multi-repo",
+  "category": "cross_repo_resolution",
+  "modules_count": 2,
+  "modules": [
+    "example.com/corp/auth",
+    "example.com/corp/gateway"
+  ],
+  "cross_module_relationships": [
+    {
+      "predicate": "IMPORTS",
+      "source_module": "example.com/corp/gateway",
+      "source_entity": "example.com/corp/gateway",
+      "target_module": "example.com/corp/auth",
+      "target_entity": "example.com/corp/auth",
+      "is_cross_boundary": true,
+      "epistemic_class": "OBSERVATION",
+      "confidence": 1.0
+    },
+    {
+      "predicate": "CALLS",
+      "source_module": "example.com/corp/gateway",
+      "source_entity": "example.com/corp/gateway.(*GatewayProxy).AuthenticateRequest",
+      "target_module": "example.com/corp/auth",
+      "target_entity": "example.com/corp/auth.(*TokenValidator).ValidateToken",
+      "is_cross_boundary": true,
+      "epistemic_class": "OBSERVATION",
+      "confidence": 1.0
+    }
+  ]
+}

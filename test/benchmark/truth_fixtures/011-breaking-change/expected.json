@@ -1,0 +1,33 @@
+{
+  "fixture_id": "011-breaking-change",
+  "category": "diff_correctness",
+  "overall_classification": "BREAKING_CHANGE",
+  "breaking_changes_count": 3,
+  "non_breaking_changes_count": 0,
+  "changes": [
+    {
+      "change_type": "REMOVED_STRUCT_FIELD",
+      "severity": "BREAKING",
+      "target_entity": "example.com/payments.UserPaymentRequest",
+      "field_name": "Currency",
+      "previous_type": "string",
+      "description": "Field Currency was removed from struct UserPaymentRequest"
+    },
+    {
+      "change_type": "INTERFACE_METHOD_REMOVED",
+      "severity": "BREAKING",
+      "target_entity": "example.com/payments.PaymentProcessor",
+      "method_name": "Refund",
+      "previous_signature": "func(transactionID string) error",
+      "description": "Method Refund was removed from interface PaymentProcessor"
+    },
+    {
+      "change_type": "FUNCTION_SIGNATURE_CHANGED",
+      "severity": "BREAKING",
+      "target_entity": "example.com/payments.CalculateFee",
+      "previous_signature": "func(amount int64) int64",
+      "new_signature": "func(amount int64, tier string) int64",
+      "description": "Function CalculateFee added mandatory parameter 'tier'"
+    }
+  ]
+}

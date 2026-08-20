@@ -1,0 +1,38 @@
+{
+  "fixture_id": "021-generic-instantiation",
+  "category": "entity_extraction",
+  "entities": [
+    {
+      "name": "Container",
+      "kind": "struct",
+      "qualified_name": "example.com/container.Container"
+    },
+    {
+      "name": "Push",
+      "kind": "method",
+      "qualified_name": "example.com/container.(*Container).Push"
+    },
+    {
+      "name": "Pop",
+      "kind": "method",
+      "qualified_name": "example.com/container.(*Container).Pop"
+    },
+    {
+      "name": "ProcessWorkflow",
+      "kind": "function",
+      "qualified_name": "example.com/container.ProcessWorkflow"
+    }
+  ],
+  "relationships": [
+    {
+      "source_name": "example.com/container.ProcessWorkflow",
+      "predicate": "CALLS",
+      "target_name": "example.com/container.(*Container).Push"
+    },
+    {
+      "source_name": "example.com/container.ProcessWorkflow",
+      "predicate": "CALLS",
+      "target_name": "example.com/container.(*Container).Pop"
+    }
+  ]
+}
