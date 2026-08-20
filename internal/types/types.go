@@ -1,8 +1,3 @@
-// Copyright 2026 Rohit Mishra
-// SPDX-License-Identifier: Apache-2.0
-//
-// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
-
 package types
 
 import (
@@ -32,12 +27,6 @@ type Scope struct {
 
 // DecisionStatus captures the lifecycle state of a governance decision.
 type DecisionStatus string
-
-// Add this struct at the end of the file
-type EvaluationTest struct {
-	ID   string
-	Name string
-}
 
 const (
 	StatusDraft       DecisionStatus = "draft"
@@ -225,29 +214,35 @@ type Agent struct {
 }
 
 // Task represents a unit of work.
+// Task represents a unit of work.
 type Task struct {
-	ID           uuid.UUID   `json:"id"`
-	TenantID     uuid.UUID   `json:"tenant_id"`
-	Title        string      `json:"title"`
-	Description  string      `json:"description,omitempty"`
-	Status       TaskStatus  `json:"status"` // pending, in_progress, paused, completed, abandoned
-	Priority     int         `json:"priority"`
-	OwnerAgentID *uuid.UUID  `json:"owner_agent_id,omitempty"`
-	AssignedTo   *uuid.UUID  `json:"assigned_to,omitempty"`
-	ParentTaskID *uuid.UUID  `json:"parent_task_id,omitempty"`
-	ScopeDomain  string      `json:"scope_domain"`
-	ScopeSystem  string      `json:"scope_system"`
-	RequiredRole AgentRole   `json:"required_role,omitempty"`
-	Scope        string      `json:"scope,omitempty"`
-	TokenBudget  int64       `json:"token_budget,omitempty"`
-	TokensUsed   int64       `json:"tokens_used,omitempty"`
-	TopologyID   uuid.UUID   `json:"topology_id,omitempty"`
-	SequenceNo   int         `json:"sequence_no,omitempty"`
-	DependsOn    []uuid.UUID `json:"depends_on,omitempty"`
-	Version      int         `json:"version"`
-	CreatedAt    time.Time   `json:"created_at"`
-	UpdatedAt    time.Time   `json:"updated_at"`
-	CompletedAt  *time.Time  `json:"completed_at,omitempty"`
+	ID           uuid.UUID              `json:"id"`
+	TenantID     uuid.UUID              `json:"tenant_id"`
+	WorkspaceID  uuid.UUID              `json:"workspace_id,omitempty"`
+	Name         string                 `json:"name,omitempty"`
+	Type         string                 `json:"type,omitempty"`
+	Title        string                 `json:"title,omitempty"`
+	Description  string                 `json:"description,omitempty"`
+	Status       TaskStatus             `json:"status"` // pending, in_progress, paused, completed, abandoned
+	Priority     int                    `json:"priority,omitempty"`
+	OwnerAgentID *uuid.UUID             `json:"owner_agent_id,omitempty"`
+	AssignedTo   *uuid.UUID             `json:"assigned_to,omitempty"`
+	ParentTaskID *uuid.UUID             `json:"parent_task_id,omitempty"`
+	ScopeDomain  string                 `json:"scope_domain,omitempty"`
+	ScopeSystem  string                 `json:"scope_system,omitempty"`
+	RequiredRole AgentRole              `json:"required_role,omitempty"`
+	Scope        string                 `json:"scope,omitempty"`
+	TokenBudget  int64                  `json:"token_budget,omitempty"`
+	TokensUsed   int64                  `json:"tokens_used,omitempty"`
+	TopologyID   uuid.UUID              `json:"topology_id,omitempty"`
+	SequenceNo   int                    `json:"sequence_no,omitempty"`
+	DependsOn    []uuid.UUID            `json:"depends_on,omitempty"`
+	Payload      map[string]interface{} `json:"payload,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	Version      int                    `json:"version,omitempty"`
+	CreatedAt    time.Time              `json:"created_at"`
+	UpdatedAt    time.Time              `json:"updated_at"`
+	CompletedAt  *time.Time             `json:"completed_at,omitempty"`
 }
 
 // LineageEdge represents an edge in the lineage DAG.
