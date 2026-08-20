@@ -69,13 +69,28 @@ func (s *PostgresStore) SaveAnalysisDecision(
 	title := fmt.Sprintf("Repository AST Schema Snapshot [%s]", result.Fingerprint[:8])
 	statement := fmt.Sprintf("Extracted %d packages, %d structs, %d interfaces, %d functions",
 		result.Stats.Packages, result.Stats.Structs, result.Stats.Interfaces, result.Stats.Functions)
+	scopeJSON := []byte(`{"domain":"architecture","system":"ast-analyzer"}`)
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO decisions (id, tenant_id, title, statement, status, domain, system, owner, fingerprint, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, 'APPROVED', 'architecture', 'ast-analyzer', 'garuda-cli', $5, NOW(), NOW())
-		ON CONFLICT (tenant_id, id) DO UPDATE
-		SET title = EXCLUDED.title, statement = EXCLUDED.statement, fingerprint = EXCLUDED.fingerprint, updated_at = NOW()
-	`, decisionID, tenantID, title, statement, result.Fingerprint)
+        INSERT INTO decisions (
+            id, tenant_id, title, decision, rationale, status,
+            scope_domain, scope_system, scope, owner, fingerprint,
+            created_at, updated_at
+        ) VALUES (
+            $1, $2, $3, $4, $4, 'APPROVED',
+            'architecture', 'ast-analyzer', $5, 'garuda-cli', $6,
+            NOW(), NOW()
+        )
+        ON CONFLICT (tenant_id, id) DO UPDATE SET
+            title = EXCLUDED.title,
+            decision = EXCLUDED.decision,
+            rationale = EXCLUDED.rationale,
+            scope_domain = EXCLUDED.scope_domain,
+            scope_system = EXCLUDED.scope_system,
+            scope = EXCLUDED.scope,
+            fingerprint = EXCLUDED.fingerprint,
+            updated_at = NOW()
+    `, decisionID, tenantID, title, statement, scopeJSON, result.Fingerprint)
 	if err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to upsert decision: %w", err)
 	}
