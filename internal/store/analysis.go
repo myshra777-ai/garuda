@@ -8,6 +8,7 @@ package store
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,17 +66,33 @@ func (s *PostgresStore) SaveAnalysisDecision(
 	// 4. Deterministic decision ID (v5 SHA‑1)
 	decisionID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("analysis:"+tenantID.String()+":"+result.Fingerprint))
 
-	// 5. Create parent decision row (so the foreign key can be satisfied)
+	// 5. Create parent decision row (so foreign keys can be satisfied)
 	title := fmt.Sprintf("Repository AST Schema Snapshot [%s]", result.Fingerprint[:8])
 	statement := fmt.Sprintf("Extracted %d packages, %d structs, %d interfaces, %d functions",
 		result.Stats.Packages, result.Stats.Structs, result.Stats.Interfaces, result.Stats.Functions)
+	scopeJSON := []byte(`{"domain":"architecture","system":"ast-analyzer"}`)
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO decisions (id, tenant_id, title, statement, status, domain, system, owner, fingerprint, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, 'APPROVED', 'architecture', 'ast-analyzer', 'garuda-cli', $5, NOW(), NOW())
-		ON CONFLICT (tenant_id, id) DO UPDATE
-		SET title = EXCLUDED.title, statement = EXCLUDED.statement, fingerprint = EXCLUDED.fingerprint, updated_at = NOW()
-	`, decisionID, tenantID, title, statement, result.Fingerprint)
+		INSERT INTO decisions (
+			tenant_id, id, title, rationale, status,
+			scope_domain, scope_system, scope, owner, confidence, fingerprint,
+			valid_from, approved_at, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, 'APPROVED',
+			'architecture', 'ast-analyzer', $5, 'garuda-cli', 1.0, $6,
+			NOW(), NOW(), NOW(), NOW()
+		)
+		ON CONFLICT (tenant_id, id) DO UPDATE SET
+			title = EXCLUDED.title,
+			rationale = EXCLUDED.rationale,
+			scope_domain = EXCLUDED.scope_domain,
+			scope_system = EXCLUDED.scope_system,
+			scope = EXCLUDED.scope,
+			fingerprint = EXCLUDED.fingerprint,
+			valid_from = EXCLUDED.valid_from,
+			approved_at = EXCLUDED.approved_at,
+			updated_at = NOW()
+	`, tenantID, decisionID, title, statement, scopeJSON, result.Fingerprint)
 	if err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to upsert decision: %w", err)
 	}
@@ -84,79 +101,71 @@ func (s *PostgresStore) SaveAnalysisDecision(
 	var revNumber int
 	err = tx.QueryRow(ctx, `
 		SELECT COALESCE(MAX(revision_number), 0) + 1
-		FROM decision_revisions WHERE decision_id = $1 AND tenant_id = $2
-	`, decisionID, tenantID).Scan(&revNumber)
+		FROM decision_revisions WHERE decision_id = $1
+	`, decisionID.String()).Scan(&revNumber)
 	if err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to get revision number: %w", err)
 	}
 
-	// 7. Get previous revision hash (maintains the chain)
-	var prevHash []byte
-	if revNumber > 1 {
-		err = tx.QueryRow(ctx, `
-			SELECT decision_hash FROM decision_revisions
-			WHERE decision_id = $1 AND revision_number = $2 AND tenant_id = $3
-		`, decisionID, revNumber-1, tenantID).Scan(&prevHash)
-		if err != nil {
-			return "", uuid.Nil, 0, fmt.Errorf("failed to fetch previous revision hash: %w", err)
-		}
-	} else {
-		prevHash = make([]byte, 32) // zero hash for genesis
-	}
-
-	// 8. Compute revision hash over the summary (includes payload_hash)
+	// 7. Compute revision hash over the summary
 	decisionHashBytes := sha256.Sum256(append([]byte(decisionID.String()), summaryJSON...))
 
-	// 9. Insert immutable decision revision
+	// 8. Insert immutable decision revision matching 005_decision_revisions.sql
 	revisionID := uuid.New()
+	emptyAssumptions := []byte("[]")
 	_, err = tx.Exec(ctx, `
 		INSERT INTO decision_revisions (
-			id, decision_id, revision_number, canonical_json,
-			decision_hash, previous_revision_hash, tenant_id, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-	`, revisionID, decisionID, revNumber, summaryJSON,
-		decisionHashBytes[:], prevHash, tenantID)
+			id, decision_id, revision_number, assumptions, facts, created_at
+		) VALUES ($1, $2, $3, $4, $5, NOW())
+	`, revisionID, decisionID.String(), revNumber, emptyAssumptions, summaryJSON)
 	if err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to insert decision revision: %w", err)
 	}
 
-	// 10. Store full AST payload in evidence_store
+	// 9. Store full AST payload in evidence_store (001_cas_blocks.sql + 003_rename)
 	_, err = tx.Exec(ctx, `
-		INSERT INTO evidence_store (tenant_id, block_hash, content, ref_count, created_at)
-		VALUES ($1, $2, $3, 1, NOW())
-		ON CONFLICT (tenant_id, block_hash) DO UPDATE
+		INSERT INTO evidence_store (block_hash, content, ref_count, created_at)
+		VALUES ($1, $2, 1, NOW())
+		ON CONFLICT (block_hash) DO UPDATE
 		SET ref_count = evidence_store.ref_count + 1
-	`, tenantID, astHashBytes[:], fullASTJSON)
+	`, astHashBytes[:], string(fullASTJSON))
 	if err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to insert isolated evidence: %w", err)
 	}
 
-	// 11. Update Merkle root (BYTEA – no hex conversion)
-	var currentRoot []byte
+	// 10. Update Merkle root (012_merkle_verification.sql)
+	var currentRootStr string
 	err = tx.QueryRow(ctx, `
 		SELECT root_hash FROM merkle_roots WHERE tenant_id = $1 FOR UPDATE
-	`, tenantID).Scan(&currentRoot)
+	`, tenantID).Scan(&currentRootStr)
+	var currentRootBytes []byte
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			currentRoot = make([]byte, 32) // zero root for first entry
+			currentRootBytes = make([]byte, 32)
 		} else {
 			return "", uuid.Nil, 0, fmt.Errorf("failed to fetch merkle root: %w", err)
 		}
+	} else {
+		currentRootBytes, _ = hex.DecodeString(currentRootStr)
+		if len(currentRootBytes) == 0 {
+			currentRootBytes = []byte(currentRootStr)
+		}
 	}
 
-	newRoot := sha256.Sum256(append(currentRoot, decisionHashBytes[:]...))
+	newRoot := sha256.Sum256(append(currentRootBytes, decisionHashBytes[:]...))
+	newRootHex := hex.EncodeToString(newRoot[:])
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO merkle_roots (tenant_id, root_hash, updated_at)
-		VALUES ($1, $2, NOW())
+		INSERT INTO merkle_roots (tenant_id, root_hash, block_height, updated_at)
+		VALUES ($1, $2, 1, NOW())
 		ON CONFLICT (tenant_id) DO UPDATE
-		SET root_hash = EXCLUDED.root_hash, updated_at = NOW()
-	`, tenantID, newRoot[:])
+		SET root_hash = EXCLUDED.root_hash, block_height = merkle_roots.block_height + 1, updated_at = NOW()
+	`, tenantID, newRootHex)
 	if err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to update merkle root: %w", err)
 	}
 
-	// 12. Commit transaction
+	// 11. Commit transaction
 	if err := tx.Commit(ctx); err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to commit transaction: %w", err)
 	}
