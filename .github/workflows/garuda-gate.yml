@@ -1,0 +1,46 @@
+name: Garuda Semantic Truth Gate
+
+on:
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  breaking-change-gate:
+    name: AST Semantic Diff Policy Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+
+      - name: Checkout PR Branch (Head)
+        uses: actions/checkout@v4
+        with:
+          path: head_repo
+          fetch-depth: 0
+
+      - name: Build Garuda Engine
+        run: |
+          cd head_repo
+          go build -o /tmp/garuda ./cmd/garuda
+
+      - name: Checkout Base Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base_repo
+
+      - name: Generate Base Snapshot
+        run: |
+          /tmp/garuda analyze ./base_repo -o /tmp/base_snapshot.json
+
+      - name: Generate Head Snapshot
+        run: |
+          /tmp/garuda analyze ./head_repo -o /tmp/head_snapshot.json
+
+      - name: Run Semantic Diff & Enforce Policy Gate
+        run: |
+          /tmp/garuda diff /tmp/base_snapshot.json /tmp/head_snapshot.json --fail-on-breaking
