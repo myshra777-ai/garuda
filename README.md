@@ -1,5 +1,11 @@
 # 🦅 Garuda
 
+https://img.shields.io/github/v/release/myshra777-ai/garuda?style=flat-square&color=blue
+https://img.shields.io/github/actions/workflow/status/myshra777-ai/garuda/garuda-ci.yml?branch=main&style=flat-square&label=CI
+https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go
+https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square
+https://img.shields.io/badge/Benchmarks-100%2525-brightgreen?style=flat-square
+
 ### Evidence-backed software intelligence for understanding, verifying, and governing software systems.
 
 Garuda turns software repositories into a deterministic, inspectable semantic model of **entities, relationships, observations, claims, evidence, decisions, and historical state**.
