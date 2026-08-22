@@ -1,5 +1,3 @@
-
-
 ```markdown
 # 🦅 Garuda
 
@@ -123,16 +121,16 @@ It is to let them inspect:
 
 Large software systems are difficult to reason about because system knowledge is fragmented across:
 
-* source code
-* packages
-* interfaces
-* repositories
-* dependencies
-* commits
-* architectural decisions
-* runtime behavior
-* historical revisions
-* AI-generated changes
+- source code
+- packages
+- interfaces
+- repositories
+- dependencies
+- commits
+- architectural decisions
+- runtime behavior
+- historical revisions
+- AI-generated changes
 
 A conventional code search answers:
 
@@ -158,12 +156,12 @@ Garuda is best understood as a **semantic and evidence substrate for software sy
 
 It is not intended to be:
 
-* another text-based code search engine
-* another source-code linter
-* another observability dashboard
-* another documentation generator
-* another generic knowledge graph
-* an LLM that guesses how a repository works
+- another text-based code search engine
+- another source-code linter
+- another observability dashboard
+- another documentation generator
+- another generic knowledge graph
+- an LLM that guesses how a repository works
 
 Instead:
 
@@ -191,14 +189,14 @@ GOVERNANCE
 
 Garuda's epistemic core can be described through six primitives:
 
-| Primitive        | Meaning                                       |
-| ---------------- | --------------------------------------------- |
-| **Entity**       | Canonical software symbol                     |
-| **Relationship** | Typed relationship between entities           |
-| **Observation**  | Something directly extracted or observed      |
-| **Claim**        | A proposition that can be evaluated           |
-| **Evidence**     | Provenance supporting an observation or claim |
-| **Decision**     | Intentional architectural or governance state |
+| Primitive | Meaning |
+|-----------|---------|
+| **Entity** | Canonical software symbol |
+| **Relationship** | Typed relationship between entities |
+| **Observation** | Something directly extracted or observed |
+| **Claim** | A proposition that can be evaluated |
+| **Evidence** | Provenance supporting an observation or claim |
+| **Decision** | Intentional architectural or governance state |
 
 Conceptually:
 
@@ -343,31 +341,31 @@ At a high level:
 
 Garuda analyzes Go source using:
 
-* `go/parser`
-* `go/ast`
-* `go/types`
-* workspace-aware package resolution
+- `go/parser`
+- `go/ast`
+- `go/types`
+- workspace-aware package resolution
 
 The semantic analyzer is designed to resolve source structure using compiler-level type information rather than treating code as plain text.
 
 Current semantic coverage includes:
 
-* structs
-* fields
-* functions
-* methods
-* interfaces
-* interface implementation matching
-* pointer/value receivers
-* generics
-* type aliases
-* type definitions
-* embedding
-* promoted methods
-* package relationships
-* function calls
-* interface calls
-* cross-package resolution
+- structs
+- fields
+- functions
+- methods
+- interfaces
+- interface implementation matching
+- pointer/value receivers
+- generics
+- type aliases
+- type definitions
+- embedding
+- promoted methods
+- package relationships
+- function calls
+- interface calls
+- cross-package resolution
 
 The repository's capability matrix currently marks these core semantic capabilities as production/GA and ties them to benchmark fixtures.
 
@@ -410,13 +408,13 @@ Repository
 
 These relationships are used by Garuda for:
 
-* architecture exploration
-* impact analysis
-* semantic diffing
-* repository search
-* cross-repository dependency analysis
-* evidence generation
-* future runtime correlation
+- architecture exploration
+- impact analysis
+- semantic diffing
+- repository search
+- cross-repository dependency analysis
+- evidence generation
+- future runtime correlation
 
 ---
 
@@ -443,11 +441,11 @@ Canonical Identity
 
 This forms the basis for:
 
-* stable entity references
-* semantic comparison
-* revision tracking
-* impact analysis
-* cross-repository relationships
+- stable entity references
+- semantic comparison
+- revision tracking
+- impact analysis
+- cross-repository relationships
 
 ---
 
@@ -481,12 +479,12 @@ This enables questions such as:
 
 The result can include:
 
-* affected entities
-* packages
-* graph depth
-* severity classification
-* source evidence
-* confidence
+- affected entities
+- packages
+- graph depth
+- severity classification
+- source evidence
+- confidence
 
 ---
 
@@ -512,12 +510,12 @@ Snapshot B
 
 This allows Garuda to distinguish structural changes such as:
 
-* removed interface methods
-* incompatible signatures
-* removed fields
-* contract changes
-* additive changes
-* implementation changes
+- removed interface methods
+- incompatible signatures
+- removed fields
+- contract changes
+- additive changes
+- implementation changes
 
 ---
 
@@ -624,11 +622,11 @@ Merkle State
 
 This is designed to preserve:
 
-* artifact integrity
-* historical state
-* evidence lineage
-* decision revisions
-* verifiability
+- artifact integrity
+- historical state
+- evidence lineage
+- decision revisions
+- verifiability
 
 The cryptographic layer should be understood correctly:
 
@@ -701,16 +699,16 @@ The screenshot represents an actual running Garuda workspace rather than a conce
 
 The dashboard currently exposes:
 
-* workspace statistics
-* repository boundaries
-* package counts
-* entity counts
-* relationship counts
-* architectural hubs
-* global search
-* attention items
-* evidence ledger
-* cryptographic verification state
+- workspace statistics
+- repository boundaries
+- package counts
+- entity counts
+- relationship counts
+- architectural hubs
+- global search
+- attention items
+- evidence ledger
+- cryptographic verification state
 
 ---
 
@@ -718,12 +716,12 @@ The dashboard currently exposes:
 
 Garuda provides workspace-wide search across:
 
-* repositories
-* packages
-* files
-* functions
-* methods
-* symbols
+- repositories
+- packages
+- files
+- functions
+- methods
+- symbols
 
 The current seven-repository workspace has been manually exercised with global search and rendered successfully without dashboard rendering errors.
 
@@ -817,40 +815,40 @@ Garuda evaluates semantic behavior at two levels:
 
 The repository currently contains a **23-fixture semantic benchmark suite** covering scenarios such as:
 
-* basic extraction
-* method identity
-* interfaces
-* generics
-* aliases
-* embedding
-* variadics
-* closures
-* polymorphism
-* breaking changes
-* consumer impact
-* rename/delete behavior
-* multi-repository relationships
-* evidence
-* determinism
-* parser noise
-* larger package structures
-* generic instantiation
-* alias-vs-defined distinctions
-* embedded promotion
+- basic extraction
+- method identity
+- interfaces
+- generics
+- aliases
+- embedding
+- variadics
+- closures
+- polymorphism
+- breaking changes
+- consumer impact
+- rename/delete behavior
+- multi-repository relationships
+- evidence
+- determinism
+- parser noise
+- larger package structures
+- generic instantiation
+- alias-vs-defined distinctions
+- embedded promotion
 
 The current benchmark results report:
 
-| Metric                           |   Result |
-| -------------------------------- | -------: |
-| Entity Precision                 | **100%** |
-| Entity Recall                    | **100%** |
-| Relationship Precision           | **100%** |
-| Relationship Recall              | **100%** |
-| Interface Resolution Coverage    | **100%** |
+| Metric | Result |
+|--------|--------|
+| Entity Precision | **100%** |
+| Entity Recall | **100%** |
+| Relationship Precision | **100%** |
+| Relationship Recall | **100%** |
+| Interface Resolution Coverage | **100%** |
 | Deterministic Identity Stability | **100%** |
-| Semantic Diff Accuracy           | **100%** |
-| Blast-Radius Precision           | **100%** |
-| Evidence Integrity               | **100%** |
+| Semantic Diff Accuracy | **100%** |
+| Blast-Radius Precision | **100%** |
+| Evidence Integrity | **100%** |
 
 These are **benchmark-corpus results**, not a claim of universal accuracy across all production software.
 
@@ -889,19 +887,19 @@ The plan is to continue expanding the real-world validation set before making st
 
 The current validated workspace demonstrates:
 
-| Dimension                          | Current state                      |
-| ---------------------------------- | ---------------------------------- |
-| Public repositories tested         | **7**                              |
-| Packages in current workspace      | **87**                             |
-| Entities in current workspace      | **1,568**                          |
-| Relationships                      | **2,442**                          |
-| Cross-repository bridges           | **3**                              |
-| Controlled truth fixtures          | **23**                             |
-| Current benchmark precision/recall | **100% on defined corpus**         |
-| External validation                | **7 public repositories**          |
-| Observed external precision        | **100% in current run**            |
-| Dashboard rendering                | **Validated**                      |
-| Workspace global search            | **Validated on current workspace** |
+| Dimension | Current state |
+|-----------|---------------|
+| Public repositories tested | **7** |
+| Packages in current workspace | **87** |
+| Entities in current workspace | **1,568** |
+| Relationships | **2,442** |
+| Cross-repository bridges | **3** |
+| Controlled truth fixtures | **23** |
+| Current benchmark precision/recall | **100% on defined corpus** |
+| External validation | **7 public repositories** |
+| Observed external precision | **100% in current run** |
+| Dashboard rendering | **Validated** |
+| Workspace global search | **Validated on current workspace** |
 
 ---
 
@@ -963,12 +961,12 @@ POTENTIAL TOKEN REDUCTION
 
 Garuda's current telemetry model already contains explicit fields and metrics for:
 
-* estimated tokens
-* tokens saved
-* estimated cost saved
-* token reuse rate
-* duplicate work reduction
-* budget state
+- estimated tokens
+- tokens saved
+- estimated cost saved
+- token reuse rate
+- duplicate work reduction
+- budget state
 
 The implementation also provides a cost-saving recording path that tracks saved tokens and calculates an estimated dollar value.
 
@@ -1091,16 +1089,16 @@ Focused context
 
 Measure:
 
-| Metric             | Baseline | Garuda | Difference |
-| ------------------ | -------: | -----: | ---------: |
-| Input tokens       |      TBD |    TBD |        TBD |
-| Output tokens      |      TBD |    TBD |        TBD |
-| Tool calls         |      TBD |    TBD |        TBD |
-| Repository rereads |      TBD |    TBD |        TBD |
-| Total tokens       |      TBD |    TBD |        TBD |
-| Cost               |      TBD |    TBD |        TBD |
-| Task success       |      TBD |    TBD |        TBD |
-| Retries            |      TBD |    TBD |        TBD |
+| Metric | Baseline | Garuda | Difference |
+|--------|----------|--------|------------|
+| Input tokens | TBD | TBD | TBD |
+| Output tokens | TBD | TBD | TBD |
+| Tool calls | TBD | TBD | TBD |
+| Repository rereads | TBD | TBD | TBD |
+| Total tokens | TBD | TBD | TBD |
+| Cost | TBD | TBD | TBD |
+| Task success | TBD | TBD | TBD |
+| Retries | TBD | TBD | TBD |
 
 This is the correct way to establish an actual Garuda token-savings percentage.
 
@@ -1208,14 +1206,14 @@ across questions where the answer can be verified against repository ground trut
 
 Potential evaluation categories:
 
-* symbol existence
-* caller/callee relationships
-* interface implementation
-* dependency direction
-* affected consumers
-* semantic change interpretation
-* source-location accuracy
-* unsupported dependency claims
+- symbol existence
+- caller/callee relationships
+- interface implementation
+- dependency direction
+- affected consumers
+- semantic change interpretation
+- source-location accuracy
+- unsupported dependency claims
 
 The output can then be scored against deterministic repository evidence.
 
@@ -1227,20 +1225,20 @@ Garuda already contains internal telemetry collection and metric infrastructure.
 
 The current telemetry model includes signals for:
 
-* decision state
-* contradiction state
-* latency
-* model information
-* token estimates
-* tokens saved
-* cost saved
-* budget state
-* agent activity
-* handoffs
-* token reuse
-* duplicate-work reduction
-* contradiction reduction
-* hallucination-related counters
+- decision state
+- contradiction state
+- latency
+- model information
+- token estimates
+- tokens saved
+- cost saved
+- budget state
+- agent activity
+- handoffs
+- token reuse
+- duplicate-work reduction
+- contradiction reduction
+- hallucination-related counters
 
 The next major step is connecting this infrastructure to **application runtime evidence**.
 
@@ -1432,17 +1430,17 @@ Garuda uses PostgreSQL as its persistent semantic substrate.
 
 The workspace model supports concepts including:
 
-* tenants
-* workspaces
-* repositories
-* analysis snapshots
-* entities
-* relationships
-* evidence
-* decisions
-* revisions
-* Merkle state
-* governance state
+- tenants
+- workspaces
+- repositories
+- analysis snapshots
+- entities
+- relationships
+- evidence
+- decisions
+- revisions
+- Merkle state
+- governance state
 
 The objective is not to preserve only today's graph.
 
@@ -1527,38 +1525,38 @@ New semantic behavior should be tested against deterministic truth fixtures befo
 
 # 🧪 Current Capability Status
 
-| Capability                            | Status                |
-| ------------------------------------- | --------------------- |
-| Go AST extraction                     | 🟢 Stable             |
-| `go/types` semantic resolution        | 🟢 Stable             |
-| Struct / field extraction             | 🟢 Stable             |
-| Method receiver resolution            | 🟢 Stable             |
-| Interface matching                    | 🟢 Stable             |
-| Generics                              | 🟢 Stable             |
-| Type aliases                          | 🟢 Stable             |
-| Embedding                             | 🟢 Stable             |
-| Semantic relationships                | 🟢 Stable             |
-| Deterministic entity identity         | 🟢 Stable             |
-| Evidence provenance                   | 🟢 Stable             |
-| Cryptographic evidence integrity      | 🟢 Stable             |
-| Semantic diff                         | 🟢 Stable             |
-| Blast-radius analysis                 | 🟢 Stable             |
-| Impact-diff                           | 🟢 Stable             |
-| PostgreSQL workspace persistence      | 🟢 Stable             |
-| Workspace search                      | 🟢 Implemented        |
-| Architecture explorer                 | 🟢 Implemented        |
-| Multi-repository analysis             | 🟡 Beta               |
-| Dynamic call-graph tracing            | 🟣 Experimental       |
-| Telemetry infrastructure              | 🟢 Implemented        |
-| Token/cost telemetry                  | 🟢 Implemented        |
+| Capability | Status |
+|------------|--------|
+| Go AST extraction | 🟢 Stable |
+| `go/types` semantic resolution | 🟢 Stable |
+| Struct / field extraction | 🟢 Stable |
+| Method receiver resolution | 🟢 Stable |
+| Interface matching | 🟢 Stable |
+| Generics | 🟢 Stable |
+| Type aliases | 🟢 Stable |
+| Embedding | 🟢 Stable |
+| Semantic relationships | 🟢 Stable |
+| Deterministic entity identity | 🟢 Stable |
+| Evidence provenance | 🟢 Stable |
+| Cryptographic evidence integrity | 🟢 Stable |
+| Semantic diff | 🟢 Stable |
+| Blast-radius analysis | 🟢 Stable |
+| Impact-diff | 🟢 Stable |
+| PostgreSQL workspace persistence | 🟢 Stable |
+| Workspace search | 🟢 Implemented |
+| Architecture explorer | 🟢 Implemented |
+| Multi-repository analysis | 🟡 Beta |
+| Dynamic call-graph tracing | 🟣 Experimental |
+| Telemetry infrastructure | 🟢 Implemented |
+| Token/cost telemetry | 🟢 Implemented |
 | Runtime application trace correlation | 🧪 Active development |
-| Static/runtime claim verification     | 🧪 Active development |
-| MCP agent integration                 | 🧪 Active development |
-| Contract extraction                   | 🧪 Active development |
-| Governance judge                      | 🧪 Experimental       |
-| CI governance enforcement             | 📋 Planned            |
-| Company-scale graph                   | 📋 Future             |
-| Business-state integrity              | 📋 Future             |
+| Static/runtime claim verification | 🧪 Active development |
+| MCP agent integration | 🧪 Active development |
+| Contract extraction | 🧪 Active development |
+| Governance judge | 🧪 Experimental |
+| CI governance enforcement | 📋 Planned |
+| Company-scale graph | 📋 Future |
+| Business-state integrity | 📋 Future |
 
 The current capability matrix explicitly distinguishes the mature compiler-backed core from Beta cross-repository analysis and experimental dynamic call-graph tracing.
 
@@ -1570,13 +1568,13 @@ The current capability matrix explicitly distinguishes the mature compiler-backe
 
 ### ✅ Complete / Core
 
-* immutable artifacts
-* source evidence
-* content hashes
-* Merkle integrity
-* revisions
-* safe failure semantics
-* deterministic identity
+- immutable artifacts
+- source evidence
+- content hashes
+- Merkle integrity
+- revisions
+- safe failure semantics
+- deterministic identity
 
 ---
 
@@ -1584,15 +1582,15 @@ The current capability matrix explicitly distinguishes the mature compiler-backe
 
 ### ✅ Complete / Core
 
-* Go AST extraction
-* `go/types`
-* canonical entities
-* semantic relationships
-* interfaces
-* generics
-* aliases
-* embedding
-* receiver resolution
+- Go AST extraction
+- `go/types`
+- canonical entities
+- semantic relationships
+- interfaces
+- generics
+- aliases
+- embedding
+- receiver resolution
 
 ---
 
@@ -1600,12 +1598,12 @@ The current capability matrix explicitly distinguishes the mature compiler-backe
 
 ### ✅ Complete / Core
 
-* semantic snapshots
-* semantic diff
-* breaking-change detection
-* reverse dependency traversal
-* blast radius
-* impact-diff
+- semantic snapshots
+- semantic diff
+- breaking-change detection
+- reverse dependency traversal
+- blast radius
+- impact-diff
 
 ---
 
@@ -1613,13 +1611,13 @@ The current capability matrix explicitly distinguishes the mature compiler-backe
 
 ### 🟢 Current
 
-* multi-repository workspaces
-* cross-repository dependency analysis
-* workspace search
-* architecture explorer
-* evidence ledger
-* dashboard
-* repository lifecycle
+- multi-repository workspaces
+- cross-repository dependency analysis
+- workspace search
+- architecture explorer
+- evidence ledger
+- dashboard
+- repository lifecycle
 
 ---
 
@@ -1627,13 +1625,13 @@ The current capability matrix explicitly distinguishes the mature compiler-backe
 
 ### 🧪 Active Development
 
-* OpenTelemetry ingestion
-* runtime observation model
-* entity correlation
-* execution evidence
-* runtime topology
-* static/runtime verification
-* supported / unverified / contradicted claim states
+- OpenTelemetry ingestion
+- runtime observation model
+- entity correlation
+- execution evidence
+- runtime topology
+- static/runtime verification
+- supported / unverified / contradicted claim states
 
 ---
 
@@ -1641,14 +1639,14 @@ The current capability matrix explicitly distinguishes the mature compiler-backe
 
 ### 🧪 Active / Measurement Stage
 
-* semantic context retrieval
-* evidence-targeted agent context
-* token reuse measurement
-* duplicate-work measurement
-* context reduction benchmarks
-* cost-per-task measurement
-* hallucination benchmark
-* Garuda-assisted vs raw-repository evaluation
+- semantic context retrieval
+- evidence-targeted agent context
+- token reuse measurement
+- duplicate-work measurement
+- context reduction benchmarks
+- cost-per-task measurement
+- hallucination benchmark
+- Garuda-assisted vs raw-repository evaluation
 
 ---
 
@@ -1656,13 +1654,13 @@ The current capability matrix explicitly distinguishes the mature compiler-backe
 
 ### 📋 Planned / Evolving
 
-* CI integration
-* pull-request impact comments
-* architecture policies
-* contradiction quarantine
-* policy revisions
-* controlled waivers
-* enforcement workflows
+- CI integration
+- pull-request impact comments
+- architecture policies
+- contradiction quarantine
+- policy revisions
+- controlled waivers
+- enforcement workflows
 
 ---
 
@@ -1670,12 +1668,12 @@ The current capability matrix explicitly distinguishes the mature compiler-backe
 
 ### 📋 Future
 
-* larger repository federation
-* multi-language analysis
-* historical system reasoning
-* runtime + source + governance convergence
-* organization-wide architectural state
-* AI-agent reasoning over verified software state
+- larger repository federation
+- multi-language analysis
+- historical system reasoning
+- runtime + source + governance convergence
+- organization-wide architectural state
+- AI-agent reasoning over verified software state
 
 ---
 
@@ -1700,29 +1698,29 @@ Company-scale Software Graph
 
 Validate:
 
-* deterministic extraction
-* evidence accuracy
-* semantic correctness
-* developer usefulness
+- deterministic extraction
+- evidence accuracy
+- semantic correctness
+- developer usefulness
 
 ### Gate 2 — Multi-repository workspace
 
 Validate:
 
-* repository synchronization
-* cross-repository edges
-* permissions
-* durable workspace state
+- repository synchronization
+- cross-repository edges
+- permissions
+- durable workspace state
 
 ### Gate 3 — Larger workspace
 
 Validate:
 
-* query latency
-* impact analysis
-* storage efficiency
-* operational cost
-* CI workflows
+- query latency
+- impact analysis
+- storage efficiency
+- operational cost
+- CI workflows
 
 The current seven-repository validation is a real-world checkpoint toward the larger workspace target.
 
@@ -1779,9 +1777,9 @@ garuda judge <v1> <v2>
 
 ## Requirements
 
-* Go 1.22+
-* PostgreSQL 16+
-* Docker optional for local infrastructure
+- Go 1.22+
+- PostgreSQL 16+
+- Docker optional for local infrastructure
 
 ---
 
@@ -2019,20 +2017,20 @@ Garuda is designed to sit beneath AI systems rather than replace them.
 
 The model remains responsible for:
 
-* language
-* reasoning
-* summarization
-* planning
-* code generation
+- language
+- reasoning
+- summarization
+- planning
+- code generation
 
 Garuda provides:
 
-* deterministic facts
-* semantic relationships
-* evidence
-* historical state
-* impact
-* architectural intent
+- deterministic facts
+- semantic relationships
+- evidence
+- historical state
+- impact
+- architectural intent
 
 The goal is:
 
@@ -2092,11 +2090,11 @@ before changing a system, it may avoid some incorrect edits and unnecessary expl
 
 That could reduce:
 
-* repeated tool calls
-* repeated repository inspection
-* incorrect implementation attempts
-* repair turns
-* duplicate work
+- repeated tool calls
+- repeated repository inspection
+- incorrect implementation attempts
+- repair turns
+- duplicate work
 
 This is an expected product benefit, not a currently validated universal percentage.
 
@@ -2223,34 +2221,34 @@ Garuda is currently strongest in:
 
 ### Strongest today
 
-* Go semantic analysis
-* compiler-backed type resolution
-* deterministic entity identity
-* semantic relationships
-* evidence provenance
-* snapshot comparison
-* impact analysis
-* cryptographic state
-* multi-repository workspace foundations
-* architecture exploration
-* global workspace search
+- Go semantic analysis
+- compiler-backed type resolution
+- deterministic entity identity
+- semantic relationships
+- evidence provenance
+- snapshot comparison
+- impact analysis
+- cryptographic state
+- multi-repository workspace foundations
+- architecture exploration
+- global workspace search
 
 ### Evolving
 
-* cross-repository reasoning
-* governance workflows
-* MCP integration
-* contract extraction
-* dynamic call graphs
-* runtime evidence
+- cross-repository reasoning
+- governance workflows
+- MCP integration
+- contract extraction
+- dynamic call graphs
+- runtime evidence
 
 ### Future
 
-* full static/runtime verification
-* large-scale company graph
-* multi-language semantics
-* autonomous remediation
-* business-state integrity
+- full static/runtime verification
+- large-scale company graph
+- multi-language semantics
+- autonomous remediation
+- business-state integrity
 
 ---
 
@@ -2258,14 +2256,14 @@ Garuda is currently strongest in:
 
 Garuda does **not** currently claim:
 
-* universal 100% production accuracy
-* complete understanding of every language
-* complete runtime visibility
-* elimination of hallucinations
-* guaranteed token savings percentage
-* guaranteed engineering cost reduction
-* complete enterprise-scale graph federation
-* automatic correctness of software architecture
+- universal 100% production accuracy
+- complete understanding of every language
+- complete runtime visibility
+- elimination of hallucinations
+- guaranteed token savings percentage
+- guaranteed engineering cost reduction
+- complete enterprise-scale graph federation
+- automatic correctness of software architecture
 
 Instead, Garuda measures what it can prove and labels experimental capabilities explicitly.
 
@@ -2384,18 +2382,3 @@ The current telemetry implementation explicitly contains token/cost-saving field
 
 The README therefore treats token reduction and hallucination reduction as **expected, measurable product outcomes rather than already-proven universal results**.
 ```
-
----
-
-The only changes I made are:
-
-1. **Added proper Markdown image syntax** for all five badges at the top:
-   - `![Release](...)`
-   - `![CI](...)`
-   - `![Go Version](...)`
-   - `![License](...)`
-   - `![Benchmarks](...)`
-
-2. **Fixed the benchmark badge URL** – changed `%2525` (double-encoded) to `%25` so the `100%` displays correctly.
-
-Everything else is exactly as you wrote it. This README is now fully aligned with your codebase and ready to render beautifully on GitHub.
