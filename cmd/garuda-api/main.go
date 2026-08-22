@@ -24,7 +24,6 @@ import (
 )
 
 // SetupRouter initializes and returns the complete http.Handler middleware pipeline.
-// This allows testing route registrations without spinning up DB connections or the HTTP listener.
 func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api.RateLimiter) http.Handler {
 	mainMux := http.NewServeMux()
 	protectedMux := http.NewServeMux()
@@ -37,10 +36,15 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	mainMux.HandleFunc("GET /system/discover", server.HandleSystemDiscover)
 	mainMux.HandleFunc("GET /system/bootstrap", server.HandleSystemBootstrap)
 	mainMux.HandleFunc("POST /sandbox", server.HandleSandbox)
+	mainMux.HandleFunc("POST /api/v1/telemetry/traces", server.HandleIngestTraces)
 
-	// Documentation & Dashboard
+	// Documentation & Dashboard (Public Telemetry & Search)
 	mainMux.HandleFunc("GET /dashboard", server.HandleDashboard)
+	mainMux.HandleFunc("GET /api/v1/dashboard/stats", server.HandleDashboardStats)
+	mainMux.HandleFunc("GET /api/v1/dashboard/search", server.HandleDashboardSearch)
 	mainMux.HandleFunc("GET /api/v1/graph", server.HandleGraph)
+	mainMux.HandleFunc("GET /api/v1/events", server.HandleLiveEvents)
+
 	mainMux.HandleFunc("GET /docs", server.HandleSwaggerUI)
 	mainMux.HandleFunc("GET /openapi.yaml", server.HandleOpenAPISpec)
 	mainMux.HandleFunc("GET /openapi.json", server.HandleOpenAPISpec)
@@ -53,7 +57,7 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	mainMux.HandleFunc("GET /debug/token", server.HandleDebugToken)
 
 	// ----------------------------------------------------------------
-	// B. PROTECTED API ROUTES (JWT required)
+	// B. PROTECTED API ROUTES (JWT required for sensitive state mutations)
 	// ----------------------------------------------------------------
 	// Decisions
 	protectedMux.HandleFunc("POST /api/v1/decisions/submit", server.HandleProposeDecision)
@@ -61,17 +65,20 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	protectedMux.HandleFunc("GET /api/v1/decisions/active", server.HandleDecisionsActiveAt)
 	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/history", server.HandleDecisionHistory)
 	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/lineage", server.HandleDecisionLineage)
+
 	// Topology routes
 	protectedMux.HandleFunc("POST /api/v1/topology/recommend", server.HandleTopologyRecommend)
 	protectedMux.HandleFunc("POST /api/v1/topology/{id}/execute", server.HandleTopologyExecute)
 	protectedMux.HandleFunc("GET /api/v1/topology/{id}", server.HandleTopologyStatus)
-	protectedMux.HandleFunc("GET /api/v1/topology/{id}/status", server.HandleTopologyStatus) // SSE stream (optional)
+	protectedMux.HandleFunc("GET /api/v1/topology/{id}/status", server.HandleTopologyStatus)
+
 	// Multi-Agent Execution & Checkpoints
 	protectedMux.HandleFunc("POST /api/v1/agents/warmup", server.HandleAgentWarmup)
 	protectedMux.HandleFunc("POST /api/v1/agents/checkpoint", server.HandleAgentCheckpoint)
 	protectedMux.HandleFunc("GET /api/v1/agents/checkpoint/{id}", server.HandleGetAgentCheckpoint)
 	protectedMux.HandleFunc("POST /api/v1/agents/resume", server.HandleAgentResume)
 	protectedMux.HandleFunc("POST /api/v1/agents/handoff", server.HandleAgentHandoff)
+
 	// Audit & Compliance
 	protectedMux.HandleFunc("GET /api/v1/audit/export", server.HandleExportAuditLogs)
 	protectedMux.HandleFunc("GET /api/v1/audit/verify/{id}", server.HandleVerifyAuditLog)
@@ -85,10 +92,6 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	// Router Pre-Flight Evaluation
 	protectedMux.HandleFunc("POST /api/v1/router/evaluate", server.HandleEvaluateRoute)
 
-	// Dashboard Stats & Live Events
-	protectedMux.HandleFunc("GET /api/v1/dashboard/stats", server.HandleDashboardStats)
-	protectedMux.HandleFunc("GET /api/v1/events", server.HandleLiveEvents)
-
 	// Plan API (protected)
 	protectedMux.HandleFunc("GET /api/v1/plan", server.HandleGetPlan)
 
@@ -96,10 +99,6 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	protectedMux.HandleFunc("POST /api/v1/policies", server.HandleRememberPolicy)
 	protectedMux.HandleFunc("GET /api/v1/policies", server.HandleListPolicies)
 	protectedMux.HandleFunc("POST /api/v1/policies/{id}/supersede", server.HandleSupersedePolicy)
-
-	// Graph handeling route
-
-	protectedMux.HandleFunc("GET /api/v1/graph", server.HandleWorkspaceGraph)
 
 	// ----------------------------------------------------------------
 	// C. MIDDLEWARE PIPELINE
@@ -170,7 +169,6 @@ func main() {
 	slog.Info("JWT authentication initialized", "public_key", jwtConfig.GetPublicKeyHex())
 
 	// 5. Core Storage & Engines
-	// Core Storage & Engines
 	dbStore, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		slog.Error("Failed to initialize database", "error", err)
@@ -182,12 +180,13 @@ func main() {
 	lineageEngine := engine.NewLineageEngine(dbStore)
 	contradictionEngine := engine.NewContradictionEngine(dbStore)
 
-	shield := engine.NewPreFlightShield(contradictionEngine) // budget engine optional
+	shield := engine.NewPreFlightShield(contradictionEngine)
 	topologyExecutor := topology.NewExecutor(dbStore, shield)
 	topologyGenerator := topology.NewGenerator(dbStore)
 
 	authService := auth.NewAuthService(dbStore, jwtConfig)
 	server := api.NewServer(dbStore, authService, jwtConfig, contradictionEngine, lineageEngine, topologyGenerator, topologyExecutor)
+
 	// 6. Rate Limiter
 	rateLimiter := api.NewRateLimiter(100, time.Minute, 1000)
 

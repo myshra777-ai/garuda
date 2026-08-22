@@ -110,7 +110,9 @@ func NewServer(
 
 // RegisterRoutes sets up HTTP routing and subrouter middleware hierarchy.
 func (s *Server) RegisterRoutes(r *mux.Router) {
-	// Public routes
+	// =========================================================================
+	// PUBLIC ROUTES (No JWT Bearer Token Required)
+	// =========================================================================
 	r.HandleFunc("/health", s.HandleHealth).Methods(http.MethodGet)
 	r.HandleFunc("/dashboard", s.HandleDashboard).Methods(http.MethodGet)
 	r.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
@@ -118,12 +120,17 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	}).Methods(http.MethodGet)
 	r.HandleFunc("/debug/token", s.HandleDebugToken).Methods(http.MethodGet)
 
-	// Protected API Subrouter - Single declaration wrapped with AuthMiddleware
+	// Public Dashboard Telemetry, Graph & Global Search Endpoints
+	r.HandleFunc("/api/v1/dashboard/stats", s.HandleDashboardStats).Methods(http.MethodGet)
+	r.HandleFunc("/api/v1/dashboard/search", s.HandleDashboardSearch).Methods(http.MethodGet)
+	r.HandleFunc("/api/v1/graph", s.HandleGraph).Methods(http.MethodGet)
+	r.HandleFunc("/api/v1/events", s.HandleLiveEvents).Methods(http.MethodGet)
+
+	// =========================================================================
+	// PROTECTED API SUBROUTER (JWT Auth Required for Sensitive Actions)
+	// =========================================================================
 	api := r.PathPrefix("/api/v1").Subrouter()
 	api.Use(s.AuthMiddleware)
-
-	// Dashboard Telemetry & Stats
-	api.HandleFunc("/dashboard/stats", s.HandleDashboardStats).Methods(http.MethodGet)
 
 	// Live Telemetry SSE Stream Endpoint
 	api.Handle("/telemetry/stream", s.sseBroker).Methods(http.MethodGet)
