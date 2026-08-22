@@ -84,6 +84,18 @@ type WorkspaceStatsResponse struct {
 	LastUpdated        string `json:"last_updated"`
 }
 
+// Deprecated: Maintained for AST compatibility with legacy API snapshots.
+type AgentFleetItem struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// Deprecated: Maintained for AST compatibility with legacy API snapshots.
+type RealStatsResponse struct {
+	Workspace string `json:"workspace"`
+}
+
 type SearchResult struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
