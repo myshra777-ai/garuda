@@ -22,15 +22,28 @@ import (
 )
 
 // GetMerkleRoot retrieves current root hash state or initializes a genesis root if missing.
+// GetMerkleRoot retrieves current root hash state or initializes a genesis root if missing.
 func (s *PostgresStore) GetMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleRoot, error) {
 	query := `
-        SELECT tenant_id, root_hash, block_height, created_at, updated_at
-        FROM merkle_roots
-        WHERE tenant_id = $1;
-    `
+		SELECT 
+			tenant_id, 
+			encode(root_hash, 'hex') AS root_hash, 
+			block_height, 
+			created_at, 
+			updated_at
+		FROM merkle_roots
+		WHERE tenant_id = $1
+		ORDER BY block_height DESC
+		LIMIT 1;
+	`
+
 	var mr types.MerkleRoot
 	err := s.pool.QueryRow(ctx, query, tenantID).Scan(
-		&mr.TenantID, &mr.RootHash, &mr.BlockHeight, &mr.CreatedAt, &mr.UpdatedAt,
+		&mr.TenantID,
+		&mr.RootHash,
+		&mr.BlockHeight,
+		&mr.CreatedAt,
+		&mr.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "no rows") {
@@ -173,26 +186,45 @@ func (s *PostgresStore) ListAllTenants(ctx context.Context) ([]uuid.UUID, error)
 }
 
 // GetLatestMerkleSnapshot retrieves the most recent snapshot for a tenant.
+// GetLatestMerkleSnapshot fetches the latest cryptographic snapshot for a tenant.
 func (s *PostgresStore) GetLatestMerkleSnapshot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleSnapshot, error) {
 	query := `
-        SELECT id, tenant_id, root_hash, block_height,
-               parent_snapshot_id, snapshot_hash, epoch_timestamp, created_at
-        FROM merkle_snapshots
-        WHERE tenant_id = $1
-        ORDER BY epoch_timestamp DESC
-        LIMIT 1;
-    `
+		SELECT 
+			id, 
+			tenant_id, 
+			encode(root_hash, 'hex') AS root_hash, 
+			block_height,
+			parent_snapshot_id, 
+			encode(snapshot_hash, 'hex') AS snapshot_hash, 
+			epoch_timestamp, 
+			created_at
+		FROM merkle_snapshots
+		WHERE tenant_id = $1
+		ORDER BY block_height DESC, epoch_timestamp DESC
+		LIMIT 1;
+	`
+
 	var snap types.MerkleSnapshot
 	var parentID *uuid.UUID
 	var epochSec int64
 
 	err := s.pool.QueryRow(ctx, query, tenantID).Scan(
-		&snap.ID, &snap.TenantID, &snap.RootHash, &snap.BlockHeight,
-		&parentID, &snap.SnapshotHash, &epochSec, &snap.CreatedAt,
+		&snap.ID,
+		&snap.TenantID,
+		&snap.RootHash,
+		&snap.BlockHeight,
+		&parentID,
+		&snap.SnapshotHash,
+		&epochSec,
+		&snap.CreatedAt,
 	)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "no rows") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to fetch latest Merkle snapshot: %w", err)
 	}
+
 	snap.ParentSnapshotID = parentID
 	snap.EpochTimestamp = time.Unix(epochSec, 0).UTC()
 	return &snap, nil

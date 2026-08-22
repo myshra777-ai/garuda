@@ -99,15 +99,16 @@ var (
 	agentIDFlag    string
 	versionFlag    bool
 
-	outputFlag     string
-	saveFlag       bool
-	jsonOutputFlag bool
-	outputFileFlag string
-	workspaceFlag  string
-	repoFlag       string
-	graphOpenFlag  bool
-	modulePathFlag string
-	graphRepoFlag  string
+	outputFlag         string
+	saveFlag           bool
+	jsonOutputFlag     bool
+	outputFileFlag     string
+	workspaceFlag      string
+	repoFlag           string
+	graphOpenFlag      bool
+	modulePathFlag     string
+	graphRepoFlag      string
+	failOnBreakingFlag bool // CI Policy Gate Flag
 )
 
 // External Commands (Assumed to be defined in other package main files)
@@ -410,6 +411,7 @@ func init() {
 
 	diffCmd.Flags().BoolVar(&jsonOutputFlag, "json", false, "Output diff in JSON format")
 	diffCmd.Flags().StringVarP(&outputFileFlag, "output", "o", "", "Write diff to file")
+	diffCmd.Flags().BoolVar(&failOnBreakingFlag, "fail-on-breaking", false, "Exit with code 1 if breaking changes are detected (CI Gate)")
 
 	graphCmd.Flags().BoolVar(&graphOpenFlag, "open", false, "Open the graph in browser automatically")
 	graphCmd.Flags().StringVar(&graphRepoFlag, "repo", "", "Filter graph to a specific repository (URL or ID)")
@@ -446,6 +448,7 @@ func init() {
 	rootCmd.AddCommand(inspectCmd)
 	rootCmd.AddCommand(graphCmd)
 	rootCmd.AddCommand(entitiesCmd)
+	rootCmd.AddCommand(summaryCmd)
 
 	// Note: External commands must be defined in other files within 'main' package.
 	if impactCmd != nil {
@@ -468,6 +471,9 @@ func init() {
 	}
 	if ciCmd != nil {
 		rootCmd.AddCommand(ciCmd)
+	}
+	if summaryCmd != nil {
+		rootCmd.AddCommand(summaryCmd)
 	}
 }
 
@@ -494,12 +500,38 @@ func handleAnalyze(path string) {
 	}
 	fmt.Printf("🔍 Analyzing %s...\n", path)
 
-	result, err := analyzer.Analyze(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Invalid path '%s': %v\n", path, err)
+		os.Exit(1)
+	}
+
+	// 1. Discover Workspace / Multi-Module Boundaries
+	ws, err := analyzer.DiscoverWorkspace(absPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Workspace discovery failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 2. Configure Execution Options with Cache
+	opts := analyzer.WorkspaceAnalysisOptions{
+		Cache: analyzer.NewMemoryPackageCache(),
+	}
+	if saveFlag || workspaceFlag != "" || repoFlag != "" {
+		if tidStr := os.Getenv("GARUDA_TENANT_ID"); tidStr != "" {
+			if tid, err := uuid.Parse(tidStr); err == nil {
+				opts.TenantID = tid
+			}
+		}
+	}
+
+	ctx := context.Background()
+	result, err := analyzer.AnalyzeWorkspaceWithOptions(ctx, ws, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Analysis failed: %v\n", err)
 		os.Exit(1)
 	}
-	if result.Stats.Files == 0 {
+	if result.Stats.Files == 0 && len(result.Entities) == 0 {
 		fmt.Fprintf(os.Stderr, "❌ No Go files found in '%s'. Aborting.\n", path)
 		os.Exit(1)
 	}
@@ -511,7 +543,7 @@ func handleAnalyze(path string) {
 		} else if err := os.WriteFile(outputFlag, data, 0644); err != nil {
 			fmt.Printf("⚠️ Failed to write JSON: %v\n", err)
 		} else {
-			fmt.Printf("📄 JSON report saved to %s\n", outputFlag)
+			fmt.Printf("📄 JSON report saved to %s (Fingerprint: %s)\n", outputFlag, result.Fingerprint)
 		}
 	}
 
@@ -668,9 +700,15 @@ func handleDiff(file1, file2 string) {
 		} else {
 			fmt.Println(string(data))
 		}
-		return
+	} else {
+		printDiffReport(report)
 	}
-	printDiffReport(report)
+
+	// Automated CI Policy Gate
+	if failOnBreakingFlag && report.HasBreakingChanges() {
+		fmt.Fprintf(os.Stderr, "\n[POLICY VIOLATION] %d breaking change(s) detected. CI Gate FAILED.\n", report.Summary.BreakingChanges)
+		os.Exit(1)
+	}
 }
 
 func printDiffReport(report *analyzer.DiffReport) {
@@ -1240,7 +1278,81 @@ func handleInspect(entityName string) {
 
 // --- Graph Handlers ---
 
-func handleGraph(workspaceName string) {
+func handleGraph(target string) {
+	// 1. Check if target is a JSON snapshot file or local directory (Offline Standalone Mode)
+	if info, err := os.Stat(target); err == nil {
+		var result *analyzer.Result
+
+		if !info.IsDir() && strings.HasSuffix(target, ".json") {
+			fmt.Printf("📊 Generating graph from snapshot %s...\n", target)
+			res, err := analyzer.LoadResult(target)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "❌ Failed to load snapshot: %v\n", err)
+				os.Exit(1)
+			}
+			result = res
+		} else if info.IsDir() {
+			fmt.Printf("🔍 Analyzing %s for offline graph generation...\n", target)
+			absPath, _ := filepath.Abs(target)
+			ws, err := analyzer.DiscoverWorkspace(absPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "❌ Discovery failed: %v\n", err)
+				os.Exit(1)
+			}
+			res, err := analyzer.AnalyzeWorkspaceWithOptions(context.Background(), ws, analyzer.WorkspaceAnalysisOptions{
+				Cache: analyzer.NewMemoryPackageCache(),
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "❌ Analysis failed: %v\n", err)
+				os.Exit(1)
+			}
+			result = res
+		}
+
+		if result != nil {
+			var nodes []graph.Node
+			for _, e := range result.Entities {
+				nodes = append(nodes, graph.Node{
+					ID:       e.ID,
+					Label:    e.Name,
+					Kind:     string(e.Kind),
+					Package:  e.Package,
+					File:     e.File,
+					Exported: e.Exported,
+				})
+			}
+
+			var edges []graph.Edge
+			for _, r := range result.Relationships {
+				edges = append(edges, graph.Edge{
+					From: r.From,
+					To:   r.To,
+					Type: r.Type,
+				})
+			}
+
+			graphTitle := filepath.Base(target)
+			html, err := generateGraphHTML(graphTitle, nodes, edges)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "❌ Failed to generate graph HTML: %v\n", err)
+				os.Exit(1)
+			}
+
+			filename := fmt.Sprintf("garuda_graph_%s.html", graphTitle)
+			if err := os.WriteFile(filename, []byte(html), 0644); err != nil {
+				fmt.Fprintf(os.Stderr, "❌ Failed to write graph file: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Printf("✓ Offline graph written to %s (%d entities, %d edges)\n", filename, len(nodes), len(edges))
+			if graphOpenFlag {
+				openFile(filename)
+			}
+			return
+		}
+	}
+
+	// 2. Fallback: PostgreSQL Workspace Mode
 	dbURL := getDBURL()
 	tenantIDStr := getTenantIDString()
 	ctx := context.Background()
@@ -1258,10 +1370,11 @@ func handleGraph(workspaceName string) {
 		os.Exit(1)
 	}
 
+	workspaceName := target
 	var wsID uuid.UUID
 	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantUUID, workspaceName).Scan(&wsID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
+		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found in database\n", workspaceName)
 		os.Exit(1)
 	}
 
@@ -1371,34 +1484,6 @@ func handleGraph(workspaceName string) {
 		fmt.Fprintf(os.Stderr, "❌ Claims query error: %v\n", err)
 		os.Exit(1)
 	}
-
-	rows3, err := st.Pool().Query(ctx, `
-		SELECT from_entity_id, to_entity_id, relationship_type
-		FROM cross_repo_edges
-		WHERE tenant_id = $1 AND workspace_id = $2
-	`, tenantUUID, wsID)
-
-	if err == nil {
-		defer rows3.Close()
-		for rows3.Next() {
-			var fromID, toID uuid.UUID
-			var typ string
-			if err := rows3.Scan(&fromID, &toID, &typ); err != nil {
-				continue
-			}
-			if fromID == uuid.Nil || toID == uuid.Nil {
-				continue
-			}
-			edges = append(edges, graph.Edge{
-				From:      fromID.String(),
-				To:        toID.String(),
-				Type:      typ,
-				CrossRepo: true,
-			})
-		}
-	}
-
-	fmt.Printf("📊 Fetched %d entities and %d relationships\n", len(nodes), len(edges))
 
 	html, err := generateGraphHTML(workspaceName, nodes, edges)
 	if err != nil {
@@ -1730,41 +1815,42 @@ func handleExplain(decisionIDStr string) {
 	}
 	tid := getTenantID()
 
+	// 1. Fetch parent decision metadata
+	var title, statement, owner, status string
+	var scopeJSON []byte
+	var confidence float64
+	var parentCreatedAt time.Time
+	err = st.Pool().QueryRow(ctx, `
+		SELECT title, statement, scope, owner, confidence, status, created_at
+		FROM decisions
+		WHERE tenant_id = $1 AND id = $2
+	`, tid, decisionID).Scan(&title, &statement, &scopeJSON, &owner, &confidence, &status, &parentCreatedAt)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Decision not found: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 2. Fetch latest immutable revision
 	var revNumber int
 	var canonicalJSON []byte
 	var hash, prevHash []byte
 	var createdAt time.Time
-
-	err = st.Pool().QueryRow(ctx, `
+	_ = st.Pool().QueryRow(ctx, `
 		SELECT revision_number, canonical_json, decision_hash, previous_revision_hash, created_at
 		FROM decision_revisions
 		WHERE tenant_id = $1 AND decision_id = $2
 		ORDER BY revision_number DESC LIMIT 1
 	`, tid, decisionID).Scan(&revNumber, &canonicalJSON, &hash, &prevHash, &createdAt)
 
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Decision not found: %v\n", err)
-		os.Exit(1)
-	}
-
-	var content map[string]interface{}
-	if err := json.Unmarshal(canonicalJSON, &content); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Failed to parse decision content: %v\n", err)
-		os.Exit(1)
-	}
-
 	fmt.Printf("📄 DECISION EXPLANATION\n")
 	fmt.Printf("Decision ID:       %s\n", decisionID)
-	fmt.Printf("Revision:          %d\n", revNumber)
-	fmt.Printf("Statement:         %v\n", content["title"])
-	fmt.Printf("Scope:             %v\n", content["scope"])
-	fmt.Printf("Owner:             %v\n", content["owner"])
-	fmt.Printf("Confidence:        %.2f\n", func() float64 {
-		if c, ok := content["confidence"].(float64); ok {
-			return c
-		}
-		return 0.0
-	}())
+	fmt.Printf("Status:            %s\n", status)
+	fmt.Printf("Title:             %s\n", title)
+	fmt.Printf("Statement:         %s\n", statement)
+	fmt.Printf("Scope:             %s\n", string(scopeJSON))
+	fmt.Printf("Owner:             %s\n", owner)
+	fmt.Printf("Confidence:        %.2f\n", confidence)
+	fmt.Printf("Revision:          #%d\n", revNumber)
 	fmt.Printf("Created:           %s\n", createdAt.Format(time.RFC3339))
 	fmt.Printf("Content Hash:      %x\n", hash)
 	fmt.Printf("Previous Revision: %x\n", prevHash)
@@ -1773,27 +1859,14 @@ func handleExplain(decisionIDStr string) {
 	_ = st.Pool().QueryRow(ctx, `SELECT root_hash FROM merkle_roots WHERE tenant_id = $1`, tid).Scan(&merkleRoot)
 	fmt.Printf("Merkle Root:       %x\n", merkleRoot)
 
-	rows, err := st.Pool().Query(ctx, `
-		SELECT content FROM evidence_store e
-		JOIN decision_revisions dr ON dr.decision_hash = e.block_hash
-		WHERE dr.tenant_id = $1 AND dr.decision_id = $2
-	`, tid, decisionID)
-
-	if err == nil {
-		defer rows.Close()
-		var evidence []string
-		for rows.Next() {
-			var c string
-			if err := rows.Scan(&c); err == nil {
-				evidence = append(evidence, c)
-			}
-		}
-		if len(evidence) > 0 {
-			fmt.Printf("\nEvidence:\n")
-			for _, e := range evidence {
-				fmt.Printf("  • %s\n", e)
-			}
-		}
+	// 3. Print AST snapshot stats if present in canonical_json
+	var summary analyzer.RevisionSummary
+	if err := json.Unmarshal(canonicalJSON, &summary); err == nil && summary.Fingerprint != "" {
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("📦 AST Snapshot Fingerprint: %s\n", summary.Fingerprint)
+		fmt.Printf("📊 Packages: %d | Structs: %d | Interfaces: %d | Functions: %d | Files: %d\n",
+			summary.Stats.Packages, summary.Stats.Structs, summary.Stats.Interfaces, summary.Stats.Functions, summary.Stats.Files)
+		fmt.Printf("🔒 Evidence Payload Hash:    %s\n", summary.PayloadHash)
 	}
 }
 

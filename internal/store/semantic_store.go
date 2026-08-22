@@ -117,6 +117,7 @@ func GenerateCanonicalEntityID(tenantID, workspaceID, repoID uuid.UUID, entity *
 	))
 }
 
+// SaveEntities stores entities from an analysis result with line numbers
 func (s *PostgresStore) SaveEntities(
 	ctx context.Context,
 	tenantID, workspaceID, repoID, analysisID uuid.UUID,
@@ -194,6 +195,37 @@ func (s *PostgresStore) SaveEntities(
 	return tx.Commit(ctx)
 }
 
+// parseExternalTarget splits a symbol reference into package path, symbol name, and module path.
+// Standard library packages are grouped under 'std' to avoid repository noise.
+func parseExternalTarget(target string) (pkgPath, symName, modPath string) {
+	lastSlash := strings.LastIndex(target, "/")
+	if lastSlash != -1 {
+		pkgPart := target[:lastSlash]
+		rest := target[lastSlash+1:]
+		if dot := strings.Index(rest, "."); dot != -1 {
+			pkgPath = pkgPart + "/" + rest[:dot]
+			symName = rest[dot+1:]
+		} else {
+			pkgPath = target
+			symName = rest
+		}
+	} else if dot := strings.Index(target, "."); dot != -1 {
+		pkgPath = target[:dot]
+		symName = target[dot+1:]
+	} else {
+		pkgPath = target
+		symName = target
+	}
+
+	if !strings.Contains(pkgPath, ".") || strings.HasPrefix(pkgPath, "net/") || strings.HasPrefix(pkgPath, "os/") || strings.HasPrefix(pkgPath, "io/") {
+		modPath = "std"
+	} else {
+		modPath = pkgPath
+	}
+	return pkgPath, symName, modPath
+}
+
+// SaveSemanticGraph stores entities and claims from an analysis result with cross-repo detection
 func (s *PostgresStore) SaveSemanticGraph(
 	ctx context.Context,
 	tenantID, workspaceID, repoID, analysisID uuid.UUID,
@@ -206,7 +238,8 @@ func (s *PostgresStore) SaveSemanticGraph(
 	}
 	defer tx.Rollback(ctx)
 
-	entityIDMap := make(map[string]uuid.UUID, len(result.Entities))
+	// 1. Populate entityIDMap with UUIDs and all qualified naming permutations
+	entityIDMap := make(map[string]uuid.UUID, len(result.Entities)*4)
 
 	for i := range result.Entities {
 		entity := &result.Entities[i]
@@ -269,18 +302,93 @@ func (s *PostgresStore) SaveSemanticGraph(
 			return fmt.Errorf("failed to upsert entity %s (%s): %w", entity.Name, entity.Kind, err)
 		}
 
+		// Register lookups
 		entityIDMap[entity.ID] = entityID
+
+		if entity.Name != "" {
+			entityIDMap[entity.Name] = entityID
+		}
+
+		if entity.Package != "" && entity.Name != "" {
+			entityIDMap[entity.Package+"."+entity.Name] = entityID
+			entityIDMap[entity.Package+":"+entity.Name] = entityID
+		}
+
+		if entity.PackagePath != "" && entity.Name != "" {
+			entityIDMap[entity.PackagePath+"."+entity.Name] = entityID
+			entityIDMap[entity.PackagePath+":"+entity.Name] = entityID
+		}
+
+		if entity.ReceiverType != "" && entity.Name != "" {
+			entityIDMap[entity.ReceiverType+"."+entity.Name] = entityID
+
+			if entity.Package != "" {
+				entityIDMap[entity.Package+"."+entity.ReceiverType+"."+entity.Name] = entityID
+			}
+
+			if entity.PackagePath != "" {
+				entityIDMap[entity.PackagePath+"."+entity.ReceiverType+"."+entity.Name] = entityID
+			}
+		}
 	}
 
+	// 2. Insert relationships (creating normalized stubs for external targets)
 	for _, rel := range result.Relationships {
 		fromID, fromOk := entityIDMap[rel.From]
 		toID, toOk := entityIDMap[rel.To]
 
-		if !fromOk || !toOk {
-			slog.Debug("Skipping claim edge: entity unresolved in snapshot",
-				"from", rel.From, "fromOk", fromOk,
-				"to", rel.To, "toOk", toOk)
-			continue
+		// 1. Resolve fromID stub
+		if !fromOk {
+			pkgPath, symName, modPath := parseExternalTarget(rel.From)
+			extFromID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(tenantID.String()+":stub:"+rel.From))
+			_, err := tx.Exec(ctx, `
+				INSERT INTO entities (
+					id, tenant_id, workspace_id, repository_id, analysis_id,
+					name, kind, package, package_path, module_path, receiver_type,
+					file_path, commit_sha, line, line_start, line_end,
+					signature, fields, methods, is_exported,
+					created_at, updated_at
+				) VALUES (
+					$1, $2, $3, $4, $5,
+					$6, 'external', $7, $7, $8, '',
+					'', $9, 0, 0, 0,
+					'', '[]'::jsonb, '[]'::jsonb, true,
+					NOW(), NOW()
+				) ON CONFLICT (id) DO NOTHING
+			`, extFromID, tenantID, workspaceID, repoID, analysisID, symName, pkgPath, modPath, commitSHA)
+			if err != nil {
+				return fmt.Errorf("failed to insert from-stub entity %s: %w", rel.From, err)
+			}
+
+			fromID = extFromID
+			entityIDMap[rel.From] = extFromID
+		}
+
+		// 2. Resolve toID stub
+		if !toOk {
+			pkgPath, symName, modPath := parseExternalTarget(rel.To)
+			extToID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(tenantID.String()+":stub:"+rel.To))
+			_, err := tx.Exec(ctx, `
+				INSERT INTO entities (
+					id, tenant_id, workspace_id, repository_id, analysis_id,
+					name, kind, package, package_path, module_path, receiver_type,
+					file_path, commit_sha, line, line_start, line_end,
+					signature, fields, methods, is_exported,
+					created_at, updated_at
+				) VALUES (
+					$1, $2, $3, $4, $5,
+					$6, 'external', $7, $7, $8, '',
+					'', $9, 0, 0, 0,
+					'', '[]'::jsonb, '[]'::jsonb, true,
+					NOW(), NOW()
+				) ON CONFLICT (id) DO NOTHING
+			`, extToID, tenantID, workspaceID, repoID, analysisID, symName, pkgPath, modPath, commitSHA)
+			if err != nil {
+				return fmt.Errorf("failed to insert to-stub entity %s: %w", rel.To, err)
+			}
+
+			toID = extToID
+			entityIDMap[rel.To] = extToID
 		}
 
 		epistemicClass := rel.EpistemicClass
@@ -337,13 +445,15 @@ func (s *PostgresStore) SaveSemanticGraph(
 		return fmt.Errorf("failed to commit semantic graph transaction: %w", err)
 	}
 
+	// 3. Detect cross-repo imports (run after commit so s.pool sees newly committed rows)
 	if err := s.detectCrossRepoImports(ctx, tenantID, workspaceID, repoID, analysisID, result); err != nil {
-		slog.Warn("Cross-repo dependency detection failed", "error", err)
+		slog.Warn("Cross-repo detection failed", "error", err)
 	}
 
 	return nil
 }
 
+// detectCrossRepoImports finds imports that cross repository boundaries
 func (s *PostgresStore) detectCrossRepoImports(
 	ctx context.Context,
 	tenantID, workspaceID, repoID, analysisID uuid.UUID,
@@ -416,19 +526,27 @@ func (s *PostgresStore) detectCrossRepoImports(
 
 		fromEntityID, ok := fileEntityMap[rel.Evidence.File]
 		if !ok {
-			var pkgID uuid.UUID
+			var entityID uuid.UUID
+			// Fallback: match any entity belonging to the source package or repository
 			err := s.pool.QueryRow(ctx, `
-				SELECT id FROM entities
-				WHERE tenant_id = $1 AND repository_id = $2 
-				  AND (package_path = $3 OR package = $3) 
-				  AND kind = 'package'
-				LIMIT 1
-			`, tenantID, repoID, rel.From).Scan(&pkgID)
+                SELECT id FROM entities
+                WHERE tenant_id = $1 AND repository_id = $2 
+                  AND (package_path = $3 OR package = $3 OR name = $3)
+                LIMIT 1
+            `, tenantID, repoID, rel.From).Scan(&entityID)
 			if err != nil {
-				slog.Debug("Could not find from entity for cross-repo edge", "file", rel.Evidence.File)
+				// Second fallback: grab the first entity registered for this repository
+				err = s.pool.QueryRow(ctx, `
+                    SELECT id FROM entities
+                    WHERE tenant_id = $1 AND repository_id = $2
+                    LIMIT 1
+                `, tenantID, repoID).Scan(&entityID)
+			}
+			if err != nil {
+				slog.Debug("Could not find from entity for cross-repo edge", "from", rel.From)
 				continue
 			}
-			fromEntityID = pkgID
+			fromEntityID = entityID
 		}
 
 		targetPkgID, err := s.findPackageEntityInRepo(ctx, tenantID, targetRepoID, importPath)
@@ -483,6 +601,7 @@ func (s *PostgresStore) detectCrossRepoImports(
 	return nil
 }
 
+// GetEntity retrieves an entity by package and name within a workspace.
 func (s *PostgresStore) GetEntity(ctx context.Context, tenantID, workspaceID uuid.UUID, pkg, name string) (*analyzer.Entity, error) {
 	var entity analyzer.Entity
 	var entityID, kind, pkgName, pkgPath, modPath, recType, file, signature string
@@ -528,6 +647,7 @@ func (s *PostgresStore) GetEntity(ctx context.Context, tenantID, workspaceID uui
 	return &entity, nil
 }
 
+// GetEntityRelationships returns incoming and outgoing relationships for an entity.
 func (s *PostgresStore) GetEntityRelationships(ctx context.Context, tenantID, workspaceID uuid.UUID, entityID string) ([]analyzer.Relationship, []analyzer.Relationship, error) {
 	var incoming, outgoing []analyzer.Relationship
 
@@ -574,6 +694,7 @@ func (s *PostgresStore) GetEntityRelationships(ctx context.Context, tenantID, wo
 	return incoming, outgoing, nil
 }
 
+// ListEntities returns all entities in a workspace.
 func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID uuid.UUID) ([]analyzer.Entity, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, kind, package, package_path, module_path, receiver_type,
@@ -628,6 +749,7 @@ func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID 
 	return entities, nil
 }
 
+// GetGraphData returns nodes and edges for graph visualisation.
 func (s *PostgresStore) GetGraphData(ctx context.Context, tenantID, workspaceID uuid.UUID) ([]map[string]interface{}, []map[string]interface{}, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, kind, package, file_path, is_exported

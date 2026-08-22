@@ -203,6 +203,10 @@ func diffEntity(before, after Entity) (*FieldsDiff, *MethodsDiff, bool) {
 	var methodsDiff *MethodsDiff
 	modified := false
 
+	if before.Signature != after.Signature {
+		modified = true
+	}
+
 	// Field diff
 	beforeFields := make(map[string]Field)
 	for _, f := range before.Fields {
@@ -243,7 +247,7 @@ func diffEntity(before, after Entity) (*FieldsDiff, *MethodsDiff, bool) {
 		modified = true
 	}
 
-	// Method diff
+	// Method diff (compares both existence and method signature contracts)
 	beforeMethods := make(map[string]Method)
 	for _, m := range before.Methods {
 		beforeMethods[m.Name] = m
@@ -256,8 +260,12 @@ func diffEntity(before, after Entity) (*FieldsDiff, *MethodsDiff, bool) {
 	var addedMethods []Method
 	var removedMethods []Method
 	for name, m := range afterMethods {
-		if _, exists := beforeMethods[name]; !exists {
+		if beforeM, exists := beforeMethods[name]; !exists {
 			addedMethods = append(addedMethods, m)
+		} else if beforeM.Signature != m.Signature {
+			// Method signature mutation breaks consumers
+			addedMethods = append(addedMethods, m)
+			removedMethods = append(removedMethods, beforeM)
 		}
 	}
 	for name, m := range beforeMethods {
