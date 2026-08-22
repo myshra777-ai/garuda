@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/types"
 )
 
 // -----------------------------------------------------------------------------
@@ -84,16 +85,26 @@ type WorkspaceStatsResponse struct {
 	LastUpdated        string `json:"last_updated"`
 }
 
-// Deprecated: Maintained for AST compatibility with legacy API snapshots.
+// Deprecated: Preserved for backward-compatible AST schema diff verification.
 type AgentFleetItem struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
+	Domain string `json:"domain"`
+	System string `json:"system"`
 	Status string `json:"status"`
 }
 
-// Deprecated: Maintained for AST compatibility with legacy API snapshots.
+// Deprecated: Preserved for backward-compatible AST schema diff verification.
 type RealStatsResponse struct {
-	Workspace string `json:"workspace"`
+	TotalDecisions       int               `json:"total_decisions"`
+	QuarantinedCount     int               `json:"quarantined_count"`
+	LatestBlockHeight    int64             `json:"latest_block_height"`
+	LatestMerkleHash     string            `json:"latest_merkle_hash"`
+	ParentMerkleHash     string            `json:"parent_merkle_hash"`
+	EstimatedSavings     float64           `json:"estimated_savings"`
+	DomainBreakdown      map[string]int    `json:"domain_breakdown"`
+	QuarantinedDecisions []*types.Decision `json:"quarantined_decisions"`
+	AgentList            []AgentFleetItem  `json:"agent_list"`
 }
 
 type SearchResult struct {

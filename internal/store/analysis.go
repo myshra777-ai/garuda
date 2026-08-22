@@ -8,6 +8,7 @@ package store
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -174,7 +175,8 @@ func (s *PostgresStore) SaveAnalysisDecision(
 		VALUES ($1, $2, 1, NOW())
 		ON CONFLICT (tenant_id) DO UPDATE
 		SET root_hash = EXCLUDED.root_hash, block_height = merkle_roots.block_height + 1, updated_at = NOW()
-	`, tenantID, newRoot[:])
+`, tenantID, hex.EncodeToString(newRoot[:]))
+
 	if err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to update merkle root: %w", err)
 	}
