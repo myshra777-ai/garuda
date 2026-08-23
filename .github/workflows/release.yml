@@ -21,7 +21,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
           cache: true
 
       - name: Build Multi-Platform Binaries
@@ -32,15 +32,15 @@ jobs:
           TAG_NAME="${{ github.ref_name }}"
           
           # Linux AMD64
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-linux-amd64 cmd/garuda/main.go
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-linux-amd64 ./cmd/garuda
           # Linux ARM64
-          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-linux-arm64 cmd/garuda/main.go
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-linux-arm64 ./cmd/garuda
           # macOS AMD64 (Intel)
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-darwin-amd64 cmd/garuda/main.go
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-darwin-amd64 ./cmd/garuda
           # macOS ARM64 (Apple Silicon)
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-darwin-arm64 cmd/garuda/main.go
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-darwin-arm64 ./cmd/garuda
           # Windows AMD64
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-windows-amd64.exe cmd/garuda/main.go
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${TAG_NAME}" -o dist/garuda-windows-amd64.exe ./cmd/garuda
 
       - name: Generate Checksums
         run: |

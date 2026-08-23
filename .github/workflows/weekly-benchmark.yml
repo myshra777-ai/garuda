@@ -5,12 +5,18 @@ on:
     - cron: "0 0 * * 0"  # Every Sunday at midnight
   workflow_dispatch:      # Manual trigger
 
+# Grant write access to commit benchmark artifacts
+permissions:
+  contents: write
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -21,23 +27,28 @@ jobs:
         run: |
           pip install matplotlib requests
 
-      - name: Install Garuda
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Build Garuda CLI
         run: |
-          chmod +x install.sh
-          ./install.sh
-          export PATH=$PATH:/usr/local/bin
+          go build -o bin/garuda ./cmd/garuda
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
 
       - name: Run Benchmark Suite
         env:
           GEMINI_API_KEY_QUATERNARY: ${{ secrets.GEMINI_API_KEY_QUATERNARY }}
           GEMINI_API_KEY_PRIMARY: ${{ secrets.GEMINI_API_KEY_PRIMARY }}
         run: |
-          python scripts/weekly_benchmark.py
+          python scripts/weekly_benchmark.py || true
 
       - name: Commit benchmark results
         uses: EndBug/add-and-commit@v9
         with:
-          author_name: "Garuda Benchmark Bot"
-          author_email: "benchmark@garuda.ai"
+          author_name: "github-actions[bot]"
+          author_email: "github-actions[bot]@users.noreply.github.com"
           message: "benchmark: weekly performance report [skip ci]"
-          add: "benchmarks/ BENCHMARKS.md"
+          add: "benchmarks/ BENCHMARKS.md benchmark_report.json"

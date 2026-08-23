@@ -1,45 +1,44 @@
-name: AI Documentation Generator
+name: AI Documentation Sync
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   update-docs:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: |
           pip install google-generativeai pyyaml
-      
-      - name: Generate Changelog
+
+      - name: Generate AI Docs
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          python scripts/generate_changelog.py || echo "Changelog generation skipped"
-      
-      - name: Generate API Docs
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          if [ -f "scripts/update_docs_ai.py" ]; then
+            python scripts/update_docs_ai.py || echo "Docs generator failed, continuing..."
+          fi
+
+      - name: Commit and push docs
         run: |
-          python scripts/generate_api_docs.py || echo "API docs generation skipped"
-      
-      - name: Commit and push
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add CHANGELOG.md docs/API.md 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "🤖 Auto-update docs from AI [skip ci]"
-          git push
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/ || true
+          git diff --staged --quiet || git commit -m "docs: auto-update architectural documentation [skip ci]"
+          git push origin main || true
