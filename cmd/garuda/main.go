@@ -334,10 +334,6 @@ var explainCmd = &cobra.Command{
 	},
 }
 
-var mcpCmd = &cobra.Command{
-	Use:   "mcp",
-	Short: "Garuda Model Context Protocol operations",
-}
 
 var mcpInstallCmd = &cobra.Command{
 	Use:   "install",
