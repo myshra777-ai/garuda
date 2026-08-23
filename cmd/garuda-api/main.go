@@ -40,10 +40,13 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 
 	// Documentation & Dashboard (Public Telemetry & Search)
 	mainMux.HandleFunc("GET /dashboard", server.HandleDashboard)
-	mainMux.HandleFunc("GET /api/v1/dashboard/stats", server.HandleDashboardStats)
 	mainMux.HandleFunc("GET /api/v1/dashboard/search", server.HandleDashboardSearch)
 	mainMux.HandleFunc("GET /api/v1/graph", server.HandleGraph)
 	mainMux.HandleFunc("GET /api/v1/events", server.HandleLiveEvents)
+	mainMux.HandleFunc("POST /api/v1/telemetry/spans", server.HandleIngestRuntimeSpans)
+	mainMux.HandleFunc("GET /api/v1/runtime/coverage", server.HandleGetRuntimeCoverage)
+	mainMux.HandleFunc("GET /api/v1/dashboard/stats", server.HandleDashboardStats)
+	mainMux.HandleFunc("GET /api/v1/merkle/latest", server.HandleGetMerkleState)
 
 	mainMux.HandleFunc("GET /docs", server.HandleSwaggerUI)
 	mainMux.HandleFunc("GET /openapi.yaml", server.HandleOpenAPISpec)

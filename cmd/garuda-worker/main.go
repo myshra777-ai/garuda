@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -84,31 +85,61 @@ func runWorker(ctx context.Context, dbStore *store.PostgresStore, cfg WorkerConf
 	}
 }
 
+// snapshotAllTenants creates unified Merkle snapshots for all active tenants.
 func snapshotAllTenants(ctx context.Context, dbStore *store.PostgresStore) error {
 	slog.Info("[GARUDA-WORKER] Executing snapshot cycle...")
 
+	// Use ListAllTenants from merkle_roots table
 	tenantIDs, err := dbStore.ListAllTenants(ctx)
 	if err != nil {
+		slog.Error("[GARUDA-WORKER] Failed to list tenants", "error", err)
 		return err
 	}
+
 	if len(tenantIDs) == 0 {
-		slog.Info("[GARUDA-WORKER] No active tenant Merkle roots found.")
+		slog.Info("[GARUDA-WORKER] No tenants found in merkle_roots.")
 		return nil
 	}
 
+	slog.Info("[GARUDA-WORKER] Processing tenants", "count", len(tenantIDs))
+
 	successCount := 0
 	for _, tenantID := range tenantIDs {
-		if err := snapshotTenant(ctx, dbStore, tenantID); err != nil {
-			slog.Error("[GARUDA-WORKER] Tenant snapshot failed", "tenant_id", tenantID, "error", err)
+		// Use the unified snapshot method directly
+		snap, err := dbStore.CreateUnifiedMerkleSnapshot(ctx, tenantID)
+		if err != nil {
+			slog.Error("[GARUDA-WORKER] Failed to create unified snapshot",
+				"tenant_id", tenantID,
+				"error", err,
+			)
 			continue
 		}
+
 		successCount++
+		slog.Info("[GARUDA-WORKER] Unified epoch snapshot generated",
+			"tenant_id", tenantID,
+			"block_height", snap.BlockHeight,
+			"epoch_hash", truncateHash(snap.SnapshotHash, 16),
+			"runtime_leaves", snap.RuntimeLeafCount,
+			"verified_claims", snap.VerifiedClaimsCount,
+			"contradictions", snap.ContradictedClaimsCount,
+		)
 	}
 
-	slog.Info("[GARUDA-WORKER] Snapshot cycle complete", "processed_tenants", len(tenantIDs), "snapshots_saved", successCount)
+	slog.Info("[GARUDA-WORKER] Snapshot cycle complete",
+		"processed_tenants", len(tenantIDs),
+		"snapshots_saved", successCount,
+		"failed", len(tenantIDs)-successCount,
+	)
+
+	if successCount == 0 && len(tenantIDs) > 0 {
+		return errors.New("all tenant snapshots failed")
+	}
 	return nil
 }
 
+// snapshotTenant creates a legacy Merkle snapshot for a single tenant.
+// This is kept for backward compatibility but deprecated in favor of CreateUnifiedMerkleSnapshot.
 func snapshotTenant(ctx context.Context, dbStore *store.PostgresStore, tenantID uuid.UUID) error {
 	root, err := dbStore.GetMerkleRoot(ctx, tenantID)
 	if err != nil {
@@ -134,9 +165,17 @@ func snapshotTenant(ctx context.Context, dbStore *store.PostgresStore, tenantID 
 		BlockHeight:      root.BlockHeight,
 		ParentSnapshotID: parentID,
 		SnapshotHash:     snapshotHash,
-		EpochTimestamp:   now, // Pass time.Time (TIMESTAMPTZ) to match struct and DB schema
+		EpochTimestamp:   now.Unix(),
 		CreatedAt:        now,
 	}
 
 	return dbStore.SaveMerkleSnapshot(ctx, snapshot)
+}
+
+// truncateHash safely truncates a hash string for logging.
+func truncateHash(hash string, length int) string {
+	if len(hash) <= length {
+		return hash
+	}
+	return hash[:length] + "..."
 }
