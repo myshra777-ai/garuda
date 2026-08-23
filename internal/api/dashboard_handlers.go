@@ -1,7 +1,5 @@
 // Copyright 2026 Rohit Mishra
 // SPDX-License-Identifier: Apache-2.0
-//
-// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
 package api
 
@@ -10,15 +8,12 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/store"
-	"github.com/myshra777-ai/garuda/internal/types"
 )
 
 // -----------------------------------------------------------------------------
@@ -42,69 +37,42 @@ type AttentionItem struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
 	Subtitle    string `json:"subtitle"`
-	Severity    string `json:"severity"` // "critical", "warning", "info"
+	Severity    string `json:"severity"`
 	EvidenceLoc string `json:"evidence_loc"`
 }
 
 type EvidenceItem struct {
 	ID        string `json:"id"`
-	Kind      string `json:"kind"` // "Static AST", "Runtime Trace", "Decision", "Merkle"
+	Kind      string `json:"kind"`
 	Summary   string `json:"summary"`
 	Source    string `json:"source"`
 	Timestamp string `json:"timestamp"`
 }
 
 type WorkspaceStatsResponse struct {
-	Workspace         string   `json:"workspace"`
-	Repositories      int      `json:"repositories"`
-	Packages          int      `json:"packages"`
-	Entities          int      `json:"entities"`
-	Relationships     int      `json:"relationships"`
-	CrossRepoLinks    int      `json:"cross_repo_links"`
-	Files             int      `json:"files"`
-	ExportedEntities  int      `json:"exported_entities"`
-	ArchitecturalHubs int      `json:"architectural_hubs"`
-	TopHubs           []HubDTO `json:"top_hubs"`
-
-	// Claim states
-	TotalClaims      int `json:"total_claims"`
-	SupportedClaims  int `json:"supported_claims"`
-	Contradicted     int `json:"contradicted"`
-	UnverifiedClaims int `json:"unverified_claims"`
-
-	// Live MVP Panels
-	NeedsAttention []AttentionItem `json:"needs_attention"`
-	RecentEvidence []EvidenceItem  `json:"recent_evidence"`
-
-	CanonicalDecisions int    `json:"canonical_decisions"`
-	QuarantinedCount   int    `json:"quarantined_count"`
-	LatestBlockHeight  int64  `json:"latest_block_height"`
-	LatestMerkleHash   string `json:"latest_merkle_hash"`
-	ParentMerkleHash   string `json:"parent_merkle_hash"`
-	TrustStatus        string `json:"trust_status"`
-	LastUpdated        string `json:"last_updated"`
-}
-
-// Deprecated: Preserved for backward-compatible AST schema diff verification.
-type AgentFleetItem struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Domain string `json:"domain"`
-	System string `json:"system"`
-	Status string `json:"status"`
-}
-
-// Deprecated: Preserved for backward-compatible AST schema diff verification.
-type RealStatsResponse struct {
-	TotalDecisions       int               `json:"total_decisions"`
-	QuarantinedCount     int               `json:"quarantined_count"`
-	LatestBlockHeight    int64             `json:"latest_block_height"`
-	LatestMerkleHash     string            `json:"latest_merkle_hash"`
-	ParentMerkleHash     string            `json:"parent_merkle_hash"`
-	EstimatedSavings     float64           `json:"estimated_savings"`
-	DomainBreakdown      map[string]int    `json:"domain_breakdown"`
-	QuarantinedDecisions []*types.Decision `json:"quarantined_decisions"`
-	AgentList            []AgentFleetItem  `json:"agent_list"`
+	Workspace          string   `json:"workspace"`
+	Repositories       int      `json:"repositories"`
+	Packages           int      `json:"packages"`
+	Entities           int      `json:"entities"`
+	Relationships      int      `json:"relationships"`
+	CrossRepoLinks     int      `json:"cross_repo_links"`
+	Files              int      `json:"files"`
+	ExportedEntities   int      `json:"exported_entities"`
+	ArchitecturalHubs  int      `json:"architectural_hubs"`
+	TopHubs            []HubDTO `json:"top_hubs"`
+	TotalClaims        int      `json:"total_claims"`
+	SupportedClaims    int      `json:"supported_claims"`
+	Contradicted       int      `json:"contradicted"`
+	UnverifiedClaims   int      `json:"unverified_claims"`
+	NeedsAttention     []AttentionItem `json:"needs_attention"`
+	RecentEvidence     []EvidenceItem  `json:"recent_evidence"`
+	CanonicalDecisions int      `json:"canonical_decisions"`
+	QuarantinedCount   int      `json:"quarantined_count"`
+	LatestBlockHeight  int64    `json:"latest_block_height"`
+	LatestMerkleHash   string   `json:"latest_merkle_hash"`
+	ParentMerkleHash   string   `json:"parent_merkle_hash"`
+	TrustStatus        string   `json:"trust_status"`
+	LastUpdated        string   `json:"last_updated"`
 }
 
 type SearchResult struct {
@@ -122,32 +90,33 @@ type SearchResponse struct {
 	Results []SearchResult `json:"results"`
 }
 
-type GraphResponse struct {
-	Level  string      `json:"level"`
-	Focus  string      `json:"focus,omitempty"`
-	Nodes  []GraphNode `json:"nodes"`
-	Edges  []GraphEdge `json:"edges"`
-	Notice string      `json:"notice,omitempty"`
+type GraphNodeDTO struct {
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Kind     string `json:"kind"`
+	Package  string `json:"package"`
+	Repo     string `json:"repo"`
+	Exported bool   `json:"exported"`
+	Status   string `json:"status"`
+	Count    int    `json:"count,omitempty"`
 }
 
-type GraphNode struct {
-	ID         string `json:"id"`
-	Label      string `json:"label"`
-	Kind       string `json:"kind"`
-	Repo       string `json:"repo,omitempty"`
-	Package    string `json:"package,omitempty"`
-	File       string `json:"file,omitempty"`
-	Exported   bool   `json:"exported,omitempty"`
-	Count      int    `json:"count,omitempty"`
-	Impact     int    `json:"impact,omitempty"`
-	Repository string `json:"repository,omitempty"`
+type GraphEdgeDTO struct {
+	ID         string  `json:"id"`
+	Source     string  `json:"from"`
+	Target     string  `json:"to"`
+	Type       string  `json:"type"`
+	Label      string  `json:"label"`
+	Confidence float64 `json:"confidence"`
+	Status     string  `json:"status"`
+	Count      int     `json:"count,omitempty"`
 }
 
-type GraphEdge struct {
-	From  string `json:"from"`
-	To    string `json:"to"`
-	Type  string `json:"type"`
-	Count int    `json:"count,omitempty"`
+type GraphResponseDTO struct {
+	Level string         `json:"level"`
+	Focus string         `json:"focus"`
+	Nodes []GraphNodeDTO `json:"nodes"`
+	Edges []GraphEdgeDTO `json:"edges"`
 }
 
 type EntityRecord struct {
@@ -175,68 +144,6 @@ func normalizeLimit(value string, fallback, maximum int) int {
 		return maximum
 	}
 	return n
-}
-
-func inferRepository(filePath, pkg string) string {
-	filePath = filepath.ToSlash(filePath)
-	if idx := strings.Index(filePath, "/real_repos/"); idx >= 0 {
-		rest := strings.TrimPrefix(filePath[idx+len("/real_repos/"):], "/")
-		parts := strings.Split(rest, "/")
-		if len(parts) > 0 && parts[0] != "" {
-			name := parts[0]
-			name = strings.TrimSuffix(name, "-base")
-			return name
-		}
-	}
-	if strings.Contains(filePath, "garuda") || strings.HasPrefix(pkg, "github.com/myshra777-ai/garuda") || strings.Contains(pkg, "example.com") {
-		return "garuda"
-	}
-	parts := strings.Split(strings.Trim(pkg, "/"), "/")
-	if len(parts) >= 3 && parts[0] == "github.com" {
-		return parts[2]
-	}
-	if len(parts) >= 2 {
-		return parts[0] + "/" + parts[1]
-	}
-	if pkg != "" {
-		return pkg
-	}
-	return "garuda"
-}
-
-func groupNodeID(level, value string) string {
-	return level + ":" + value
-}
-
-func makeEntityNode(e EntityRecord) GraphNode {
-	return GraphNode{
-		ID:       e.ID,
-		Label:    e.Name,
-		Kind:     e.Kind,
-		Repo:     e.Repo,
-		Package:  e.Package,
-		File:     e.File,
-		Exported: e.Exported,
-		Impact:   0,
-	}
-}
-
-func sortNodes(nodes []GraphNode) {
-	sort.Slice(nodes, func(i, j int) bool {
-		if nodes[i].Impact != nodes[j].Impact {
-			return nodes[i].Impact > nodes[j].Impact
-		}
-		return strings.ToLower(nodes[i].Label) < strings.ToLower(nodes[j].Label)
-	})
-}
-
-func sortEdges(edges []GraphEdge) {
-	sort.Slice(edges, func(i, j int) bool {
-		if edges[i].Count != edges[j].Count {
-			return edges[i].Count > edges[j].Count
-		}
-		return edges[i].Type < edges[j].Type
-	})
 }
 
 // -----------------------------------------------------------------------------
@@ -268,8 +175,8 @@ const prodDashboardHTML = `<!DOCTYPE html>
     --green-soft: #ecfdf5;
     --amber: #d97706;
     --amber-soft: #fffbeb;
-    --red: #dc2626;
-    --red-soft: #fef2f2;
+    --red: #e11d48;
+    --red-soft: #ffe4e6;
     --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
     --shadow-md: 0 5px 20px rgba(16, 24, 40, 0.07);
     --radius: 10px;
@@ -329,7 +236,6 @@ button { cursor: pointer; }
 .kpi-value { font-size: 25px; font-weight: 750; margin-top: 7px; letter-spacing: -0.03em; }
 .kpi-foot { color: var(--muted); font-size: 11px; margin-top: 5px; }
 
-/* CLAIM TRUST STRIP */
 .trust-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-bottom: 20px; }
 .trust-card { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); border-left: 4px solid var(--muted); }
 .trust-card.supported { border-left-color: var(--green); }
@@ -375,7 +281,6 @@ button { cursor: pointer; }
 .row-title { color: var(--text); font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-meta { color: var(--muted); font-size: 10px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ATTENTION & EVIDENCE BADGES */
 .badge-pill { font-size: 9px; font-weight: 750; padding: 3px 7px; border-radius: 5px; text-transform: uppercase; }
 .badge-pill.critical { background: var(--red-soft); color: var(--red); border: 1px solid #fecaca; }
 .badge-pill.warning { background: var(--amber-soft); color: var(--amber); border: 1px solid #fde68a; }
@@ -388,20 +293,29 @@ button { cursor: pointer; }
 .graph-button:hover { background: #f8fafc; color: var(--text); }
 .graph-button.primary { background: var(--brand); color: white; border-color: var(--brand); }
 .graph-button.primary:hover { background: var(--brand-dark); }
-.graph-wrap { height: 570px; position: relative; background: linear-gradient(#f4f6f9 1px, transparent 1px), linear-gradient(90deg, #f4f6f9 1px, transparent 1px); background-size: 28px 28px; overflow: hidden; }
+
+/* FULLSCREEN INFINITE CANVAS */
+.graph-wrap { height: 570px; position: relative; background: linear-gradient(#f4f6f9 1px, transparent 1px), linear-gradient(90deg, #f4f6f9 1px, transparent 1px); background-size: 28px 28px; overflow: hidden; transition: all 0.2s ease; }
+.graph-wrap.fullscreen { position: fixed; inset: 0; z-index: 9999; height: 100vh; width: 100vw; background-color: white; margin: 0; padding: 0; }
+.graph-wrap.fullscreen .graph-controls { top: 20px; right: 20px; }
+
 #graph { width: 100%; height: 100%; }
 .graph-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; pointer-events: none; }
 .graph-help { position: absolute; left: 14px; bottom: 13px; background: rgba(255,255,255,0.94); border: 1px solid var(--border); border-radius: 7px; padding: 7px 9px; color: var(--muted); font-size: 10px; box-shadow: var(--shadow-sm); }
 .graph-controls { position: absolute; right: 13px; top: 13px; display: flex; flex-direction: column; gap: 5px; }
 .graph-control { width: 30px; height: 30px; border: 1px solid var(--border); background: white; color: var(--text-2); border-radius: 6px; box-shadow: var(--shadow-sm); }
-.graph-node-label { font-size: 11px; fill: #1e293b; pointer-events: none; }
-.graph-node-label.strong { font-weight: 750; }
-.graph-link { stroke: #3b82f6; stroke-opacity: 0.7; }
-.graph-link-label { fill: #475569; font-size: 9px; font-weight: 600; pointer-events: none; }
+.graph-node-label { font-size: 10px; fill: #f8fafc; pointer-events: none; font-weight: 600; text-anchor: middle; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+.graph-node-label.dark { fill: #0f172a; text-shadow: none; }
+.graph-link { stroke: #cbd5e1; stroke-opacity: 0.6; }
+.graph-link.violation { stroke: #e11d48; stroke-opacity: 0.9; stroke-dasharray: 4; animation: pulse-edge 2s infinite; }
+.graph-link-label { fill: #e11d48; font-size: 9px; font-weight: 700; pointer-events: none; }
 
-.drawer-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.15); z-index: 100; display: none; }
+@keyframes pulse-edge { 0% { stroke-opacity: 0.6; } 50% { stroke-opacity: 1; } 100% { stroke-opacity: 0.6; } }
+@keyframes pulse-node { 0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(225, 29, 72, 0); } 100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); } }
+
+.drawer-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.15); z-index: 10000; display: none; }
 .drawer-overlay.open { display: block; }
-.drawer { position: fixed; right: 0; top: 0; height: 100vh; width: min(470px, 92vw); background: white; border-left: 1px solid var(--border); box-shadow: -12px 0 35px rgba(16,24,40,0.12); z-index: 101; transform: translateX(100%); transition: transform 0.2s ease; display: flex; flex-direction: column; }
+.drawer { position: fixed; right: 0; top: 0; height: 100vh; width: min(470px, 92vw); background: white; border-left: 1px solid var(--border); box-shadow: -12px 0 35px rgba(16,24,40,0.12); z-index: 10001; transform: translateX(100%); transition: transform 0.2s ease; display: flex; flex-direction: column; }
 .drawer.open { transform: translateX(0); }
 .drawer-header { padding: 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; gap: 12px; }
 .drawer-title { font-size: 16px; font-weight: 750; }
@@ -426,7 +340,6 @@ button { cursor: pointer; }
 
 <body>
 <div class="app">
-    <!-- SIDEBAR -->
     <aside class="sidebar">
         <div class="brand">
             <div class="brand-mark">🦅</div>
@@ -473,7 +386,6 @@ button { cursor: pointer; }
         </div>
     </aside>
 
-    <!-- MAIN -->
     <section class="main">
         <header class="topbar">
             <div class="global-search">
@@ -491,7 +403,6 @@ button { cursor: pointer; }
         </header>
 
         <main class="content">
-            <!-- VIEW: OVERVIEW -->
             <section id="view-overview">
                 <div class="breadcrumbs">
                     <span>Workspace</span>
@@ -512,7 +423,6 @@ button { cursor: pointer; }
                     </div>
                 </div>
 
-                <!-- TOP KPI CARDS -->
                 <div class="kpi-grid">
                     <div class="kpi-card">
                         <div class="kpi-label">Repositories</div>
@@ -536,7 +446,6 @@ button { cursor: pointer; }
                     </div>
                 </div>
 
-                <!-- CLAIM EPISTEMIC STRIP -->
                 <div class="trust-strip">
                     <div class="trust-card supported">
                         <div class="trust-card-title">✓ Supported Claims</div>
@@ -555,7 +464,6 @@ button { cursor: pointer; }
                     </div>
                 </div>
 
-                <!-- SEARCH BAR -->
                 <div class="start-card">
                     <div class="start-title">Find anything in the workspace</div>
                     <div class="start-description">Instant fuzzy search across all symbols, files, and packages.</div>
@@ -569,7 +477,6 @@ button { cursor: pointer; }
                     </div>
                 </div>
 
-                <!-- ROW 1: EXPLORER & HUBS -->
                 <div class="two-column">
                     <div class="panel">
                         <div class="panel-header">
@@ -615,7 +522,6 @@ button { cursor: pointer; }
                     </div>
                 </div>
 
-                <!-- ROW 2: NEEDS ATTENTION & RECENT EVIDENCE (NEW MVP PANELS) -->
                 <div class="two-column">
                     <div class="panel">
                         <div class="panel-header">
@@ -643,7 +549,6 @@ button { cursor: pointer; }
                 </div>
             </section>
 
-            <!-- VIEW: ARCHITECTURE -->
             <section id="view-architecture" style="display:none;">
                 <div class="breadcrumbs">
                     <button class="breadcrumb-button" onclick="showView('overview')">Workspace</button>
@@ -671,10 +576,11 @@ button { cursor: pointer; }
                             <button class="graph-button primary" onclick="fitGraph()">Fit</button>
                         </div>
                     </div>
-                    <div class="graph-wrap">
+                    <div class="graph-wrap" id="graph-wrap">
                         <svg id="graph"></svg>
                         <div id="graph-empty" class="graph-empty" style="display:none;">No architecture data available.</div>
                         <div class="graph-controls">
+                            <button class="graph-control" onclick="toggleFullscreen()" title="Toggle Fullscreen">⛶</button>
                             <button class="graph-control" onclick="zoomGraph(1.25)" title="Zoom in">+</button>
                             <button class="graph-control" onclick="zoomGraph(0.8)" title="Zoom out">−</button>
                             <button class="graph-control" onclick="fitGraph()" title="Fit graph">⌂</button>
@@ -684,7 +590,6 @@ button { cursor: pointer; }
                 </div>
             </section>
 
-            <!-- VIEW: SEARCH -->
             <section id="view-search" class="search-view">
                 <div class="breadcrumbs">
                     <button class="breadcrumb-button" onclick="showView('overview')">Workspace</button>
@@ -713,7 +618,6 @@ button { cursor: pointer; }
                 </div>
             </section>
 
-            <!-- VIEW: TRUST -->
             <section id="view-trust" class="search-view">
                 <div class="breadcrumbs">
                     <button class="breadcrumb-button" onclick="showView('overview')">Workspace</button>
@@ -766,7 +670,6 @@ button { cursor: pointer; }
     </section>
 </div>
 
-<!-- DETAIL DRAWER -->
 <div id="drawer-overlay" class="drawer-overlay" onclick="closeDrawer()"></div>
 <aside id="drawer" class="drawer">
     <div class="drawer-header">
@@ -794,6 +697,12 @@ var state = {
     graphSimulation: null,
     searchTimer: null
 };
+
+function toggleFullscreen() {
+    var wrap = document.getElementById("graph-wrap");
+    wrap.classList.toggle("fullscreen");
+    setTimeout(fitGraph, 200);
+}
 
 function showView(view) {
     state.currentView = view;
@@ -950,8 +859,7 @@ async function loadArchitecture(level, focus) {
     updateArchitectureHeader();
 
     var url = "/api/v1/graph?workspace=" + encodeURIComponent(WORKSPACE) +
-        "&level=" + encodeURIComponent(state.currentLevel) +
-        "&limit=180";
+        "&level=" + encodeURIComponent(state.currentLevel);
     if (state.currentFocus) {
         url += "&focus=" + encodeURIComponent(state.currentFocus);
     }
@@ -995,14 +903,15 @@ function updateArchitectureHeader() {
 }
 
 var nodeTypeColors = {
-    repository: "#2563eb",
+    repository: "#0f172a",
     package: "#7c3aed",
-    function: "#d97706",
-    method: "#059669",
-    struct: "#0284c7",
-    interface: "#7c3aed",
+    interface: "#0d9488",
+    struct: "#4f46e5",
+    function: "#f59e0b",
+    method: "#d97706",
     file: "#db2777",
-    default: "#475467"
+    default: "#64748b",
+    external_quarantined: "#e11d48"
 };
 
 function nodeColor(kind) {
@@ -1026,7 +935,6 @@ function renderGraph(data) {
 
     svg.attr("width", width).attr("height", height);
 
-    // Defs for arrowheads
     var defs = svg.append("defs");
     defs.append("marker")
         .attr("id", "arrow")
@@ -1038,7 +946,19 @@ function renderGraph(data) {
         .attr("orient", "auto")
         .append("path")
         .attr("d", "M0,-5L10,0L0,5")
-        .attr("fill", "#3b82f6");
+        .attr("fill", "#cbd5e1");
+        
+    defs.append("marker")
+        .attr("id", "arrow-violation")
+        .attr("viewBox", "0 -5 10 10")
+        .attr("refX", 26)
+        .attr("refY", 0)
+        .attr("markerWidth", 6)
+        .attr("markerHeight", 6)
+        .attr("orient", "auto")
+        .append("path")
+        .attr("d", "M0,-5L10,0L0,5")
+        .attr("fill", "#e11d48");
 
     var zoomLayer = svg.append("g");
     state.graphSvg = svg;
@@ -1050,14 +970,9 @@ function renderGraph(data) {
     svg.call(zoom);
     state.graphZoom = zoom;
 
-    var nodes = data.nodes.map(function(n) {
-        return Object.assign({}, n);
-    });
-
+    var nodes = data.nodes.map(function(n) { return Object.assign({}, n); });
     var nodeByID = {};
-    nodes.forEach(function(n) {
-        nodeByID[n.id] = n;
-    });
+    nodes.forEach(function(n) { nodeByID[n.id] = n; });
 
     var validEdges = (data.edges || []).filter(function(e) {
         return nodeByID[e.from] && nodeByID[e.to];
@@ -1066,18 +981,24 @@ function renderGraph(data) {
             source: e.from,
             target: e.to,
             type: e.type,
+            status: e.status,
+            label: e.label,
             count: e.count || 1
         };
     });
 
+    var linkDist = state.currentLevel === "repository" ? 220 : (state.currentLevel === "package" ? 140 : 80);
+    var chargeForce = state.currentLevel === "repository" ? -1500 : (state.currentLevel === "package" ? -800 : -350);
+
     var simulation = d3.forceSimulation(nodes)
-        .force("link", d3.forceLink(validEdges).id(function(d) { return d.id; }).distance(state.currentLevel === "entity" ? 120 : 180).strength(0.35))
-        .force("charge", d3.forceManyBody().strength(state.currentLevel === "entity" ? -350 : -600))
+        .force("link", d3.forceLink(validEdges).id(function(d) { return d.id; }).distance(linkDist).strength(0.35))
+        .force("charge", d3.forceManyBody().strength(chargeForce))
         .force("center", d3.forceCenter(width / 2, height / 2))
         .force("collision", d3.forceCollide().radius(function(d) {
-            if (state.currentLevel === "repository") return 55;
-            if (state.currentLevel === "package") return 38;
-            return 28;
+            var val = (d.count || d.Count || 1);
+            var logScale = Math.log10(val + 1) * 12;
+            var base = state.currentLevel === "repository" ? 26 + logScale : (state.currentLevel === "package" ? 20 + logScale : 15 + (logScale/2));
+            return base + 15;
         }));
 
     state.graphSimulation = simulation;
@@ -1085,15 +1006,16 @@ function renderGraph(data) {
     var link = zoomLayer.append("g").selectAll("line")
         .data(validEdges)
         .enter().append("line")
-        .attr("class", "graph-link")
+        .attr("class", function(d) { return d.status === "CONTRADICTED" ? "graph-link violation" : "graph-link"; })
         .attr("stroke-width", function(d) { return Math.min(6, 2 + Math.log2((d.count || 1) + 1)); })
-        .attr("marker-end", "url(#arrow)");
+        .attr("marker-end", function(d) { return d.status === "CONTRADICTED" ? "url(#arrow-violation)" : "url(#arrow)"; });
 
+    var violationEdges = validEdges.filter(function(d) { return d.status === "CONTRADICTED"; });
     var linkLabels = zoomLayer.append("g").selectAll("text")
-        .data(validEdges)
+        .data(violationEdges)
         .enter().append("text")
         .attr("class", "graph-link-label")
-        .text(function(d) { return (d.count || 1) > 1 ? d.type + " (" + d.count + ")" : d.type; });
+        .text(function(d) { return d.label ? d.label : "VIOLATION"; });
 
     var node = zoomLayer.append("g").selectAll("g")
         .data(nodes)
@@ -1114,19 +1036,20 @@ function renderGraph(data) {
 
     node.append("circle")
         .attr("r", function(d) {
-            if (state.currentLevel === "repository") return 26 + Math.min(18, Math.sqrt(d.Count || 1) * 1.5);
-            if (state.currentLevel === "package") return 20 + Math.min(12, Math.sqrt(d.Count || 1));
-            return 15;
+            var val = (d.count || d.Count || 1);
+            var logScale = Math.log10(val + 1) * 12;
+            if (state.currentLevel === "repository") return 26 + logScale;
+            if (state.currentLevel === "package") return 20 + logScale;
+            return 15 + (Math.log10(val + 1) * 6);
         })
         .attr("fill", function(d) { return nodeColor(d.kind); })
-        .attr("fill-opacity", 0.95)
+        .attr("fill-opacity", 1)
         .attr("stroke", "#ffffff")
-        .attr("stroke-width", 3);
+        .attr("stroke-width", 2)
+        .style("animation", function(d) { return d.status === "CONTRADICTED" ? "pulse-node 2s infinite" : "none"; });
 
     node.append("text")
-        .attr("class", function(d) { return "graph-node-label " + ((d.Count || 0) > 50 ? "strong" : ""); })
-        .attr("x", function(d) { return state.currentLevel === "repository" ? 34 : 24; })
-        .attr("y", 4)
+        .attr("class", "graph-node-label")
         .text(function(d) { return shortenLabel(d.label, 30); });
 
     node.on("click", function(event, d) {
@@ -1226,8 +1149,7 @@ function openNodeDrawer(node) {
     if (node.package) html += propertyRow("Package", node.package);
     if (node.file) html += propertyRow("File", node.file);
     if (node.exported !== undefined) html += propertyRow("Exported", node.exported ? "Yes" : "No");
-    if (node.Count) html += propertyRow("Contained", formatNumber(node.Count));
-    if (node.Impact) html += propertyRow("Centrality impact", formatNumber(node.Impact));
+    if (node.Count || node.count) html += propertyRow("Contained/Centrality", formatNumber(node.Count || node.count));
     html += '</div>';
 
     html += '<div class="detail-section"><div class="detail-section-title">Actions</div>';
@@ -1438,6 +1360,55 @@ func (s *Server) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 	_ = parsedProdDashboardTmpl.Execute(w, data)
 }
 
+func inferRepositoryFromPackage(pkg string) string {
+	if pkg == "" {
+		return "unknown"
+	}
+
+	parts := strings.Split(strings.Trim(pkg, "/"), "/")
+	firstSegment := parts[0]
+
+	if !strings.Contains(firstSegment, ".") && firstSegment != "garuda" && firstSegment != "myshra777-ai" {
+		return "stdlib"
+	}
+
+	if strings.Contains(pkg, "go.uber.org/zap") {
+		return "go.uber.org/zap"
+	}
+	if strings.Contains(pkg, "spf13/cobra") {
+		return "github.com/spf13/cobra"
+	}
+	if strings.Contains(pkg, "gorilla/websocket") {
+		return "github.com/gorilla/websocket"
+	}
+	if strings.Contains(pkg, "gin-gonic/gin") {
+		return "github.com/gin-gonic/gin"
+	}
+	if strings.Contains(pkg, "prometheus/client_golang") {
+		return "github.com/prometheus/client_golang"
+	}
+	if strings.Contains(pkg, "sirupsen/logrus") {
+		return "github.com/sirupsen/logrus"
+	}
+	if strings.Contains(pkg, "go-chi/chi") {
+		return "chi"
+	}
+	if strings.Contains(pkg, "gorilla/securecookie") {
+		return "securecookie"
+	}
+	if strings.Contains(pkg, "myshra777-ai/garuda") {
+		return "garuda"
+	}
+
+	if len(parts) >= 3 && parts[0] == "github.com" {
+		return parts[2]
+	}
+	if len(parts) >= 2 {
+		return parts[0] + "/" + parts[1]
+	}
+	return pkg
+}
+
 func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := getDashboardTenant()
@@ -1454,102 +1425,87 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var workspaceID uuid.UUID
-	err := pgStore.Pool().QueryRow(
-		ctx,
-		`SELECT id FROM workspaces WHERE name = $1 LIMIT 1`,
-		workspaceName,
-	).Scan(&workspaceID)
-
+	err := pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID)
 	if err != nil {
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT id, name FROM workspaces LIMIT 1`).Scan(&workspaceID, &workspaceName)
+		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces LIMIT 1`).Scan(&workspaceID)
 	}
 
-	// 1. Scanned Repositories Count (excluding external stubs)
-	repoRows, err := pgStore.Pool().Query(
-		ctx,
-		`SELECT package, file_path FROM entities WHERE workspace_id = $1 AND kind != 'external'`,
-		workspaceID,
-	)
-	repoSet := make(map[string]struct{})
+	// ============================================================
+	// 1. REPOSITORY COUNT DYNAMIC IN-MEMORY
+	// ============================================================
+	repoSet := make(map[string]bool)
+	pkgRows, err := pgStore.Pool().Query(ctx, `SELECT DISTINCT package FROM entities WHERE workspace_id = $1 AND kind != 'external'`, workspaceID)
 	if err == nil {
-		for repoRows.Next() {
-			var pkg, file string
-			if err := repoRows.Scan(&pkg, &file); err == nil {
-				repo := inferRepository(file, pkg)
-				if repo != "unknown" && repo != "" {
-					repoSet[repo] = struct{}{}
+		defer pkgRows.Close()
+		for pkgRows.Next() {
+			var p string
+			if err := pkgRows.Scan(&p); err == nil {
+				rName := inferRepositoryFromPackage(p)
+				if rName != "stdlib" && rName != "unknown" {
+					repoSet[rName] = true
 				}
 			}
 		}
-		repoRows.Close()
 	}
 	repositories := len(repoSet)
 	if repositories == 0 {
-		repositories = 6
+		repositories = 10
 	}
 
-	// 2. Entity & Package Metrics
+	var crossRepoLinks int
+	crossRows, err := pgStore.Pool().Query(ctx, `
+		SELECT e1.package, e2.package 
+		FROM claims c
+		JOIN entities e1 ON e1.id = c.from_entity_id
+		JOIN entities e2 ON e2.id = c.to_entity_id
+		WHERE c.workspace_id = $1
+	`, workspaceID)
+	if err == nil {
+		defer crossRows.Close()
+		seenBridges := make(map[string]bool)
+		for crossRows.Next() {
+			var pkg1, pkg2 string
+			if err := crossRows.Scan(&pkg1, &pkg2); err == nil {
+				r1 := inferRepositoryFromPackage(pkg1)
+				r2 := inferRepositoryFromPackage(pkg2)
+				if r1 != r2 && r1 != "stdlib" && r2 != "stdlib" && r1 != "unknown" && r2 != "unknown" {
+					bridge := r1 + "->" + r2
+					if !seenBridges[bridge] {
+						seenBridges[bridge] = true
+						crossRepoLinks++
+					}
+				}
+			}
+		}
+	}
+
 	var packages, entities, files, exportedEntities int
-	_ = pgStore.Pool().QueryRow(
-		ctx,
-		`
-		SELECT
-			COUNT(*)::int,
-			COUNT(DISTINCT package)::int,
-			COUNT(DISTINCT file_path)::int,
-			COUNT(*) FILTER (WHERE is_exported = TRUE)::int
-		FROM entities
-		WHERE workspace_id = $1 AND kind != 'external'
-		`,
-		workspaceID,
-	).Scan(&entities, &packages, &files, &exportedEntities)
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int, COUNT(DISTINCT package)::int, COUNT(DISTINCT file_path)::int, COUNT(*) FILTER (WHERE is_exported = TRUE)::int
+		FROM entities WHERE workspace_id = $1 AND kind != 'external'
+	`, workspaceID).Scan(&entities, &packages, &files, &exportedEntities)
 
-	// 3. Relationships & Cross-Repo links
-	var relationships, crossRepoLinks int
-	_ = pgStore.Pool().QueryRow(
-		ctx,
-		`SELECT COUNT(*)::int FROM claims WHERE workspace_id = $1`,
-		workspaceID,
-	).Scan(&relationships)
+	var relationships int
+	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM claims WHERE workspace_id = $1`, workspaceID).Scan(&relationships)
 
-	_ = pgStore.Pool().QueryRow(
-		ctx,
-		`SELECT COUNT(*)::int FROM cross_repo_edges WHERE workspace_id = $1`,
-		workspaceID,
-	).Scan(&crossRepoLinks)
-
-	// 4. Claims breakdown
 	var activeContradictions int
-	_ = pgStore.Pool().QueryRow(
-		ctx,
-		`SELECT COUNT(*)::int FROM contradictions WHERE workspace_id = $1 AND status = 'QUARANTINED'`,
-		workspaceID,
-	).Scan(&activeContradictions)
+	_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(COUNT(*)::int, 0) FROM claim_verifications WHERE workspace_id = $1 AND status = 'CONTRADICTED'`, workspaceID).Scan(&activeContradictions)
 
-	var runtimeObservedCount int
-	_ = pgStore.Pool().QueryRow(
-		ctx,
-		`SELECT COUNT(*)::int FROM runtime_observations WHERE workspace_id = $1`,
-		workspaceID,
-	).Scan(&runtimeObservedCount)
+	var supportedClaims int
+	_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(COUNT(*)::int, 0) FROM claim_verifications WHERE workspace_id = $1 AND status = 'SUPPORTED'`, workspaceID).Scan(&supportedClaims)
 
+	var unverifiedClaims int
+	_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(COUNT(*)::int, 0) FROM claim_verifications WHERE workspace_id = $1 AND status = 'UNVERIFIED'`, workspaceID).Scan(&unverifiedClaims)
+
+	if supportedClaims == 0 && unverifiedClaims == 0 && activeContradictions == 0 {
+		unverifiedClaims = relationships
+	}
 	totalClaims := relationships
-	supportedClaims := runtimeObservedCount
-	if supportedClaims == 0 && totalClaims > 0 {
-		supportedClaims = totalClaims - activeContradictions
-	}
-	if supportedClaims > totalClaims {
-		supportedClaims = totalClaims
-	}
-	unverifiedClaims := totalClaims - supportedClaims - activeContradictions
-	if unverifiedClaims < 0 {
-		unverifiedClaims = 0
+	if totalClaims == 0 {
+		totalClaims = supportedClaims + unverifiedClaims + activeContradictions
 	}
 
-	// 5. Top Architectural Hubs (Ranked by Callers)
-	hubRows, err := pgStore.Pool().Query(
-		ctx,
-		`
+	hubRows, err := pgStore.Pool().Query(ctx, `
 		SELECT e.id, e.name, e.kind, e.package, count(c.id) as callers
 		FROM entities e
 		JOIN claims c ON c.to_entity_id = e.id
@@ -1557,71 +1513,46 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		GROUP BY e.id, e.name, e.kind, e.package
 		ORDER BY callers DESC
 		LIMIT 5
-		`,
-		workspaceID,
-	)
+	`, workspaceID)
 	var topHubs []HubDTO
 	if err == nil {
 		defer hubRows.Close()
 		for hubRows.Next() {
 			var h HubDTO
 			if err := hubRows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.Callers); err == nil {
-				h.Repo = inferRepository("", h.Package)
+				h.Repo = inferRepositoryFromPackage(h.Package)
 				topHubs = append(topHubs, h)
 			}
 		}
 	}
 
-	// 6. Live "Needs Attention" Alerts
 	var needsAttention []AttentionItem
-	if activeContradictions > 0 {
-		contraRows, err := pgStore.Pool().Query(
-			ctx,
-			`
-			SELECT id, observation_summary, severity, evidence_file || ':' || evidence_line
-			FROM contradictions
-			WHERE workspace_id = $1 AND status = 'QUARANTINED'
-			LIMIT 5
-			`,
-			workspaceID,
-		)
-		if err == nil {
-			defer contraRows.Close()
-			for contraRows.Next() {
-				var it AttentionItem
-				if err := contraRows.Scan(&it.ID, &it.Title, &it.Severity, &it.EvidenceLoc); err == nil {
-					it.Subtitle = "Quarantined policy violation"
-					needsAttention = append(needsAttention, it)
-				}
+	contraClaimRows, err := pgStore.Pool().Query(ctx, `
+		SELECT cv.id::text, 'Runtime deviation: unauthorized call to ' || COALESCE(cv.evidence_payload->>'raw_target', 'unapproved endpoint'), 'CRITICAL', COALESCE(e.file_path, 'runtime') || ':' || COALESCE(e.line_start::text, '0')
+		FROM claim_verifications cv
+		JOIN entities e ON e.id = cv.source_entity_id
+		WHERE cv.workspace_id = $1 AND cv.status = 'CONTRADICTED'
+		LIMIT 5
+	`, workspaceID)
+	if err == nil {
+		defer contraClaimRows.Close()
+		for contraClaimRows.Next() {
+			var it AttentionItem
+			if err := contraClaimRows.Scan(&it.ID, &it.Title, &it.Severity, &it.EvidenceLoc); err == nil {
+				it.Subtitle = "Quarantined runtime contradiction"
+				needsAttention = append(needsAttention, it)
 			}
 		}
 	}
 
-	// If no contradictions, show top unverified boundary if any
-	if len(needsAttention) == 0 && crossRepoLinks > 0 {
-		needsAttention = append(needsAttention, AttentionItem{
-			ID:          "cross-repo-notice",
-			Title:       "Cross-Repository Boundary Verified",
-			Subtitle:    fmt.Sprintf("%d inter-repository dependency bridges active", crossRepoLinks),
-			Severity:    "info",
-			EvidenceLoc: "cross_repo_edges",
-		})
-	}
-
-	// 7. Live "Recent Evidence" Feed
 	var recentEvidence []EvidenceItem
-	// Fetch recent runtime traces or static claims
-	traceRows, err := pgStore.Pool().Query(
-		ctx,
-		`
-		SELECT trace_id, source_service || ' → ' || target_service || ' (' || operation || ')', 'Runtime Trace', observed_at
+	traceRows, err := pgStore.Pool().Query(ctx, `
+		SELECT trace_id, service_name || ' → (' || operation || ')', 'Runtime Trace', started_at
 		FROM runtime_observations
 		WHERE workspace_id = $1
-		ORDER BY observed_at DESC
+		ORDER BY started_at DESC
 		LIMIT 3
-		`,
-		workspaceID,
-	)
+	`, workspaceID)
 	if err == nil {
 		defer traceRows.Close()
 		for traceRows.Next() {
@@ -1635,28 +1566,7 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Fill with static compiler proofs
-	if len(recentEvidence) < 3 {
-		recentEvidence = append(recentEvidence,
-			EvidenceItem{
-				ID:        "proof-ast-chi",
-				Kind:      "Static AST",
-				Summary:   "chi.NewRouter → middleware.Logger execution contract",
-				Source:    "chi/mux.go:48",
-				Timestamp: time.Now().Add(-12 * time.Minute).Format(time.RFC3339),
-			},
-			EvidenceItem{
-				ID:        "proof-ast-sec",
-				Kind:      "Static AST",
-				Summary:   "handlers.CORS → securecookie.Decode verification",
-				Source:    "handlers/cors.go:112",
-				Timestamp: time.Now().Add(-25 * time.Minute).Format(time.RFC3339),
-			},
-		)
-	}
-
-	// 8. Merkle Snapshot Status
-	latestSnap, _ := s.store.GetLatestMerkleSnapshot(ctx, tenantID)
+	latestSnap, _ := pgStore.GetLatestMerkleSnapshot(ctx, tenantID)
 	latestHash := "Genesis verified"
 	parentHash := "Genesis"
 	var latestBlock int64 = 1
@@ -1720,11 +1630,7 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 	limit := normalizeLimit(r.URL.Query().Get("limit"), 50, 100)
 
 	var workspaceID uuid.UUID
-	err := pgStore.Pool().QueryRow(
-		ctx,
-		`SELECT id FROM workspaces WHERE name = $1 LIMIT 1`,
-		workspaceName,
-	).Scan(&workspaceID)
+	err := pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID)
 	if err != nil {
 		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces LIMIT 1`).Scan(&workspaceID)
 	}
@@ -1754,7 +1660,7 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var res SearchResult
 		if err := rows.Scan(&res.ID, &res.Name, &res.Kind, &res.Package, &res.File, &res.Exported); err == nil {
-			res.Repo = inferRepository(res.File, res.Package)
+			res.Repo = inferRepositoryFromPackage(res.Package)
 			results = append(results, res)
 		}
 	}
@@ -1764,352 +1670,221 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
-		http.Error(w, "graph data unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "store unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
-	ctx := r.Context()
 	workspaceName := r.URL.Query().Get("workspace")
 	if workspaceName == "" {
 		workspaceName = "uuid-ws"
 	}
-	level := r.URL.Query().Get("level")
-	if level == "" {
-		level = "repository"
-	}
-	focus := strings.TrimSpace(r.URL.Query().Get("focus"))
-	limit := normalizeLimit(r.URL.Query().Get("limit"), 180, 300)
 
 	var workspaceID uuid.UUID
-	err := pgStore.Pool().QueryRow(
-		ctx,
-		`SELECT id FROM workspaces WHERE name = $1 LIMIT 1`,
-		workspaceName,
-	).Scan(&workspaceID)
+	err := pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID)
 	if err != nil {
 		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces LIMIT 1`).Scan(&workspaceID)
 	}
 
-	// Load entities
-	rows, err := pgStore.Pool().Query(
-		ctx,
-		`SELECT id, name, kind, package, file_path, is_exported FROM entities WHERE workspace_id = $1`,
-		workspaceID,
-	)
-	if err != nil {
-		http.Error(w, "failed to query entities", http.StatusInternalServerError)
-		return
+	level := r.URL.Query().Get("level")
+	if level == "" {
+		level = "repository"
 	}
-	defer rows.Close()
+	focus := r.URL.Query().Get("focus")
 
-	entities := make(map[string]EntityRecord)
-	for rows.Next() {
-		var e EntityRecord
-		if err := rows.Scan(&e.ID, &e.Name, &e.Kind, &e.Package, &e.File, &e.Exported); err == nil {
-			e.Repo = inferRepository(e.File, e.Package)
-			entities[e.ID] = e
-		}
-	}
-
-	// Load all claims and cross-repo edges
-	type RawEdge struct {
-		From, To, Type string
-	}
-	rawEdges := make([]RawEdge, 0)
-	claimRows, err := pgStore.Pool().Query(
-		ctx,
-		`SELECT from_entity_id, to_entity_id, claim_type FROM claims WHERE workspace_id = $1`,
-		workspaceID,
-	)
+	entityMap := make(map[string]EntityRecord)
+	eRows, err := pgStore.Pool().Query(ctx, `SELECT id::text, name, kind, package, file_path, is_exported FROM entities WHERE workspace_id = $1`, workspaceID)
 	if err == nil {
-		defer claimRows.Close()
-		for claimRows.Next() {
-			var from, to, typ string
-			if err := claimRows.Scan(&from, &to, &typ); err == nil {
-				if _, ok1 := entities[from]; ok1 {
-					if _, ok2 := entities[to]; ok2 {
-						rawEdges = append(rawEdges, RawEdge{From: from, To: to, Type: typ})
-					}
-				}
+		defer eRows.Close()
+		for eRows.Next() {
+			var e EntityRecord
+			if err := eRows.Scan(&e.ID, &e.Name, &e.Kind, &e.Package, &e.File, &e.Exported); err == nil {
+				e.Repo = inferRepositoryFromPackage(e.Package)
+				entityMap[e.ID] = e
 			}
 		}
 	}
 
-	crossRows, err := pgStore.Pool().Query(
-		ctx,
-		`SELECT from_entity_id, to_entity_id, relationship_type FROM cross_repo_edges WHERE workspace_id = $1`,
-		workspaceID,
-	)
+	type rawClaim struct{ from, to string }
+	var claims []rawClaim
+	cRows, err := pgStore.Pool().Query(ctx, `SELECT from_entity_id::text, to_entity_id::text FROM claims WHERE workspace_id = $1`, workspaceID)
 	if err == nil {
-		defer crossRows.Close()
-		for crossRows.Next() {
-			var from, to, typ string
-			if err := crossRows.Scan(&from, &to, &typ); err == nil {
-				if _, ok1 := entities[from]; ok1 {
-					if _, ok2 := entities[to]; ok2 {
-						rawEdges = append(rawEdges, RawEdge{From: from, To: to, Type: typ})
-					}
-				}
+		defer cRows.Close()
+		for cRows.Next() {
+			var c rawClaim
+			if err := cRows.Scan(&c.from, &c.to); err == nil {
+				claims = append(claims, c)
 			}
 		}
 	}
 
-	// ------------------------------------------------------------------
-	// LEVEL 1: REPOSITORY TOPOLOGY
-	// ------------------------------------------------------------------
+	type rawContra struct {
+		src, rawTarget string
+		count          int64
+	}
+	var contras []rawContra
+	cvRows, err := pgStore.Pool().Query(ctx, `
+		SELECT source_entity_id::text, COALESCE(evidence_payload->>'raw_target', 'unapproved-endpoint'), runtime_observed_count 
+		FROM claim_verifications 
+		WHERE workspace_id = $1 AND status = 'CONTRADICTED'
+	`, workspaceID)
+	if err == nil {
+		defer cvRows.Close()
+		for cvRows.Next() {
+			var cv rawContra
+			if err := cvRows.Scan(&cv.src, &cv.rawTarget, &cv.count); err == nil {
+				contras = append(contras, cv)
+			}
+		}
+	}
+
+	nodesMap := make(map[string]GraphNodeDTO)
+	edgesMap := make(map[string]GraphEdgeDTO)
+
 	if level == "repository" {
-		type group struct {
-			Count, Impact int
-		}
-		groups := make(map[string]*group)
-		for _, e := range entities {
-			if e.Kind == "external" {
-				continue
-			}
-			if groups[e.Repo] == nil {
-				groups[e.Repo] = &group{}
-			}
-			groups[e.Repo].Count++
-		}
-
-		edgeCounts := make(map[string]int)
-		for _, edge := range rawEdges {
-			f := entities[edge.From]
-			t := entities[edge.To]
-			if f.Repo == "" || t.Repo == "" || f.Repo == t.Repo || f.Kind == "external" || t.Kind == "external" {
-				continue
-			}
-			key := f.Repo + "\x00" + t.Repo + "\x00" + edge.Type
-			edgeCounts[key]++
-		}
-
-		// Ensure cross-repo connections exist in topology
-		if len(edgeCounts) == 0 {
-			if groups["garuda"] != nil && groups["chi"] != nil {
-				edgeCounts["garuda\x00chi\x00imports"] = 8
-			}
-			if groups["handlers"] != nil && groups["securecookie"] != nil {
-				edgeCounts["handlers\x00securecookie\x00calls"] = 4
-			}
-			if groups["chi"] != nil && groups["csrf"] != nil {
-				edgeCounts["chi\x00csrf\x00middleware"] = 3
+		repoCounts := make(map[string]int)
+		for _, e := range entityMap {
+			if e.Repo == "stdlib" { continue }
+			repoCounts[e.Repo]++
+			if _, exists := nodesMap[e.Repo]; !exists {
+				nodesMap[e.Repo] = GraphNodeDTO{ID: e.Repo, Label: e.Repo, Kind: "repository", Repo: e.Repo, Status: "SUPPORTED", Exported: true}
 			}
 		}
-
-		nodes := make([]GraphNode, 0)
-		for repo, g := range groups {
-			nodes = append(nodes, GraphNode{
-				ID:     groupNodeID("repository", repo),
-				Label:  repo,
-				Kind:   "repository",
-				Repo:   repo,
-				Count:  g.Count,
-				Impact: g.Impact,
-			})
-		}
-		sortNodes(nodes)
-
-		nodeSet := make(map[string]bool)
-		for _, n := range nodes {
-			nodeSet[n.Label] = true
+		for repo, count := range repoCounts {
+			node := nodesMap[repo]
+			node.Count = count
+			nodesMap[repo] = node
 		}
 
-		edges := make([]GraphEdge, 0)
-		for key, count := range edgeCounts {
-			parts := strings.Split(key, "\x00")
-			if len(parts) == 3 && nodeSet[parts[0]] && nodeSet[parts[1]] {
-				edges = append(edges, GraphEdge{
-					From:  groupNodeID("repository", parts[0]),
-					To:    groupNodeID("repository", parts[1]),
-					Type:  parts[2],
-					Count: count,
-				})
-			}
-		}
-		sortEdges(edges)
+		for _, c := range claims {
+			src := entityMap[c.from]
+			tgt := entityMap[c.to]
+			if src.Repo == "stdlib" || tgt.Repo == "stdlib" { continue }
 
-		writeGraphResponse(w, GraphResponse{
-			Level:  "repository",
-			Nodes:  nodes,
-			Edges:  edges,
-			Notice: "Repository topology. Double-click a repository to drill down into packages.",
-		})
-		return
-	}
-
-	// ------------------------------------------------------------------
-	// LEVEL 2: PACKAGE MAP
-	// ------------------------------------------------------------------
-	if level == "package" {
-		type group struct {
-			Count, Impact int
-		}
-		groups := make(map[string]*group)
-		for _, e := range entities {
-			if e.Kind == "external" {
-				continue
-			}
-			if focus != "" && e.Repo != focus {
-				continue
-			}
-			if groups[e.Package] == nil {
-				groups[e.Package] = &group{}
-			}
-			groups[e.Package].Count++
-		}
-
-		edgeCounts := make(map[string]int)
-		for _, edge := range rawEdges {
-			f := entities[edge.From]
-			t := entities[edge.To]
-			if (focus != "" && (f.Repo != focus || t.Repo != focus)) || f.Package == t.Package || f.Kind == "external" || t.Kind == "external" {
-				continue
-			}
-			key := f.Package + "\x00" + t.Package + "\x00" + edge.Type
-			edgeCounts[key]++
-		}
-
-		nodes := make([]GraphNode, 0)
-		for pkg, g := range groups {
-			nodes = append(nodes, GraphNode{
-				ID:      groupNodeID("package", pkg),
-				Label:   pkg,
-				Kind:    "package",
-				Package: pkg,
-				Count:   g.Count,
-				Impact:  g.Impact,
-			})
-		}
-		sortNodes(nodes)
-		if len(nodes) > limit {
-			nodes = nodes[:limit]
-		}
-
-		nodeSet := make(map[string]bool)
-		for _, n := range nodes {
-			nodeSet[n.Label] = true
-		}
-
-		edges := make([]GraphEdge, 0)
-		for key, count := range edgeCounts {
-			parts := strings.Split(key, "\x00")
-			if len(parts) == 3 && nodeSet[parts[0]] && nodeSet[parts[1]] {
-				edges = append(edges, GraphEdge{
-					From:  groupNodeID("package", parts[0]),
-					To:    groupNodeID("package", parts[1]),
-					Type:  parts[2],
-					Count: count,
-				})
-			}
-		}
-		sortEdges(edges)
-
-		writeGraphResponse(w, GraphResponse{
-			Level:  "package",
-			Focus:  focus,
-			Nodes:  nodes,
-			Edges:  edges,
-			Notice: "Package-level architecture. Double-click a package to explore symbols.",
-		})
-		return
-	}
-
-	// ------------------------------------------------------------------
-	// LEVEL 3: ENTITY NEIGHBORHOOD
-	// ------------------------------------------------------------------
-	if level == "entity" {
-		neighborSet := make(map[string]bool)
-		focusTitle := focus
-
-		if focus != "" {
-			var targetID string
-			if _, ok := entities[focus]; ok {
-				targetID = focus
-			} else {
-				for id, e := range entities {
-					if strings.EqualFold(e.Name, focus) || strings.EqualFold(groupNodeID("package", e.Package), focus) || strings.EqualFold(e.Package, focus) {
-						targetID = id
-						break
-					}
+			if src.Repo != "" && tgt.Repo != "" && src.Repo != tgt.Repo {
+				edgeKey := src.Repo + "->" + tgt.Repo
+				edge := edgesMap[edgeKey]
+				if edge.Source == "" {
+					edge = GraphEdgeDTO{ID: edgeKey, Source: src.Repo, Target: tgt.Repo, Type: "STATIC_DEPENDENCY", Status: "SUPPORTED", Count: 0}
 				}
+				edge.Count++
+				edgesMap[edgeKey] = edge
 			}
-
-			if targetID != "" {
-				neighborSet[targetID] = true
-				focusTitle = entities[targetID].Name
-				for _, edge := range rawEdges {
-					if edge.From == targetID {
-						neighborSet[edge.To] = true
-					}
-					if edge.To == targetID {
-						neighborSet[edge.From] = true
-					}
+		}
+		for _, cv := range contras {
+			src := entityMap[cv.src]
+			if src.Repo != "" && src.Repo != "stdlib" {
+				targetID := "ext-" + cv.rawTarget
+				nodesMap[targetID] = GraphNodeDTO{ID: targetID, Label: cv.rawTarget, Kind: "external_quarantined", Repo: "external", Status: "CONTRADICTED"}
+				edgeKey := src.Repo + "->" + targetID
+				edge := edgesMap[edgeKey]
+				if edge.Source == "" {
+					edge = GraphEdgeDTO{ID: edgeKey, Source: src.Repo, Target: targetID, Type: "RUNTIME_CONTRADICTION", Status: "CONTRADICTED", Count: 0}
+				}
+				edge.Count += int(cv.count)
+				edge.Label = fmt.Sprintf("VIOLATION (%dx)", edge.Count)
+				edgesMap[edgeKey] = edge
+			}
+		}
+	} else if level == "package" {
+		pkgCounts := make(map[string]int)
+		for _, e := range entityMap {
+			if e.Repo == focus {
+				pkgCounts[e.Package]++
+				if _, exists := nodesMap[e.Package]; !exists {
+					nodesMap[e.Package] = GraphNodeDTO{ID: e.Package, Label: e.Package, Kind: "package", Repo: e.Repo, Package: e.Package, Status: "SUPPORTED", Exported: true}
 				}
 			}
 		}
+		for pkg, count := range pkgCounts {
+			node := nodesMap[pkg]
+			node.Count = count
+			nodesMap[pkg] = node
+		}
 
-		if len(neighborSet) == 0 {
-			focusTitle = "Top Architectural Symbols"
-			degree := make(map[string]int)
-			for _, edge := range rawEdges {
-				degree[edge.To]++
-			}
-			type pair struct {
-				id    string
-				count int
-			}
-			var list []pair
-			for id, c := range degree {
-				if entities[id].Kind != "external" {
-					list = append(list, pair{id, c})
+		for _, c := range claims {
+			src := entityMap[c.from]
+			tgt := entityMap[c.to]
+			if src.Repo == focus && tgt.Repo == focus && src.Package != tgt.Package {
+				edgeKey := src.Package + "->" + tgt.Package
+				edge := edgesMap[edgeKey]
+				if edge.Source == "" {
+					edge = GraphEdgeDTO{ID: edgeKey, Source: src.Package, Target: tgt.Package, Type: "STATIC_DEPENDENCY", Status: "SUPPORTED", Count: 0}
 				}
-			}
-			sort.Slice(list, func(i, j int) bool { return list[i].count > list[j].count })
-			for i := 0; i < len(list) && i < 25; i++ {
-				neighborSet[list[i].id] = true
+				edge.Count++
+				edgesMap[edgeKey] = edge
 			}
 		}
-
-		nodes := make([]GraphNode, 0)
-		for id := range neighborSet {
-			if e, ok := entities[id]; ok {
-				nodes = append(nodes, makeEntityNode(e))
+		for _, cv := range contras {
+			src := entityMap[cv.src]
+			if src.Repo == focus {
+				targetID := "ext-" + cv.rawTarget
+				nodesMap[targetID] = GraphNodeDTO{ID: targetID, Label: cv.rawTarget, Kind: "external_quarantined", Repo: "external", Status: "CONTRADICTED"}
+				edgeKey := src.Package + "->" + targetID
+				edge := edgesMap[edgeKey]
+				if edge.Source == "" {
+					edge = GraphEdgeDTO{ID: edgeKey, Source: src.Package, Target: targetID, Type: "RUNTIME_CONTRADICTION", Status: "CONTRADICTED", Count: 0}
+				}
+				edge.Count += int(cv.count)
+				edge.Label = fmt.Sprintf("VIOLATION (%dx)", edge.Count)
+				edgesMap[edgeKey] = edge
 			}
 		}
-
-		visible := make(map[string]bool)
-		for _, n := range nodes {
-			visible[n.ID] = true
-		}
-
-		edges := make([]GraphEdge, 0)
-		for _, edge := range rawEdges {
-			if visible[edge.From] && visible[edge.To] {
-				edges = append(edges, GraphEdge{
-					From:  edge.From,
-					To:    edge.To,
-					Type:  edge.Type,
-					Count: 1,
-				})
+	} else if level == "entity" {
+		for _, e := range entityMap {
+			if e.Package == focus {
+				nodesMap[e.ID] = GraphNodeDTO{ID: e.ID, Label: e.Name, Kind: e.Kind, Repo: e.Repo, Package: e.Package, Exported: e.Exported, Status: "SUPPORTED"}
 			}
 		}
-
-		writeGraphResponse(w, GraphResponse{
-			Level:  "entity",
-			Focus:  focusTitle,
-			Nodes:  nodes,
-			Edges:  edges,
-			Notice: "Focused symbol neighborhood with zero hairballs.",
-		})
-		return
+		for _, c := range claims {
+			src := entityMap[c.from]
+			tgt := entityMap[c.to]
+			if src.Package == focus || tgt.Package == focus {
+				if _, exists := nodesMap[src.ID]; !exists {
+					nodesMap[src.ID] = GraphNodeDTO{ID: src.ID, Label: src.Name, Kind: src.Kind, Package: src.Package, Repo: src.Repo, Status: "SUPPORTED"}
+				}
+				if _, exists := nodesMap[tgt.ID]; !exists {
+					nodesMap[tgt.ID] = GraphNodeDTO{ID: tgt.ID, Label: tgt.Name, Kind: tgt.Kind, Package: tgt.Package, Repo: tgt.Repo, Status: "SUPPORTED"}
+				}
+				edgeKey := src.ID + "->" + tgt.ID
+				edge := edgesMap[edgeKey]
+				if edge.Source == "" {
+					edge = GraphEdgeDTO{ID: edgeKey, Source: src.ID, Target: tgt.ID, Type: "STATIC_DEPENDENCY", Status: "SUPPORTED", Count: 0}
+				}
+				edge.Count++
+				edgesMap[edgeKey] = edge
+			}
+		}
+		for _, cv := range contras {
+			src := entityMap[cv.src]
+			if src.Package == focus {
+				targetID := "ext-" + cv.rawTarget
+				nodesMap[targetID] = GraphNodeDTO{ID: targetID, Label: cv.rawTarget, Kind: "external_quarantined", Repo: "external", Status: "CONTRADICTED"}
+				edgeKey := src.ID + "->" + targetID
+				edge := edgesMap[edgeKey]
+				if edge.Source == "" {
+					edge = GraphEdgeDTO{ID: edgeKey, Source: src.ID, Target: targetID, Type: "RUNTIME_CONTRADICTION", Status: "CONTRADICTED", Count: 0}
+				}
+				edge.Count += int(cv.count)
+				edge.Label = fmt.Sprintf("VIOLATION (%dx)", edge.Count)
+				edgesMap[edgeKey] = edge
+			}
+		}
 	}
-}
 
-func writeGraphResponse(w http.ResponseWriter, resp GraphResponse) {
+	var nodes []GraphNodeDTO
+	for _, n := range nodesMap {
+		nodes = append(nodes, n)
+	}
+	var edges []GraphEdgeDTO
+	for _, e := range edgesMap {
+		edges = append(edges, e)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(GraphResponseDTO{Level: level, Focus: focus, Nodes: nodes, Edges: edges})
 }
 
 func (s *Server) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {

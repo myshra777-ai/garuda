@@ -44,12 +44,17 @@ type EvidenceBlock struct {
 
 // MerkleSnapshot represents a historical snapshot of a tenant's Merkle root.
 type MerkleSnapshot struct {
-	ID               uuid.UUID  `json:"id"`
-	TenantID         uuid.UUID  `json:"tenant_id"`
-	RootHash         string     `json:"root_hash"`
-	BlockHeight      int64      `json:"block_height"`
-	ParentSnapshotID *uuid.UUID `json:"parent_snapshot_id,omitempty"`
-	SnapshotHash     string     `json:"snapshot_hash"`
-	EpochTimestamp   time.Time  `json:"epoch_timestamp"`
-	CreatedAt        time.Time  `json:"created_at"`
+	ID                      uuid.UUID  `json:"id"`
+	TenantID                uuid.UUID  `json:"tenant_id"`
+	ParentSnapshotID        *uuid.UUID `json:"parent_snapshot_id,omitempty"`
+	BlockHeight             int64      `json:"block_height"`
+	SnapshotHash            string     `json:"snapshot_hash"`
+	RootHash                string     `json:"root_hash,omitempty"`
+	StaticRootHash          string     `json:"static_root_hash"`
+	RuntimeRootHash         string     `json:"runtime_root_hash"`
+	RuntimeLeafCount        int64      `json:"runtime_leaf_count"`
+	VerifiedClaimsCount     int64      `json:"verified_claims_count"`
+	ContradictedClaimsCount int64      `json:"contradicted_claims_count"`
+	EpochTimestamp          int64      `json:"epoch_timestamp,omitempty"`
+	CreatedAt               time.Time  `json:"created_at"`
 }

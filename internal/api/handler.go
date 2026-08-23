@@ -125,6 +125,8 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/api/v1/dashboard/search", s.HandleDashboardSearch).Methods(http.MethodGet)
 	r.HandleFunc("/api/v1/graph", s.HandleGraph).Methods(http.MethodGet)
 	r.HandleFunc("/api/v1/events", s.HandleLiveEvents).Methods(http.MethodGet)
+	r.HandleFunc("/api/v1/telemetry/spans", s.HandleIngestRuntimeSpans).Methods(http.MethodPost)
+	r.HandleFunc("/api/v1/runtime/coverage", s.HandleGetRuntimeCoverage).Methods(http.MethodGet)
 
 	// =========================================================================
 	// PROTECTED API SUBROUTER (JWT Auth Required for Sensitive Actions)
