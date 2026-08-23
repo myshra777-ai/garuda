@@ -9,18 +9,6 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: garuda-redis
-    ports:
-      - "6380:6379"
-
+      - garuda-pgdata:/var/lib/postgresql/data
 volumes:
-  postgres_data:
+  garuda-pgdata:
