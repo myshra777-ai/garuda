@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -75,7 +76,8 @@ type GraphResponse struct {
 
 // Deprecated: Preserved for backward-compatible AST schema diff verification.
 type graphQueryStore interface {
-	GetWorkspace(ctx context.Context, id uuid.UUID) (*types.Workspace, error)
+	Pool() *pgxpool.Pool
+	GetGraphData(ctx context.Context, tenantID, workspaceID uuid.UUID) ([]map[string]interface{}, []map[string]interface{}, error)
 }
 
 // Deprecated: Preserved for backward-compatible AST schema diff verification.
