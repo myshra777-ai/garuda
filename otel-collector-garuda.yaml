@@ -1,0 +1,36 @@
+# OpenTelemetry Collector Configuration for Garuda Ingestion
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 256
+    send_batch_max_size: 1024
+
+exporters:
+  garuda:
+    endpoint: "http://localhost:8080/api/v1/telemetry/spans"
+    tenant_id: "00000000-0000-0000-0000-000000000001"
+    workspace_id: "532a8e33-975d-48a3-8f88-221cef52fec4"
+    timeout: 3s
+    max_batch_size: 500
+
+  # Optional debug output
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [garuda, debug]
+  telemetry:
+    logs:
+      level: info
