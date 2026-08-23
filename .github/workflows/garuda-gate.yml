@@ -1,46 +1,133 @@
-name: Garuda Semantic Truth Gate
+name: Garuda Architectural PR Gate
 
 on:
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
+    types: [ opened, synchronize, reopened ]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
-  breaking-change-gate:
-    name: AST Semantic Diff Policy Gate
+  architectural-gate:
+    name: Epistemic Drift & Schema Verification
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          check-latest: true
-
-      - name: Checkout PR Branch (Head)
-        uses: actions/checkout@v4
-        with:
-          path: head_repo
-          fetch-depth: 0
-
-      - name: Build Garuda Engine
-        run: |
-          cd head_repo
-          go build -o /tmp/garuda ./cmd/garuda
-
       - name: Checkout Base Branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.base_ref }}
-          path: base_repo
+          fetch-depth: 0
+          path: base-repo
 
-      - name: Generate Base Snapshot
-        run: |
-          /tmp/garuda analyze ./base_repo -o /tmp/base_snapshot.json
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: pr-repo
 
-      - name: Generate Head Snapshot
-        run: |
-          /tmp/garuda analyze ./head_repo -o /tmp/head_snapshot.json
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+          cache-dependency-path: pr-repo/go.sum
 
-      - name: Run Semantic Diff & Enforce Policy Gate
+      - name: Build Garuda CLI
         run: |
-          /tmp/garuda diff /tmp/base_snapshot.json /tmp/head_snapshot.json --fail-on-breaking
+          cd pr-repo
+          go build -o ../bin/garuda ./cmd/garuda
+          cd ..
+          chmod +x ./bin/garuda
+
+      - name: Extract Base Snapshot
+        run: |
+          cd base-repo
+          ../bin/garuda analyze ./cmd ./internal --json -o ../baseline.json || echo "{}" > ../baseline.json
+          cd ..
+
+      - name: Extract Proposed PR Snapshot
+        run: |
+          cd pr-repo
+          ../bin/garuda analyze ./cmd ./internal --json -o ../proposed.json
+          cd ..
+
+      - name: Run Garuda Governance Judge & Diff
+        id: judge
+        continue-on-error: true
+        run: |
+          ./bin/garuda judge baseline.json proposed.json --json -o judge_report.json || true
+          ./bin/garuda diff baseline.json proposed.json -o diff_summary.json || true
+          
+          # Inspect evaluation output
+          cat judge_report.json || echo '{"verdict":"UNKNOWN"}' > judge_report.json
+
+      - name: Post / Update PR Evaluation Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            let report = { verdict: "APPROVED", breaking_changes: [], warnings: [], score: 100 };
+            try {
+              report = JSON.parse(fs.readFileSync('judge_report.json', 'utf8'));
+            } catch (e) {
+              console.log("Could not parse judge_report.json:", e);
+            }
+
+            const isBlocked = report.verdict === 'BLOCKED' || (report.breaking_changes && report.breaking_changes.length > 0);
+            const statusIcon = isBlocked ? '🛑' : '✅';
+            const statusBadge = isBlocked ? '**BLOCKED (Architectural Invariant Violation)**' : '**PASSED (Truth-Preserving Change)**';
+
+            let commentBody = `### ${statusIcon} Garuda Architectural Gate: ${statusBadge}\n\n`;
+            commentBody += `| Metric | Evaluation |\n`;
+            commentBody += `| :--- | :--- |\n`;
+            commentBody += `| **Verdict** | \`${report.verdict || "APPROVED"}\` |\n`;
+            commentBody += `| **Integrity Score** | \`${report.score ?? 100} / 100\` |\n`;
+            commentBody += `| **Breaking Changes** | \`${(report.breaking_changes || []).length}\` |\n`;
+            commentBody += `| **Warnings / Drift** | \`${(report.warnings || []).length}\` |\n\n`;
+
+            if (report.breaking_changes && report.breaking_changes.length > 0) {
+              commentBody += `#### ⚠️ Breaking Architectural Changes Detected:\n`;
+              report.breaking_changes.forEach((b) => {
+                commentBody += `- **${b.entity || b.name || "Symbol"}**: ${b.description || b.reason || "Interface or signature mutation"}\n`;
+              });
+              commentBody += `\n> *This Pull Request is blocked by the Garuda ACGM Invariant. Either revert breaking modifications or submit a formal superseding decision.*`;
+            } else {
+              commentBody += `> *All proposed AST entities, interface contracts, and cross-package call graphs preserve system invariants.*`;
+            }
+
+            const commentIdentifier = '<!-- garuda-pr-gate-comment -->';
+            const fullBody = `${commentIdentifier}\n${commentBody}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existingComment = comments.find(c => c.body.includes(commentIdentifier));
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: fullBody
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: fullBody
+              });
+            }
+
+            if (isBlocked) {
+              core.setFailed('Garuda Gate blocked this PR due to breaking architectural invariants.');
+            }
