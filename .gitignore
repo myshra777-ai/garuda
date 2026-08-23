@@ -94,3 +94,4 @@ v*.json
 !test/benchmark/**/*.json
 test/benchmark/results/
 test/benchmark/results/
+bin/
