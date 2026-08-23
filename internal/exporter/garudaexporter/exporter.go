@@ -13,10 +13,26 @@ import (
 	"net/http"
 	"time"
 
-	"go.opentelemetry.io/collector/pdata/pcommon"
-	"go.opentelemetry.io/collector/pdata/ptrace"
-	"go.uber.org/zap"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
+
+type Config struct {
+	Endpoint     string        `json:"endpoint"`
+	TenantID     string        `json:"tenant_id"`
+	WorkspaceID  string        `json:"workspace_id"`
+	Timeout      time.Duration `json:"timeout"`
+	MaxBatchSize int           `json:"max_batch_size"`
+}
+
+func DefaultConfig() Config {
+	return Config{
+		Endpoint:     "http://localhost:8080/api/v1/telemetry/spans",
+		TenantID:     "00000000-0000-0000-0000-000000000001",
+		WorkspaceID:  "532a8e33-975d-48a3-8f88-221cef52fec4",
+		Timeout:      5 * time.Second,
+		MaxBatchSize: 1000,
+	}
+}
 
 type SpanPayload struct {
 	ServiceName    string `json:"service_name"`
@@ -30,99 +46,75 @@ type IngestRequest struct {
 	Spans []SpanPayload `json:"spans"`
 }
 
-type garudaExporter struct {
-	cfg    *Config
+type GarudaSpanExporter struct {
+	cfg    Config
 	client *http.Client
-	logger *zap.Logger
 }
 
-func newGarudaExporter(cfg *Config, logger *zap.Logger) *garudaExporter {
-	return &garudaExporter{
+func New(cfg Config) (*GarudaSpanExporter, error) {
+	if cfg.Endpoint == "" {
+		cfg.Endpoint = "http://localhost:8080/api/v1/telemetry/spans"
+	}
+	if cfg.TenantID == "" {
+		cfg.TenantID = "00000000-0000-0000-0000-000000000001"
+	}
+	if cfg.Timeout == 0 {
+		cfg.Timeout = 5 * time.Second
+	}
+	if cfg.MaxBatchSize <= 0 {
+		cfg.MaxBatchSize = 1000
+	}
+
+	return &GarudaSpanExporter{
 		cfg: cfg,
 		client: &http.Client{
 			Timeout: cfg.Timeout,
 		},
-		logger: logger,
-	}
+	}, nil
 }
 
-func (e *garudaExporter) pushTraces(ctx context.Context, td ptrace.Traces) error {
-	var payloads []SpanPayload
-
-	resourceSpans := td.ResourceSpans()
-	for i := 0; i < resourceSpans.Len(); i++ {
-		rs := resourceSpans.At(i)
-		serviceName := "unknown_service"
-		if sn, ok := rs.Resource().Attributes().Get("service.name"); ok {
-			serviceName = sn.AsString()
-		}
-
-		scopeSpans := rs.ScopeSpans()
-		for j := 0; j < scopeSpans.Len(); j++ {
-			ss := scopeSpans.At(j)
-			packageName := ss.Scope().Name()
-
-			spans := ss.Spans()
-			for k := 0; k < spans.Len(); k++ {
-				span := spans.At(k)
-				payload := e.convertSpan(serviceName, packageName, span)
-				if payload != nil {
-					payloads = append(payloads, *payload)
-				}
-			}
-		}
+func (e *GarudaSpanExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	if len(spans) == 0 {
+		return nil
 	}
 
-	if len(payloads) == 0 {
-		return nil
+	payloads := make([]SpanPayload, 0, len(spans))
+	for _, span := range spans {
+		serviceName := "unknown_service"
+		for _, attr := range span.Resource().Attributes() {
+			if string(attr.Key) == "service.name" {
+				serviceName = attr.Value.AsString()
+			}
+		}
+
+		callerSymbol := span.Name()
+		callerPkg := span.InstrumentationScope().Name
+		targetEndpoint := span.Name()
+
+		for _, attr := range span.Attributes() {
+			switch string(attr.Key) {
+			case "code.function":
+				callerSymbol = attr.Value.AsString()
+			case "code.namespace":
+				callerPkg = attr.Value.AsString()
+			case "peer.service", "net.peer.name", "http.url", "db.name":
+				targetEndpoint = attr.Value.AsString()
+			}
+		}
+
+		payloads = append(payloads, SpanPayload{
+			ServiceName:    serviceName,
+			CallerSymbol:   callerSymbol,
+			CallerPackage:  callerPkg,
+			TargetEndpoint: targetEndpoint,
+			Timestamp:      span.StartTime().UTC().Format(time.RFC3339),
+		})
 	}
 
 	return e.sendBatches(ctx, payloads)
 }
 
-func (e *garudaExporter) convertSpan(serviceName, scopeName string, span ptrace.Span) *SpanPayload {
-	callerSymbol := span.Name()
-	callerPkg := scopeName
-	targetEndpoint := ""
-
-	// 1. Check code attributes if available
-	span.Attributes().Range(func(k string, v pcommon.Value) bool {
-		switch k {
-		case "code.function":
-			callerSymbol = v.AsString()
-		case "code.namespace":
-			callerPkg = v.AsString()
-		case "peer.service", "net.peer.name", "http.url", "db.name":
-			if targetEndpoint == "" {
-				targetEndpoint = v.AsString()
-			}
-		case "db.system":
-			if targetEndpoint == "" {
-				targetEndpoint = fmt.Sprintf("%s-instance", v.AsString())
-			}
-		}
-		return true
-	})
-
-	if targetEndpoint == "" {
-		targetEndpoint = span.Name()
-	}
-
-	ts := span.StartTimestamp().AsTime()
-	if ts.IsZero() {
-		ts = time.Now()
-	}
-
-	return &SpanPayload{
-		ServiceName:    serviceName,
-		CallerSymbol:   callerSymbol,
-		CallerPackage:  callerPkg,
-		TargetEndpoint: targetEndpoint,
-		Timestamp:      ts.UTC().Format(time.RFC3339),
-	}
-}
-
-func (e *garudaExporter) sendBatches(ctx context.Context, payloads []SpanPayload) error {
+func (e *GarudaSpanExporter) sendBatches(ctx context.Context, payloads []SpanPayload) error {
 	batchSize := e.cfg.MaxBatchSize
 	for i := 0; i < len(payloads); i += batchSize {
 		end := i + batchSize
@@ -155,7 +147,9 @@ func (e *garudaExporter) sendBatches(ctx context.Context, payloads []SpanPayload
 			return fmt.Errorf("garuda ingestion returned HTTP %d", resp.StatusCode)
 		}
 	}
+	return nil
+}
 
-	e.logger.Debug("Pushed runtime spans to Garuda", zap.Int("count", len(payloads)))
+func (e *GarudaSpanExporter) Shutdown(ctx context.Context) error {
 	return nil
 }
