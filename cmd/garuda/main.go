@@ -277,13 +277,6 @@ var repoDisableCmd = &cobra.Command{
 	},
 }
 
-var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize local environment and generate docker-compose file",
-	Run: func(cmd *cobra.Command, args []string) {
-		handleInit()
-	},
-}
 
 var upCmd = &cobra.Command{
 	Use:   "up",
@@ -427,7 +420,6 @@ func init() {
 	repoCmd.AddCommand(repoEnableCmd)
 	repoCmd.AddCommand(repoDisableCmd)
 
-	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(upCmd)
 	rootCmd.AddCommand(downCmd)
 	rootCmd.AddCommand(statusCmd)
