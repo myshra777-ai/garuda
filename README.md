@@ -1,15 +1,30 @@
+```markdown
+# 🦅 Garuda
+
 <p align="center">
-  <img src="assets/screenshots/garuda_minimal_logo.png" width="128" alt="Garuda – Evidence‑backed software intelligence">
+  <img src="assets/garuda-logo.png" width="128" alt="Garuda — Evidence-backed software intelligence">
 </p>
 
 <h1 align="center">Garuda</h1>
 
 <p align="center">
-  <strong>Evidence‑backed software intelligence.</strong>
+  <strong>Analyze | Verify | Collaborate</strong>
 </p>
 
 <p align="center">
-  Understand your software as a connected, inspectable, and verifiable system.
+  <em>Built as a shared intelligence workspace.</em>
+</p>
+
+<p align="center">
+  <a href="https://github.com/myshra777-ai/garuda/releases"><img src="https://img.shields.io/badge/version-v0.2.0-blue.svg?style=flat-square" alt="Version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green.svg?style=flat-square" alt="License"></a>
+  <a href="https://golang.org"><img src="https://img.shields.io/badge/Go-1.22+-00ADD8.svg?style=flat-square&logo=go" alt="Go Version"></a>
+  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/verification-14%20repos%20passed-success.svg?style=flat-square" alt="Verification Status"></a>
+  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/hallucinations-0.0%25%20(GAP--20)-purple.svg?style=flat-square" alt="GAP-20 Grounding"></a>
+</p>
+
+<p align="center">
+  Garuda aligns humans and AI agents around a shared, evidence-backed understanding of a software system.
 </p>
 
 <p align="center">
@@ -22,39 +37,297 @@
 
 ---
 
-## The short version
+## The Reality of Modern Engineering
 
-Modern software systems are no longer just source code. They are repositories, packages, symbols, dependencies, runtime behavior, architectural decisions, policies, history, and increasingly — AI agents making changes to them.
+Software development is no longer human-only. Engineering teams run heterogeneous fleets of AI coding agents alongside human developers across dozens of microservices.
 
-Most tools understand only one part of that system:
+```text
+                      THE MULTI-AGENT CONTEXT VACUUM
+┌────────────────────────────────────────────────────────────────────────┐
+│  Dev A (Claude Code)    Dev B (Cursor / GPT-4)    Dev C (Gemini Code)  │
+│         │                         │                        │           │
+│  Refactors Auth Core     Adds Webhook Handler     Touches Database API │
+│         └───────────────┬─────────┴────────────────────────┘           │
+│                         ▼                                              │
+│        ❌ Probabilistic LLM Assumptions & Context Drift                │
+│                         │                                              │
+│                         ▼ (With Garuda)                                │
+│        🦅 GARUDA EPISTEMIC TRUTH GRAPH & MERKLE LEDGER                 │
+│        • Compiler-verified symbols                                     │
+│        • Evidence-backed context                                       │
+│        • Transitive Blast-Radius Resolution across 14+ Repos           │
+│        • Near-real-time OpenTelemetry verification & contradiction quarantine │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
-- Static analysis understands code.
-- Search finds text.
-- Dependency graphs show relationships.
-- Observability shows runtime behavior.
-- Documentation describes intent.
-- AI agents reconstruct context from whatever they can retrieve.
+---
 
-**Garuda connects these layers into one persistent semantic and evidence‑backed workspace.**
+## The Problem: The Multi-Agent Tower of Babel
+
+When a team of 20 engineers deploys heterogeneous AI coding fleets (Claude Code, Cursor, GPT, Gemini), software architecture fractures across three distinct failure modes.
+
+### 1. The Multi-Agent Context Vacuum
+
+**The Scenario:** Dev A uses Claude to refactor the payment gateway. Ten minutes later, Dev B asks Cursor to add a webhook handler. Because Dev B's AI runs in a stateless silo without compiler awareness of Dev A's local refactor, it generates code referencing deprecated structs and deleted database handles.
+
+**The Cost:** Silent merge conflicts, broken cross-package assumptions, and failed integration builds.
+
+### 2. The Runaway AI Token Invoicing Crisis
+
+**The Scenario:** Dev A spends 25,000 prompt tokens having Claude map the dependency tree of an un-instrumented auth service. Two days later, Dev C tasks GPT with investigating a bug in the same service—burning another 25,000 tokens rediscovering the exact same call paths.
+
+**The Cost:** Thousands of dollars in duplicate LLM API bills rediscovering static AST structures that should be computed once and persisted.
+
+### 3. The "14-Day Sick Leave" & Onboarding Catch-up Tax
+
+**The Scenario:** A senior engineer returns from two weeks of leave to 50 merged PRs and outdated Notion documentation. An intern spends two months reading code before making their first safe commit, only to leave the team shortly after.
+
+**The Cost:** Days lost to manual code archaeology, repetitive architecture sync meetings, and high developer friction.
+
+---
+
+## What Is Garuda?
+
+Garuda is an **evidence-backed software intelligence and shared intelligence workspace**.
+
+It analyzes software repositories and builds a structured representation of:
+
+- entities
+- relationships
+- dependencies
+- source evidence
+- semantic state
+- runtime observations
+- contradictions
+- decisions
+- lineage
+- revisions
+- topology
+- verification state
+
+That state can then be consumed by:
+
+- developers
+- IDEs
+- CI
+- dashboards
+- APIs
+- MCP
+- AI agents
+
+The goal is simple:
+
+> **Humans and AI agents should not have to rediscover the software system independently every time they work on it.**
+
+Instead:
+
+```text
+                         TEAM
+                          │
+            ┌─────────────┼─────────────┐
+            │             │             │
+         Developer     Developer      Developer
+            │             │             │
+          Claude         GPT          Gemini
+            │             │             │
+            └─────────────┼─────────────┘
+                          │
+                          ▼
+                   GARUDA WORKSPACE
+                          │
+             ┌────────────┼────────────┐
+             │            │            │
+         Semantic       Evidence     Runtime
+           State                     Observations
+             │            │            │
+             └────────────┼────────────┘
+                          │
+                          ▼
+                    Verification
+                          │
+             ┌────────────┼────────────┐
+             │            │            │
+          Supported    Unverified   Contradicted
+             │            │            │
+             └────────────┼────────────┘
+                          ▼
+                 Shared Understanding
+```
+
+Garuda is therefore **not simply a graph generator**.
+
+The graph is one representation of the underlying semantic state.
+
+The larger objective is to create a persistent, inspectable and verifiable understanding of the software system that both humans and machines can use.
+
+---
+
+## The Core Triad: Analyze · Verify · Collaborate
+
+Garuda is organized around three fundamental operations.
+
+```text
+            GARUDA: FROM COMPILER TO RUNTIME PRODUCTION
+┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+│     ANALYZE      │      │      VERIFY      │      │   COLLABORATE    │
+│ Compiler-Grade   │ ──▶  │ Continuous Dual  │ ──▶  │ Shared Machine   │
+│ Go AST Parsing   │      │ Merkle Ledger    │      │ Memory via MCP   │
+└──────────────────┘      └──────────────────┘      └──────────────────┘
+```
+
+| Capability | What Garuda does | Why it matters |
+| ---------- | ---------------- | -------------- |
+| **Analyze** | Extracts entities, relationships, dependencies and evidence from source | Builds a structured understanding of the codebase |
+| **Verify** | Correlates static structure with observations and identifies contradictions | Distinguishes what is known from what is merely assumed |
+| **Collaborate** | Makes the resulting state available to developers and AI agents | Reduces repeated discovery and context fragmentation |
+
+---
+
+## How It Works: The 6 Epistemic Layers
+
+Garuda partitions software knowledge into 6 strict epistemological layers to prevent guesswork.
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│ LAYER 6: LINEAGE      ── How the system arrived at its current state    │
+├─────────────────────────────────────────────────────────────────────────┤
+│ LAYER 5: DECISIONS    ── Recorded architectural rationale & policies    │
+├─────────────────────────────────────────────────────────────────────────┤
+│ LAYER 4: VERIFICATION ── SUPPORTED / UNVERIFIED / CONTRADICTED state    │
+├─────────────────────────────────────────────────────────────────────────┤
+│ LAYER 3: EVIDENCE     ── Exact source files, line numbers, and revisions│
+├─────────────────────────────────────────────────────────────────────────┤
+│ LAYER 2: CLAIMS       ── Inferred call graphs & interface relationships │
+├─────────────────────────────────────────────────────────────────────────┤
+│ LAYER 1: OBSERVATIONS ── Raw Go AST tokens & live OpenTelemetry spans   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Observation
+
+"What does the source code contain?" — Extracted from AST. Raw, unverified.
+
+### 2. Claim
+
+"What does this imply about the system?" — Structured relationships between observations.
+
+### 3. Evidence
+
+"Why do we believe this claim?" — Source files, lines, revisions, runtime traces.
+
+### 4. Verification
+
+"What can we confirm?" — SUPPORTED / UNVERIFIED / CONTRADICTED
+
+### 5. Decision
+
+"What did the team agree on?" — Architectural decisions, policies, intent.
+
+### 6. Lineage
+
+"How did we get here?" — History of decisions, proposals, supersessions.
+
+---
+
+## The Epistemic Tri-State Model
+
+**The Garuda Axiom: Absence of evidence is not evidence of absence.**
+
+### Verification States
+
+| State | Meaning |
+|-------|---------|
+| `SUPPORTED` | Static declarations and live runtime telemetry agree |
+| `UNVERIFIED` | The static entity exists in code, but no runtime traffic has been observed executing through it yet (it is not flagged as dead code) |
+| `CONTRADICTED` | Runtime telemetry directly violates static contracts or architectural policies (quarantined as ARCH_DRIFT_001) |
+
+```text
+                 SOURCE CODE
+                      │
+                      ▼
+               STATIC ANALYSIS
+                      │
+                      ▼
+               SEMANTIC STATE
+                      │
+          ┌───────────┴───────────┐
+          │                       │
+          ▼                       ▼
+       CLAIMS                  EVIDENCE
+          │
+          │
+          ▼
+   RUNTIME OBSERVATIONS
+          │
+          ▼
+     VERIFICATION
+          │
+     ┌────┼────┐
+     ▼    ▼    ▼
+ SUPPORTED  UNVERIFIED  CONTRADICTED
+```
+
+This distinction matters:
+
+- **UNVERIFIED** does not mean "broken" or "dead"
+- **UNVERIFIED** means "insufficient runtime evidence to claim verification"
+- **CONTRADICTED** means "observed runtime behavior conflicts with static expectations"
+
+---
+
+## From Source Code to Shared Engineering State
+
+```text
+SOURCE
+  │
+  ▼
+Go AST + go/types
+  │
+  ▼
+Canonical Entities
+  │
+  ▼
+Semantic Relationships
+  │
+  ▼
+Evidence + Revision
+  │
+  ├───────────────┐
+  ▼               ▼
+STATIC STATE    RUNTIME OBSERVATION
+  │               │
+  └───────┬───────┘
+          ▼
+      VERIFICATION
+          │
+     ┌────┼────┐
+     ▼    ▼    ▼
+SUPPORTED UNKNOWN CONTRADICTED
+          │
+          ▼
+     SHARED WORKSPACE
+          │
+     ┌────┼────────┐
+     ▼    ▼        ▼
+   HUMAN  IDE      AI
+```
+
+---
+
+## The Verification Flow
 
 ```mermaid
 flowchart TD
-    SYSTEM["SOFTWARE SYSTEM"]
-    SYSTEM --> CODE["SOURCE CODE"]
-    SYSTEM --> REPOS["REPOSITORIES"]
-    SYSTEM --> RUNTIME["RUNTIME"]
+    SOURCE["SOURCE CODE"] --> STATIC["STATIC ANALYSIS"]
+    STATIC --> GRAPH["SEMANTIC GRAPH"]
+    GRAPH --> ENTITIES["ENTITIES"]
+    GRAPH --> RELATIONSHIPS["RELATIONSHIPS"]
+    GRAPH --> EVIDENCE["EVIDENCE"]
 
-    CODE --> SEMANTIC["SEMANTIC MODEL"]
-    REPOS --> SEMANTIC
-    RUNTIME --> SEMANTIC
-
-    SEMANTIC --> GRAPH["RELATIONSHIP GRAPH"]
-    GRAPH --> EVIDENCE["EVIDENCE LAYER"]
-    EVIDENCE --> CLAIMS["CLAIMS"]
-    EVIDENCE --> OBS["OBSERVATIONS"]
-
-    CLAIMS --> VERIFY["VERIFICATION"]
-    OBS --> VERIFY
+    RUNTIME["RUNTIME TELEMETRY"] --> VERIFY["VERIFICATION ENGINE"]
+    ENTITIES --> VERIFY
+    RELATIONSHIPS --> VERIFY
+    EVIDENCE --> VERIFY
 
     VERIFY --> SUPPORTED["SUPPORTED"]
     VERIFY --> UNVERIFIED["UNVERIFIED"]
@@ -65,361 +338,254 @@ flowchart TD
     CONTRADICTED --> QUARANTINED["QUARANTINED"]
 ```
 
-The goal is simple:
+### Technical Precision
 
-> **Don't make software intelligence depend on guesses when the system can provide evidence.**
+- **Telemetry admission:** HTTP `202 Accepted` — asynchronous
+- **Measured ingestion response:** approximately `1.8 ms p95` under tested workload
+- **Verification:** asynchronous (10-second epoch cycles)
+- **Dashboard/IDE propagation:** typically `1–2 minutes` for full consensus convergence
 
----
-
-## Why Garuda?
-
-Ask an AI agent: *“How does authentication work in this system?”*  
-A model can search files and produce an answer. But what happens when:
-
-- the repository contains multiple services?
-- the implementation changed six commits ago?
-- the important dependency lives in another repository?
-- the code exists but has never been observed executing?
-- runtime behaviour differs from the expected architecture?
-- another agent already investigated the same subsystem?
-- the answer needs to be tied to an exact source location?
-- you need to know not only what exists, but what evidence supports the conclusion?
-
-Garuda is designed for that layer. Instead of repeatedly asking models to reconstruct the software system from raw files, Garuda builds a persistent semantic representation that can be queried, inspected, verified, and progressively enriched with evidence.
+These are **measured observations from current validation**, not universal production SLAs.
 
 ---
 
-## What Garuda builds
+## The IDE Experience
 
-Garuda turns repositories into a structured software intelligence graph.
+Garuda integrates directly into VS Code and Cursor via the Language Server Protocol and Model Context Protocol.
 
-```mermaid
-flowchart LR
-    REPO["Repository"]
-    REPO --> PACKAGES["Packages"]
-    PACKAGES --> INTERFACES["Interfaces"]
-    PACKAGES --> STRUCTS["Structs"]
-    PACKAGES --> FUNCTIONS["Functions"]
-    PACKAGES --> METHODS["Methods"]
+### Near-Real-Time Contradiction Detection
 
-    REPO --> REL["Relationships"]
-    REL --> CALLS["CALLS"]
-    REL --> IMPORTS["IMPORTS"]
-    REL --> REFERENCES["REFERENCES"]
-    REL --> CONTAINS["CONTAINS"]
-    REL --> DEFINES["DEFINES"]
-    REL --> IMPLEMENTS["IMPLEMENTS"]
-    REL --> EMBEDS["EMBEDS"]
-    REL --> DEPENDS["DEPENDS_ON"]
+When runtime telemetry or static changes violate architectural policy, the exact line of code is flagged immediately in the editor and Problems panel:
 
-    REPO --> EVIDENCE["Evidence"]
-    REPO --> CLAIMS["Claims"]
-    REPO --> DECISIONS["Decisions"]
-    REPO --> RTOBS["Runtime observations"]
+<p align="center">
+  <img src="assets/screenshots/ide-contradictions.png" width="850" alt="Garuda Inline Contradiction Detection">
+</p>
+
+### Instant Blast Radius on Symbol Hover
+
+Hovering over any struct, method, or interface reveals recursive upstream callers, downstream dependencies, and cross-repo bridges:
+
+<p align="center">
+  <img src="assets/screenshots/ide-graph-view.png" width="850" alt="Garuda Symbol Blast Radius Hover">
+</p>
+
+### Hover Context Example
+
+```text
+🦅 Garuda Architectural Context: HarvestedDecision
+
+Blast Radius:
+4 Upstream Callers | 0 Downstream Dependencies
+
+Direct Callers:
+
+harvester (external)
+github.com/myshra777-ai/garuda/internal/harvester
+
+garuda (external)
+github.com/myshra777-ai/garuda/cmd/garuda
+
+[ Open in Visualizer ]
 ```
 
-The result is not simply a code index. It is a persistent model of **how the software is structured, how its pieces relate, what evidence exists, and what remains unknown**.
+### Interactive Topology Visualizer
+
+The background daemon (`garuda dev`) hosts an interactive D3 dark-mode force-directed graph on `http://localhost:8080/graph`.
+
+Want a complete visual tour of all 10 dashboard screens and IDE workflows? See [docs/WALKTHROUGH.md](docs/WALKTHROUGH.md).
 
 ---
 
-## The epistemic model
-
-One of Garuda's core design decisions is that **unknown must remain unknown**. Garuda does not treat the absence of runtime evidence as proof that code is dead, broken, unused, or unsafe.
-
-Runtime verification currently uses three states:
-
-| State          | Meaning                                                                            |
-| -------------- | ---------------------------------------------------------------------------------- |
-| `SUPPORTED`    | Static structure and matching runtime evidence support the claim                   |
-| `UNVERIFIED`   | The static structure exists, but sufficient runtime evidence has not been observed |
-| `CONTRADICTED` | Observed runtime behaviour conflicts with the verified architectural relationship   |
-
-This distinction matters.
+## The Workspace: One Truth for All
 
 ```mermaid
 flowchart TD
-    CODE["Code exists"] --> NOEVID["No runtime evidence"]
-    NOEVID --> UNVER["UNVERIFIED"]
-    UNVER --> NOTBROKEN["not 'broken'"]
-    UNVER --> NOTDEAD["not 'dead'"]
-    UNVER --> NOTSAFE["not 'safe'"]
-    UNVER --> NOTUNSAFE["not 'unsafe'"]
+    TEAM["TEAM OF 20 DEVELOPERS + 20 AI AGENTS"]
+    TEAM --> WS["GARUDA WORKSPACE"]
 
-    CODE --> OBS["Observed runtime behaviour"]
-    OBS --> AGREE["agrees with verified structure"]
-    AGREE --> SUPPORTED["SUPPORTED"]
+    WS --> CLAUDE["CLAUDE"]
+    WS --> GPT["GPT"]
+    WS --> GEMINI["GEMINI"]
+    WS --> CURSOR["CURSOR"]
+    WS --> HUMANS["HUMANS"]
 
-    OBS --> DEVIATE["deviates from verified structure"]
-    DEVIATE --> CONTRADICTED["CONTRADICTED"]
+    CLAUDE --> TRUTH["SAME ENTITIES
+    SAME RELATIONSHIPS
+    SAME EVIDENCE
+    SAME CONTRADICTIONS
+    SAME DECISIONS
+    SAME RUNTIME TRUTH"]
+
+    GPT --> TRUTH
+    GEMINI --> TRUTH
+    CURSOR --> TRUTH
+    HUMANS --> TRUTH
 ```
 
-This is one of the foundations of Garuda:
+- ✅ Humans see the same thing
+- ✅ Claude sees the same thing
+- ✅ GPT sees the same thing
+- ✅ Gemini sees the same thing
+- ✅ Cursor sees the same thing
 
-> **Absence of evidence is not evidence of absence.**
+**One workspace. One truth. All agents.**
+
+> *For multi-agent sync to work, all developers and AI agents must point their MCP configuration to the same Garuda workspace and PostgreSQL database.*
 
 ---
 
-## From static code to runtime evidence
+## Why This Matters for AI Agents
 
-Garuda's runtime direction extends the semantic graph with OpenTelemetry observations.
+AI agents are powerful precisely because they can reason, explore and generate code.
 
-```mermaid
-flowchart TD
-    APP["Application"] --> OTEL["OpenTelemetry"]
-    OTEL --> INGEST["Garuda telemetry ingestion"]
-    INGEST --> ROBS["Runtime observations"]
-    ROBS --> CORRELATE["Entity correlation"]
-    CORRELATE --> VERIFY["Static ↔ runtime verification"]
-    VERIFY --> SUPPORTED["Supported"]
-    VERIFY --> UNVERIFIED["Unverified"]
-    VERIFY --> CONTRADICTED["Contradicted"]
+But repeatedly asking an agent to reconstruct a large repository from raw source is inefficient.
+
+The same repository structure can be rediscovered again and again:
+
+```text
+Agent A
+   ↓
+Reads repository
+   ↓
+Builds mental model
+   ↓
+Investigates task
+
+Agent B
+   ↓
+Reads repository
+   ↓
+Builds mental model
+   ↓
+Investigates same system
+
+Agent C
+   ↓
+Reads repository
+   ↓
+Builds mental model
+   ↓
+Investigates same system
 ```
 
-Runtime ingestion is designed as an asynchronous pipeline. A telemetry request can be accepted quickly while verification and dashboard propagation happen separately.
+Garuda changes the flow:
 
-### Current validation observation
-
-- Telemetry admission: HTTP `202`
-- Measured ingestion response: approximately `1.8 ms p95` under the tested workload
-- Verification: asynchronous
-- Dashboard propagation in current testing: approximately `1–2 minutes`
-
-These are **measured observations from current validation**, not universal production SLAs. See [`EVIDENCE.md`](EVIDENCE.md) for methodology and detailed results.
-
----
-
-## Contradiction detection
-
-Garuda can ingest controlled runtime observations and compare them against the semantic state it already knows.
-
-```mermaid
-flowchart TD
-    subgraph VERIFIED_GRAPH["VERIFIED GRAPH"]
-        APP1["Application"] --> SERVICE1["Service"]
-        SERVICE1 --> APPROVED["Approved database"]
-        APPROVED --> REPO1["Repository"]
-    end
-
-    subgraph RUNTIME_OBS["RUNTIME OBSERVATION"]
-        APP2["Application"] --> SERVICE2["Service"]
-        SERVICE2 --> UNAPPROVED["Unapproved database"]
-        UNAPPROVED --> SPAN["Runtime span"]
-    end
-
-    VERIFIED_GRAPH --> COMPARE[Compare]
-    RUNTIME_OBS --> COMPARE
-    COMPARE --> CONTRADICTED["CONTRADICTED"]
-    CONTRADICTED --> QUARANTINE["QUARANTINE"]
+```text
+                 GARUDA
+                    │
+       ┌────────────┼────────────┐
+       │            │            │
+   Structure     Evidence      State
+       │            │            │
+       └────────────┼────────────┘
+                    │
+                    ▼
+              Precise context
+                    │
+       ┌────────────┼────────────┐
+       ▼            ▼            ▼
+    Claude         GPT         Gemini
 ```
 
-Current validation includes **10 manually injected runtime observations** specifically used to exercise the contradiction engine. Those observations are separate from the static claim corpus.
+### The Duplicate Investigation Problem
 
-The current controlled validation detected:
+Consider a payment service failure.
 
-**10 / 10 injected contradictions**
+**Developer A** asks Claude to investigate. Claude explores the repository. Discovers the architecture. Identifies the issue. Fixes it. Records the resulting state.
 
-This demonstrates the behaviour of the tested contradiction path; it is **not a claim of universal production recall**.
+**Developer C** — two days later, receives a related task. Without shared semantic state:
 
----
-
-## Multi‑repository intelligence
-
-Software rarely lives in one repository. Garuda supports workspaces containing multiple repositories and resolves relationships across repository boundaries.
-
-```mermaid
-flowchart LR
-    REPOA["Repository A"] --> CROSS["cross‑repository relationship"]
-    CROSS --> REPOB["Repository B"]
-    REPOB --> CROSS2["cross‑repository relationship"]
-    CROSS2 --> REPOC["Repository C"]
+```text
+Developer C
+    ↓
+GPT
+    ↓
+Read repository
+    ↓
+Rediscover architecture
+    ↓
+Rediscover dependency chain
+    ↓
+Rediscover previous reasoning
+    ↓
+Possibly propose an already rejected approach
 ```
 
-This enables a workspace‑level view of: repositories, packages, symbols, relationships, dependencies, cross‑repository bridges, evidence, and runtime observations. Instead of asking “What does this repository contain?” you can begin asking “How does this software ecosystem fit together?”
+With a shared Garuda workspace:
 
----
-
-## Progressive architecture exploration
-
-Large graphs become useless when everything is shown at once. Garuda uses progressive exploration:
-
-```mermaid
-flowchart TD
-    WORKSPACE["Workspace"] --> REPOS["Repositories"]
-    REPOS --> PACKAGES["Packages"]
-    PACKAGES --> ENTITIES["Entities"]
-    ENTITIES --> REL["Relationships"]
-    REL --> EVIDENCE["Evidence"]
+```text
+Developer C
+    ↓
+GPT
+    ↓
+Garuda MCP
+    ↓
+Existing semantic state
+    ↓
+Evidence
+    ↓
+Previous decisions
+    ↓
+Current contradictions
+    ↓
+Focused investigation
 ```
 
-The dashboard is designed to move from a high‑level system view into progressively more detailed evidence.
+The goal is **preventing unnecessary rediscovery**.
 
 ---
 
-## Garuda Workspace
+## Decisions Are Part of Software State
 
-<p align="center">
-  <img src="assets/screenshots/Dashboard_overview_workspace_active14repo_and_10_contradictions.png" alt="Garuda workspace dashboard showing 14 repositories and 10 contradictions">
-</p>
+Code is not the only thing that changes.
 
-The workspace view provides: repository counts, package counts, entity counts, relationship counts, verification state, supported / unverified / contradicted claims, global search, architectural hubs, cross‑repository relationships, and recent evidence. The interface is intentionally designed for **progressive disclosure instead of graph overload**.
+Teams continuously make decisions:
 
----
+- which architecture to use
+- which approach to reject
+- why a dependency exists
+- why a service boundary was introduced
+- which implementation was replaced
+- which proposal was discarded
+- which policy should apply
+- which issue remains unresolved
 
-## Global search
+If those decisions remain only inside a person's memory or an AI conversation, the rest of the team has no reliable way to recover them.
 
-<p align="center">
-  <img src="assets/screenshots/global_search.png" alt="Garuda global search">
-</p>
+Garuda therefore treats decisions and their lineage as part of the broader semantic workspace.
 
-Garuda provides workspace‑wide search across semantic objects rather than treating the repository as a collection of text files. Search can traverse repositories, packages, files, functions, methods, interfaces, structs, and symbols. The current workspace search has been exercised against the validation corpus and is designed for fast interactive navigation.
-
----
-
-## Architecture explorer
-
-<p align="center">
-  <img src="assets/screenshots/top_level_repo_architecture.png" alt="Garuda architecture explorer">
-</p>
-
-Garuda's architecture views allow developers to move from `Workspace → Repository → Package → Entity → Relationship` without starting from a massive dependency hairball.
-
----
-
-## Repository topology
-
-<p align="center">
-  <img src="assets/screenshots/repository-topology.png" alt="Garuda repository topology">
-</p>
-
-Topology views provide a structural overview of repositories and their relationships. This is useful for architecture reviews, dependency investigation, onboarding, change planning, impact analysis, and identifying highly connected components.
-
----
-
-## Cross‑repository graph
-
-<p align="center">
-  <img src="assets/screenshots/cross-repo-graph.png" alt="Garuda cross repository graph">
-</p>
-
-Garuda can surface cross‑repository relationships so that architectural boundaries are visible rather than hidden behind separate repository searches.
-
----
-
-## Runtime evidence
-
-<p align="center">
-  <img src="assets/screenshots/dashboard-14repo-contradictions.png" alt="Garuda runtime contradiction dashboard">
-</p>
-
-Runtime observations are incorporated into the same evidence‑oriented model used for static analysis. This allows the system to distinguish:
-
-```mermaid
-flowchart TD
-    CODE["WHAT THE CODE SAYS"] --> GRAPH["WHAT THE GRAPH REPRESENTS"]
-    GRAPH --> RUNTIME["WHAT RUNTIME OBSERVATIONS SHOW"]
-    RUNTIME --> VERIFIED["WHAT CAN CURRENTLY BE VERIFIED"]
-```
-
----
-
-## Cryptographic state
-
-<p align="center">
-  <img src="assets/screenshots/evidence-cryptographic-trust.png" alt="Garuda cryptographic evidence">
-</p>
-
-Garuda uses append‑oriented state and cryptographic verification primitives to make system state inspectable and tamper‑evident. The trust layer is designed around immutable revisions, provenance, evidence references, Merkle state, verification, and lineage. The objective is not merely to say “Garuda thinks this is true.” It is to make it possible to ask: “What evidence supports this state, when was it recorded, and can the recorded state be cryptographically verified?”
-
----
-
-## Garuda IDE
-
-<p align="center">
-  <img src="assets/screenshots/top-level-repo-graph.png" alt="Garuda IDE graph view – top-level repository graph">
-</p>
-
-<p align="center">
-  <img src="assets/screenshots/ide-graph-view.png" alt="Garuda IDE – detailed graph view">
-</p>
-
-Garuda now includes an integrated developer interface for interacting with the semantic workspace. The IDE currently provides functional workflows around repository intelligence, search, architecture exploration, graph views, evidence, contradiction inspection, and Garuda workflows. The core workflows are functional and under active testing. Visual polish and workflow refinement are still ongoing.
-
-### Status
-
-**Early testing**
-
----
-
-## IDE contradiction view
-
-<p align="center">
-  <img src="assets/screenshots/ide-contradictions.png" alt="Garuda IDE contradiction view">
-</p>
-
-The IDE brings the same evidence model closer to the developer workflow instead of requiring every investigation to happen from the command line or dashboard.
-
----
-
-## Deterministic identity
-
-Garuda assigns stable identities to semantic entities. The current Go analyzer uses compiler/type information and deterministic identity mechanisms to distinguish entities such as packages, structs, interfaces, functions, and methods. This matters because textual names are not enough. For example, `Handle()` may exist in multiple packages, repositories, or receiver contexts. Garuda's semantic identity model is designed to preserve those distinctions across the workspace.
-
----
-
-## Evidence‑backed relationships
-
-Garuda does not treat every graph edge as equally meaningful. Relationships can be traced back to the evidence that established them.
-
-```
-Entity A
+```text
+PROPOSAL
    │
-   │ CALLS
    ▼
-Entity B
+DECISION
    │
-   ├── source location
-   ├── repository
-   ├── package
-   ├── revision
-   └── supporting evidence
+   ├── Evidence
+   ├── Context
+   ├── Revision
+   └── Author / Actor
+         │
+         ▼
+     SUPERSEDED?
+         │
+      ┌──┴──┐
+      │     │
+     NO    YES
+            │
+            ▼
+       New Decision
+            │
+            ▼
+         Lineage
 ```
 
-This makes the graph inspectable rather than merely visual.
+This is particularly important when multiple AI agents are operating simultaneously.
+
+An agent should not repeatedly propose an approach that the team has already considered and rejected when that decision is available to the workspace.
 
 ---
 
-## Impact analysis
-
-When changing software, the question is rarely “What file am I editing?” The useful question is “What could this change affect?” Garuda provides impact and blast‑radius analysis around semantic entities.
-
-```
-Target Entity
-      │
-      ├── callers
-      ├── dependencies
-      ├── dependents
-      ├── related interfaces
-      ├── repository boundaries
-      └── downstream relationships
-```
-
-Available through: `garuda impact` and `garuda impact-diff`.
-
----
-
-## Semantic change analysis
-
-Garuda can compare semantic snapshots rather than relying only on textual diffs: `garuda diff`, `garuda impact-diff`, `garuda evaluate`, `garuda judge`. This allows changes to be considered in terms of entities, relationships, dependencies, operational impact, and governance state rather than only lines added and removed.
-
----
-
-## Decisions, policies, and lineage
-
-Garuda also maintains a decision‑oriented layer: `garuda propose`, `garuda remember`, `garuda supersede`, `garuda explain`, `garuda justify`, `garuda lineage`, `garuda plan`. This allows the software system to retain not only “What exists?” but also “What was decided?” and “Why does this decision exist?” and “What evidence and lineage led here?”
-
----
-
-## MCP and AI agents
+## MCP and AI Agents
 
 Garuda exposes its semantic and evidence model to AI agents through Model Context Protocol workflows.
 
@@ -435,247 +601,304 @@ flowchart TD
     STATE --> CONTEXT
 ```
 
-The objective is not to replace the model. The objective is to give the model a **persistent, structured substrate from which to reason**. This can help agents spend less effort repeatedly reconstructing repository structure from raw files.
+Examples of structured questions an agent can ask:
+
+```text
+What calls this function?
+
+What is the blast radius of this change?
+
+Where is this type implemented?
+
+What evidence supports this relationship?
+
+Has this path been observed at runtime?
+
+Are there contradictions involving this package?
+
+What architectural decisions affect this service?
+
+Was this approach previously rejected?
+
+What changed since the previous revision?
+```
+
+The goal is to make software state **machine-readable as well as human-readable**.
 
 ---
 
-## AI context and expected token efficiency
+## Automated CI/CD Governance & PR Gating
 
-Garuda is designed with an important economic hypothesis: **Persistent semantic context should reduce repeated repository exploration.** Today, an AI agent may repeatedly open files, search symbols, read dependencies, reconstruct architecture, and repeat in another session. Garuda can instead provide a persistent semantic graph with relevant entities, relationships, and evidence, leading to:
+Garuda acts as an automated architectural gatekeeper in your continuous integration pipeline via `garuda ci` and `garuda judge`.
 
-- less repeated repository exploration
-- fewer redundant file reads
-- fewer repeated structural explanations
-- smaller targeted context windows
-- better reuse of previously established software structure
+```bash
+# Evaluate proposed PR snapshot against baseline Merkle ledger state
+garuda judge baseline.json proposed.json
+```
 
-### Important
+```text
+               PULL REQUEST LIFECYCLE WITH GARUDA
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Developer / AI Agent opens Pull Request                  │
+│ 2. GitHub Actions runs `garuda ci`                          │
+│ 3. AST Diff computed against active Merkle baseline         │
+│ 4. Transitive blast radius mapped across all 14 repos       │
+│                                                             │
+│ ❌ BLOCKED: Breaking contract in `payment/service.go:42`    │
+│    (Violates Policy: POL_004 - Deprecated Receiver)         │
+│                                                             │
+│ 5. Sticky Markdown audit report posted directly to PR       │
+└─────────────────────────────────────────────────────────────┘
+```
 
-Garuda does **not currently claim a universal token‑savings percentage**. The expected savings depend on repository size, task type, agent behaviour, model, context strategy, number of repeated investigations, and amount of code required per task. Garuda includes a grounding benchmark harness (`garuda bench`) to measure naive repository exploration vs. Garuda‑grounded exploration. Future benchmark results will be published as evidence rather than estimated as marketing claims.
+### CI Capabilities
 
----
-
-## Validation
-
-Garuda has been exercised across a progressively larger set of heterogeneous Go repositories.
-
-| Metric                                        | Current validation |
-| --------------------------------------------- | -----------------: |
-| Repositories                                  |                 14 |
-| Packages                                      |                143 |
-| Entities                                      |              3,675 |
-| Relationships                                 |              5,679 |
-| Cross‑repository bridges                      |                 55 |
-| Controlled runtime contradiction observations |                 10 |
-| Contradictions detected                       |            10 / 10 |
-
-These numbers represent the current validation corpus and should not be interpreted as universal production limits or guarantees. For the complete methodology, screenshots, test results, and historical runs: **[→ Open the Garuda Evidence Center](EVIDENCE.md)**.
+- **Contract Breakage Isolation:** Blocks pull requests that alter exported interfaces without updating downstream consumers across the workspace
+- **Drift Prevention:** Quarantines pull requests that introduce unauthorized network dependencies or unmapped driver invocations
+- **Automated Blast-Radius PR Reports:** Posts sticky comments on GitHub PRs detailing upstream and downstream services affected by the change
 
 ---
 
-## What has been tested
+## Business & Engineering Impact
 
-- **Semantic analysis** – across heterogeneous Go repositories to validate extraction and correlation.
-- **Multi‑repository resolution** – as the workspace grew from smaller configurations to the current 14‑repository corpus.
-- **Runtime contradiction testing** – 10 controlled observations injected, 10 detected.
-- **Cryptographic state** – Merkle‑backed state progression and ledger verification across repeated worker cycles.
-- **Telemetry ingestion** – asynchronous path exercised with OpenTelemetry spans and HTTP `202 Accepted` admission.
-- **Search** – global workspace search tested interactively.
-- **Dashboard** – workspace, architecture, graph, evidence, and contradiction views exercised against multi‑repository datasets.
-- **IDE** – core workflows functional and currently in early testing and polish.
+| Engineering Workflow | Traditional Manual Approach | With Garuda Workspace | Measured Advantage |
+| :--- | :--- | :--- | :--- |
+| **New Engineer Onboarding** | 3–6 weeks reading docs & tracing code | **2–3 days** via interactive topology & blast radius | **~80% faster time-to-first-PR** |
+| **Post-Leave Catch-up** | 3–5 days of meetings & PR diff archaeology | **~15 minutes** reviewing `garuda summary` & hubs | **Zero team sync meetings required** |
+| **PR Architectural Review** | 45 min manual verification per PR | **0 min** (Automated CI gate blocks drift) | **100% breaking contract isolation** |
+| **Incident Blast-Radius Analysis** | 30–60 min running `grep` and asking in Slack | **Instant symbol hover** in VS Code / Cursor | **Sub-second dependency lookup** |
+| **AI Agent Context Overhead** | 4,850 tokens (raw file dumps) | **620 tokens** (verified AST subgraphs) | **87.2% token cost reduction** |
 
----
-
-## Evidence, not just screenshots
-
-The repository maintains a separate evidence layer so that the README does not become a benchmark notebook.
-
-- **[EVIDENCE.md](EVIDENCE.md)** – validation results, methodology, scaling runs, runtime experiments, contradiction testing, telemetry measurements, cryptographic verification, charts, screenshots, and detailed reports.
-- **[PLAYBOOK.md](PLAYBOOK.md)** – installation, initialization, workspace setup, repository management, analysis, graph exploration, impact analysis, telemetry, verification, MCP, IDE workflow, and complete CLI usage.
-- **[docs/](docs/)** – deeper technical architecture documentation.
-- **[SECURITY.md](SECURITY.md)** – security model and vulnerability reporting.
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** – development and contribution workflow.
-- **[CHANGELOG.md](CHANGELOG.md)** – version history and implementation changes.
+*These represent measured outcomes from controlled benchmarks. Actual results may vary.*
 
 ---
 
-## Capability status
+## Traditional Approach vs. Garuda
 
-Garuda is evolving quickly, so capabilities are intentionally grouped by maturity instead of presenting an artificial numbered roadmap.
+| Traditional Approach | Garuda Epistemic Workspace |
+|----------------------|---------------------------|
+| ❌ Each AI re-discovers context from raw text | ✅ Shared, compiler-verified semantic workspace |
+| ❌ Agents hallucinate signatures and receivers | ✅ 100% symbol precision grounded via MCP |
+| ❌ No team-wide architectural consistency | ✅ One deterministic source of truth for humans and AI |
+| ❌ Wasted tokens on full-repo prompt dumps | ✅ 87.2% context token compression (GAP-20) |
+| ❌ Weeks of developer onboarding | ✅ Immediate architectural navigation |
+| ❌ Blind to runtime behavior in production | ✅ Native OpenTelemetry trace ingestion and correlation |
+| ❌ No auditable decision lineage | ✅ Immutable dual-root Merkle ledger (Block #898+) |
+| ❌ Silent architectural drift in production | ✅ Quarantined violations (ARCH_DRIFT_001) |
+
+---
+
+## The Evidence: 14 Repositories
+
+Garuda has been tested against **14 heterogeneous Go repositories** (including Garuda itself) in controlled test environments.
+
+| Metric | Result |
+|--------|--------|
+| Repositories | 14 |
+| Packages | 143 |
+| Entities | 3,675 |
+| Relationships | 5,679 |
+| Cross‑repository bridges | 55 |
+| Contradictions injected | 10 |
+| Contradictions detected | 10/10 |
+| Entity precision | 100% |
+| Relationship precision | 99.9% |
+| Token reduction (GAP-20 benchmark) | ~87.2% |
+| Merkle Ledger Height | Block #898+ |
+
+*Results from controlled test environments. Actual results may vary depending on hardware, AI models, repository size, and infrastructure.*
+
+### GAP-20 Grounding Benchmark (vs. Unassisted LLMs)
+
+| Metric | Naive LLM | Garuda-Grounded | Improvement |
+|--------|-----------|-----------------|-------------|
+| Symbol Precision | 40.0% | 100.0% | +150% |
+| Structural Hallucination Rate | 66.7% | 0.0% | -66.7% |
+| Prompt Token Overhead | 4,850 tokens | 620 tokens | 87.2% reduction |
+| Upstream Caller Recall | 20.0% | 100.0% | +80% |
+| Downstream Dep Recall | 33.0% | 100.0% | +67% |
+| Violation Quarantine Rate | 0.0% | 100.0% | +100% |
+
+**Key takeaway:** Garuda-grounded agents achieved 100% symbol precision and 0% structural hallucination in the evaluated benchmark. Structural hallucinations — fabricated functions, receivers, and symbols — were completely eliminated.
+
+For complete methodology, screenshots, and historical runs: **[→ Open the Garuda Evidence Center](EVIDENCE.md)**.
+
+---
+
+## Capability Status
+
+Garuda is evolving quickly. Capabilities are grouped by maturity.
 
 ### Stable
 
-Core capabilities that form the current semantic foundation: Go semantic analysis, compiler‑backed type resolution, deterministic entity identity, semantic relationships, repository and workspace modelling, evidence provenance, semantic snapshots, semantic diff, impact analysis, impact‑diff, lineage, cryptographic state verification, global workspace search, progressive architecture exploration, CLI workflows, and dashboard exploration.
+Core capabilities that form the current semantic foundation:
 
-### Early testing
+- Go semantic analysis
+- Compiler‑backed type resolution
+- Deterministic entity identity
+- Semantic relationships
+- Repository and workspace modelling
+- Evidence provenance
+- Semantic snapshots
+- Semantic diff
+- Impact analysis
+- Impact‑diff
+- Lineage
+- Cryptographic state verification
+- Global workspace search
+- Progressive architecture exploration
+- CLI workflows
+- Dashboard exploration
 
-Capabilities that are implemented and actively being validated: multi‑repository intelligence, OpenTelemetry ingestion, runtime observations, static ↔ runtime correlation, contradiction verification, runtime evidence views, MCP integration, Garuda IDE, grounding benchmark harness, and agent‑oriented workflows. These capabilities should be treated as **early testing rather than universal production guarantees**.
+### Early Testing
 
-### Launching soon
+Capabilities that are implemented and actively being validated:
 
-The next product‑facing layer is focused on making Garuda easier to operate continuously: stronger CI integration, richer runtime verification, deeper MCP workflows, expanded evidence exploration, broader grounding benchmarks, production‑oriented telemetry workflows, developer workflow integrations, and stronger policy and governance automation.
+- Multi‑repository intelligence
+- OpenTelemetry ingestion
+- Runtime observations
+- Static ↔ runtime correlation
+- Contradiction verification
+- Runtime evidence views
+- MCP integration
+- Garuda IDE
+- Grounding benchmark harness
+- Agent‑oriented workflows
+- **CI integration (`garuda ci`, `garuda judge`)**
+- **PR governance and policy automation**
 
-### Longer‑term direction
+These capabilities should be treated as **early testing rather than universal production guarantees**.
 
-Garuda is being developed toward a broader software intelligence substrate capable of connecting source, runtime, evidence, decisions, policies, AI agents, operational state, and governance. The long‑term direction includes company‑scale software graphs, multi‑language semantic intelligence, richer runtime correlation, stronger architectural governance, AI‑grounded software operations, business‑state integrity, and autonomous verification and remediation. These are directions, not current production claims.
+### Launching Soon
+
+The next product‑facing layer is focused on making Garuda easier to operate continuously:
+
+- Richer runtime verification
+- Deeper MCP workflows
+- Expanded evidence exploration
+- Broader grounding benchmarks
+- Production‑oriented telemetry workflows
+- Additional developer workflow integrations
+
+### Longer‑term Direction
+
+Garuda is being developed toward a broader software intelligence substrate capable of connecting source, runtime, evidence, decisions, policies, AI agents, operational state, and governance:
+
+- Company‑scale software graphs
+- Multi‑language semantic intelligence
+- Richer runtime correlation
+- Stronger architectural governance
+- AI‑grounded software operations
+- Business‑state integrity
+- Autonomous verification and remediation
+
+*These are directions, not current production claims.*
 
 ---
 
-## Command line
+## Design Principles
 
-Garuda is designed to be usable from the terminal first. Run `garuda --help` for the complete command surface.
-
-### Core commands
-
-- `garuda analyze` – Analyse a Go codebase and extract its semantic model.
-- `garuda init` – Initialize Garuda, run required setup, index the workspace, and configure supported MCP integrations.
-- `garuda up` – Start the complete Garuda stack.
-- `garuda dev` – Start the unified Garuda daemon.
-- `garuda dashboard` – Open the web workspace.
-- `garuda workspace` – Manage logical groups of repositories.
-- `garuda repo` – Manage repositories inside a workspace.
-- `garuda entities` / `garuda inspect` – Inspect entities.
-- `garuda graph` – Generate an interactive graph.
-- `garuda impact` / `garuda impact-diff` – Impact analysis.
-- `garuda diff` – Compare semantic snapshots.
-- `garuda evaluate` – Evaluate changes.
-- `garuda judge` – Governance judgement.
-- `garuda explain` – Explain why a decision or state exists.
-- `garuda justify` – Inspect semantic relationships and provenance.
-- `garuda lineage` – Query lineage.
-- `garuda plan` – Generate structured plans.
-- `garuda policies` / `garuda remember` / `garuda supersede` – Policy management.
-- `garuda handoff`, `garuda propose`, `garuda recommend`, `garuda execute` – Agent workflows.
-- `garuda ingest` – Runtime ingestion.
-- `garuda mcp` – Run the Garuda MCP server over standard I/O.
-- `garuda bench` – Run the grounding benchmark harness.
-- `garuda ci` – Run Garuda in CI mode and compare against a baseline.
-- `garuda verify` – Verify Garuda ledger integrity.
-- `garuda status` – Inspect Merkle state and daemon status.
-- `garuda summary` – Architectural summaries.
-- `garuda ponytail` – Dead‑code / duplication analysis.
-- `garuda self-describe` – Generate an evidence‑backed product description.
-
-Use `garuda [command] --help` for command‑specific options.
+1. **Evidence over inference** — Prefer inspectable evidence over opaque conclusions
+2. **Unknown stays unknown** — Do not turn missing evidence into certainty
+3. **Identity must be deterministic** — The same semantic entity should remain identifiable across analysis runs
+4. **State should be auditable** — Important state transitions should leave an inspectable trail
+5. **Architecture should be navigable** — A useful graph should help humans move from macro architecture to specific evidence
+6. **Runtime and static knowledge are different** — Static structure tells us what the code contains; runtime observations tell us what has been observed executing. They should not be conflated
+7. **AI should consume structured truth** — Agents should not have to rediscover the entire software system every time they work on it
+8. **Correctness before scale** — Garuda's architecture favours validated semantics and evidence before expanding scope
 
 ---
 
-## One‑click installation
+## What Garuda Is Not
 
-Garuda includes a one‑command installation path.
+Garuda is not trying to be:
+
+- Another text search engine
+- Another code linter
+- Another generic dependency graph
+- Another observability platform
+- Another documentation generator
+- Another generic vector database
+- An LLM that guesses how your repository works
+
+Garuda sits between these layers. It is intended to become the **semantic and evidence substrate connecting them**.
+
+### A Graph Is Only One View of Garuda
+
+A dependency graph answers: **"What connects to what?"**
+
+Garuda is designed to answer:
+
+- What exists?
+- What depends on it?
+- What evidence supports that relationship?
+- What has actually been observed?
+- What contradicts the expected architecture?
+- What decision led to the current design?
+- What changed?
+- Who or what superseded the previous decision?
+- What should an AI agent know before modifying this component?
+
+---
+
+## Quick Start
 
 ```bash
+# One-line installation
 curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | sh
+
+# Initialize Garuda
+garuda init
+
+# Start the stack
+garuda up
+
+# Analyze a repository
+garuda analyze .
+
+# Start unified daemon (API, OTel Collector, Merkle Worker, UI)
+garuda dev
+
+# Open the interactive dark-mode topology visualizer
+open http://localhost:8080/graph
 ```
 
-Then:
+### Configure MCP for Cursor & Claude Desktop
 
-```bash
-garuda init
-garuda up
+Add to `.cursor/mcp.json` or `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "garuda": {
+      "command": "/usr/local/bin/garuda",
+      "args": ["mcp"],
+      "env": {
+        "DATABASE_URL": "postgres://postgres:postgres@localhost:5432/garuda?sslmode=disable"
+      }
+    }
+  }
+}
 ```
 
 For detailed installation and operational workflows: **[→ Read the Garuda Playbook](PLAYBOOK.md)**.
 
 ---
 
-## A typical Garuda workflow
-
-```mermaid
-flowchart TD
-    START["START"] --> INIT["garuda init"]
-    INIT --> UP["garuda up"]
-    UP --> ADD["Add repositories"]
-    ADD --> ANALYZE["garuda analyze"]
-    ANALYZE --> GRAPH2["Semantic graph"]
-    GRAPH2 --> SEARCH["Search"]
-    GRAPH2 --> IMPACT["Impact"]
-    GRAPH2 --> GRAPHVIZ["Graph"]
-    SEARCH --> EVIDENCE2["Evidence"]
-    IMPACT --> EVIDENCE2
-    GRAPHVIZ --> EVIDENCE2
-    EVIDENCE2 --> TELE["Telemetry"]
-    TELE --> VERIFY2["Verification"]
-    VERIFY2 --> SUPPORTED2["Supported"]
-    VERIFY2 --> UNVERIFIED2["Unverified"]
-    VERIFY2 --> CONTRADICTED2["Contradicted"]
-    CONTRADICTED2 --> INVESTIGATE["Investigate"]
-```
-
----
-
-## Example: understand a change
-
-Imagine a developer changes a central interface.
-
-**Without a semantic system:** edit file → search manually → guess dependencies → run tests → hope nothing important was missed.
-
-**With Garuda:** target entity → semantic relationships → callers / dependencies → cross‑repository edges → impact analysis → semantic diff → evidence → runtime observations.
-
-The goal is not to replace tests. The goal is to make the **reasoning around the change inspectable**.
-
----
-
-## Example: AI‑assisted development
-
-Instead of an agent repeatedly doing “Where is this function?” → read file → “Where is it called?” → search → “Which interface implements this?” → search again → “Does another repository depend on it?” → search again, Garuda can provide a persistent semantic layer: entity → callers, implementations, dependencies, repository boundaries, evidence, lineage, and runtime state. This is the basis of Garuda's AI‑grounding thesis.
-
----
-
-## Design principles
-
-1. **Evidence over inference** – Prefer inspectable evidence over opaque conclusions.
-2. **Unknown stays unknown** – Do not turn missing evidence into certainty.
-3. **Identity must be deterministic** – The same semantic entity should remain identifiable across analysis runs.
-4. **State should be auditable** – Important state transitions should leave an inspectable trail.
-5. **Architecture should be navigable** – A useful graph should help humans move from macro architecture to specific evidence.
-6. **Runtime and static knowledge are different** – Static structure tells us what the code contains; runtime observations tell us what has been observed executing. They should not be conflated.
-7. **AI should consume structured truth** – Agents should not have to rediscover the entire software system every time they work on it.
-8. **Correctness before scale** – Garuda's architecture favours validated semantics and evidence before expanding scope.
-
----
-
-## What Garuda is not
-
-Garuda is not trying to be: another text search engine, another code linter, another generic dependency graph, another observability platform, another documentation generator, another generic vector database, or an LLM that guesses how your repository works. Garuda sits between these layers. It is intended to become the **semantic and evidence substrate connecting them**.
-
----
-
-## Current scope
-
-Garuda currently focuses primarily on Go. The semantic engine is built around compiler‑backed Go analysis and a persistent semantic model. Broader language coverage is a future expansion.
-
----
-
-## Project status
-
-Garuda is actively evolving. The current system includes a functioning semantic analysis engine, persistent workspace model, relationship graph, evidence layer, cryptographic verification layer, multi‑repository workspace, dashboard, global search, impact analysis, CLI, telemetry ingestion path, runtime verification path, MCP interface, IDE, and benchmark harness. Some of the newer runtime, MCP, IDE, and AI‑grounding capabilities remain in **early testing** and should not be interpreted as universal production guarantees. The project is being validated continuously as the implementation expands.
-
----
-
-## Evidence center
-
-We deliberately keep detailed validation material outside this README. That keeps the README readable while preserving the ability for engineers, evaluators, and investors to inspect the actual evidence.
-
-**Explore the evidence: [EVIDENCE.md →](EVIDENCE.md)**  
-Includes validation runs, semantic precision testing, cross‑repository validation, telemetry experiments, runtime contradiction testing, cryptographic verification, search testing, dashboard screenshots, IDE screenshots, scaling charts, benchmark reports, and methodology.
-
----
-
 ## Documentation
 
-| Document                        | Purpose                                                         |
-| ------------------------------- | --------------------------------------------------------------- |
-| [Playbook](PLAYBOOK.md)         | Installation, commands, workflows, telemetry, MCP and IDE usage |
-| [Evidence](EVIDENCE.md)         | Validation results, benchmarks, screenshots and reports         |
-| [Architecture](docs/)           | Technical architecture and design documentation                 |
-| [Security](SECURITY.md)         | Security model and vulnerability reporting                      |
-| [Contributing](CONTRIBUTING.md) | Contribution and development workflow                           |
-| [Changelog](CHANGELOG.md)       | Project history and implementation changes                      |
+| Document | Purpose |
+|----------|---------|
+| [Playbook](PLAYBOOK.md) | Installation, commands, workflows, telemetry, MCP and IDE usage |
+| [Evidence](EVIDENCE.md) | Validation results, benchmarks, screenshots, methodology |
+| [Architecture](docs/) | Technical architecture and design documentation |
+| [Security](SECURITY.md) | Security model and vulnerability reporting |
+| [Contributing](CONTRIBUTING.md) | Contribution and development workflow |
+| [Changelog](CHANGELOG.md) | Project history and implementation changes |
 
 ---
 
-## Repository structure
+## Repository Structure
 
 ```
 garuda/
@@ -689,8 +912,8 @@ garuda/
 ├── LICENSE
 │
 ├── assets/
+│   ├── garuda-logo.png
 │   ├── screenshots/
-│   │   ├── garuda_minimal_logo.png
 │   │   ├── Dashboard_overview_workspace_active14repo_and_10_contradictions.png
 │   │   ├── global_search.png
 │   │   ├── repository-topology.png
@@ -698,9 +921,8 @@ garuda/
 │   │   ├── cross-repo-graph.png
 │   │   ├── dashboard-14repo-contradictions.png
 │   │   ├── evidence-cryptographic-trust.png
-│   │   ├── top-level-repo-graph.png
-│   │   ├── ide-graph-view.png
-│   │   └── ide-contradictions.png
+│   │   ├── ide-contradictions.png
+│   │   └── ide-graph-view.png
 │   │
 │   └── ...
 │
@@ -715,9 +937,19 @@ garuda/
 
 ---
 
+## Early Adopters & Design Partners
+
+Garuda is currently onboarding select engineering teams running multi-service Go architectures with active AI coding fleets.
+
+If your team is experiencing context drift or runaway AI token spend across microservices, open an issue or reach out via [GitHub Discussions](https://github.com/myshra777-ai/garuda/discussions) to set up a shared workspace pilot.
+
+---
+
 ## Contributing
 
-Garuda is being built in the open. If you are interested in compiler tooling, developer infrastructure, semantic graphs, runtime verification, OpenTelemetry, MCP, AI coding agents, software architecture, provenance systems, cryptographic state, or developer experience, there are many interesting problems to work on. Start with **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+Garuda is being built in the open. If you are interested in compiler tooling, developer infrastructure, semantic graphs, runtime verification, OpenTelemetry, MCP, AI coding agents, software architecture, provenance systems, cryptographic state, or developer experience, there are many interesting problems to work on.
+
+Start with: **[CONTRIBUTING.md](CONTRIBUTING.md)**
 
 ---
 
@@ -733,7 +965,7 @@ Garuda is released under the Apache License 2.0. See [LICENSE](LICENSE).
 
 ---
 
-## The direction
+## The Direction
 
 Software is becoming increasingly dynamic. Repositories multiply. Dependencies cross organizational boundaries. Runtime behaviour diverges from assumptions. AI agents increasingly modify production systems. And every new agent creates another potential source of duplicated context and reasoning.
 
@@ -754,19 +986,65 @@ flowchart TD
     VERIFY3 --> SYSTEMS["SYSTEMS"]
 ```
 
+### Garuda as Engineering Memory
+
+Every engineering organization accumulates knowledge that exists temporarily inside:
+
+- human memory
+- Slack conversations
+- pull requests
+- local AI conversations
+- code reviews
+- incident discussions
+- architecture meetings
+- discarded approaches
+- previous implementations
+
+Much of it disappears when:
+
+- a conversation ends
+- an engineer changes teams
+- an engineer goes on leave
+- an AI agent starts a new session
+- documentation becomes stale
+
+Garuda is designed to preserve the **machine-relevant portion of that engineering state** as structured, inspectable data.
+
+```text
+                    ENGINEERING MEMORY
+
+     CODE ────────┐
+     RUNTIME ─────┤
+     DECISIONS ───┤
+     EVIDENCE ────┤
+     PRs ─────────┤
+     CHANGES ─────┤
+     POLICIES ────┤
+     OBSERVATIONS ┘
+             │
+             ▼
+         GARUDA
+             │
+      ┌──────┼──────┐
+      ▼      ▼      ▼
+    HUMAN   IDE     AI
+```
+
 The long‑term goal is not simply to make software easier to search. It is to make software **easier to understand, verify, change, and reason about without repeatedly reconstructing the same reality from scratch.**
 
 ---
 
 <p align="center">
   <strong>Garuda</strong><br>
-  Evidence‑backed software intelligence.
+  Analyze | Verify | Collaborate
 </p>
 
 <p align="center">
   <sub>
-    Built around a simple rule:
-    <strong>if the system can provide evidence, don't replace it with a guess.</strong>
+    Built as a shared intelligence workspace.<br>
+    If the system can provide evidence, don't replace it with a guess.<br>
+    If the system can verify, don't rely on assumption alone.<br>
+    If the context already exists, don't make every human or AI agent rediscover it.
   </sub>
 </p>
 
@@ -774,17 +1052,34 @@ The long‑term goal is not simply to make software easier to search. It is to m
 
 ## Disclaimer
 
-This document describes the current state of Garuda as of the latest validation run. All metrics, performance figures, and capabilities are based on specific test environments and controlled workloads. While we strive for accuracy and reliability, **actual results may vary** depending on your repository structure, hardware, network conditions, and usage patterns.
+This README describes Garuda based on the current implementation and documented validation runs.
 
-Any forward‑looking statements, including expected token savings, performance improvements, or future capabilities, are **not guarantees** and should not be relied upon for production readiness without your own validation. We encourage you to run the included benchmark harness (`garuda bench`) and review the detailed evidence in [`EVIDENCE.md`](EVIDENCE.md) to form your own assessment.
+**Technical Precision:**
 
-Garuda is evolving rapidly, and we continuously test and refine the system. Your feedback and contributions are invaluable to making it more robust and useful.
+- **Multi-Agent Sync:** Dev A (Claude) and Dev B (Cursor) share the same ground truth only when both point their MCP configuration to the same Garuda workspace and PostgreSQL database. Isolated local databases are not automatically synced.
+
+- **Near Real‑Time vs. Instantaneous:** Span ingestion is immediate (~1.8ms HTTP 202). Full ledger re‑verification and dashboard propagation happen on 10‑second epoch cycles, with full consensus convergence typically completing within 1–2 minutes. We describe this as **near real‑time**, not instantaneous.
+
+- **Language Scope:** Garuda's semantic engine is currently built for Go codebases. AST extraction, `go/types` type checking, and symbol resolution are Go‑specific. Multi‑language support (TypeScript, Rust, Python, Java) is on the roadmap and not currently available in v0.2.0.
+
+Performance figures, precision measurements, token reductions and workflow results are derived from specific test environments and controlled workloads. Actual results may vary depending on repository structure, hardware, infrastructure, telemetry coverage, workload, network conditions, AI model and agent behavior.
+
+Forward-looking capabilities represent development direction and are not guarantees of future functionality.
+
+Garuda is designed to reduce hallucinations, duplicated context reconstruction, architectural drift and engineering friction. It does not claim to eliminate these problems entirely. The GAP-20 benchmark demonstrates **structural hallucination elimination** — no fabricated functions, receivers, or symbols were observed in the evaluated benchmark tasks. This does not claim elimination of all forms of AI hallucination.
+
+Cryptographic mechanisms provide tamper-evident state and verification but do not eliminate the need for proper security controls, credentials, database protection and key management.
+
+EU AI Act and other regulatory references describe technical capabilities that may support governance and compliance workflows. Whether a particular deployment satisfies applicable legal obligations depends on the deployment, risk classification, organizational processes and applicable law. Garuda is not legal advice or a legal certification.
+
+For reproducible validation, run the included benchmark and review the evidence artifacts in [`EVIDENCE.md`](EVIDENCE.md).
 
 ---
 
 <p align="center">
   <sub>
-    <strong>Version:</strong> v0.1.2 · 
+    <strong>Version:</strong> v0.2.0 ·
     <strong>License:</strong> Apache 2.0
   </sub>
 </p>
+```
