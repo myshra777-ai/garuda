@@ -22,6 +22,8 @@ type Workspace struct {
 	ID          uuid.UUID `json:"id"`
 	TenantID    uuid.UUID `json:"tenant_id"`
 	Name        string    `json:"name"`
+	RootPath    string    `json:"root_path"`
+	IsGoWork    bool      `json:"is_go_work"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -46,6 +48,8 @@ func (s *PostgresStore) CreateWorkspace(ctx context.Context, tenantIDStr, name, 
 
 	var (
 		id        uuid.UUID
+		rootPath  string
+		isGoWork  bool
 		createdAt time.Time
 		updatedAt time.Time
 		inserted  bool
@@ -53,21 +57,23 @@ func (s *PostgresStore) CreateWorkspace(ctx context.Context, tenantIDStr, name, 
 
 	query := `
 		WITH ins AS (
-			INSERT INTO workspaces (id, tenant_id, name, description, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, NOW(), NOW())
+			INSERT INTO workspaces (id, tenant_id, name, root_path, is_go_work, description, created_at, updated_at)
+			VALUES ($1, $2, $3, '.', false, $4, NOW(), NOW())
 			ON CONFLICT (tenant_id, name) DO NOTHING
-			RETURNING id, created_at, updated_at, true AS inserted
+			RETURNING id, root_path, is_go_work, created_at, updated_at, true AS inserted
 		)
-		SELECT id, created_at, updated_at, inserted FROM ins
+		SELECT id, root_path, is_go_work, created_at, updated_at, inserted FROM ins
 		UNION ALL
-		SELECT id, created_at, updated_at, false AS inserted 
+		SELECT id, COALESCE(root_path, '.'), is_go_work, created_at, updated_at, false AS inserted 
 		FROM workspaces 
 		WHERE tenant_id = $2 AND name = $3
 		LIMIT 1;
 	`
 
 	newID := uuid.New()
-	err = s.pool.QueryRow(ctx, query, newID, tenantID, name, description).Scan(&id, &createdAt, &updatedAt, &inserted)
+	err = s.pool.QueryRow(ctx, query, newID, tenantID, name, description).Scan(
+		&id, &rootPath, &isGoWork, &createdAt, &updatedAt, &inserted,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute create workspace query: %w", err)
 	}
@@ -76,6 +82,8 @@ func (s *PostgresStore) CreateWorkspace(ctx context.Context, tenantIDStr, name, 
 		ID:          id,
 		TenantID:    tenantID,
 		Name:        name,
+		RootPath:    rootPath,
+		IsGoWork:    isGoWork,
 		Description: description,
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,
@@ -96,7 +104,7 @@ func (s *PostgresStore) ListWorkspaces(ctx context.Context, tenantIDStr string) 
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, tenant_id, name, COALESCE(description, ''), created_at, updated_at
+		SELECT id, tenant_id, name, COALESCE(root_path, '.'), is_go_work, COALESCE(description, ''), created_at, updated_at
 		FROM workspaces WHERE tenant_id = $1 ORDER BY name ASC
 	`, tenantID)
 	if err != nil {
@@ -107,7 +115,7 @@ func (s *PostgresStore) ListWorkspaces(ctx context.Context, tenantIDStr string) 
 	var workspaces []*Workspace
 	for rows.Next() {
 		var w Workspace
-		if err := rows.Scan(&w.ID, &w.TenantID, &w.Name, &w.Description, &w.CreatedAt, &w.UpdatedAt); err != nil {
+		if err := rows.Scan(&w.ID, &w.TenantID, &w.Name, &w.RootPath, &w.IsGoWork, &w.Description, &w.CreatedAt, &w.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan workspace: %w", err)
 		}
 		workspaces = append(workspaces, &w)
@@ -121,23 +129,34 @@ func (s *PostgresStore) AddRepository(
 	workspaceID uuid.UUID,
 	provider, url, defaultBranch, language, modulePath string,
 ) (*Repository, error) {
-	if _, err := s.getTenantIDFromWorkspace(ctx, workspaceID); err != nil {
+	tenantID, err := s.getTenantIDFromWorkspace(ctx, workspaceID)
+	if err != nil {
 		return nil, fmt.Errorf("failed to get tenant: %w", err)
 	}
 
+	repoName := modulePath
+	if repoName == "" || repoName == "." {
+		repoName = filepath.Base(url)
+	}
+	if repoName == "." || repoName == "/" || repoName == "" {
+		repoName = "primary"
+	}
+
 	id := uuid.New()
-	_, err := s.pool.Exec(ctx, `
-        INSERT INTO repositories (
-            id, workspace_id, provider, url, default_branch, language, module_path,
-            enabled, analysis_status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'pending', NOW(), NOW())
-        ON CONFLICT (workspace_id, url) DO UPDATE
-        SET provider = EXCLUDED.provider,
-            default_branch = EXCLUDED.default_branch,
-            language = EXCLUDED.language,
-            module_path = EXCLUDED.module_path,
-            updated_at = NOW()
-    `, id, workspaceID, provider, url, defaultBranch, language, modulePath)
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO repositories (
+			id, tenant_id, workspace_id, name, provider, url, default_branch, language, module_path,
+			enabled, analysis_status, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, 'pending', NOW(), NOW())
+		ON CONFLICT (workspace_id, url) DO UPDATE
+		SET tenant_id = EXCLUDED.tenant_id,
+		    name = EXCLUDED.name,
+		    provider = EXCLUDED.provider,
+		    default_branch = EXCLUDED.default_branch,
+		    language = EXCLUDED.language,
+		    module_path = EXCLUDED.module_path,
+		    updated_at = NOW()
+	`, id, tenantID, workspaceID, repoName, provider, url, defaultBranch, language, modulePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add repository: %w", err)
 	}
@@ -235,7 +254,6 @@ func (s *PostgresStore) SyncWorkspace(ctx context.Context, workspaceID uuid.UUID
 			return fmt.Errorf("failed to create temp dir: %w", err)
 		}
 		if err := syncFunc(repo, tempDir); err != nil {
-			// Log error but continue with other repos
 			continue
 		}
 	}

@@ -50,29 +50,29 @@ type EvidenceItem struct {
 }
 
 type WorkspaceStatsResponse struct {
-	Workspace          string   `json:"workspace"`
-	Repositories       int      `json:"repositories"`
-	Packages           int      `json:"packages"`
-	Entities           int      `json:"entities"`
-	Relationships      int      `json:"relationships"`
-	CrossRepoLinks     int      `json:"cross_repo_links"`
-	Files              int      `json:"files"`
-	ExportedEntities   int      `json:"exported_entities"`
-	ArchitecturalHubs  int      `json:"architectural_hubs"`
-	TopHubs            []HubDTO `json:"top_hubs"`
-	TotalClaims        int      `json:"total_claims"`
-	SupportedClaims    int      `json:"supported_claims"`
-	Contradicted       int      `json:"contradicted"`
-	UnverifiedClaims   int      `json:"unverified_claims"`
+	Workspace          string          `json:"workspace"`
+	Repositories       int             `json:"repositories"`
+	Packages           int             `json:"packages"`
+	Entities           int             `json:"entities"`
+	Relationships      int             `json:"relationships"`
+	CrossRepoLinks     int             `json:"cross_repo_links"`
+	Files              int             `json:"files"`
+	ExportedEntities   int             `json:"exported_entities"`
+	ArchitecturalHubs  int             `json:"architectural_hubs"`
+	TopHubs            []HubDTO        `json:"top_hubs"`
+	TotalClaims        int             `json:"total_claims"`
+	SupportedClaims    int             `json:"supported_claims"`
+	Contradicted       int             `json:"contradicted"`
+	UnverifiedClaims   int             `json:"unverified_claims"`
 	NeedsAttention     []AttentionItem `json:"needs_attention"`
 	RecentEvidence     []EvidenceItem  `json:"recent_evidence"`
-	CanonicalDecisions int      `json:"canonical_decisions"`
-	QuarantinedCount   int      `json:"quarantined_count"`
-	LatestBlockHeight  int64    `json:"latest_block_height"`
-	LatestMerkleHash   string   `json:"latest_merkle_hash"`
-	ParentMerkleHash   string   `json:"parent_merkle_hash"`
-	TrustStatus        string   `json:"trust_status"`
-	LastUpdated        string   `json:"last_updated"`
+	CanonicalDecisions int             `json:"canonical_decisions"`
+	QuarantinedCount   int             `json:"quarantined_count"`
+	LatestBlockHeight  int64           `json:"latest_block_height"`
+	LatestMerkleHash   string          `json:"latest_merkle_hash"`
+	ParentMerkleHash   string          `json:"parent_merkle_hash"`
+	TrustStatus        string          `json:"trust_status"`
+	LastUpdated        string          `json:"last_updated"`
 }
 
 type SearchResult struct {
@@ -1746,7 +1746,9 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	if level == "repository" {
 		repoCounts := make(map[string]int)
 		for _, e := range entityMap {
-			if e.Repo == "stdlib" { continue }
+			if e.Repo == "stdlib" {
+				continue
+			}
 			repoCounts[e.Repo]++
 			if _, exists := nodesMap[e.Repo]; !exists {
 				nodesMap[e.Repo] = GraphNodeDTO{ID: e.Repo, Label: e.Repo, Kind: "repository", Repo: e.Repo, Status: "SUPPORTED", Exported: true}
@@ -1761,7 +1763,9 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		for _, c := range claims {
 			src := entityMap[c.from]
 			tgt := entityMap[c.to]
-			if src.Repo == "stdlib" || tgt.Repo == "stdlib" { continue }
+			if src.Repo == "stdlib" || tgt.Repo == "stdlib" {
+				continue
+			}
 
 			if src.Repo != "" && tgt.Repo != "" && src.Repo != tgt.Repo {
 				edgeKey := src.Repo + "->" + tgt.Repo

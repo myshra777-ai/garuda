@@ -26,35 +26,35 @@ type GroundTruthTarget struct {
 }
 
 type BenchmarkTask struct {
-	ID          string            `json:"id"`
-	Category    string            `json:"category"`
-	Title       string            `json:"title"`
-	Prompt      string            `json:"prompt"`
-	Target      GroundTruthTarget `json:"target"`
+	ID       string            `json:"id"`
+	Category string            `json:"category"`
+	Title    string            `json:"title"`
+	Prompt   string            `json:"prompt"`
+	Target   GroundTruthTarget `json:"target"`
 }
 
 type TaskExecutionResult struct {
-	TaskID                 string        `json:"task_id"`
-	Title                  string        `json:"title"`
-	Mode                   BenchmarkMode `json:"mode"`
-	HallucinationDetected  bool          `json:"hallucination_detected"`
-	HallucinatedSymbols    []string      `json:"hallucinated_symbols"`
-	ViolationsQuarantined  bool          `json:"violations_quarantined"`
-	UpstreamRecall         float64       `json:"upstream_recall"`
-	DownstreamRecall       float64       `json:"downstream_recall"`
-	PrecisionScore         float64       `json:"precision_score"`
-	ContextSizeTokens      int           `json:"context_size_tokens"`
-	DurationMs             int64         `json:"duration_ms"`
+	TaskID                string        `json:"task_id"`
+	Title                 string        `json:"title"`
+	Mode                  BenchmarkMode `json:"mode"`
+	HallucinationDetected bool          `json:"hallucination_detected"`
+	HallucinatedSymbols   []string      `json:"hallucinated_symbols"`
+	ViolationsQuarantined bool          `json:"violations_quarantined"`
+	UpstreamRecall        float64       `json:"upstream_recall"`
+	DownstreamRecall      float64       `json:"downstream_recall"`
+	PrecisionScore        float64       `json:"precision_score"`
+	ContextSizeTokens     int           `json:"context_size_tokens"`
+	DurationMs            int64         `json:"duration_ms"`
 }
 
 type BenchmarkSummaryReport struct {
-	Timestamp            time.Time             `json:"timestamp"`
-	Workspace            string                `json:"workspace"`
-	TotalTasks           int                   `json:"total_tasks"`
-	NaiveMetrics         AggregateMetrics      `json:"naive_metrics"`
-	GarudaMCPMetrics     AggregateMetrics      `json:"garuda_mcp_metrics"`
-	ImprovementFactor    map[string]float64    `json:"improvement_factor"`
-	DetailedTaskResults  []TaskExecutionResult `json:"detailed_task_results"`
+	Timestamp           time.Time             `json:"timestamp"`
+	Workspace           string                `json:"workspace"`
+	TotalTasks          int                   `json:"total_tasks"`
+	NaiveMetrics        AggregateMetrics      `json:"naive_metrics"`
+	GarudaMCPMetrics    AggregateMetrics      `json:"garuda_mcp_metrics"`
+	ImprovementFactor   map[string]float64    `json:"improvement_factor"`
+	DetailedTaskResults []TaskExecutionResult `json:"detailed_task_results"`
 }
 
 type AggregateMetrics struct {

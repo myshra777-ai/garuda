@@ -62,7 +62,7 @@ var initCmd = &cobra.Command{
 		cursorDir := ".cursor"
 		_ = os.MkdirAll(cursorDir, 0755)
 		cursorConfigPath := filepath.Join(cursorDir, "mcp.json")
-		
+
 		cursorConfig := map[string]interface{}{
 			"mcpServers": map[string]interface{}{
 				"garuda": map[string]interface{}{

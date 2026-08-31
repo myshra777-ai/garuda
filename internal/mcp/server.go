@@ -464,10 +464,10 @@ func (s *Server) executeGetBlastRadius(ctx context.Context, args map[string]inte
 	}
 
 	blastRadius := map[string]interface{}{
-		"target_symbol":         symbol,
+		"target_symbol":          symbol,
 		"upstream_callers_count": len(upstream),
 		"upstream_callers":       upstream,
-		"downstream_deps_count": len(downstream),
+		"downstream_deps_count":  len(downstream),
 		"downstream_deps":        downstream,
 	}
 
