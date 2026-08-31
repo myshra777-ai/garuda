@@ -1,18 +1,14 @@
 ## [Unreleased]
 
-*No commits recorded since `v0.2.0`.*
-
 ### Added
-- None.
+- Automated workflow for generating capabilities matrix and API specifications documentation.
 
 ### Changed
-- None.
+- Updated `README.md` to align documentation with current project capabilities.
 
 ### Fixed
-- None.
 
 ### Removed
-- None.
 
 ### Semantic Changes
 - None.
