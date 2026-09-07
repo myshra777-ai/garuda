@@ -212,12 +212,12 @@ func (s *Server) HandleGetMerkleState(w http.ResponseWriter, r *http.Request) {
 	if err != nil || snap == nil {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":             "GENESIS",
-			"block_height":       1,
-			"snapshot_hash":      "Genesis verified",
-			"static_root_hash":   "Genesis",
-			"runtime_root_hash":  "Genesis",
-			"verified_claims":    0,
+			"status":              "GENESIS",
+			"block_height":        1,
+			"snapshot_hash":       "Genesis verified",
+			"static_root_hash":    "Genesis",
+			"runtime_root_hash":   "Genesis",
+			"verified_claims":     0,
 			"contradicted_claims": 0,
 		})
 		return

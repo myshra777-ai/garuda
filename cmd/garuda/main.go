@@ -277,7 +277,6 @@ var repoDisableCmd = &cobra.Command{
 	},
 }
 
-
 var upCmd = &cobra.Command{
 	Use:   "up",
 	Short: "Start complete Garuda stack (Postgres, API, Worker)",
@@ -326,7 +325,6 @@ var explainCmd = &cobra.Command{
 		handleExplain(args[0])
 	},
 }
-
 
 var mcpInstallCmd = &cobra.Command{
 	Use:   "install",
@@ -390,6 +388,7 @@ func init() {
 	rootCmd.Flags().StringVar(&checkpointFlag, "checkpoint", "", "Create checkpoint")
 	rootCmd.Flags().StringVar(&agentIDFlag, "agent", "cli-operator", "Agent ID context")
 	rootCmd.Flags().BoolVar(&versionFlag, "version", false, "Display runtime version")
+	rootCmd.AddCommand(statsCmd)
 
 	analyzeCmd.Flags().StringVarP(&outputFlag, "output", "o", "", "Write JSON report to file")
 	analyzeCmd.Flags().BoolVarP(&saveFlag, "save", "s", false, "Save analysis snapshot into PostgreSQL ledger")

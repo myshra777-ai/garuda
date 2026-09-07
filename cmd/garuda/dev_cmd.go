@@ -79,7 +79,7 @@ var devCmd = &cobra.Command{
 		mux.HandleFunc("/api/v1/telemetry/spans", server.HandleIngestRuntimeSpans)
 		mux.HandleFunc("/api/v1/runtime/coverage", server.HandleGetRuntimeCoverage)
 		mux.HandleFunc("/api/v1/merkle/state", server.HandleGetMerkleState)
-		
+
 		// Serve Interactive Visualizer HTML on /graph or when Accept header contains text/html
 		mux.HandleFunc("/graph", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")

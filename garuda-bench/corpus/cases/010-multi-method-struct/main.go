@@ -11,10 +11,12 @@ type Service interface {
 }
 
 type HTTPService struct{}
+
 func (h *HTTPService) Start() error { return nil }
 func (h *HTTPService) Stop() error  { return nil }
 
 type GRPCService struct{}
+
 func (g *GRPCService) Start() error { return nil }
 func (g *GRPCService) Stop() error  { return nil }
 

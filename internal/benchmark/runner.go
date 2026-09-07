@@ -166,11 +166,11 @@ func (r *Runner) RunSuite(ctx context.Context, workspaceName string) (*Benchmark
 	}
 
 	report := &BenchmarkSummaryReport{
-		Timestamp:           time.Now().UTC(),
-		Workspace:           workspaceName,
-		TotalTasks:          len(tasks),
-		NaiveMetrics:        naiveMetrics,
-		GarudaMCPMetrics:    garudaMetrics,
+		Timestamp:        time.Now().UTC(),
+		Workspace:        workspaceName,
+		TotalTasks:       len(tasks),
+		NaiveMetrics:     naiveMetrics,
+		GarudaMCPMetrics: garudaMetrics,
 		ImprovementFactor: map[string]float64{
 			"precision_gain_pct":          precisionImprovement,
 			"hallucination_reduction_pct": naiveMetrics.HallucinationRate - garudaMetrics.HallucinationRate,
