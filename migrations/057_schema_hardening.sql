@@ -1,10 +1,13 @@
--- Workspaces
+-- =========================================================================
+-- 057_schema_hardening.sql: Production Parity, Isolation & Indexes
+-- =========================================================================
+
+-- 1. Workspace and Repository Alignment
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE workspaces ALTER COLUMN root_path DROP NOT NULL;
 ALTER TABLE workspaces ALTER COLUMN root_path SET DEFAULT '.';
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS is_go_work BOOLEAN DEFAULT false;
 
--- Repositories
 ALTER TABLE repositories ADD COLUMN IF NOT EXISTS name TEXT DEFAULT 'primary';
 ALTER TABLE repositories ALTER COLUMN name DROP NOT NULL;
 ALTER TABLE repositories ALTER COLUMN tenant_id DROP NOT NULL;
@@ -19,7 +22,8 @@ ALTER TABLE repositories ADD COLUMN IF NOT EXISTS current_commit TEXT;
 ALTER TABLE repositories ADD COLUMN IF NOT EXISTS last_analyzed_at TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_repositories_workspace_url ON repositories (workspace_id, url);
 
--- Entities
+-- 2. Entities Canonical Identity & AST Fields
+ALTER TABLE entities ADD COLUMN IF NOT EXISTS canonical_name TEXT;
 ALTER TABLE entities ADD COLUMN IF NOT EXISTS analysis_id UUID;
 ALTER TABLE entities ADD COLUMN IF NOT EXISTS file_path TEXT;
 ALTER TABLE entities ALTER COLUMN file DROP NOT NULL;
@@ -47,11 +51,32 @@ ALTER TABLE entities ADD COLUMN IF NOT EXISTS type_params JSONB DEFAULT '[]'::js
 ALTER TABLE entities ADD COLUMN IF NOT EXISTS implements JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE entities ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
--- Claims
-ALTER TABLE claims ADD COLUMN IF NOT EXISTS analysis_id UUID;
-ALTER TABLE claims ADD COLUMN IF NOT EXISTS workspace_id UUID;
-ALTER TABLE claims ADD COLUMN IF NOT EXISTS repository_id UUID;
-ALTER TABLE claims ADD COLUMN IF NOT EXISTS confidence DOUBLE PRECISION DEFAULT 1.0;
-ALTER TABLE claims ADD COLUMN IF NOT EXISTS evidence JSONB DEFAULT '{}'::jsonb;
-ALTER TABLE claims ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
-ALTER TABLE claims ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+CREATE INDEX IF NOT EXISTS idx_entities_canonical_name ON entities (canonical_name);
+
+-- 3. Relationships Schema Hardening
+CREATE TABLE IF NOT EXISTS relationships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    analysis_id UUID,
+    tenant_id UUID,
+    workspace_id UUID,
+    source_id UUID NOT NULL,
+    target_id UUID NOT NULL,
+    kind TEXT DEFAULT 'references' NOT NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE relationships ADD COLUMN IF NOT EXISTS tenant_id UUID;
+ALTER TABLE relationships ADD COLUMN IF NOT EXISTS workspace_id UUID;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_relationships_edge 
+  ON relationships (source_id, target_id, kind);
+CREATE INDEX IF NOT EXISTS idx_relationships_src_target 
+  ON relationships (source_id, target_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_tenant_ws 
+  ON relationships (tenant_id, workspace_id);
+
+-- 4. Cross-Repo Bridges Alignment (Using Active from_repo_id / to_repo_id)
+DROP INDEX IF EXISTS idx_cross_repo_bridges;
+CREATE INDEX IF NOT EXISTS idx_cross_repo_bridges 
+  ON cross_repo_edges (from_repo_id, to_repo_id);
