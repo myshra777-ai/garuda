@@ -1,6 +1,6 @@
 # 🧠 Garuda Capabilities & AST Verification Matrix
 
-> Auto-generated on `2026-08-31 03:21:31 UTC`. Grounded in AST snapshot and benchmark gates.
+> Auto-generated on `2026-09-07 02:41:51 UTC`. Grounded in AST snapshot and benchmark gates.
 
 ## Snapshot Extraction Metrics
 
