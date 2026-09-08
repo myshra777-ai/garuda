@@ -3,21 +3,27 @@
 //
 // Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
-
 package main
 
-type AnyParser interface {
-	Parse(data string) bool
+type Parser interface {
+	Parse(input string) bool
 }
 
-type JSONParser struct{}
+type JSONParser struct {
+	Version int
+}
 
-func (p *JSONParser) Parse(data string) bool {
+func (j *JSONParser) Parse(input string) bool {
 	return true
 }
 
-func ExecuteParser(p AnyParser) bool {
-	return p.Parse("{}")
+func CheckParser(p Parser) bool {
+	switch v := p.(type) {
+	case *JSONParser:
+		return v.Version > 0
+	default:
+		return false
+	}
 }
 
 func main() {}

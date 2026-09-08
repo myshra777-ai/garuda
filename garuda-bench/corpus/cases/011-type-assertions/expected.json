@@ -1,7 +1,7 @@
 {
   "entities": [
     {
-      "name": "AnyParser",
+      "name": "Parser",
       "kind": "interface"
     },
     {
@@ -13,7 +13,7 @@
       "kind": "method"
     },
     {
-      "name": "ExecuteParser",
+      "name": "CheckParser",
       "kind": "function"
     }
   ],
@@ -24,18 +24,13 @@
       "type": "DEFINES"
     },
     {
-      "from": "ExecuteParser",
-      "to": "AnyParser",
+      "from": "CheckParser",
+      "to": "Parser",
       "type": "REFERENCES"
     },
     {
-      "from": "ExecuteParser",
-      "to": "Parse",
-      "type": "CALLS"
-    },
-    {
       "from": "JSONParser",
-      "to": "AnyParser",
+      "to": "Parser",
       "type": "IMPLEMENTS"
     }
   ]
