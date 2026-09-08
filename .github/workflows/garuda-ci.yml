@@ -65,22 +65,34 @@ jobs:
 
       - name: Build Garuda Engine & CLI
         run: |
-          go build -v -o garuda cmd/garuda/*.go
-          chmod +x garuda
+          go build -v -o garuda ./cmd/garuda
+          mkdir -p bin && cp garuda bin/
+          chmod +x garuda bin/garuda
 
-      - name: Run Unit Tests
+      - name: Cold-Boot Database Migrations (000 -> 057)
+        env:
+          DATABASE_URL: "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+        run: |
+          echo "🚀 Executing cold-boot migrations from clean state..."
+          go run cmd/migrate/main.go
+
+      - name: Verify Cold-Boot Schema Invariants & Indexes
+        env:
+          DATABASE_URL: "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+        run: |
+          echo "🔍 Auditing table constraints, canonical columns, and edge indexes..."
+          go test -v -run TestSchema_IndexesAndInvariants ./test
+
+      - name: Run Unit & Integration Tests (Race Enabled)
+        env:
+          DATABASE_URL: "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+          GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
         run: go test -v -race ./...
 
       - name: Execute V5 Truth-First Benchmark Suite
         run: |
           echo "⚖️ Running garuda-bench 10-fixture suite..."
           go run garuda-bench/runner/main.go
-
-      - name: Run Database Migrations
-        env:
-          DATABASE_URL: "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
-        run: |
-          go run cmd/migrate/main.go
 
       - name: Generate Baseline Analysis (origin/main)
         if: github.event_name == 'pull_request'
@@ -115,9 +127,9 @@ jobs:
         if: github.event_name == 'pull_request' && always()
         env:
           DATABASE_URL: "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+          PGPASSWORD: "test"
           GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
         run: |
-          # Query workspace ID
           WORKSPACE_ID=$(psql -U test -h localhost -p 5433 -d garuda_test -t -c "SELECT id FROM workspaces WHERE tenant_id = '00000000-0000-0000-0000-000000000001' AND name = 'default' LIMIT 1;" 2>/dev/null | tr -d ' ' || true)
           if [ -n "$WORKSPACE_ID" ]; then
             ENTITY_ID=$(psql -U test -h localhost -p 5433 -d garuda_test -t -c "SELECT id FROM entities WHERE workspace_id = '$WORKSPACE_ID' LIMIT 1;" 2>/dev/null | tr -d ' ' || true)
