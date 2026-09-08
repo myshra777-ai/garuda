@@ -1,0 +1,19 @@
+{
+  "entities": [
+    {
+      "name": "SafeCounter",
+      "kind": "struct"
+    },
+    {
+      "name": "Increment",
+      "kind": "method"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "SafeCounter",
+      "to": "Increment",
+      "type": "DEFINES"
+    }
+  ]
+}

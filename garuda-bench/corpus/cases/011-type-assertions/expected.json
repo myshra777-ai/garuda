@@ -1,0 +1,37 @@
+{
+  "entities": [
+    {
+      "name": "Parser",
+      "kind": "interface"
+    },
+    {
+      "name": "JSONParser",
+      "kind": "struct"
+    },
+    {
+      "name": "Parse",
+      "kind": "method"
+    },
+    {
+      "name": "CheckParser",
+      "kind": "function"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "JSONParser",
+      "to": "Parse",
+      "type": "DEFINES"
+    },
+    {
+      "from": "CheckParser",
+      "to": "Parser",
+      "type": "REFERENCES"
+    },
+    {
+      "from": "JSONParser",
+      "to": "Parser",
+      "type": "IMPLEMENTS"
+    }
+  ]
+}

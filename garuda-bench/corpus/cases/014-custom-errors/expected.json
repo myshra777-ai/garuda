@@ -1,0 +1,19 @@
+{
+  "entities": [
+    {
+      "name": "DomainError",
+      "kind": "struct"
+    },
+    {
+      "name": "Error",
+      "kind": "method"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "DomainError",
+      "to": "Error",
+      "type": "DEFINES"
+    }
+  ]
+}

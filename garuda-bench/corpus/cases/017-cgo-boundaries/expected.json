@@ -1,0 +1,19 @@
+{
+  "entities": [
+    {
+      "name": "NativeBridge",
+      "kind": "struct"
+    },
+    {
+      "name": "NewNativeBridge",
+      "kind": "function"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "NewNativeBridge",
+      "to": "NativeBridge",
+      "type": "REFERENCES"
+    }
+  ]
+}

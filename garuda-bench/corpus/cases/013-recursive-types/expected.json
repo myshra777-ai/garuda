@@ -1,0 +1,19 @@
+{
+  "entities": [
+    {
+      "name": "TreeNode",
+      "kind": "struct"
+    },
+    {
+      "name": "NewTreeNode",
+      "kind": "function"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "NewTreeNode",
+      "to": "TreeNode",
+      "type": "REFERENCES"
+    }
+  ]
+}

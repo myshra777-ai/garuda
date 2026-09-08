@@ -1,0 +1,19 @@
+{
+  "entities": [
+    {
+      "name": "TaskRunner",
+      "kind": "struct"
+    },
+    {
+      "name": "Execute",
+      "kind": "method"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "TaskRunner",
+      "to": "Execute",
+      "type": "DEFINES"
+    }
+  ]
+}

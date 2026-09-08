@@ -1,0 +1,28 @@
+{
+  "entities": [
+    {
+      "name": "BaseEngine",
+      "kind": "struct"
+    },
+    {
+      "name": "CustomEngine",
+      "kind": "struct"
+    },
+    {
+      "name": "Process",
+      "kind": "method"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "CustomEngine",
+      "to": "BaseEngine",
+      "type": "EMBEDS"
+    },
+    {
+      "from": "CustomEngine",
+      "to": "Process",
+      "type": "DEFINES"
+    }
+  ]
+}
