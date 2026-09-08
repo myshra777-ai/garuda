@@ -1,0 +1,19 @@
+{
+  "entities": [
+    {
+      "name": "SystemProbe",
+      "kind": "struct"
+    },
+    {
+      "name": "NewSystemProbe",
+      "kind": "function"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "NewSystemProbe",
+      "to": "SystemProbe",
+      "type": "REFERENCES"
+    }
+  ]
+}

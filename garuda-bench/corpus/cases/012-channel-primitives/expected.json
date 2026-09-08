@@ -1,0 +1,19 @@
+{
+  "entities": [
+    {
+      "name": "MessageQueue",
+      "kind": "struct"
+    },
+    {
+      "name": "NewMessageQueue",
+      "kind": "function"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "NewMessageQueue",
+      "to": "MessageQueue",
+      "type": "REFERENCES"
+    }
+  ]
+}

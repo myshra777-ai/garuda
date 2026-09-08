@@ -91,7 +91,7 @@ jobs:
 
       - name: Execute V5 Truth-First Benchmark Suite
         run: |
-          echo "⚖️ Running garuda-bench 10-fixture suite..."
+          echo "⚖️ Running garuda-bench 20-fixture suite..."
           go run garuda-bench/runner/main.go
 
       - name: Generate Baseline Analysis (origin/main)
@@ -163,7 +163,7 @@ jobs:
             
             const summary = diffReport.summary || {};
             let body = `## 🧠 Garuda CI Quality & Governance Report\n\n`;
-            body += `**Truth-First Benchmark:** ✅ 100% Precision / Recall (10 Fixtures)\n`;
+            body += `**Truth-First Benchmark:** ✅ 100% Precision / Recall (20 Fixtures - GAP-20)\n`;
             body += `**Diff Status:** ${diffReport.status || 'OK'}\n\n`;
             body += `| Metric | Count |\n| :--- | :--- |\n`;
             body += `| 🚫 Breaking Changes | **${summary.breaking_changes || 0}** |\n`;

@@ -1,0 +1,42 @@
+{
+  "entities": [
+    {
+      "name": "AnyParser",
+      "kind": "interface"
+    },
+    {
+      "name": "JSONParser",
+      "kind": "struct"
+    },
+    {
+      "name": "Parse",
+      "kind": "method"
+    },
+    {
+      "name": "ExecuteParser",
+      "kind": "function"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "JSONParser",
+      "to": "Parse",
+      "type": "DEFINES"
+    },
+    {
+      "from": "ExecuteParser",
+      "to": "AnyParser",
+      "type": "REFERENCES"
+    },
+    {
+      "from": "ExecuteParser",
+      "to": "Parse",
+      "type": "CALLS"
+    },
+    {
+      "from": "JSONParser",
+      "to": "AnyParser",
+      "type": "IMPLEMENTS"
+    }
+  ]
+}

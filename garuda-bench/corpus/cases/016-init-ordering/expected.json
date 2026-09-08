@@ -1,0 +1,19 @@
+{
+  "entities": [
+    {
+      "name": "Registry",
+      "kind": "struct"
+    },
+    {
+      "name": "InitRegistry",
+      "kind": "function"
+    }
+  ],
+  "relationships": [
+    {
+      "from": "InitRegistry",
+      "to": "Registry",
+      "type": "REFERENCES"
+    }
+  ]
+}
