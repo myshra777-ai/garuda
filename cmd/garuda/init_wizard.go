@@ -108,5 +108,4 @@ func runInitWizard() {
 }
 
 func init() {
-	rootCmd.AddCommand(initCmd)
 }
