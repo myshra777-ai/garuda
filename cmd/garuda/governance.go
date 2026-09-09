@@ -6,7 +6,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -135,64 +134,37 @@ func handleVerify() {
 	ctx := context.Background()
 	tid := getTenantID()
 
-	rows, err := st.Pool().Query(ctx, `
-		SELECT id, decision_hash, previous_revision_hash
-		FROM decision_revisions
-		WHERE tenant_id = $1
-		ORDER BY created_at ASC
-	`, tid)
-
+	chain, err := st.GetRevisionChain(ctx, tid)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Query failed: %v\n", err)
 		os.Exit(1)
 	}
-	defer rows.Close()
 
 	var count int
 	var prevHash []byte
 	chainValid := true
 
-	for rows.Next() {
-		var id uuid.UUID
-		var currHash, prevHashStored []byte
-		if err := rows.Scan(&id, &currHash, &prevHashStored); err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Row scan failed: %v\n", err)
-			os.Exit(1)
-		}
-
-		if count == 0 {
-			for _, b := range prevHashStored {
-				if b != 0 {
-					chainValid = false
-					break
-				}
-			}
-		} else {
-			if !bytes.Equal(prevHash, prevHashStored) {
-				chainValid = false
-			}
-		}
-		prevHash = currHash
+	for _, entry := range chain {
 		count++
+		if prevHash != nil {
+			if string(entry.PreviousRevisionHash) != string(prevHash) {
+				fmt.Printf("❌ Chain broken at revision %s\n", entry.ID)
+				fmt.Printf("   Expected prev: %x\n", prevHash)
+				fmt.Printf("   Actual prev:   %x\n", entry.PreviousRevisionHash)
+				chainValid = false
+				break
+			}
+		}
+		prevHash = entry.DecisionHash
 	}
 
-	if err := rows.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Row iteration error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("🛡️ GARUDA INTEGRITY CHECK")
-	fmt.Printf("Revisions:           %d\n", count)
-	fmt.Printf("Hash chain:          %s\n", statusText(chainValid))
-	fmt.Printf("Audit events:        %d\n", count)
-	fmt.Printf("Evidence references: %s\n", statusText(chainValid))
-	fmt.Printf("Immutable history:   %s\n", statusText(chainValid))
-	fmt.Printf("Tenant isolation:    %s\n", statusText(chainValid))
-
-	if chainValid {
-		fmt.Println("Integrity: PASS ✅")
+	if chainValid && count > 0 {
+		fmt.Printf("✅ Hash chain intact: %d revision(s) verified.\n", count)
+		fmt.Printf("   Latest content hash: %x\n", prevHash)
+	} else if count == 0 {
+		fmt.Println("ℹ️ No revisions in ledger.")
 	} else {
-		fmt.Println("Integrity: FAIL ❌")
+		os.Exit(1)
 	}
 }
 
@@ -204,6 +176,12 @@ func statusText(valid bool) string {
 }
 
 func handleExplain(decisionIDStr string) {
+	decisionID, err := uuid.Parse(decisionIDStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Invalid decision ID '%s': %v\n", decisionIDStr, err)
+		os.Exit(1)
+	}
+
 	dbURL := getDBURL()
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
@@ -213,57 +191,30 @@ func handleExplain(decisionIDStr string) {
 	defer st.Close()
 
 	ctx := context.Background()
-	decisionID, err := uuid.Parse(decisionIDStr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Invalid decision ID: %v\n", err)
-		os.Exit(1)
-	}
 	tid := getTenantID()
 
-	var title, statement, owner, status string
-	var scopeJSON []byte
-	var confidence float64
-	var parentCreatedAt time.Time
-	err = st.Pool().QueryRow(ctx, `
-		SELECT title, statement, scope, owner, confidence, status, created_at
-		FROM decisions
-		WHERE tenant_id = $1 AND id = $2
-	`, tid, decisionID).Scan(&title, &statement, &scopeJSON, &owner, &confidence, &status, &parentCreatedAt)
+	exp, err := st.GetDecisionExplanation(ctx, tid, decisionID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Decision not found: %v\n", err)
 		os.Exit(1)
 	}
 
-	var revNumber int
-	var canonicalJSON []byte
-	var hash, prevHash []byte
-	var createdAt time.Time
-	_ = st.Pool().QueryRow(ctx, `
-		SELECT revision_number, canonical_json, decision_hash, previous_revision_hash, created_at
-		FROM decision_revisions
-		WHERE tenant_id = $1 AND decision_id = $2
-		ORDER BY revision_number DESC LIMIT 1
-	`, tid, decisionID).Scan(&revNumber, &canonicalJSON, &hash, &prevHash, &createdAt)
-
 	fmt.Printf("📄 DECISION EXPLANATION\n")
-	fmt.Printf("Decision ID:       %s\n", decisionID)
-	fmt.Printf("Status:            %s\n", status)
-	fmt.Printf("Title:             %s\n", title)
-	fmt.Printf("Statement:         %s\n", statement)
-	fmt.Printf("Scope:             %s\n", string(scopeJSON))
-	fmt.Printf("Owner:             %s\n", owner)
-	fmt.Printf("Confidence:        %.2f\n", confidence)
-	fmt.Printf("Revision:          #%d\n", revNumber)
-	fmt.Printf("Created:           %s\n", createdAt.Format(time.RFC3339))
-	fmt.Printf("Content Hash:      %x\n", hash)
-	fmt.Printf("Previous Revision: %x\n", prevHash)
-
-	var merkleRoot []byte
-	_ = st.Pool().QueryRow(ctx, `SELECT root_hash FROM merkle_roots WHERE tenant_id = $1`, tid).Scan(&merkleRoot)
-	fmt.Printf("Merkle Root:       %x\n", merkleRoot)
+	fmt.Printf("Decision ID:       %s\n", exp.ID)
+	fmt.Printf("Status:            %s\n", exp.Status)
+	fmt.Printf("Title:             %s\n", exp.Title)
+	fmt.Printf("Statement:         %s\n", exp.Statement)
+	fmt.Printf("Scope:             %s\n", string(exp.ScopeJSON))
+	fmt.Printf("Owner:             %s\n", exp.Owner)
+	fmt.Printf("Confidence:        %.2f\n", exp.Confidence)
+	fmt.Printf("Revision:          #%d\n", exp.RevisionNumber)
+	fmt.Printf("Created:           %s\n", exp.RevisionCreatedAt.Format(time.RFC3339))
+	fmt.Printf("Content Hash:      %x\n", exp.DecisionHash)
+	fmt.Printf("Previous Revision: %x\n", exp.PreviousRevisionHash)
+	fmt.Printf("Merkle Root:       %x\n", exp.MerkleRoot)
 
 	var summary analyzer.RevisionSummary
-	if err := json.Unmarshal(canonicalJSON, &summary); err == nil && summary.Fingerprint != "" {
+	if err := json.Unmarshal(exp.CanonicalJSON, &summary); err == nil && summary.Fingerprint != "" {
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		fmt.Printf("📦 AST Snapshot Fingerprint: %s\n", summary.Fingerprint)
 		fmt.Printf("📊 Packages: %d | Structs: %d | Interfaces: %d | Functions: %d | Files: %d\n",

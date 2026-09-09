@@ -803,3 +803,64 @@ func (s *PostgresStore) GetGraphData(ctx context.Context, tenantID, workspaceID 
 
 	return nodes, edges, nil
 }
+
+// GetEntityByID retrieves an entity by its UUID within a tenant and workspace.
+func (s *PostgresStore) GetEntityByID(ctx context.Context, tenantID, workspaceID, entityID uuid.UUID) (*analyzer.Entity, error) {
+	var entity analyzer.Entity
+	var id, kind, pkgName, pkgPath, modPath, recType, file, signature string
+	var exported bool
+	var fieldsJSON, methodsJSON []byte
+	var line, lineStart, lineEnd int
+
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, name, kind, package, package_path, module_path, receiver_type,
+		       file_path, signature, fields, methods, is_exported,
+		       line, line_start, line_end
+		FROM entities
+		WHERE tenant_id = $1 AND workspace_id = $2 AND id = $3
+		LIMIT 1
+	`, tenantID, workspaceID, entityID).Scan(
+		&id, &entity.Name, &kind, &pkgName, &pkgPath, &modPath, &recType,
+		&file, &signature, &fieldsJSON, &methodsJSON, &exported,
+		&line, &lineStart, &lineEnd,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("entity ID %s not found: %w", entityID, err)
+	}
+
+	entity.ID = id
+	entity.Kind = analyzer.EntityKind(kind)
+	entity.Package = pkgName
+	entity.PackagePath = pkgPath
+	entity.ModulePath = modPath
+	entity.ReceiverType = recType
+	entity.File = file
+	entity.Signature = signature
+	entity.Exported = exported
+	entity.Line = line
+	entity.LineStart = lineStart
+	entity.LineEnd = lineEnd
+
+	if len(fieldsJSON) > 0 {
+		_ = json.Unmarshal(fieldsJSON, &entity.Fields)
+	}
+	if len(methodsJSON) > 0 {
+		_ = json.Unmarshal(methodsJSON, &entity.Methods)
+	}
+
+	return &entity, nil
+}
+
+// FindEntityIDByNameAndPackage resolves an entity UUID given workspace, name, and package.
+func (s *PostgresStore) FindEntityIDByNameAndPackage(ctx context.Context, workspaceID uuid.UUID, name, pkg string) (uuid.UUID, error) {
+	var entityID uuid.UUID
+	err := s.pool.QueryRow(ctx, `
+		SELECT id FROM entities 
+		WHERE workspace_id = $1 AND name = $2 AND package = $3
+		LIMIT 1
+	`, workspaceID, name, pkg).Scan(&entityID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return entityID, nil
+}

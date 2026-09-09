@@ -92,7 +92,7 @@ func handleAnalyze(path string) {
 		os.Exit(1)
 	}
 
-	ws, err := analyzer.DiscoverWorkspace(absPath)
+	wsMeta, err := analyzer.DiscoverWorkspace(absPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace discovery failed: %v\n", err)
 		os.Exit(1)
@@ -110,7 +110,7 @@ func handleAnalyze(path string) {
 	}
 
 	ctx := context.Background()
-	result, err := analyzer.AnalyzeWorkspaceWithOptions(ctx, ws, opts)
+	result, err := analyzer.AnalyzeWorkspaceWithOptions(ctx, wsMeta, opts)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Analysis failed: %v\n", err)
 		os.Exit(1)
@@ -206,19 +206,21 @@ func handleAnalyze(path string) {
 		}
 
 		var workspaceID uuid.UUID
-		err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantUUID, wsName).Scan(&workspaceID)
+		wsRecord, err := st.GetWorkspaceByName(ctx, tenantIDStr, wsName)
 		if err != nil {
-			ws, err := st.CreateWorkspace(ctx, tenantIDStr, wsName, "")
+			newWs, err := st.CreateWorkspace(ctx, tenantIDStr, wsName, "")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "⚠️ Failed to create workspace '%s': %v\n", wsName, err)
 				return
 			}
-			workspaceID = ws.ID
+			workspaceID = newWs.ID
 			fmt.Printf("   Created workspace: %s\n", wsName)
+		} else {
+			workspaceID = wsRecord.ID
 		}
 
 		var repoID uuid.UUID
-		err = st.Pool().QueryRow(ctx, `SELECT id FROM repositories WHERE workspace_id = $1 AND url = $2`, workspaceID, repoURL).Scan(&repoID)
+		repoRecord, err := st.GetRepositoryByURL(ctx, workspaceID, repoURL)
 		if err != nil {
 			provider := "local"
 			if strings.Contains(repoURL, "github.com") {
@@ -228,17 +230,19 @@ func handleAnalyze(path string) {
 			} else if strings.Contains(repoURL, "bitbucket") {
 				provider = "bitbucket"
 			}
-			repo, err := st.AddRepository(ctx, workspaceID, provider, repoURL, "main", "go", modulePath)
+			newRepo, err := st.AddRepository(ctx, workspaceID, provider, repoURL, "main", "go", modulePath)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "⚠️ Failed to create repository: %v\n", err)
 				return
 			}
-			repoID = repo.ID
+			repoID = newRepo.ID
 			fmt.Printf("   Created repository: %s\n", repoURL)
+		} else {
+			repoID = repoRecord.ID
 		}
 
 		if modulePath != "" {
-			_, _ = st.Pool().Exec(ctx, `UPDATE repositories SET module_path = $1 WHERE id = $2`, modulePath, repoID)
+			_ = st.UpdateRepositoryModulePath(ctx, repoID, modulePath)
 			fmt.Printf("   Module path: %s\n", modulePath)
 		}
 

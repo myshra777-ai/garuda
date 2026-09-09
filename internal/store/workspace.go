@@ -259,3 +259,69 @@ func (s *PostgresStore) SyncWorkspace(ctx context.Context, workspaceID uuid.UUID
 	}
 	return nil
 }
+
+// GetWorkspaceByName retrieves a workspace by name
+func (s *PostgresStore) GetWorkspaceByName(ctx context.Context, tenantIDStr, name string) (*Workspace, error) {
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		return nil, err
+	}
+	var w Workspace
+	err = s.pool.QueryRow(ctx, `SELECT id, tenant_id, name, root_path, is_go_work, description, created_at, updated_at FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, name).Scan(
+		&w.ID, &w.TenantID, &w.Name, &w.RootPath, &w.IsGoWork, &w.Description, &w.CreatedAt, &w.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &w, nil
+}
+
+// DeleteWorkspaceByName deletes a workspace and cascades to repositories
+func (s *PostgresStore) DeleteWorkspaceByName(ctx context.Context, tenantIDStr, name string) error {
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		return err
+	}
+	res, err := s.pool.Exec(ctx, `DELETE FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, name)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return fmt.Errorf("workspace '%s' not found", name)
+	}
+	return nil
+}
+
+// GetRepositoryByURL finds a repository by its origin URL
+func (s *PostgresStore) GetRepositoryByURL(ctx context.Context, workspaceID uuid.UUID, repoURL string) (*Repository, error) {
+	var r Repository
+	err := s.pool.QueryRow(ctx, `SELECT id, url, default_branch, language, module_path, enabled, analysis_status FROM repositories WHERE workspace_id = $1 AND url = $2 LIMIT 1`, workspaceID, repoURL).Scan(
+		&r.ID, &r.URL, &r.DefaultBranch, &r.Language, &r.ModulePath, &r.Enabled, &r.AnalysisStatus)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// RemoveRepositoryByURL deletes a repository from a workspace
+func (s *PostgresStore) RemoveRepositoryByURL(ctx context.Context, workspaceID uuid.UUID, repoURL string) error {
+	res, err := s.pool.Exec(ctx, `DELETE FROM repositories WHERE workspace_id = $1 AND url = $2`, workspaceID, repoURL)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return fmt.Errorf("repository '%s' not found", repoURL)
+	}
+	return nil
+}
+
+// SetRepositoryEnablement toggles sync/analysis participation
+func (s *PostgresStore) SetRepositoryEnablement(ctx context.Context, workspaceID uuid.UUID, repoURL string, enabled bool) error {
+	res, err := s.pool.Exec(ctx, `UPDATE repositories SET enabled = $1 WHERE workspace_id = $2 AND url = $3`, enabled, workspaceID, repoURL)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return fmt.Errorf("repository '%s' not found", repoURL)
+	}
+	return nil
+}

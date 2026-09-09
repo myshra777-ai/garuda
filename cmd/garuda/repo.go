@@ -11,7 +11,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/myshra777-ai/garuda/internal/store"
@@ -94,8 +93,7 @@ func handleRepoAdd(workspaceName, repoURL, modulePath string) {
 	}
 	defer st.Close()
 
-	var wsID uuid.UUID
-	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
+	ws, err := st.GetWorkspaceByName(ctx, tenantID, workspaceName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
@@ -108,7 +106,7 @@ func handleRepoAdd(workspaceName, repoURL, modulePath string) {
 		provider = "bitbucket"
 	}
 
-	repo, err := st.AddRepository(ctx, wsID, provider, sanitizeGitURL(repoURL), "main", "go", modulePath)
+	repo, err := st.AddRepository(ctx, ws.ID, provider, sanitizeGitURL(repoURL), "main", "go", modulePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to add repository: %v\n", err)
 		os.Exit(1)
@@ -131,14 +129,13 @@ func handleRepoList(workspaceName string) {
 	}
 	defer st.Close()
 
-	var wsID uuid.UUID
-	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
+	ws, err := st.GetWorkspaceByName(ctx, tenantID, workspaceName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
 
-	repos, err := st.ListRepositories(ctx, wsID)
+	repos, err := st.ListRepositories(ctx, ws.ID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to list: %v\n", err)
 		os.Exit(1)
@@ -171,16 +168,14 @@ func handleRepoRemove(workspaceName, repoURL string) {
 	}
 	defer st.Close()
 
-	var wsID string
-	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
+	ws, err := st.GetWorkspaceByName(ctx, tenantID, workspaceName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
 
-	_, err = st.Pool().Exec(ctx, `DELETE FROM repositories WHERE workspace_id = $1 AND url = $2`, wsID, repoURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Failed to remove: %v\n", err)
+	if err := st.RemoveRepositoryByURL(ctx, ws.ID, repoURL); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed to remove repository: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("✓ Repository '%s' removed from workspace '%s'.\n", repoURL, workspaceName)
@@ -198,16 +193,14 @@ func handleRepoEnable(workspaceName, repoURL string, enable bool) {
 	}
 	defer st.Close()
 
-	var wsID string
-	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
+	ws, err := st.GetWorkspaceByName(ctx, tenantID, workspaceName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
 
-	_, err = st.Pool().Exec(ctx, `UPDATE repositories SET enabled = $1 WHERE workspace_id = $2 AND url = $3`, enable, wsID, repoURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Failed to update: %v\n", err)
+	if err := st.SetRepositoryEnablement(ctx, ws.ID, repoURL, enable); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed to update repository: %v\n", err)
 		os.Exit(1)
 	}
 

@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/myshra777-ai/garuda/internal/store"
@@ -127,16 +126,8 @@ func handleWorkspaceDelete(name string) {
 	}
 	defer st.Close()
 
-	var wsID string
-	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, name).Scan(&wsID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", name)
-		os.Exit(1)
-	}
-
-	_, err = st.Pool().Exec(ctx, `DELETE FROM workspaces WHERE id = $1`, wsID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Failed to delete: %v\n", err)
+	if err := st.DeleteWorkspaceByName(ctx, tenantID, name); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' could not be deleted: %v\n", name, err)
 		os.Exit(1)
 	}
 	fmt.Printf("✓ Workspace '%s' deleted.\n", name)
@@ -154,14 +145,13 @@ func handleWorkspaceSync(workspaceName string) {
 	}
 	defer st.Close()
 
-	var wsID uuid.UUID
-	err = st.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2`, tenantID, workspaceName).Scan(&wsID)
+	ws, err := st.GetWorkspaceByName(ctx, tenantID, workspaceName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
 
-	repos, err := st.ListRepositories(ctx, wsID)
+	repos, err := st.ListRepositories(ctx, ws.ID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to list repositories: %v\n", err)
 		os.Exit(1)
@@ -238,20 +228,11 @@ func handleWorkspaceSync(workspaceName string) {
 		}
 
 		fmt.Printf("  🔍 Analysing...\n")
-		analyzeArgs := []string{"analyze", tempDir, "--save", "--workspace", workspaceName, "--repo", repo.URL, "--commit", commitSHA}
-		if modulePath != "" {
-			analyzeArgs = append(analyzeArgs, "--module-path", modulePath)
-		}
-
-		analyzeCmd := exec.Command("./garuda", analyzeArgs...)
-		analyzeCmd.Env = append(os.Environ(), "DATABASE_URL="+os.Getenv("DATABASE_URL"), "GARUDA_TENANT_ID="+tenantID)
-
-		output, err := analyzeCmd.CombinedOutput()
-		if err != nil {
-			fmt.Printf("  ❌ Failed: %v\n", err)
-			fmt.Printf("  Output: %s\n", string(output))
-			continue
-		}
+		saveFlag = true
+		workspaceFlag = workspaceName
+		repoFlag = repo.URL
+		modulePathFlag = modulePath
+		handleAnalyze(tempDir)
 		fmt.Printf("  ✅ Done\n")
 
 		err = st.UpdateRepositorySyncStatus(ctx, tenantID, repo.ID, commitSHA, "synced")

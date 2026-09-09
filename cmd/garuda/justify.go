@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/myshra777-ai/garuda/internal/analyzer"
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -50,38 +49,21 @@ var justifyCmd = &cobra.Command{
 			workspaceName = "default"
 		}
 
-		var workspaceID uuid.UUID
-		err = st.Pool().QueryRow(ctx, "SELECT id FROM workspaces WHERE name = $1 LIMIT 1", workspaceName).Scan(&workspaceID)
+		ws, err := st.GetWorkspaceByName(ctx, tenantID.String(), workspaceName)
 		if err != nil {
 			return fmt.Errorf("failed to resolve workspace '%s': %w", workspaceName, err)
 		}
+		workspaceID := ws.ID
 
 		var entityID string
 		var entityName string
 
 		if targetUUID, err := uuid.Parse(target); err == nil {
-			var entity analyzer.Entity
-			var id, kind, pkgName, pkgPath, modPath, recType, file, signature string
-			var exported bool
-			var fieldsJSON, methodsJSON []byte
-			var line, lineStart, lineEnd int
-
-			err := st.Pool().QueryRow(ctx, `
-				SELECT id, name, kind, package, package_path, module_path, receiver_type,
-				       file_path, signature, fields, methods, is_exported,
-				       line, line_start, line_end
-				FROM entities
-				WHERE tenant_id = $1 AND workspace_id = $2 AND id = $3
-				LIMIT 1
-			`, tenantID, workspaceID, targetUUID).Scan(
-				&id, &entity.Name, &kind, &pkgName, &pkgPath, &modPath, &recType,
-				&file, &signature, &fieldsJSON, &methodsJSON, &exported,
-				&line, &lineStart, &lineEnd,
-			)
+			entity, err := st.GetEntityByID(ctx, tenantID, workspaceID, targetUUID)
 			if err != nil {
 				return fmt.Errorf("entity ID %s not found: %w", targetUUID, err)
 			}
-			entityID = id
+			entityID = entity.ID
 			entityName = entity.Name
 		} else {
 			parts := strings.Split(target, ".")

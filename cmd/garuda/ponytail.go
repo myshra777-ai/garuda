@@ -69,14 +69,12 @@ func handlePonytail(path string) {
 	}
 
 	tenantUUID := uuid.MustParse(tenantID)
-	var wsID uuid.UUID
-	err = st.Pool().QueryRow(ctx, `
-		SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2
-	`, tenantUUID, workspaceName).Scan(&wsID)
+	ws, err := st.GetWorkspaceByName(ctx, tenantID, workspaceName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found\n", workspaceName)
 		os.Exit(1)
 	}
+	wsID := ws.ID
 
 	// Fetch all entities and relationships
 	entities, err := st.ListEntities(ctx, tenantUUID, wsID)

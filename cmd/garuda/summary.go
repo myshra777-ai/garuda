@@ -1,5 +1,7 @@
 // Copyright 2026 Rohit Mishra
 // SPDX-License-Identifier: Apache-2.0
+//
+// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
 package main
 
@@ -11,8 +13,9 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/spf13/cobra"
+
+	"github.com/myshra777-ai/garuda/internal/store"
 )
 
 var summaryJSONFlag bool
@@ -21,7 +24,6 @@ func init() {
 	summaryCmd.Flags().BoolVarP(&summaryJSONFlag, "json", "j", false, "Output summary in structured JSON format")
 }
 
-// DTO structures for JSON serialization
 type HubNodeDTO struct {
 	Name    string `json:"name"`
 	Kind    string `json:"kind"`
@@ -98,34 +100,25 @@ var summaryCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
-		dbURL := os.Getenv("DATABASE_URL")
-		if dbURL == "" {
-			dbURL = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
-		}
-
+		dbURL := getDBURL()
 		st, err := store.NewPostgresStore(dbURL)
 		if err != nil {
 			return fmt.Errorf("failed to connect to store: %w", err)
 		}
 		defer st.Close()
 
-		tenantStr := os.Getenv("GARUDA_TENANT_ID")
-		if tenantStr == "" {
-			tenantStr = "00000000-0000-0000-0000-000000000001"
-		}
-		tenantID, _ := uuid.Parse(tenantStr)
+		tenantID := getTenantID()
 
-		// 1. Resolve workspace
 		workspaceName := os.Getenv("GARUDA_WORKSPACE")
 		if workspaceName == "" {
 			workspaceName = "uuid-ws"
 		}
 
-		var workspaceID uuid.UUID
-		err = st.Pool().QueryRow(ctx, "SELECT id FROM workspaces WHERE name = $1 LIMIT 1", workspaceName).Scan(&workspaceID)
+		workspaceID, resolvedName, err := st.ResolveWorkspaceTarget(ctx, workspaceName)
 		if err != nil {
-			_ = st.Pool().QueryRow(ctx, "SELECT id, name FROM workspaces LIMIT 1").Scan(&workspaceID, &workspaceName)
+			return err
 		}
+		workspaceName = resolvedName
 
 		if len(args) == 0 || args[0] == workspaceName {
 			return printWorkspaceSummary(ctx, st, tenantID, workspaceID, workspaceName)
@@ -133,88 +126,53 @@ var summaryCmd = &cobra.Command{
 
 		target := strings.TrimSpace(args[0])
 
-		// 2. Check if target matches a repository
-		var repoID uuid.UUID
-		var repoURL, modPath string
-		err = st.Pool().QueryRow(ctx, `
-			SELECT id, url, module_path FROM repositories 
-			WHERE workspace_id = $1 AND (module_path ILIKE '%' || $2 || '%' OR url ILIKE '%' || $2 || '%')
-			LIMIT 1
-		`, workspaceID, target).Scan(&repoID, &repoURL, &modPath)
-
+		repoID, repoURL, modPath, err := st.FindRepoByTarget(ctx, workspaceID, target)
 		if err == nil {
 			return printRepoSummary(ctx, st, tenantID, workspaceID, repoID, modPath, repoURL)
 		}
 
-		// 3. Fallback: treat target as a Symbol/Entity
 		return printSymbolSummary(ctx, st, tenantID, workspaceID, target)
 	},
 }
 
 func printWorkspaceSummary(ctx context.Context, st *store.PostgresStore, tenantID, workspaceID uuid.UUID, wsName string) error {
-	var repoCount, entityCount, claimCount int
-	_ = st.Pool().QueryRow(ctx, `SELECT count(*) FROM repositories WHERE workspace_id = $1`, workspaceID).Scan(&repoCount)
-	_ = st.Pool().QueryRow(ctx, `SELECT count(*) FROM entities WHERE workspace_id = $1 AND kind != 'external'`, workspaceID).Scan(&entityCount)
-	_ = st.Pool().QueryRow(ctx, `SELECT count(*) FROM claims WHERE workspace_id = $1`, workspaceID).Scan(&claimCount)
-
-	rows, err := st.Pool().Query(ctx, `
-		SELECT e.name, e.kind, e.package, count(c.id) as callers
-		FROM entities e
-		JOIN claims c ON c.to_entity_id = e.id
-		WHERE e.workspace_id = $1 AND e.kind != 'external'
-		GROUP BY e.id, e.name, e.kind, e.package
-		ORDER BY callers DESC
-		LIMIT 5;
-	`, workspaceID)
+	counts, err := st.GetWorkspaceCounts(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
+	hubsData, err := st.GetTopArchitecturalHubs(ctx, workspaceID, 5)
+	if err != nil {
+		return err
+	}
 	var hubs []HubNodeDTO
-	for rows.Next() {
-		var h HubNodeDTO
-		if err := rows.Scan(&h.Name, &h.Kind, &h.Package, &h.Callers); err == nil {
-			hubs = append(hubs, h)
-		}
+	for _, h := range hubsData {
+		hubs = append(hubs, HubNodeDTO{
+			Name:    h.Name,
+			Kind:    h.Kind,
+			Package: h.Package,
+			Callers: h.Callers,
+		})
 	}
 
-	rows2, err := st.Pool().Query(ctx, `
-		SELECT DISTINCT r1.module_path, r2.module_path, count(*) 
-		FROM claims c
-		JOIN entities e1 ON c.from_entity_id = e1.id
-		JOIN entities e2 ON c.to_entity_id = e2.id
-		JOIN repositories r1 ON e1.repository_id = r1.id
-		JOIN repositories r2 ON e2.repository_id = r2.id
-		WHERE c.workspace_id = $1 AND r1.id != r2.id
-		GROUP BY r1.module_path, r2.module_path
-		LIMIT 5;
-	`, workspaceID)
+	bridgesData, _ := st.GetCrossRepoBridges(ctx, workspaceID, 5)
 	var bridges []CrossRepoBridgeDTO
-	if err == nil {
-		defer rows2.Close()
-		for rows2.Next() {
-			var b CrossRepoBridgeDTO
-			if err := rows2.Scan(&b.FromModule, &b.ToModule, &b.CallCount); err == nil {
-				bridges = append(bridges, b)
-			}
-		}
+	for _, b := range bridgesData {
+		bridges = append(bridges, CrossRepoBridgeDTO{
+			FromModule: b.FromModule,
+			ToModule:   b.ToModule,
+			CallCount:  b.CallCount,
+		})
 	}
 
-	var latestMerkle string
-	_ = st.Pool().QueryRow(ctx, `
-		SELECT COALESCE(merkle_root, '<pending>')
-		FROM decision_revisions
-		GROUP BY merkle_root, created_at
-		ORDER BY created_at DESC LIMIT 1
-	`).Scan(&latestMerkle)
+	latestMerkle := st.GetLatestMerkleRoot(ctx)
 
 	dto := WorkspaceSummaryDTO{
 		Workspace: wsName,
 		Scale: WorkspaceScaleDTO{
-			Repositories:       repoCount,
-			ASTEntities:        entityCount,
-			TypedRelationships: claimCount,
+			Repositories:       counts.Repositories,
+			ASTEntities:        counts.Entities,
+			TypedRelationships: counts.Claims,
 		},
 		ArchitecturalHubs: hubs,
 		CrossRepoBridges:  bridges,
@@ -230,10 +188,10 @@ func printWorkspaceSummary(ctx context.Context, st *store.PostgresStore, tenantI
 		return enc.Encode(dto)
 	}
 
-	// Plain English formatting
 	fmt.Printf("\n🌐 WORKSPACE ARCHITECTURAL SUMMARY: %s\n", wsName)
 	fmt.Println(strings.Repeat("━", 65))
-	fmt.Printf("Scale: %d Repositories | %d AST Entities | %d Typed Relationships\n\n", repoCount, entityCount, claimCount)
+	fmt.Printf("Scale: %d Repositories | %d AST Entities | %d Typed Relationships\n\n",
+		counts.Repositories, counts.Entities, counts.Claims)
 
 	fmt.Println("🏛️  Core Architectural Hubs (Highest Impact Nodes):")
 	for _, h := range hubs {
@@ -264,53 +222,35 @@ func printWorkspaceSummary(ctx context.Context, st *store.PostgresStore, tenantI
 }
 
 func printRepoSummary(ctx context.Context, st *store.PostgresStore, tenantID, workspaceID, repoID uuid.UUID, modPath, repoURL string) error {
-	var entCount, pkgCount int
-	_ = st.Pool().QueryRow(ctx, `SELECT count(*), count(DISTINCT package) FROM entities WHERE repository_id = $1 AND kind != 'external'`, repoID).Scan(&entCount, &pkgCount)
-
-	rows, err := st.Pool().Query(ctx, `
-		SELECT name, kind, COALESCE(receiver_type, '')
-		FROM entities 
-		WHERE repository_id = $1 AND is_exported = true AND kind IN ('function', 'struct', 'interface')
-		ORDER BY kind DESC, name ASC
-		LIMIT 6;
-	`, repoID)
-	var exports []ExportedSymbolDTO
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var sym ExportedSymbolDTO
-			if err := rows.Scan(&sym.Name, &sym.Kind, &sym.ReceiverType); err == nil {
-				exports = append(exports, sym)
-			}
-		}
+	metrics, err := st.GetRepoMetrics(ctx, repoID)
+	if err != nil {
+		return err
 	}
 
-	rows2, err := st.Pool().Query(ctx, `
-		SELECT DISTINCT e2.package, count(*) as count
-		FROM claims c
-		JOIN entities e1 ON c.from_entity_id = e1.id
-		JOIN entities e2 ON c.to_entity_id = e2.id
-		WHERE e1.repository_id = $1 AND (e2.repository_id != $1 OR e2.kind = 'external')
-		GROUP BY e2.package
-		ORDER BY count DESC
-		LIMIT 4;
-	`, repoID)
+	exportsData, _ := st.GetExportedSymbols(ctx, repoID, 6)
+	var exports []ExportedSymbolDTO
+	for _, sym := range exportsData {
+		exports = append(exports, ExportedSymbolDTO{
+			Name:         sym.Name,
+			Kind:         sym.Kind,
+			ReceiverType: sym.ReceiverType,
+		})
+	}
+
+	depsData, _ := st.GetExternalDependencies(ctx, repoID, 4)
 	var deps []DependencyRefDTO
-	if err == nil {
-		defer rows2.Close()
-		for rows2.Next() {
-			var d DependencyRefDTO
-			if err := rows2.Scan(&d.Package, &d.References); err == nil {
-				deps = append(deps, d)
-			}
-		}
+	for _, d := range depsData {
+		deps = append(deps, DependencyRefDTO{
+			Package:    d.Package,
+			References: d.References,
+		})
 	}
 
 	dto := RepoSummaryDTO{
 		Repository:           modPath,
 		SourceURL:            repoURL,
-		PackageCount:         pkgCount,
-		EntityCount:          entCount,
+		PackageCount:         metrics.PackageCount,
+		EntityCount:          metrics.EntityCount,
 		ExportedSymbols:      exports,
 		OutgoingDependencies: deps,
 	}
@@ -324,7 +264,7 @@ func printRepoSummary(ctx context.Context, st *store.PostgresStore, tenantID, wo
 	fmt.Printf("\n📦 REPOSITORY SUMMARY: %s\n", modPath)
 	fmt.Println(strings.Repeat("━", 65))
 	fmt.Printf("Source: %s\n", repoURL)
-	fmt.Printf("Footprint: %d Packages | %d Entities\n\n", pkgCount, entCount)
+	fmt.Printf("Footprint: %d Packages | %d Entities\n\n", metrics.PackageCount, metrics.EntityCount)
 
 	fmt.Println("🔑 Key Exported Symbols (Public Surface):")
 	for _, sym := range exports {
@@ -344,57 +284,29 @@ func printRepoSummary(ctx context.Context, st *store.PostgresStore, tenantID, wo
 }
 
 func printSymbolSummary(ctx context.Context, st *store.PostgresStore, tenantID, workspaceID uuid.UUID, target string) error {
-	var entID uuid.UUID
-	var name, kind, pkg, file, sig, rec string
-	var exported bool
-	var line int
-
-	var err error
-	if parsedID, parseErr := uuid.Parse(target); parseErr == nil {
-		err = st.Pool().QueryRow(ctx, `
-			SELECT id, name, kind, package, receiver_type, file_path, signature, is_exported, line
-			FROM entities WHERE workspace_id = $1 AND id = $2 LIMIT 1
-		`, workspaceID, parsedID).Scan(&entID, &name, &kind, &pkg, &rec, &file, &sig, &exported, &line)
-	} else {
-		sym := target
-		if dot := strings.LastIndex(target, "."); dot != -1 {
-			sym = target[dot+1:]
-		}
-		err = st.Pool().QueryRow(ctx, `
-			SELECT id, name, kind, package, receiver_type, file_path, signature, is_exported, line
-			FROM entities 
-			WHERE workspace_id = $1 AND (name = $2 OR name ILIKE $2)
-			ORDER BY (kind != 'external') DESC, is_exported DESC
-			LIMIT 1
-		`, workspaceID, sym).Scan(&entID, &name, &kind, &pkg, &rec, &file, &sig, &exported, &line)
-	}
-
+	det, err := st.GetSymbolSummaryDetail(ctx, workspaceID, target)
 	if err != nil {
 		return fmt.Errorf("could not find symbol or repository matching '%s'", target)
 	}
 
-	var inCount, outCount int
-	_ = st.Pool().QueryRow(ctx, `SELECT count(*) FROM claims WHERE workspace_id = $1 AND to_entity_id = $2`, workspaceID, entID).Scan(&inCount)
-	_ = st.Pool().QueryRow(ctx, `SELECT count(*) FROM claims WHERE workspace_id = $1 AND from_entity_id = $2`, workspaceID, entID).Scan(&outCount)
-
 	centralityTag := "Leaf / Root"
-	if inCount > 10 {
+	if det.InboundCount > 10 {
 		centralityTag = "Critical Hub"
-	} else if inCount > 0 {
+	} else if det.InboundCount > 0 {
 		centralityTag = "Connected Node"
 	}
 
 	dto := SymbolSummaryDTO{
-		Symbol:    name,
-		Package:   pkg,
-		Kind:      kind,
-		Exported:  exported,
-		FilePath:  file,
-		Line:      line,
-		Signature: sig,
+		Symbol:    det.Name,
+		Package:   det.Package,
+		Kind:      det.Kind,
+		Exported:  det.IsExported,
+		FilePath:  det.FilePath,
+		Line:      det.Line,
+		Signature: det.Signature,
 		BlastRadius: BlastRadiusDTO{
-			DirectCallers: inCount,
-			Dependencies:  outCount,
+			DirectCallers: det.InboundCount,
+			Dependencies:  det.OutboundCount,
 			CentralityTag: centralityTag,
 		},
 	}
@@ -405,26 +317,19 @@ func printSymbolSummary(ctx context.Context, st *store.PostgresStore, tenantID, 
 		return enc.Encode(dto)
 	}
 
-	fmt.Printf("\n🔍 SYMBOL CARD: %s.%s\n", pkg, name)
+	fmt.Printf("\n🔎 SYMBOL SUMMARY: %s.%s\n", det.Package, det.Name)
 	fmt.Println(strings.Repeat("━", 65))
-	fmt.Printf("Kind: %s | Exported: %t\n", kind, exported)
-	if file != "" {
-		fmt.Printf("File: %s:%d\n", file, line)
+	fmt.Printf("Kind: %s | Exported: %t\n", det.Kind, det.IsExported)
+	if det.FilePath != "" {
+		fmt.Printf("Location: %s:%d\n", det.FilePath, det.Line)
 	}
-	if sig != "" {
-		fmt.Printf("Signature: %s\n", sig)
+	if det.Signature != "" {
+		fmt.Printf("Signature: %s\n", det.Signature)
 	}
-
-	fmt.Println("\n💥 Blast Radius & Centrality:")
-	if inCount > 10 {
-		fmt.Printf("   • 🔥 CRITICAL HUB: %d incoming callers depend on this entity.\n", inCount)
-	} else if inCount > 0 {
-		fmt.Printf("   • Direct callers: %d dependents.\n", inCount)
-	} else {
-		fmt.Println("   • Leaf / Root entity (0 direct callers detected in workspace).")
-	}
-
-	fmt.Printf("   • Outgoing dependencies: calls %d other symbols.\n", outCount)
+	fmt.Printf("\n💥 Blast Radius & Centrality:\n")
+	fmt.Printf("   • Direct Callers:        %d\n", det.InboundCount)
+	fmt.Printf("   • Outgoing Dependencies: %d\n", det.OutboundCount)
+	fmt.Printf("   • Classification:        %s\n", centralityTag)
 	fmt.Println(strings.Repeat("━", 65))
 	return nil
 }

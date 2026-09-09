@@ -287,14 +287,12 @@ func handleImpactDiff(baselineFile, proposedFile string) {
 		workspaceName = "default"
 	}
 
-	var workspaceID uuid.UUID
-	err = st.Pool().QueryRow(ctx, `
-		SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2
-	`, tenantUUID, workspaceName).Scan(&workspaceID)
+	ws, err := st.GetWorkspaceByName(ctx, tenantUUID.String(), workspaceName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found. Run 'garuda workspace create %s' first.\n", workspaceName, workspaceName)
 		os.Exit(1)
 	}
+	workspaceID := ws.ID
 
 	diff := analyzer.Diff(baseline, proposed)
 
@@ -313,12 +311,7 @@ func handleImpactDiff(baselineFile, proposedFile string) {
 	allResults := make([]*impact.BlastRadiusResult, 0)
 
 	for _, ed := range diff.EntityDiffs {
-		var entityID uuid.UUID
-		err := st.Pool().QueryRow(ctx, `
-			SELECT id FROM entities 
-			WHERE workspace_id = $1 AND name = $2 AND package = $3
-			LIMIT 1
-		`, workspaceID, ed.Name, extractPackageFromEntity(ed.Name, ed.EntityID)).Scan(&entityID)
+		entityID, err := st.FindEntityIDByNameAndPackage(ctx, workspaceID, ed.Name, extractPackageFromEntity(ed.Name, ed.EntityID))
 		if err != nil {
 			continue
 		}
