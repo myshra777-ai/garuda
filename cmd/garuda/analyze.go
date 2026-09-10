@@ -84,7 +84,6 @@ func handleAnalyze(path string) {
 		fmt.Fprintf(os.Stderr, "❌ Path '%s' is not a directory\n", path)
 		os.Exit(1)
 	}
-	fmt.Printf("🔍 Analyzing %s...\n", path)
 
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -92,34 +91,60 @@ func handleAnalyze(path string) {
 		os.Exit(1)
 	}
 
-	wsMeta, err := analyzer.DiscoverWorkspace(absPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Workspace discovery failed: %v\n", err)
-		os.Exit(1)
-	}
+	ctx := context.Background()
 
-	opts := analyzer.WorkspaceAnalysisOptions{
-		Cache: analyzer.NewMemoryPackageCache(),
-	}
-	if saveFlag || workspaceFlag != "" || repoFlag != "" {
-		if tidStr := os.Getenv("GARUDA_TENANT_ID"); tidStr != "" {
-			if tid, err := uuid.Parse(tidStr); err == nil {
-				opts.TenantID = tid
+	// ─────────────────────────────────────────────────────────────
+	// Language dispatch: Python vs Go
+	// ─────────────────────────────────────────────────────────────
+	var result *analyzer.Result
+	var language string
+
+	if analyzer.IsPythonProject(absPath) {
+		fmt.Printf("🐍 Analyzing Python project %s...\n", absPath)
+		pyResult, err := analyzer.AnalyzePythonWorkspace(ctx, absPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Python analysis failed: %v\n", err)
+			os.Exit(1)
+		}
+		result = pyResult
+		language = "python"
+		fmt.Printf("✓ %d entities, %d relationships extracted\n",
+			len(result.Entities), len(result.Relationships))
+	} else {
+		fmt.Printf("🔍 Analyzing Go workspace %s...\n", absPath)
+		wsMeta, err := analyzer.DiscoverWorkspace(absPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Workspace discovery failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		opts := analyzer.WorkspaceAnalysisOptions{
+			Cache: analyzer.NewMemoryPackageCache(),
+		}
+		if saveFlag || workspaceFlag != "" || repoFlag != "" {
+			if tidStr := os.Getenv("GARUDA_TENANT_ID"); tidStr != "" {
+				if tid, err := uuid.Parse(tidStr); err == nil {
+					opts.TenantID = tid
+				}
 			}
 		}
+
+		goResult, err := analyzer.AnalyzeWorkspaceWithOptions(ctx, wsMeta, opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Analysis failed: %v\n", err)
+			os.Exit(1)
+		}
+		if goResult.Stats.Files == 0 && len(goResult.Entities) == 0 {
+			fmt.Fprintf(os.Stderr, "❌ No Go files found in '%s'. Aborting.\n", path)
+			os.Exit(1)
+		}
+		result = goResult
+		language = "go"
 	}
 
-	ctx := context.Background()
-	result, err := analyzer.AnalyzeWorkspaceWithOptions(ctx, wsMeta, opts)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Analysis failed: %v\n", err)
-		os.Exit(1)
-	}
-	if result.Stats.Files == 0 && len(result.Entities) == 0 {
-		fmt.Fprintf(os.Stderr, "❌ No Go files found in '%s'. Aborting.\n", path)
-		os.Exit(1)
-	}
-
+	// ─────────────────────────────────────────────────────────────
+	// JSON output (both languages)
+	// ─────────────────────────────────────────────────────────────
 	isJSONRequested := jsonFlag || jsonOutputFlag
 	if outputFlag != "" || isJSONRequested {
 		data, err := json.MarshalIndent(result, "", "  ")
@@ -139,6 +164,9 @@ func handleAnalyze(path string) {
 		}
 	}
 
+	// ─────────────────────────────────────────────────────────────
+	// Persist to ledger (both languages)
+	// ─────────────────────────────────────────────────────────────
 	if saveFlag || workspaceFlag != "" || repoFlag != "" {
 		dbURL := getDBURL()
 		tenantIDStr := getTenantIDString()
@@ -148,7 +176,7 @@ func handleAnalyze(path string) {
 			os.Exit(1)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		persistCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		st, err := store.NewPostgresStore(dbURL)
@@ -158,7 +186,7 @@ func handleAnalyze(path string) {
 		}
 		defer st.Close()
 
-		decisionID, revisionID, rev, err := st.SaveAnalysisDecision(ctx, tenantIDStr, result)
+		decisionID, revisionID, rev, err := st.SaveAnalysisDecision(persistCtx, tenantIDStr, result)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "❌ Failed to log decision to ledger: %v\n", err)
 			os.Exit(1)
@@ -185,30 +213,55 @@ func handleAnalyze(path string) {
 				repoURL = strings.TrimSpace(string(out))
 			}
 			if repoURL == "" {
-				absPath, _ := filepath.Abs(path)
 				repoURL = "file://" + absPath
 			}
 		}
 		repoURL = sanitizeGitURL(repoURL)
 
+		// Module path detection: Go reads go.mod, Python reads pyproject.toml
 		modulePath := modulePathFlag
 		if modulePath == "" {
-			goModPath := filepath.Join(path, "go.mod")
-			if modData, err := os.ReadFile(goModPath); err == nil {
-				for _, line := range strings.Split(string(modData), "\n") {
-					line = strings.TrimSpace(line)
-					if strings.HasPrefix(line, "module ") {
-						modulePath = strings.TrimSpace(strings.TrimPrefix(line, "module "))
-						break
+			switch language {
+			case "go":
+				goModPath := filepath.Join(path, "go.mod")
+				if modData, err := os.ReadFile(goModPath); err == nil {
+					for _, line := range strings.Split(string(modData), "\n") {
+						line = strings.TrimSpace(line)
+						if strings.HasPrefix(line, "module ") {
+							modulePath = strings.TrimSpace(strings.TrimPrefix(line, "module "))
+							break
+						}
 					}
+				}
+			case "python":
+				pyprojectPath := filepath.Join(path, "pyproject.toml")
+				if data, err := os.ReadFile(pyprojectPath); err == nil {
+					for _, line := range strings.Split(string(data), "\n") {
+						line = strings.TrimSpace(line)
+						if strings.HasPrefix(line, "name") && strings.Contains(line, "=") {
+							parts := strings.SplitN(line, "=", 2)
+							if len(parts) == 2 {
+								v := strings.TrimSpace(parts[1])
+								v = strings.Trim(v, `"'`)
+								if v != "" {
+									modulePath = v
+									break
+								}
+							}
+						}
+					}
+				}
+				if modulePath == "" {
+					// Fall back to directory name
+					modulePath = filepath.Base(absPath)
 				}
 			}
 		}
 
 		var workspaceID uuid.UUID
-		wsRecord, err := st.GetWorkspaceByName(ctx, tenantIDStr, wsName)
+		wsRecord, err := st.GetWorkspaceByName(persistCtx, tenantIDStr, wsName)
 		if err != nil {
-			newWs, err := st.CreateWorkspace(ctx, tenantIDStr, wsName, "")
+			newWs, err := st.CreateWorkspace(persistCtx, tenantIDStr, wsName, "")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "⚠️ Failed to create workspace '%s': %v\n", wsName, err)
 				return
@@ -220,7 +273,7 @@ func handleAnalyze(path string) {
 		}
 
 		var repoID uuid.UUID
-		repoRecord, err := st.GetRepositoryByURL(ctx, workspaceID, repoURL)
+		repoRecord, err := st.GetRepositoryByURL(persistCtx, workspaceID, repoURL)
 		if err != nil {
 			provider := "local"
 			if strings.Contains(repoURL, "github.com") {
@@ -230,19 +283,19 @@ func handleAnalyze(path string) {
 			} else if strings.Contains(repoURL, "bitbucket") {
 				provider = "bitbucket"
 			}
-			newRepo, err := st.AddRepository(ctx, workspaceID, provider, repoURL, "main", "go", modulePath)
+			newRepo, err := st.AddRepository(persistCtx, workspaceID, provider, repoURL, "main", language, modulePath)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "⚠️ Failed to create repository: %v\n", err)
 				return
 			}
 			repoID = newRepo.ID
-			fmt.Printf("   Created repository: %s\n", repoURL)
+			fmt.Printf("   Created repository: %s (%s)\n", repoURL, language)
 		} else {
 			repoID = repoRecord.ID
 		}
 
 		if modulePath != "" {
-			_ = st.UpdateRepositoryModulePath(ctx, repoID, modulePath)
+			_ = st.UpdateRepositoryModulePath(persistCtx, repoID, modulePath)
 			fmt.Printf("   Module path: %s\n", modulePath)
 		}
 
@@ -252,12 +305,13 @@ func handleAnalyze(path string) {
 			commitSHA = strings.TrimSpace(string(out))
 		}
 
-		err = st.SaveSemanticGraph(ctx, tenantUUID, workspaceID, repoID, revisionID, result, commitSHA)
+		err = st.SaveSemanticGraph(persistCtx, tenantUUID, workspaceID, repoID, revisionID, result, commitSHA)
 		if err != nil {
 			fmt.Printf("⚠️ Failed to save semantic graph: %v\n", err)
 		} else {
 			fmt.Printf("   🧠 Semantic graph saved (%d entities, %d relationships, commit: %s)\n",
 				len(result.Entities), len(result.Relationships), commitSHA[:min(8, len(commitSHA))])
+			_ = st.UpdateRepositorySyncStatus(persistCtx, tenantIDStr, repoID, commitSHA, "synced")
 		}
 	}
 }

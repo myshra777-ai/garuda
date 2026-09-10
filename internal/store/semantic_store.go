@@ -153,13 +153,13 @@ func (s *PostgresStore) SaveEntities(
 				id, tenant_id, workspace_id, repository_id, analysis_id,
 				name, kind, package, package_path, module_path, receiver_type,
 				file_path, commit_sha, line, line_start, line_end,
-				signature, fields, methods, is_exported,
+								signature, fields, methods, is_exported, language,
 				created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5,
 				$6, $7, $8, $9, $10, $11,
 				$12, $13, $14, $15, $16,
-				$17, $18, $19, $20,
+				$17, $18, $19, $20, COALESCE(NULLIF($21, ''), 'go'),
 				NOW(), NOW()
 			)
 			ON CONFLICT (id) DO UPDATE SET
@@ -170,7 +170,8 @@ func (s *PostgresStore) SaveEntities(
 				package_path  = EXCLUDED.package_path,
 				module_path   = EXCLUDED.module_path,
 				receiver_type = EXCLUDED.receiver_type,
-				file_path     = EXCLUDED.file_path,
+				language      = EXCLUDED.language,
+		    	file_path     = EXCLUDED.file_path,
 				commit_sha    = EXCLUDED.commit_sha,
 				line          = EXCLUDED.line,
 				line_start    = EXCLUDED.line_start,
@@ -185,7 +186,7 @@ func (s *PostgresStore) SaveEntities(
 			entity.Name, string(entity.Kind), entity.Package,
 			entity.PackagePath, entity.ModulePath, entity.ReceiverType,
 			entity.File, commitSHA, line, entity.LineStart, entity.LineEnd,
-			entity.Signature, fieldsJSON, methodsJSON, entity.Exported,
+			entity.Signature, fieldsJSON, methodsJSON, entity.Exported, entity.Language,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to upsert entity '%s.%s' (%s): %w", entity.Package, entity.Name, entity.Kind, err)
@@ -264,13 +265,13 @@ func (s *PostgresStore) SaveSemanticGraph(
 				id, tenant_id, workspace_id, repository_id, analysis_id,
 				name, kind, package, package_path, module_path, receiver_type,
 				file_path, commit_sha, line, line_start, line_end,
-				signature, fields, methods, is_exported,
+								signature, fields, methods, is_exported, language,
 				created_at, updated_at
 			) VALUES (
 				$1, $2, $3, $4, $5,
 				$6, $7, $8, $9, $10, $11,
 				$12, $13, $14, $15, $16,
-				$17, $18, $19, $20,
+				$17, $18, $19, $20, COALESCE(NULLIF($21, ''), 'go'),
 				NOW(), NOW()
 			)
 			ON CONFLICT (id) DO UPDATE SET
@@ -282,6 +283,7 @@ func (s *PostgresStore) SaveSemanticGraph(
 				module_path   = EXCLUDED.module_path,
 				receiver_type = EXCLUDED.receiver_type,
 				file_path     = EXCLUDED.file_path,
+				language      = EXCLUDED.language,
 				commit_sha    = EXCLUDED.commit_sha,
 				line          = EXCLUDED.line,
 				line_start    = EXCLUDED.line_start,
@@ -296,7 +298,7 @@ func (s *PostgresStore) SaveSemanticGraph(
 			entity.Name, string(entity.Kind), entity.Package,
 			entity.PackagePath, entity.ModulePath, entity.ReceiverType,
 			entity.File, commitSHA, line, entity.LineStart, entity.LineEnd,
-			entity.Signature, fieldsJSON, methodsJSON, entity.Exported,
+			entity.Signature, fieldsJSON, methodsJSON, entity.Exported, entity.Language,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to upsert entity %s (%s): %w", entity.Name, entity.Kind, err)
@@ -346,7 +348,7 @@ func (s *PostgresStore) SaveSemanticGraph(
 					id, tenant_id, workspace_id, repository_id, analysis_id,
 					name, kind, package, package_path, module_path, receiver_type,
 					file_path, commit_sha, line, line_start, line_end,
-					signature, fields, methods, is_exported,
+					signature, fields, methods, is_exported, language,
 					created_at, updated_at
 				) VALUES (
 					$1, $2, $3, $4, $5,
@@ -373,7 +375,7 @@ func (s *PostgresStore) SaveSemanticGraph(
 					id, tenant_id, workspace_id, repository_id, analysis_id,
 					name, kind, package, package_path, module_path, receiver_type,
 					file_path, commit_sha, line, line_start, line_end,
-					signature, fields, methods, is_exported,
+					signature, fields, methods, is_exported, language,
 					created_at, updated_at
 				) VALUES (
 					$1, $2, $3, $4, $5,
@@ -611,7 +613,7 @@ func (s *PostgresStore) GetEntity(ctx context.Context, tenantID, workspaceID uui
 
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, name, kind, package, package_path, module_path, receiver_type,
-		       file_path, signature, fields, methods, is_exported,
+		       file_path, signature, fields, methods, is_exported, language,
 		       line, line_start, line_end
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2 AND package = $3 AND name = $4
@@ -698,7 +700,7 @@ func (s *PostgresStore) GetEntityRelationships(ctx context.Context, tenantID, wo
 func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID uuid.UUID) ([]analyzer.Entity, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, kind, package, package_path, module_path, receiver_type,
-		       file_path, signature, fields, methods, is_exported,
+		       file_path, signature, fields, methods, is_exported, language,
 		       line, line_start, line_end
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2
@@ -814,7 +816,7 @@ func (s *PostgresStore) GetEntityByID(ctx context.Context, tenantID, workspaceID
 
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, name, kind, package, package_path, module_path, receiver_type,
-		       file_path, signature, fields, methods, is_exported,
+		       file_path, signature, fields, methods, is_exported, language,
 		       line, line_start, line_end
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2 AND id = $3

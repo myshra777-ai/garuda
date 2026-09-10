@@ -54,6 +54,7 @@ type Entity struct {
 	LineStart    int        `json:"line_start"`
 	LineEnd      int        `json:"line_end"`
 	Exported     bool       `json:"exported"`
+	Language     string     `json:"language,omitempty"` // NEW — "go", "python", etc.
 	Fields       []Field    `json:"fields,omitempty"`
 	Methods      []Method   `json:"methods,omitempty"`
 	Signature    string     `json:"signature,omitempty"`
