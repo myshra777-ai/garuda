@@ -1,6 +1,3 @@
-// Copyright 2026 Rohit Mishra
-// SPDX-License-Identifier: Apache-2.0
-//
 // Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
 package main
@@ -72,6 +69,10 @@ var devCmd = &cobra.Command{
 		server := api.NewServer(pgStore, authService, jwtConfig, contraEngine, lineageEngine, topoGen, topoExec)
 
 		mux := http.NewServeMux()
+
+		// ─────────────────────────────────────────────────────────────
+		// Core health + telemetry routes
+		// ─────────────────────────────────────────────────────────────
 		mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"status":"healthy","service":"garuda-unified"}`))
@@ -80,14 +81,32 @@ var devCmd = &cobra.Command{
 		mux.HandleFunc("/api/v1/runtime/coverage", server.HandleGetRuntimeCoverage)
 		mux.HandleFunc("/api/v1/merkle/state", server.HandleGetMerkleState)
 
-		// Serve Interactive Visualizer HTML on /graph or when Accept header contains text/html
+		// ─────────────────────────────────────────────────────────────
+		// Dashboard routes — MUST be registered at the top level.
+		// Previously these were nested inside /api/v1/graph and only
+		// registered after that endpoint was hit once. That caused 404s.
+		// ─────────────────────────────────────────────────────────────
+		mux.HandleFunc("/dashboard", server.HandleDashboard)
+		mux.HandleFunc("/api/v1/dashboard/stats", server.HandleDashboardStats)
+		mux.HandleFunc("/api/v1/dashboard/search", server.HandleDashboardSearch)
+		mux.HandleFunc("/api/v1/events", server.HandleLiveEvents)
+
+		// ─────────────────────────────────────────────────────────────
+		// Graph routes
+		//   /graph        → standalone D3 visualizer (lightweight, for iframe/embed)
+		//   /api/v1/graph → full GraphResponseDTO (level/focus/nodes/edges)
+		//                   with an HTML fallback when Accept: text/html
+		// ─────────────────────────────────────────────────────────────
 		mux.HandleFunc("/graph", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_, _ = w.Write([]byte(visualizerHTML))
 		})
 
 		mux.HandleFunc("/api/v1/graph", func(w http.ResponseWriter, r *http.Request) {
-			if strings.Contains(r.Header.Get("Accept"), "text/html") && !strings.Contains(r.URL.Query().Get("format"), "json") {
+			// If the client wants HTML (browser navigation) serve the visualizer.
+			// Otherwise delegate to the JSON API handler.
+			if strings.Contains(r.Header.Get("Accept"), "text/html") &&
+				!strings.Contains(r.URL.Query().Get("format"), "json") {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				_, _ = w.Write([]byte(visualizerHTML))
 				return
@@ -100,7 +119,10 @@ var devCmd = &cobra.Command{
 			Handler: mux,
 		}
 
+		// ─────────────────────────────────────────────────────────────
 		// Background Worker Loop (10-second Merkle epoch)
+		// Iterates every workspace in the tenant, not just uuid-ws.
+		// ─────────────────────────────────────────────────────────────
 		go func() {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
@@ -112,23 +134,44 @@ var devCmd = &cobra.Command{
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					var workspaceID uuid.UUID
-					err := pool.QueryRow(ctx, `SELECT id FROM workspaces WHERE name = 'uuid-ws' LIMIT 1`).Scan(&workspaceID)
-					if err == nil {
-						_, _ = verifier.RecomputeWorkspaceVerification(ctx, workspaceID, tenantID)
-						_, _ = pgStore.CreateUnifiedMerkleSnapshot(ctx, tenantID)
+					rows, err := pool.Query(ctx, `
+						SELECT id FROM workspaces WHERE tenant_id = $1
+					`, tenantID)
+					if err != nil {
+						continue
 					}
+
+					var workspaceIDs []uuid.UUID
+					for rows.Next() {
+						var id uuid.UUID
+						if err := rows.Scan(&id); err == nil {
+							workspaceIDs = append(workspaceIDs, id)
+						}
+					}
+					rows.Close()
+
+					for _, wsID := range workspaceIDs {
+						_, _ = verifier.RecomputeWorkspaceVerification(ctx, wsID, tenantID)
+					}
+					_, _ = pgStore.CreateUnifiedMerkleSnapshot(ctx, tenantID)
 				}
 			}
 		}()
 
+		// ─────────────────────────────────────────────────────────────
 		// Start HTTP API
+		// ─────────────────────────────────────────────────────────────
 		go func() {
 			fmt.Println("🚀 Garuda Unified Daemon running at http://localhost:8080")
+			fmt.Println("   • Dashboard:           GET  http://localhost:8080/dashboard?workspace=<name>")
+			fmt.Println("   • Dashboard Stats API: GET  http://localhost:8080/api/v1/dashboard/stats?workspace=<name>")
+			fmt.Println("   • Dashboard Search:    GET  http://localhost:8080/api/v1/dashboard/search?q=<query>")
 			fmt.Println("   • Interactive Graph:   GET  http://localhost:8080/graph")
+			fmt.Println("   • Graph JSON API:      GET  http://localhost:8080/api/v1/graph?format=json")
 			fmt.Println("   • Telemetry Ingestion: POST http://localhost:8080/api/v1/telemetry/spans")
 			fmt.Println("   • Runtime Coverage:    GET  http://localhost:8080/api/v1/runtime/coverage")
 			fmt.Println("   • Dual-Root Merkle:    GET  http://localhost:8080/api/v1/merkle/state")
+			fmt.Println("   • SSE Live Events:     GET  http://localhost:8080/api/v1/events")
 			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				fmt.Printf("HTTP server error: %v\n", err)
 			}
@@ -178,8 +221,10 @@ const visualizerHTML = `<!DOCTYPE html>
         svg.call(d3.zoom().scaleExtent([0.1, 4]).on("zoom", (e) => g.attr("transform", e.transform)));
 
         const tooltip = d3.select("#tooltip");
+        const params = new URLSearchParams(window.location.search);
+        const workspace = params.get("workspace") || "";
 
-        fetch("/api/v1/graph?format=json")
+        fetch("/api/v1/graph?format=json" + (workspace ? "&workspace=" + encodeURIComponent(workspace) : ""))
             .then(res => res.json())
             .then(data => {
                 const nodes = data.nodes || [];

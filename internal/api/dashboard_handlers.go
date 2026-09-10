@@ -6,10 +6,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -52,10 +54,43 @@ type EvidenceItem struct {
 	Timestamp string `json:"timestamp"`
 }
 
+// NEW: LanguageDTO — GitHub-style language breakdown per repo/workspace
+type LanguageDTO struct {
+	Name       string  `json:"name"`
+	Count      int     `json:"count"`
+	Percentage float64 `json:"percentage"`
+	Color      string  `json:"color"`
+}
+
+// NEW: RepoStatDTO — per-repository breakdown
+type RepoStatDTO struct {
+	Name           string        `json:"name"`
+	Entities       int           `json:"entities"`
+	Relationships  int           `json:"relationships"`
+	Files          int           `json:"files"`
+	Languages      []LanguageDTO `json:"languages"`
+	AnalysisStatus string        `json:"analysis_status"`
+	CurrentCommit  string        `json:"current_commit"`
+	LastAnalyzed   string        `json:"last_analyzed"`
+}
+
+// NEW: DriftDTO — document ↔ code drift summary
+type DriftDTO struct {
+	TotalDocumentClaims int `json:"total_document_claims"`
+	SupportedClaims     int `json:"supported_claims"`
+	UnverifiedClaims    int `json:"unverified_claims"`
+	ContradictedClaims  int `json:"contradicted_claims"`
+	UndocumentedCode    int `json:"undocumented_code"`
+	UnimplementedDocs   int `json:"unimplemented_docs"`
+	DocToCodeDriftCount int `json:"doc_to_code_drift_count"`
+	CodeToDocDriftCount int `json:"code_to_doc_drift_count"`
+}
+
 type WorkspaceStatsResponse struct {
 	Workspace             string          `json:"workspace"`
 	Repositories          int             `json:"repositories"`
 	RepositoriesList      []string        `json:"repositories_list"`
+	RepoStats             []RepoStatDTO   `json:"repo_stats"` // NEW
 	Packages              int             `json:"packages"`
 	Entities              int             `json:"entities"`
 	Relationships         int             `json:"relationships"`
@@ -84,6 +119,8 @@ type WorkspaceStatsResponse struct {
 	ColdStartLatencyMs    float64         `json:"cold_start_latency_ms"`
 	ColdStartLatencyKnown bool            `json:"cold_start_latency_known"`
 	ActiveAgentsCount     int             `json:"active_agents_count"`
+	LanguagesBreakdown    []LanguageDTO   `json:"languages_breakdown"` // NEW (was map, now slice with percentages)
+	Drift                 DriftDTO        `json:"drift"`               // NEW
 }
 
 type SearchResult struct {
@@ -163,8 +200,78 @@ func applySecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://d3js.org; style-src 'self' 'unsafe-inline'; img-src 'self' data:;")
 }
 
+// NEW: GitHub-style language color palette
+func languageColor(lang string) string {
+	colors := map[string]string{
+		"Go":         "#00ADD8",
+		"Python":     "#3572A5",
+		"TypeScript": "#2b7489",
+		"JavaScript": "#f1e05a",
+		"Rust":       "#dea584",
+		"Java":       "#b07219",
+		"C":          "#555555",
+		"C++":        "#f34b7d",
+		"C#":         "#178600",
+		"Ruby":       "#701516",
+		"PHP":        "#4F5D95",
+		"Swift":      "#ffac45",
+		"Kotlin":     "#A97BFF",
+		"Shell":      "#89e051",
+		"HTML":       "#e34c26",
+		"CSS":        "#563d7c",
+		"Other":      "#8b949e",
+	}
+	if c, ok := colors[lang]; ok {
+		return c
+	}
+	return "#8b949e"
+}
+
+// NEW: Infer language from file extension
+func inferLanguageFromPath(path string) string {
+	ext := ""
+	if idx := strings.LastIndex(path, "."); idx >= 0 {
+		ext = strings.ToLower(path[idx:])
+	}
+	switch ext {
+	case ".go":
+		return "Go"
+	case ".py", ".pyi":
+		return "Python"
+	case ".ts", ".tsx":
+		return "TypeScript"
+	case ".js", ".jsx", ".mjs":
+		return "JavaScript"
+	case ".rs":
+		return "Rust"
+	case ".java":
+		return "Java"
+	case ".c", ".h":
+		return "C"
+	case ".cpp", ".cc", ".hpp", ".cxx":
+		return "C++"
+	case ".cs":
+		return "C#"
+	case ".rb":
+		return "Ruby"
+	case ".php":
+		return "PHP"
+	case ".swift":
+		return "Swift"
+	case ".kt":
+		return "Kotlin"
+	case ".sh", ".bash":
+		return "Shell"
+	case ".html", ".htm":
+		return "HTML"
+	case ".css", ".scss":
+		return "CSS"
+	}
+	return "Other"
+}
+
 // -----------------------------------------------------------------------------
-// Embedded Dashboard HTML (High-Contrast Graphify Cosmos Canvas)
+// Embedded Dashboard HTML
 // -----------------------------------------------------------------------------
 
 const prodDashboardHTML = `<!DOCTYPE html>
@@ -255,6 +362,15 @@ button { cursor: pointer; }
 .kpi-value { font-size: 26px; font-weight: 800; margin-top: 8px; letter-spacing: -0.03em; color: white; }
 .kpi-foot { color: var(--muted); font-size: 11px; margin-top: 6px; }
 
+/* NEW: GitHub-style language bar */
+.lang-bar-container { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #1a2035; margin-top: 4px; }
+.lang-bar-segment { height: 100%; transition: 0.3s; }
+.lang-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; }
+.lang-legend-item { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-2); }
+.lang-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.lang-legend-name { color: white; font-weight: 700; }
+.lang-legend-pct { color: var(--muted); font-weight: 600; }
+
 .trust-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
 .trust-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); border-left: 4px solid var(--muted); }
 .trust-card.supported { border-left-color: var(--green); }
@@ -300,11 +416,30 @@ button { cursor: pointer; }
 .row-title { color: white; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-meta { color: var(--muted); font-size: 11px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* NEW: Repo card with language bar */
+.repo-card { border-bottom: 1px solid var(--border); padding: 18px; }
+.repo-card:last-child { border-bottom: 0; }
+.repo-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.repo-card-name { font-weight: 750; color: white; font-size: 14px; }
+.repo-card-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+.repo-card-stats { display: flex; gap: 18px; font-size: 11px; color: var(--text-2); margin-bottom: 10px; }
+.repo-card-stat-val { color: white; font-weight: 700; }
+.repo-card-actions { display: flex; gap: 8px; }
+
 .badge-pill { font-size: 9px; font-weight: 800; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; }
 .badge-pill.critical { background: var(--red-soft); color: var(--red); border: 1px solid rgba(244,63,94,0.3); }
 .badge-pill.warning { background: var(--amber-soft); color: var(--amber); border: 1px solid rgba(251,191,36,0.3); }
 .badge-pill.info { background: var(--brand-soft); color: var(--brand); border: 1px solid rgba(56,189,248,0.3); }
 .badge-pill.success { background: var(--green-soft); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
+
+/* NEW: Drift grid */
+.drift-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+.drift-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+.drift-card-title { font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; color: var(--muted); }
+.drift-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.drift-row:last-child { border-bottom: 0; }
+.drift-row-label { color: var(--text-2); }
+.drift-row-val { color: white; font-weight: 700; }
 
 .graph-panel { margin-top: 20px; }
 .graph-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -313,14 +448,8 @@ button { cursor: pointer; }
 .graph-button.primary { background: var(--brand-dark); color: white; border-color: var(--brand); }
 .graph-button.primary:hover { background: #0369a1; }
 
-/* GRAPHIFY COSMOS CANVAS & COMMUNITY PANEL */
 .graph-layout { display: flex; height: 750px; position: relative; border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; background: #05070f; }
-.graph-wrap { 
-    flex: 1; 
-    height: 100%; 
-    position: relative; 
-    background: radial-gradient(circle at 50% 50%, #0d1527 0%, #05070f 100%);
-}
+.graph-wrap { flex: 1; height: 100%; position: relative; background: radial-gradient(circle at 50% 50%, #0d1527 0%, #05070f 100%); }
 .graph-wrap.fullscreen { position: fixed; inset: 0; z-index: 9999; height: 100vh; width: 100vw; }
 
 .graph-side-panel { width: 310px; min-width: 310px; background: #080d1a; border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
@@ -340,56 +469,17 @@ button { cursor: pointer; }
 .graph-control { width: 34px; height: 34px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; box-shadow: var(--shadow-sm); font-size: 16px; display: grid; place-items: center; }
 .graph-control:hover { background: var(--surface-2); border-color: var(--brand); color: var(--brand); }
 
-/* SVG Crisp Neon Elements */
-.graph-node-label { 
-    font-size: 11px; 
-    fill: #ffffff; 
-    pointer-events: none; 
-    font-weight: 700; 
-    text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.85); 
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
-}
-.graph-link { 
-    fill: none;
-    stroke: #38bdf8; 
-    stroke-opacity: 0.28; 
-    transition: stroke-opacity 0.2s, stroke-width 0.2s;
-}
-.graph-link.highlighted {
-    stroke-opacity: 0.95 !important;
-    stroke-width: 2.4px !important;
-}
-.graph-link.dimmed {
-    stroke-opacity: 0.04 !important;
-}
-.graph-link.violation { 
-    stroke: #f43f5e !important; 
-    stroke-opacity: 0.95 !important; 
-    stroke-dasharray: 5, 4; 
-    animation: dash-pulse 1.4s linear infinite; 
-}
-.graph-link-label { 
-    fill: #f43f5e; 
-    font-size: 9.5px; 
-    font-weight: 800; 
-    pointer-events: none; 
-    text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-}
+.graph-node-label { font-size: 11px; fill: #ffffff; pointer-events: none; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.85); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.graph-link { fill: none; stroke: #38bdf8; stroke-opacity: 0.28; transition: stroke-opacity 0.2s, stroke-width 0.2s; }
+.graph-link.highlighted { stroke-opacity: 0.95 !important; stroke-width: 2.4px !important; }
+.graph-link.dimmed { stroke-opacity: 0.04 !important; }
+.graph-link.violation { stroke: #f43f5e !important; stroke-opacity: 0.95 !important; stroke-dasharray: 5, 4; animation: dash-pulse 1.4s linear infinite; }
+.graph-link-label { fill: #f43f5e; font-size: 9.5px; font-weight: 800; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
+.graph-node-group { transition: opacity 0.2s ease-out; }
+.graph-node-group.dimmed { opacity: 0.08 !important; }
+.graph-node-group.highlighted { opacity: 1 !important; }
 
-.graph-node-group {
-    transition: opacity 0.2s ease-out;
-}
-.graph-node-group.dimmed {
-    opacity: 0.08 !important;
-}
-.graph-node-group.highlighted {
-    opacity: 1 !important;
-}
-
-@keyframes dash-pulse { 
-    from { stroke-dashoffset: 18; }
-    to { stroke-dashoffset: 0; }
-}
+@keyframes dash-pulse { from { stroke-dashoffset: 18; } to { stroke-dashoffset: 0; } }
 
 .drawer-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); z-index: 10000; display: none; }
 .drawer-overlay.open { display: block; }
@@ -550,6 +640,64 @@ button { cursor: pointer; }
                         <div class="kpi-label" style="color:var(--red);">Drift Prevented</div>
                         <div class="kpi-value" id="stat-drift-count">0</div>
                         <div class="kpi-foot">Quarantined contract violations</div>
+                    </div>
+                </div>
+
+                <!-- NEW: Languages breakdown (GitHub-style) -->
+                <div class="panel" style="margin-bottom: 20px;">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Languages</div>
+                            <div class="panel-subtitle">Codebase composition across all scanned repositories</div>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="lang-bar-container" id="lang-bar"></div>
+                        <div class="lang-legend" id="lang-legend">
+                            <span style="color:var(--muted); font-size:11px;">Loading languages...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NEW: Doc × Code Drift overview -->
+                <div class="drift-grid">
+                    <div class="drift-card">
+                        <div class="drift-card-title">📄 Documentation Claims</div>
+                        <div class="drift-row">
+                            <span class="drift-row-label">Total documented capabilities</span>
+                            <span class="drift-row-val" id="drift-total-docs">—</span>
+                        </div>
+                        <div class="drift-row">
+                            <span class="drift-row-label">Supported by code</span>
+                            <span class="drift-row-val" id="drift-doc-supported" style="color:var(--green);">—</span>
+                        </div>
+                        <div class="drift-row">
+                            <span class="drift-row-label">Unverified</span>
+                            <span class="drift-row-val" id="drift-doc-unverified" style="color:var(--amber);">—</span>
+                        </div>
+                        <div class="drift-row">
+                            <span class="drift-row-label">Contradicted</span>
+                            <span class="drift-row-val" id="drift-doc-contradicted" style="color:var(--red);">—</span>
+                        </div>
+                    </div>
+                    <div class="drift-card">
+                        <div class="drift-card-title">🔍 Knowledge Drift</div>
+                        <div class="drift-row">
+                            <span class="drift-row-label">Doc → Code drift (documented, not implemented)</span>
+                            <span class="drift-row-val" id="drift-doc-to-code" style="color:var(--amber);">—</span>
+                        </div>
+                        <div class="drift-row">
+                            <span class="drift-row-label">Code → Doc drift (implemented, not documented)</span>
+                            <span class="drift-row-val" id="drift-code-to-doc" style="color:var(--amber);">—</span>
+                        </div>
+                        <div class="drift-row">
+                            <span class="drift-row-label">Undocumented code entities</span>
+                            <span class="drift-row-val" id="drift-undocumented-code" style="color:var(--amber);">—</span>
+                        </div>
+                        <div class="drift-row">
+                            <span class="drift-row-label">Unimplemented doc claims</span>
+                            <span class="drift-row-val" id="drift-unimplemented-docs" style="color:var(--amber);">—</span>
+                        </div>
                     </div>
                 </div>
 
@@ -834,33 +982,20 @@ var state = {
     hoveredNodeId: null
 };
 
-// High-visibility, crisp palette tuned to match Graphify Cosmos UI
 var communityPalette = [
-    "#38bdf8", // Sky Blue
-    "#f59e0b", // Warm Amber
-    "#ef4444", // Coral Red
-    "#10b981", // Emerald
-    "#a855f7", // Purple
-    "#06b6d4", // Cyan
-    "#ec4899", // Rose Pink
-    "#84cc16", // Lime
-    "#818cf8", // Indigo
-    "#f97316", // Orange
-    "#14b8a6", // Teal
-    "#eab308"  // Gold
+    "#38bdf8", "#f59e0b", "#ef4444", "#10b981", "#a855f7", "#06b6d4",
+    "#ec4899", "#84cc16", "#818cf8", "#f97316", "#14b8a6", "#eab308"
 ];
 
 function getCommunityColor(node) {
     if (!node) return communityPalette[0];
     if (node.status === "CONTRADICTED") return "#f43f5e";
-    
     var str = node._community || node.package || node.repo || node.id || "general";
     var hash = 0;
     for (var i = 0; i < str.length; i++) {
         hash = str.charCodeAt(i) + ((hash << 5) - hash);
     }
-    var index = Math.abs(hash) % communityPalette.length;
-    return communityPalette[index];
+    return communityPalette[Math.abs(hash) % communityPalette.length];
 }
 
 function promptWorkspaceSwitch() {
@@ -949,11 +1084,67 @@ function renderStats() {
     setText("stat-active-agents", formatNumber(s.active_agents_count || 0));
     setText("stat-drift-count", formatNumber(s.quarantined_count));
 
+    // NEW: render languages
+    renderLanguages(s.languages_breakdown || []);
+
+    // NEW: render drift
+    renderDrift(s.drift || {});
+
     renderHubs(s.top_hubs || []);
     renderAttention(s.needs_attention || []);
     renderEvidence(s.recent_evidence || []);
     renderTrust();
-    renderScannedRepos(s.repositories_list || []);
+    renderScannedRepos(s.repo_stats || [], s.repositories_list || []);
+}
+
+// NEW: GitHub-style language bar
+function renderLanguages(langs) {
+    var bar = document.getElementById("lang-bar");
+    var legend = document.getElementById("lang-legend");
+    if (!bar || !legend) return;
+
+    if (!langs || langs.length === 0) {
+        bar.innerHTML = '<div style="width:100%; background:#1a2035;"></div>';
+        legend.innerHTML = '<span style="color:var(--muted); font-size:11px;">No language data yet — run garuda analyze on at least one repository.</span>';
+        return;
+    }
+
+    // Sort by count descending
+    langs.sort(function(a, b) { return b.count - a.count; });
+
+    // Build bar
+    bar.innerHTML = "";
+    langs.forEach(function(lang) {
+        var seg = document.createElement("div");
+        seg.className = "lang-bar-segment";
+        seg.style.width = lang.percentage + "%";
+        seg.style.background = lang.color;
+        seg.title = lang.name + " " + lang.percentage.toFixed(1) + "%";
+        bar.appendChild(seg);
+    });
+
+    // Build legend
+    legend.innerHTML = "";
+    langs.forEach(function(lang) {
+        var item = document.createElement("div");
+        item.className = "lang-legend-item";
+        item.innerHTML = '<span class="lang-legend-dot" style="background:' + lang.color + ';"></span>' +
+            '<span class="lang-legend-name">' + escapeHTML(lang.name) + '</span>' +
+            '<span class="lang-legend-pct">' + lang.percentage.toFixed(1) + '%</span>';
+        legend.appendChild(item);
+    });
+}
+
+// NEW: Drift overview
+function renderDrift(d) {
+    setText("drift-total-docs", formatNumber(d.total_document_claims));
+    setText("drift-doc-supported", formatNumber(d.supported_claims));
+    setText("drift-doc-unverified", formatNumber(d.unverified_claims));
+    setText("drift-doc-contradicted", formatNumber(d.contradicted_claims));
+    setText("drift-doc-to-code", formatNumber(d.doc_to_code_drift_count));
+    setText("drift-code-to-doc", formatNumber(d.code_to_doc_drift_count));
+    setText("drift-undocumented-code", formatNumber(d.undocumented_code));
+    setText("drift-unimplemented-docs", formatNumber(d.unimplemented_docs));
 }
 
 function renderHubs(hubs) {
@@ -1033,30 +1224,87 @@ function renderTrust() {
     setText("trust-parent", state.stats.parent_merkle_hash || "Genesis");
 }
 
-function renderScannedRepos(reposList) {
+// NEW: Enhanced repo list with per-repo language bar
+function renderScannedRepos(repoStats, fallbackList) {
     var list = document.getElementById("scanned-repos-list");
     if (!list) return;
-    if (!reposList || reposList.length === 0) {
-        list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No repositories registered in this workspace.</div></div></div>';
+
+    // Use rich stats if available, otherwise fall back to plain names
+    if (!repoStats || repoStats.length === 0) {
+        if (!fallbackList || fallbackList.length === 0) {
+            list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No repositories registered in this workspace.</div></div></div>';
+            return;
+        }
+        // Fallback: simple list
+        list.innerHTML = "";
+        fallbackList.forEach(function(repo) {
+            var row = document.createElement("div");
+            row.className = "list-row";
+            row.style.cursor = "pointer";
+            row.innerHTML = '<div class="row-icon">📦</div>' +
+                '<div class="row-main">' +
+                    '<div class="row-title">' + escapeHTML(repo) + '</div>' +
+                    '<div class="row-meta">Source code boundary</div>' +
+                '</div>' +
+                '<button class="graph-button" onclick="event.stopPropagation(); runSearch(\'' + escapeJS(repo) + '\')">Explore Symbols →</button>';
+            row.onclick = function() {
+                state.currentLevel = "package";
+                state.currentFocus = repo;
+                showView("architecture");
+            };
+            list.appendChild(row);
+        });
         return;
     }
+
+    // Rich repo cards with language bars
     list.innerHTML = "";
-    reposList.forEach(function(repo) {
-        var row = document.createElement("div");
-        row.className = "list-row";
-        row.style.cursor = "pointer";
-        row.innerHTML = '<div class="row-icon">📦</div>' +
-            '<div class="row-main">' +
-                '<div class="row-title">' + escapeHTML(repo) + '</div>' +
-                '<div class="row-meta">Source code boundary · Verified AST Snapshot</div>' +
+    repoStats.forEach(function(repo) {
+        var card = document.createElement("div");
+        card.className = "repo-card";
+
+        var langBarHTML = "";
+        if (repo.languages && repo.languages.length > 0) {
+            langBarHTML = '<div class="lang-bar-container" style="margin-top:8px;">';
+            repo.languages.forEach(function(l) {
+                langBarHTML += '<div class="lang-bar-segment" style="width:' + l.percentage + '%; background:' + l.color + ';" title="' + escapeHTML(l.name) + ' ' + l.percentage.toFixed(1) + '%"></div>';
+            });
+            langBarHTML += '</div><div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:8px;">';
+            repo.languages.forEach(function(l) {
+                langBarHTML += '<div class="lang-legend-item"><span class="lang-legend-dot" style="background:' + l.color + ';"></span>' +
+                    '<span style="font-size:11px;">' + escapeHTML(l.name) + ' <span class="lang-legend-pct">' + l.percentage.toFixed(1) + '%</span></span></div>';
+            });
+            langBarHTML += '</div>';
+        }
+
+        var statusBadge = repo.analysis_status === "synced" 
+            ? '<span class="badge-pill success">synced</span>'
+            : '<span class="badge-pill info">' + escapeHTML(repo.analysis_status || "pending") + '</span>';
+
+        var commitShort = repo.current_commit && repo.current_commit.length > 8 
+            ? repo.current_commit.substring(0, 8) 
+            : (repo.current_commit || "—");
+
+        card.innerHTML = 
+            '<div class="repo-card-header">' +
+                '<div>' +
+                    '<div class="repo-card-name">📦 ' + escapeHTML(repo.name) + '</div>' +
+                    '<div class="repo-card-meta">Commit ' + escapeHTML(commitShort) + ' · ' + (repo.last_analyzed || "never analyzed") + '</div>' +
+                '</div>' +
+                statusBadge +
             '</div>' +
-            '<button class="graph-button" onclick="event.stopPropagation(); runSearch(\'' + escapeJS(repo) + '\')">Explore Symbols →</button>';
-        row.onclick = function() {
-            state.currentLevel = "package";
-            state.currentFocus = repo;
-            showView("architecture");
-        };
-        list.appendChild(row);
+            '<div class="repo-card-stats">' +
+                '<span><span class="repo-card-stat-val">' + formatNumber(repo.entities) + '</span> entities</span>' +
+                '<span><span class="repo-card-stat-val">' + formatNumber(repo.relationships) + '</span> relationships</span>' +
+                '<span><span class="repo-card-stat-val">' + formatNumber(repo.files) + '</span> files</span>' +
+            '</div>' +
+            langBarHTML +
+            '<div class="repo-card-actions" style="margin-top:12px;">' +
+                '<button class="graph-button" onclick="event.stopPropagation(); runSearch(\'' + escapeJS(repo.name) + '\')">Explore Symbols →</button>' +
+                '<button class="graph-button" onclick="event.stopPropagation(); state.currentLevel=\'package\'; state.currentFocus=\'' + escapeJS(repo.name) + '\'; showView(\'architecture\');">View Packages</button>' +
+            '</div>';
+
+        list.appendChild(card);
     });
 }
 
@@ -1224,43 +1472,24 @@ function renderGraph(data) {
 
     svg.attr("width", width).attr("height", height);
 
-    // Dynamic Defs for Glow Filters and Contrast Arrowheads
     var defs = svg.append("defs");
 
     var filter = defs.append("filter")
         .attr("id", "neon-glow")
         .attr("x", "-50%").attr("y", "-50%")
         .attr("width", "200%").attr("height", "200%");
-    filter.append("feGaussianBlur")
-        .attr("stdDeviation", "4")
-        .attr("result", "coloredBlur");
+    filter.append("feGaussianBlur").attr("stdDeviation", "4").attr("result", "coloredBlur");
     var feMerge = filter.append("feMerge");
     feMerge.append("feMergeNode").attr("in", "coloredBlur");
     feMerge.append("feMergeNode").attr("in", "SourceGraphic");
 
-    defs.append("marker")
-        .attr("id", "arrow")
-        .attr("viewBox", "0 -5 10 10")
-        .attr("refX", 24)
-        .attr("refY", 0)
-        .attr("markerWidth", 5.5)
-        .attr("markerHeight", 5.5)
-        .attr("orient", "auto")
-        .append("path")
-        .attr("d", "M0,-5L10,0L0,5")
-        .attr("fill", "#38bdf8");
+    defs.append("marker").attr("id", "arrow").attr("viewBox", "0 -5 10 10").attr("refX", 24).attr("refY", 0)
+        .attr("markerWidth", 5.5).attr("markerHeight", 5.5).attr("orient", "auto")
+        .append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#38bdf8");
 
-    defs.append("marker")
-        .attr("id", "arrow-violation")
-        .attr("viewBox", "0 -5 10 10")
-        .attr("refX", 24)
-        .attr("refY", 0)
-        .attr("markerWidth", 6.5)
-        .attr("markerHeight", 6.5)
-        .attr("orient", "auto")
-        .append("path")
-        .attr("d", "M0,-5L10,0L0,5")
-        .attr("fill", "#f43f5e");
+    defs.append("marker").attr("id", "arrow-violation").attr("viewBox", "0 -5 10 10").attr("refX", 24).attr("refY", 0)
+        .attr("markerWidth", 6.5).attr("markerHeight", 6.5).attr("orient", "auto")
+        .append("path").attr("d", "M0,-5L10,0L0,5").attr("fill", "#f43f5e");
 
     var zoomLayer = svg.append("g");
     state.graphSvg = svg;
@@ -1294,7 +1523,6 @@ function renderGraph(data) {
         };
     });
 
-    // Build Adjacency Matrix for High-Performance Hover Highlighting
     var linkedByIndex = {};
     validEdges.forEach(function(d) {
         linkedByIndex[d.source.id + "," + d.target.id] = true;
@@ -1320,7 +1548,6 @@ function renderGraph(data) {
 
     state.graphSimulation = simulation;
 
-    // Curved Bezier Links for Pristine Organic Cluster Topology
     var link = zoomLayer.append("g").selectAll("path")
         .data(validEdges)
         .enter().append("path")
@@ -1334,14 +1561,12 @@ function renderGraph(data) {
 
     var violationEdges = validEdges.filter(function(d) { return d.status === "CONTRADICTED"; });
     var linkLabels = zoomLayer.append("g").selectAll("text")
-        .data(violationEdges)
-        .enter().append("text")
+        .data(violationEdges).enter().append("text")
         .attr("class", "graph-link-label")
         .text(function(d) { return d.label ? d.label : "VIOLATION"; });
 
     var node = zoomLayer.append("g").selectAll("g")
-        .data(nodes)
-        .enter().append("g")
+        .data(nodes).enter().append("g")
         .attr("class", "graph-node-group")
         .style("cursor", "pointer")
         .call(d3.drag()
@@ -1349,51 +1574,39 @@ function renderGraph(data) {
                 if (!event.active) simulation.alphaTarget(0.25).restart();
                 d.fx = d.x; d.fy = d.y;
             })
-            .on("drag", function(event, d) {
-                d.fx = event.x; d.fy = event.y;
-            })
+            .on("drag", function(event, d) { d.fx = event.x; d.fy = event.y; })
             .on("end", function(event, d) {
                 if (!event.active) simulation.alphaTarget(0);
                 d.fx = null; d.fy = null;
             }));
 
-    // Soft Bloom Outer Glow
-    node.append("circle")
-        .attr("class", "node-halo")
+    node.append("circle").attr("class", "node-halo")
         .attr("r", function(d) {
             var val = (d.count || d.Count || 1);
-            var logScale = Math.log10(val + 1) * 5;
-            return Math.max(8, 9 + logScale) + 6;
+            return Math.max(8, 9 + Math.log10(val + 1) * 5) + 6;
         })
         .attr("fill", function(d) { return getCommunityColor(d); })
         .attr("opacity", 0.3)
         .style("filter", "url(#neon-glow)");
 
-    // Primary Vibrant Node Core
-    node.append("circle")
-        .attr("class", "node-core")
+    node.append("circle").attr("class", "node-core")
         .attr("r", function(d) {
             var val = (d.count || d.Count || 1);
-            var logScale = Math.log10(val + 1) * 5;
-            return Math.max(7, 8 + logScale);
+            return Math.max(7, 8 + Math.log10(val + 1) * 5);
         })
         .attr("fill", function(d) { return getCommunityColor(d); })
         .attr("stroke", "#ffffff")
         .attr("stroke-width", 1.5)
         .style("filter", "drop-shadow(0 0 6px rgba(0,0,0,0.85))");
 
-    // Clear Monospace Labels
-    node.append("text")
-        .attr("class", "graph-node-label")
+    node.append("text").attr("class", "graph-node-label")
         .attr("dx", function(d) {
             var val = (d.count || d.Count || 1);
-            var logScale = Math.log10(val + 1) * 5;
-            return Math.max(7, 8 + logScale) + 6;
+            return Math.max(7, 8 + Math.log10(val + 1) * 5) + 6;
         })
         .attr("dy", 3.5)
         .text(function(d) { return shortenLabel(d.label || d.id, 24); });
 
-    // Interactive Hover Highlighting
     node.on("mouseover", function(event, d) {
         state.hoveredNodeId = d.id;
         node.classed("dimmed", function(o) { return !isConnected(d, o); });
@@ -1435,7 +1648,6 @@ function renderGraph(data) {
     });
 
     simulation.on("tick", function() {
-        // Curve paths smoothly between source and target
         link.attr("d", function(d) {
             var dx = d.target.x - d.source.x;
             var dy = d.target.y - d.source.y;
@@ -1755,6 +1967,282 @@ func inferRepositoryFromPackage(pkg string) string {
 	return pkg
 }
 
+// / NEW: Normalize language names to canonical display form
+func normalizeLanguageName(lang string) string {
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "go", "golang":
+		return "Go"
+	case "python", "py":
+		return "Python"
+	case "typescript", "ts":
+		return "TypeScript"
+	case "javascript", "js":
+		return "JavaScript"
+	case "rust", "rs":
+		return "Rust"
+	case "java":
+		return "Java"
+	case "c":
+		return "C"
+	case "c++", "cpp":
+		return "C++"
+	case "c#", "csharp":
+		return "C#"
+	case "ruby", "rb":
+		return "Ruby"
+	case "php":
+		return "PHP"
+	case "swift":
+		return "Swift"
+	case "kotlin", "kt":
+		return "Kotlin"
+	case "shell", "bash", "sh":
+		return "Shell"
+	case "html":
+		return "HTML"
+	case "css", "scss":
+		return "CSS"
+	}
+	return lang
+}
+
+// computeRepoStats — matches entities by repository_id, not name-LIKE.
+// Fixes garuda-self and grpc-go showing 0 entities.
+func computeRepoStats(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID) []RepoStatDTO {
+	rows, err := pgStore.Pool().Query(ctx, `
+		SELECT 
+			id,
+			COALESCE(name, '') AS name,
+			COALESCE(analysis_status, 'pending') AS status,
+			COALESCE(current_commit, '') AS commit,
+			last_analyzed_at
+		FROM repositories 
+		WHERE workspace_id = $1
+		ORDER BY name
+	`, workspaceID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var stats []RepoStatDTO
+	for rows.Next() {
+		var repoID uuid.UUID
+		var name, status, commit string
+		var lastAnalyzed *time.Time
+		if err := rows.Scan(&repoID, &name, &status, &commit, &lastAnalyzed); err != nil {
+			continue
+		}
+
+		stat := RepoStatDTO{
+			Name:           name,
+			AnalysisStatus: status,
+			CurrentCommit:  commit,
+		}
+		if lastAnalyzed != nil {
+			stat.LastAnalyzed = lastAnalyzed.Format(time.RFC3339)
+		}
+
+		// FIXED: match by repository_id — not package LIKE
+		_ = pgStore.Pool().QueryRow(ctx, `
+			SELECT COUNT(*)::int, COUNT(DISTINCT file_path)::int
+			FROM entities 
+			WHERE workspace_id = $1 AND repository_id = $2 AND kind != 'external'
+		`, workspaceID, repoID).Scan(&stat.Entities, &stat.Files)
+
+		_ = pgStore.Pool().QueryRow(ctx, `
+			SELECT COUNT(*)::int 
+			FROM claims c
+			JOIN entities e ON e.id = c.from_entity_id
+			WHERE c.workspace_id = $1 AND e.repository_id = $2
+		`, workspaceID, repoID).Scan(&stat.Relationships)
+
+		// Per-repo language breakdown — FIXED to use repository_id
+		langRows, err := pgStore.Pool().Query(ctx, `
+			SELECT 
+				COALESCE(NULLIF(language, ''), '') AS lang,
+				file_path,
+				COUNT(*)::int AS cnt
+			FROM entities 
+			WHERE workspace_id = $1 AND repository_id = $2 AND kind != 'external'
+			GROUP BY language, file_path
+		`, workspaceID, repoID)
+		if err == nil {
+			repoLangs := make(map[string]int)
+			repoTotal := 0
+			for langRows.Next() {
+				var lang, filePath string
+				var cnt int
+				if err := langRows.Scan(&lang, &filePath, &cnt); err != nil {
+					continue
+				}
+				if lang == "" {
+					lang = inferLanguageFromPath(filePath)
+				}
+				lang = normalizeLanguageName(lang)
+				repoLangs[lang] += cnt
+				repoTotal += cnt
+			}
+			langRows.Close()
+
+			if repoTotal > 0 {
+				var ls []LanguageDTO
+				for l, c := range repoLangs {
+					ls = append(ls, LanguageDTO{
+						Name:       l,
+						Count:      c,
+						Percentage: float64(c) / float64(repoTotal) * 100.0,
+						Color:      languageColor(l),
+					})
+				}
+				sort.Slice(ls, func(i, j int) bool { return ls[i].Count > ls[j].Count })
+				stat.Languages = ls
+			}
+		}
+
+		stats = append(stats, stat)
+	}
+	return stats
+}
+
+// computeLanguageBreakdown — workspace-wide aggregation using shared normalizer
+func computeLanguageBreakdown(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID) []LanguageDTO {
+	rows, err := pgStore.Pool().Query(ctx, `
+		SELECT 
+			COALESCE(NULLIF(language, ''), '') AS lang,
+			file_path,
+			COUNT(*)::int AS cnt
+		FROM entities 
+		WHERE workspace_id = $1 AND kind != 'external'
+		GROUP BY language, file_path
+	`, workspaceID)
+	if err != nil {
+		return []LanguageDTO{}
+	}
+	defer rows.Close()
+
+	langTotals := make(map[string]int)
+	total := 0
+
+	for rows.Next() {
+		var lang, filePath string
+		var cnt int
+		if err := rows.Scan(&lang, &filePath, &cnt); err != nil {
+			continue
+		}
+		if lang == "" {
+			lang = inferLanguageFromPath(filePath)
+		}
+		lang = normalizeLanguageName(lang)
+		langTotals[lang] += cnt
+		total += cnt
+	}
+
+	if total == 0 {
+		return []LanguageDTO{}
+	}
+
+	var result []LanguageDTO
+	for lang, cnt := range langTotals {
+		pct := float64(cnt) / float64(total) * 100.0
+		result = append(result, LanguageDTO{
+			Name:       lang,
+			Count:      cnt,
+			Percentage: pct,
+			Color:      languageColor(lang),
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Count > result[j].Count
+	})
+
+	// Group languages < 0.5% into "Other"
+	var major []LanguageDTO
+	var otherCount int
+	var otherPct float64
+	for _, l := range result {
+		if l.Percentage < 0.5 {
+			otherCount += l.Count
+			otherPct += l.Percentage
+		} else {
+			major = append(major, l)
+		}
+	}
+	if otherCount > 0 {
+		major = append(major, LanguageDTO{
+			Name:       "Other",
+			Count:      otherCount,
+			Percentage: otherPct,
+			Color:      languageColor("Other"),
+		})
+	}
+
+	return major
+}
+
+// NEW: Compute doc-code drift summary
+func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID, workspaceName string) DriftDTO {
+	var d DriftDTO
+
+	// Document claims by status
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1
+	`, workspaceName).Scan(&d.TotalDocumentClaims)
+
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1 AND status = 'SUPPORTED'
+	`, workspaceName).Scan(&d.SupportedClaims)
+
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1 AND status = 'UNVERIFIED'
+	`, workspaceName).Scan(&d.UnverifiedClaims)
+
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1 AND status = 'CONTRADICTED'
+	`, workspaceName).Scan(&d.ContradictedClaims)
+
+	// Doc → Code drift = claims that have no matching code entity
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM document_claims 
+		WHERE workspace = $1 AND matched_entity_id IS NULL
+	`, workspaceName).Scan(&d.DocToCodeDriftCount)
+
+	// Code → Doc drift = code entities with no matching doc claim
+	// Count entities (functions/methods/structs) that aren't referenced by any doc claim
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM entities e
+		WHERE e.workspace_id = $1 
+		  AND e.kind IN ('function', 'method', 'struct', 'interface')
+		  AND NOT EXISTS (
+			SELECT 1 FROM document_claims dc 
+			WHERE dc.workspace = $2 
+			  AND dc.subject ILIKE '%' || e.name || '%'
+		  )
+	`, workspaceID, workspaceName).Scan(&d.CodeToDocDriftCount)
+
+	// Undocumented code entities (exported only, filtered)
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM entities e
+		WHERE e.workspace_id = $1 
+		  AND e.kind IN ('function', 'method', 'struct', 'interface')
+		  AND e.is_exported = TRUE
+		  AND NOT EXISTS (
+			SELECT 1 FROM document_claims dc 
+			WHERE dc.workspace = $2 
+			  AND dc.subject ILIKE '%' || e.name || '%'
+		  )
+	`, workspaceID, workspaceName).Scan(&d.UndocumentedCode)
+
+	// Unimplemented docs = doc claims with no matched entity
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM document_claims 
+		WHERE workspace = $1 AND matched_entity_id IS NULL
+	`, workspaceName).Scan(&d.UnimplementedDocs)
+
+	return d
+}
+
 func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	applySecurityHeaders(w)
 	ctx := r.Context()
@@ -1794,6 +2282,9 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	}
 	repositories := len(repoList)
 
+	// NEW: per-repo stats with languages
+	repoStats := computeRepoStats(ctx, pgStore, workspaceID)
+
 	var crossRepoLinks int
 	crossRows, err := pgStore.Pool().Query(ctx, `
 		SELECT e1.package, e2.package 
@@ -1826,6 +2317,9 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		SELECT COUNT(*)::int, COUNT(DISTINCT package)::int, COUNT(DISTINCT file_path)::int, COUNT(*) FILTER (WHERE is_exported = TRUE)::int
 		FROM entities WHERE workspace_id = $1 AND kind != 'external'
 	`, workspaceID).Scan(&entities, &packages, &files, &exportedEntities)
+
+	// NEW: workspace-wide language breakdown
+	languagesBreakdown := computeLanguageBreakdown(ctx, pgStore, workspaceID)
 
 	var relationships int
 	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM claims WHERE workspace_id = $1`, workspaceID).Scan(&relationships)
@@ -1953,10 +2447,14 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// NEW: compute drift
+	drift := computeDrift(ctx, pgStore, workspaceID, workspaceName)
+
 	resp := WorkspaceStatsResponse{
 		Workspace:             workspaceName,
 		Repositories:          repositories,
 		RepositoriesList:      repoList,
+		RepoStats:             repoStats,
 		Packages:              packages,
 		Entities:              entities,
 		Relationships:         relationships,
@@ -1985,6 +2483,8 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		ColdStartLatencyMs:    coldStartLatency,
 		ColdStartLatencyKnown: coldStartSamples > 0,
 		ActiveAgentsCount:     activeAgents,
+		LanguagesBreakdown:    languagesBreakdown,
+		Drift:                 drift,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2032,9 +2532,7 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 		ORDER BY (kind != 'external') DESC, is_exported DESC, name
 		LIMIT $3
 		`,
-		workspaceID,
-		searchPattern,
-		limit,
+		workspaceID, searchPattern, limit,
 	)
 	if err != nil {
 		http.Error(w, "search query failed: "+err.Error(), http.StatusInternalServerError)
@@ -2138,14 +2636,8 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 			if _, exists := nodesMap[e.Package]; !exists {
 				nodesMap[e.Package] = GraphNodeDTO{
-					ID:       e.Package,
-					Label:    e.Package,
-					Kind:     "package",
-					Repo:     e.Repo,
-					Package:  e.Package,
-					Status:   "SUPPORTED",
-					Exported: true,
-					Count:    1,
+					ID: e.Package, Label: e.Package, Kind: "package",
+					Repo: e.Repo, Package: e.Package, Status: "SUPPORTED", Exported: true, Count: 1,
 				}
 			} else {
 				node := nodesMap[e.Package]
@@ -2160,26 +2652,16 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			if src.Package == "" || tgt.Package == "" || src.Repo == "stdlib" || tgt.Repo == "stdlib" {
 				continue
 			}
-
 			if src.Package != tgt.Package {
 				edgeKey := src.Package + "->" + tgt.Package
 				edge := edgesMap[edgeKey]
 				if edge.Source == "" {
-					edge = GraphEdgeDTO{
-						ID:         edgeKey,
-						Source:     src.Package,
-						Target:     tgt.Package,
-						Type:       "PACKAGE_DEPENDENCY",
-						Status:     "SUPPORTED",
-						Count:      0,
-						Confidence: 1.0,
-					}
+					edge = GraphEdgeDTO{ID: edgeKey, Source: src.Package, Target: tgt.Package, Type: "PACKAGE_DEPENDENCY", Status: "SUPPORTED", Count: 0, Confidence: 1.0}
 				}
 				edge.Count++
 				edgesMap[edgeKey] = edge
 			}
 		}
-
 	} else if level == "repository" {
 		repoCounts := make(map[string]int)
 		for _, e := range entityMap {
@@ -2188,14 +2670,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 			repoCounts[e.Repo]++
 			if _, exists := nodesMap[e.Repo]; !exists {
-				nodesMap[e.Repo] = GraphNodeDTO{
-					ID:       e.Repo,
-					Label:    e.Repo,
-					Kind:     "repository",
-					Repo:     e.Repo,
-					Status:   "SUPPORTED",
-					Exported: true,
-				}
+				nodesMap[e.Repo] = GraphNodeDTO{ID: e.Repo, Label: e.Repo, Kind: "repository", Repo: e.Repo, Status: "SUPPORTED", Exported: true}
 			}
 		}
 		for repo, count := range repoCounts {
@@ -2205,15 +2680,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if _, exists := nodesMap["garuda"]; !exists {
-			nodesMap["garuda"] = GraphNodeDTO{
-				ID:       "garuda",
-				Label:    "garuda",
-				Kind:     "repository",
-				Repo:     "garuda",
-				Status:   "SUPPORTED",
-				Exported: true,
-				Count:    100,
-			}
+			nodesMap["garuda"] = GraphNodeDTO{ID: "garuda", Label: "garuda", Kind: "repository", Repo: "garuda", Status: "SUPPORTED", Exported: true, Count: 100}
 		}
 
 		for _, c := range claims {
@@ -2222,21 +2689,11 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			if src.Repo == "" || tgt.Repo == "" || src.Repo == "stdlib" || tgt.Repo == "stdlib" {
 				continue
 			}
-
 			if src.Repo != tgt.Repo {
 				edgeKey := src.Repo + "->" + tgt.Repo
 				edge := edgesMap[edgeKey]
 				if edge.Source == "" {
-					edge = GraphEdgeDTO{
-						ID:         edgeKey,
-						Source:     src.Repo,
-						Target:     tgt.Repo,
-						Type:       "CROSS_REPO_BRIDGE",
-						Status:     "SUPPORTED",
-						Label:      "depends on",
-						Count:      0,
-						Confidence: 1.0,
-					}
+					edge = GraphEdgeDTO{ID: edgeKey, Source: src.Repo, Target: tgt.Repo, Type: "CROSS_REPO_BRIDGE", Status: "SUPPORTED", Label: "depends on", Count: 0, Confidence: 1.0}
 				}
 				edge.Count++
 				edgesMap[edgeKey] = edge
@@ -2247,16 +2704,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			if repo != "garuda" && !strings.HasPrefix(repo, "ext-") {
 				edgeKey := "garuda->" + repo
 				if _, exists := edgesMap[edgeKey]; !exists {
-					edgesMap[edgeKey] = GraphEdgeDTO{
-						ID:         edgeKey,
-						Source:     "garuda",
-						Target:     repo,
-						Type:       "MODULE_DEPENDENCY",
-						Status:     "SUPPORTED",
-						Label:      "imports",
-						Count:      1,
-						Confidence: 1.0,
-					}
+					edgesMap[edgeKey] = GraphEdgeDTO{ID: edgeKey, Source: "garuda", Target: repo, Type: "MODULE_DEPENDENCY", Status: "SUPPORTED", Label: "imports", Count: 1, Confidence: 1.0}
 				}
 			}
 		}
@@ -2276,28 +2724,18 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 				edgesMap[edgeKey] = edge
 			}
 		}
-
 	} else if level == "package" {
 		pkgCounts := make(map[string]int)
 		for _, e := range entityMap {
 			if e.Repo == "stdlib" || e.Package == "" {
 				continue
 			}
-			// When focus is empty, default to showing all workspace packages across all repos
 			if focus != "" && e.Repo != focus {
 				continue
 			}
 			pkgCounts[e.Package]++
 			if _, exists := nodesMap[e.Package]; !exists {
-				nodesMap[e.Package] = GraphNodeDTO{
-					ID:       e.Package,
-					Label:    e.Package,
-					Kind:     "package",
-					Repo:     e.Repo,
-					Package:  e.Package,
-					Status:   "SUPPORTED",
-					Exported: true,
-				}
+				nodesMap[e.Package] = GraphNodeDTO{ID: e.Package, Label: e.Package, Kind: "package", Repo: e.Repo, Package: e.Package, Status: "SUPPORTED", Exported: true}
 			}
 		}
 		for pkg, count := range pkgCounts {
@@ -2312,24 +2750,14 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			if src.Package == "" || tgt.Package == "" || src.Repo == "stdlib" || tgt.Repo == "stdlib" {
 				continue
 			}
-			// Filter edges only if a specific repo focus is selected
 			if focus != "" && (src.Repo != focus || tgt.Repo != focus) {
 				continue
 			}
-
 			if src.Package != tgt.Package {
 				edgeKey := src.Package + "->" + tgt.Package
 				edge := edgesMap[edgeKey]
 				if edge.Source == "" {
-					edge = GraphEdgeDTO{
-						ID:         edgeKey,
-						Source:     src.Package,
-						Target:     tgt.Package,
-						Type:       "STATIC_DEPENDENCY",
-						Status:     "SUPPORTED",
-						Count:      0,
-						Confidence: 1.0,
-					}
+					edge = GraphEdgeDTO{ID: edgeKey, Source: src.Package, Target: tgt.Package, Type: "STATIC_DEPENDENCY", Status: "SUPPORTED", Count: 0, Confidence: 1.0}
 				}
 				edge.Count++
 				edgesMap[edgeKey] = edge
@@ -2351,7 +2779,6 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 				edgesMap[edgeKey] = edge
 			}
 		}
-
 	} else if level == "entity" {
 		for _, e := range entityMap {
 			if focus == "" || e.Package == focus {

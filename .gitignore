@@ -96,3 +96,12 @@ test/benchmark/results/
 test/benchmark/results/
 bin/
 bin/
+
+# Internal strategy documents — never commit
+ROADMAP_INTERNAL.md
+COMPETITIVE_ANALYSIS.md
+GAP_ANALYSIS.md
+YC_APPLICATION_NOTES.md
+.env
+.env.local
+*.private.md
