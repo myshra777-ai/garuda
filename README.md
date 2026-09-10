@@ -69,6 +69,7 @@ flowchart LR
 
     MERKLE --> HUMANS["Developers and CI"]
     POLICY --> HUMANS
+```
 
 ---
 
@@ -76,7 +77,7 @@ flowchart LR
 
 Garuda treats machine-relevant engineering state as a structured, inspectable, immutable ledger that can be inspected, queried, revised, verified, and shared.
 
-```
+```text
 Garuda Engine
    │
    ├── Semantic Graph (Entities, Topology, Lineage)
@@ -124,9 +125,9 @@ Coming soon: Rust, Java, Kotlin, C#.
 
 The language column is a property of the entity, not a property of the workspace. Adding a language does not require a new schema, a new dashboard, or a new verification pipeline.
 
-### Validation Snapshot (2026-09-10)
+### Validation Snapshot
 
-```
+```text
 Workspace:       go-validation-10
 Repositories:    12 (11 Go, 1 Python)
 Languages:       Go 90.1%, Python 9.9%
@@ -337,7 +338,7 @@ flowchart TD
     VERIFY --> SUPPORTED["Supported"]
     VERIFY --> UNVERIFIED["Unverified"]
     VERIFY --> CONTRADICTED["Contradicted"]
-    CONTRADICTED --> QUARANTINE["Quarantined / ARCH_DRIFT_001"]
+    CONTRADICTED --> QUARANTINE["Quarantined ARCH_DRIFT_001"]
 ```
 
 Status updates propagate immediately to the Mission Control analytics stream without requiring process restarts.
@@ -540,7 +541,7 @@ Garuda has been evaluated against 13 heterogeneous repositories across Go, Pytho
 | GAP-20 token reduction | ~87.2% |
 | Merkle ledger height | Block #898+ |
 
-### Multi-Language Validation Snapshot (2026-09-10)
+### Multi-Language Validation Snapshot
 
 | Workspace | Language | Repositories | Entities | Relationships |
 | :--- | :--- | ---: | ---: | ---: |
@@ -581,7 +582,7 @@ When an evaluated runtime observation conflicts with the expected architecture, 
 
 Symbols can expose their surrounding dependency context and recursive relationships.
 
-```
+```text
 Garuda Architectural Context: HarvestedDecision
 
 Blast Radius:
@@ -602,7 +603,7 @@ github.com/myshra777-ai/garuda/cmd/garuda
 
 The development daemon hosts the topology visualizer at:
 
-```
+```text
 http://localhost:8080/graph
 ```
 
@@ -860,7 +861,7 @@ Cryptographic mechanisms provide tamper-evident state and verification. They do 
 
 ## Repository Structure
 
-```
+```text
 garuda/
 │
 ├── README.md
@@ -966,24 +967,3 @@ Reproducibility — For reproducible validation, run the included benchmark and 
     <strong>License:</strong> Apache 2.0
   </sub>
 </p>
-```
-
----
-
-**What was fixed for GitHub rendering:**
-
-| Issue | Fix |
-|-------|-----|
-| Badge URL with `%2B` and `%C2%B7` broke rendering | Replaced with `_` separators (e.g., `Go_Python_TypeScript`) |
-| Badge text with `~87.2%` | Replaced with `87.2%25` (URL-safe) |
-| HTML tags accidentally wrapped in code fences | All HTML kept as raw HTML, all code kept in fences |
-| Middle dot `·` in nav line | Kept as plain text — GitHub renders this fine |
-| Mermaid with `()` in node labels | Removed all parentheses from mermaid labels |
-| `<br/>` in flowchart labels broke parsing | Removed all `<br/>` from mermaid |
-| Middle dot `·` in nav line | Kept as plain text — GitHub renders this fine |
-| Ambiguous "14 heterogeneous" claim | Corrected to "13 heterogeneous repositories across Go, Python, TypeScript" |
-| Missing policy enforcement, dashboard API, agent workflow | Added dedicated sections and agent workflow snippet |
-| Missing `policies/` and migration files in repo structure | Added |
-| Missing policy CLI commands in reference table | Added 5 commands |
-| Raw HTML `<img>` tags | Kept as-is (GitHub renders them) |
-
