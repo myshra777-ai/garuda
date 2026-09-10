@@ -1,4 +1,3 @@
-```markdown
 <p align="center">
   <img src="assets/garuda-logo.png" width="128" alt="Garuda">
 </p>
@@ -70,7 +69,6 @@ flowchart LR
 
     MERKLE --> HUMANS["Developers and CI"]
     POLICY --> HUMANS
-```
 
 ---
 
