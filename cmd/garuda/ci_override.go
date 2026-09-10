@@ -36,7 +36,10 @@ var ciCheckCmd = &cobra.Command{
 		defer pool.Close()
 
 		tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-		workspace := "default"
+		workspace := os.Getenv("GARUDA_WORKSPACE")
+		if workspace == "" {
+			workspace = "default"
+		}
 
 		fmt.Println("🛡️ Running Garuda Software Knowledge Integrity Gate...")
 		evaluator := knowledge.NewEvaluator(pool)

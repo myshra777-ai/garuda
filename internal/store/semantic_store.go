@@ -354,7 +354,7 @@ func (s *PostgresStore) SaveSemanticGraph(
 					$1, $2, $3, $4, $5,
 					$6, 'external', $7, $7, $8, '',
 					'', $9, 0, 0, 0,
-					'', '[]'::jsonb, '[]'::jsonb, true,
+					'', '[]'::jsonb, '[]'::jsonb, true, 'external',
 					NOW(), NOW()
 				) ON CONFLICT (id) DO NOTHING
 			`, extFromID, tenantID, workspaceID, repoID, analysisID, symName, pkgPath, modPath, commitSHA)
@@ -381,7 +381,7 @@ func (s *PostgresStore) SaveSemanticGraph(
 					$1, $2, $3, $4, $5,
 					$6, 'external', $7, $7, $8, '',
 					'', $9, 0, 0, 0,
-					'', '[]'::jsonb, '[]'::jsonb, true,
+					'', '[]'::jsonb, '[]'::jsonb, true, 'external',
 					NOW(), NOW()
 				) ON CONFLICT (id) DO NOTHING
 			`, extToID, tenantID, workspaceID, repoID, analysisID, symName, pkgPath, modPath, commitSHA)

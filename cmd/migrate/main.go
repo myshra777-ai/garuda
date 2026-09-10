@@ -15,7 +15,7 @@ import (
 func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+		log.Fatal("DATABASE_URL environment variable must be set")
 	}
 
 	log.Println("Running migrations...")

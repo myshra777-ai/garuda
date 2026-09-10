@@ -24,6 +24,11 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
+      GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+      GARUDA_WORKSPACE: "ci-workspace"
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -33,26 +38,56 @@ jobs:
         with:
           go-version: '1.25'
 
-      - name: Run Database Migrations
-        env:
-          DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Wait for Postgres to be ready
         run: |
-          psql $DATABASE_URL -f migrations/059_document_claims.sql
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U garuda -d garuda; then
+              echo "✅ Postgres ready"
+              break
+            fi
+            echo "⏳ Waiting for Postgres... ($i/30)"
+            sleep 1
+          done
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Run ALL Database Migrations
+        run: |
+          echo "🔧 Running full migration suite..."
+          go run cmd/migrate/main.go
+          echo "✅ Migrations complete"
+
+      - name: Verify critical tables exist
+        run: |
+          echo "🔍 Verifying schema..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\d document_claims" > /dev/null || { echo "❌ document_claims missing"; exit 1; }
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\d entities" > /dev/null || { echo "❌ entities missing"; exit 1; }
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\d workspaces" > /dev/null || { echo "❌ workspaces missing"; exit 1; }
+          echo "✅ Schema verified"
 
       - name: Build Garuda Engine CLI
         run: go build -o bin/garuda ./cmd/garuda
 
-      - name: Ingest Architecture Documentation & ADRs
-        env:
-          DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
-        run: ./bin/garuda docs ingest docs/adr/
-
       - name: Analyze Codebase AST
-        env:
-          DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
-        run: ./bin/garuda analyze .
+        run: |
+          echo "🔍 Analyzing codebase..."
+          ./bin/garuda analyze . --save --workspace ci-workspace
+          echo "✅ Analysis complete"
+
+      - name: Ingest Architecture Documentation & ADRs
+        run: |
+          if [ -d "docs/adr" ] && [ "$(ls -A docs/adr 2>/dev/null)" ]; then
+            echo "📚 Ingesting ADRs..."
+            ./bin/garuda docs ingest docs/adr/
+          else
+            echo "⏭️  No ADRs found, skipping"
+          fi
 
       - name: Run Garuda Knowledge Integrity Gate
-        env:
-          DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
-        run: ./bin/garuda ci check --fail-on-contradiction=true
+        run: |
+          echo "🛡️ Running CI integrity check..."
+          ./bin/garuda ci check --fail-on-contradiction=true
