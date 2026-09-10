@@ -194,20 +194,28 @@ func (s *PostgresStore) ResumeAgent(ctx context.Context, tenantID, agentID, chec
 		return nil, err
 	}
 
-	// 2. Fetch checkpoint
-	var checkpointData []byte
+	// 2. Fetch checkpoint safely as text from jsonb
+	var jsonStr string
 	checkpointQuery := `
-		SELECT checkpoint_data
+		SELECT checkpoint_data::text
 		FROM agent_checkpoints
 		WHERE id = $1 AND tenant_id = $2 AND status = 'active'
 		FOR UPDATE
 	`
-	err = tx.QueryRow(ctx, checkpointQuery, checkpointID, tenantID).Scan(&checkpointData)
+	err = tx.QueryRow(ctx, checkpointQuery, checkpointID, tenantID).Scan(&jsonStr)
 	if err != nil {
 		return nil, fmt.Errorf("checkpoint not found: %w", err)
 	}
 
-	// 3. Mark checkpoint as restored
+	// 3. Unmarshal checkpoint data
+	var restoredState interface{}
+	if len(jsonStr) > 0 {
+		if err := json.Unmarshal([]byte(jsonStr), &restoredState); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal checkpoint data: %w", err)
+		}
+	}
+
+	// 4. Mark checkpoint as restored
 	restoreQuery := `
 		UPDATE agent_checkpoints SET status = 'restored', updated_at = NOW()
 		WHERE id = $1 AND tenant_id = $2
@@ -216,7 +224,7 @@ func (s *PostgresStore) ResumeAgent(ctx context.Context, tenantID, agentID, chec
 		return nil, err
 	}
 
-	// 4. Update agent status to 'working'
+	// 5. Update agent status to 'working'
 	if err := s.updateAgentStatus(ctx, tx, agentID, "working"); err != nil {
 		return nil, err
 	}
@@ -225,12 +233,7 @@ func (s *PostgresStore) ResumeAgent(ctx context.Context, tenantID, agentID, chec
 		return nil, err
 	}
 
-	// 5. Return restored data
-	var restored interface{}
-	if err := json.Unmarshal(checkpointData, &restored); err != nil {
-		return nil, err
-	}
-	return restored, nil
+	return restoredState, nil
 }
 
 // ============================================================
@@ -277,6 +280,7 @@ func (s *PostgresStore) GetLineageDAG(ctx context.Context, tenantID, taskID uuid
 		return nil, fmt.Errorf("failed to query lineage DAG: %w", err)
 	}
 	defer rows.Close()
+
 	var edges []types.LineageEdge
 	for rows.Next() {
 		var e types.LineageEdge

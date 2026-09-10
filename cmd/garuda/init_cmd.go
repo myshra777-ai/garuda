@@ -40,17 +40,22 @@ var initCmd = &cobra.Command{
 
 		// 2. Ensure Core Tables & Seed Workspace
 		tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-		workspaceID := uuid.MustParse("532a8e33-975d-48a3-8f88-221cef52fec4")
+		workspaceName := "default"
+		var workspaceID uuid.UUID
 
-		_, err = pool.Exec(ctx, `
-			INSERT INTO workspaces (id, tenant_id, name, created_at, updated_at)
-			VALUES ($1, $2, 'uuid-ws', NOW(), NOW())
-			ON CONFLICT (id) DO NOTHING;
-		`, workspaceID, tenantID)
+		err = pool.QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 AND tenant_id = $2 LIMIT 1`, workspaceName, tenantID).Scan(&workspaceID)
 		if err != nil {
-			return fmt.Errorf("failed to seed workspace: %w", err)
+			workspaceID = uuid.New()
+			_, err = pool.Exec(ctx, `
+				INSERT INTO workspaces (id, tenant_id, name, created_at, updated_at)
+				VALUES ($1, $2, $3, NOW(), NOW())
+				ON CONFLICT (id) DO NOTHING;
+			`, workspaceID, tenantID, workspaceName)
+			if err != nil {
+				return fmt.Errorf("failed to seed workspace: %w", err)
+			}
 		}
-		fmt.Println("  ✓ Workspace initialized (uuid-ws)")
+		fmt.Printf("  ✓ Workspace initialized (%s)\n", workspaceName)
 
 		// 3. Resolve Current Binary Location
 		execPath, err := os.Executable()
@@ -110,7 +115,7 @@ var initCmd = &cobra.Command{
 
 		// 6. Run Fast Initial Analysis
 		fmt.Println("\n🔍 Performing initial AST scan on current repository...")
-		rootCmd.SetArgs([]string{"analyze", ".", "--workspace", "uuid-ws", "-s"})
+		rootCmd.SetArgs([]string{"analyze", ".", "--workspace", workspaceName, "-s"})
 		if err := rootCmd.Execute(); err != nil {
 			return fmt.Errorf("initial analysis failed: %w", err)
 		}

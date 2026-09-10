@@ -426,3 +426,8 @@ func extractPackageFromEntity(name, entityID string) string {
 	}
 	return ""
 }
+
+func init() {
+	rootCmd.AddCommand(impactCmd)
+	rootCmd.AddCommand(impactDiffCmd)
+}

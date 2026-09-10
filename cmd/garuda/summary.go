@@ -111,7 +111,7 @@ var summaryCmd = &cobra.Command{
 
 		workspaceName := os.Getenv("GARUDA_WORKSPACE")
 		if workspaceName == "" {
-			workspaceName = "uuid-ws"
+			workspaceName = "default"
 		}
 
 		workspaceID, resolvedName, err := st.ResolveWorkspaceTarget(ctx, workspaceName)
@@ -332,4 +332,8 @@ func printSymbolSummary(ctx context.Context, st *store.PostgresStore, tenantID, 
 	fmt.Printf("   • Classification:        %s\n", centralityTag)
 	fmt.Println(strings.Repeat("━", 65))
 	return nil
+}
+
+func init() {
+	rootCmd.AddCommand(summaryCmd)
 }

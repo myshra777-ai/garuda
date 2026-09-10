@@ -12,29 +12,62 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/myshra777-ai/garuda/internal/canonical"
 	"github.com/myshra777-ai/garuda/internal/merkle"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
+var tenantLocks sync.Map // tenantID -> *sync.Mutex
+
+func getTenantMutex(tenantID uuid.UUID) *sync.Mutex {
+	actual, _ := tenantLocks.LoadOrStore(tenantID, &sync.Mutex{})
+	return actual.(*sync.Mutex)
+}
+
+func isSerializationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "40001" || pgErr.Code == "40P01"
+	}
+	return false
+}
+
 // SubmitDecision atomically creates an immutable revision with:
-// - Decision identity creation and row-level lock
-// - Hash chain / Merkle root update
-// - Append-only revision record
-// - Audit event generation
-// - Reference-counted evidence store
-// - Idempotency tracking
-// Everything is executed in a single, atomic, serializable transaction.
+// - Strict domain boundary validation (non-nil UUIDs, required fields)
+// - In-process tenant serialization
+// - Resilient SSI retry loop for multi-node database contention
+// - Row-level decision locking and identity anchoring
+// - Deterministic Merkle hash chain sequencing
+// - Append-only revision ledgering
+// - Multi-tenant audit trail and CAS evidence ref-counting
+// - Transactional idempotency recording
 func (s *PostgresStore) SubmitDecision(
 	ctx context.Context,
 	req *types.SubmitDecisionRequest,
 	actor string,
 	requestID string,
 ) (*types.SubmitDecisionResult, error) {
-	// 1. Check idempotency outside transaction to fast-path duplicated incoming requests
+	// 1. Enforce strict domain invariants before touching the database
+	if req == nil {
+		return nil, fmt.Errorf("submit decision request cannot be nil")
+	}
+	if req.TenantID == uuid.Nil {
+		return nil, fmt.Errorf("invalid tenant ID: nil UUID is not permitted")
+	}
+	if req.Title == "" {
+		return nil, fmt.Errorf("decision title cannot be empty")
+	}
+
+	// 2. Fast-path idempotency check outside transaction
 	if req.IdempotencyKey != "" {
 		existing, err := s.getDecisionByidempotencyKey(ctx, req.TenantID, req.IdempotencyKey)
 		if err == nil && existing != nil {
@@ -42,7 +75,41 @@ func (s *PostgresStore) SubmitDecision(
 		}
 	}
 
-	// 2. Begin serializable transaction
+	// 3. Serialize in-process tenant writes to eliminate local SSI aborts
+	mu := getTenantMutex(req.TenantID)
+	mu.Lock()
+	defer mu.Unlock()
+
+	// 4. Serializable transaction with backoff retry loop for multi-node contention
+	const maxRetries = 10
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		result, err := s.submitDecisionTx(ctx, req, actor, requestID)
+		if err == nil {
+			return result, nil
+		}
+		if isSerializationError(err) {
+			lastErr = err
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt*10+5) * time.Millisecond):
+				continue
+			}
+		}
+		return nil, err
+	}
+
+	return nil, fmt.Errorf("serializable transaction exceeded retry limit: %w", lastErr)
+}
+
+func (s *PostgresStore) submitDecisionTx(
+	ctx context.Context,
+	req *types.SubmitDecisionRequest,
+	actor string,
+	requestID string,
+) (*types.SubmitDecisionResult, error) {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{
 		IsoLevel: pgx.Serializable,
 	})
@@ -51,17 +118,39 @@ func (s *PostgresStore) SubmitDecision(
 	}
 	defer tx.Rollback(ctx)
 
-	// 3. Upsert decision identity and acquire row lock (serialize concurrent updates to same decision)
+	// Decision identity
 	decisionID := req.DecisionID
 	if decisionID == uuid.Nil {
 		decisionID = uuid.New()
 	}
 
+	domain := req.Scope.Domain
+	if domain == "" {
+		domain = "architecture"
+	}
+	system := req.Scope.System
+	if system == "" {
+		system = "default"
+	}
+	owner := req.Owner
+	if owner == "" {
+		owner = "system"
+	}
+
+	scopeJSON, err := json.Marshal(req.Scope)
+	if err != nil {
+		scopeJSON = []byte("{}")
+	}
+
 	_, err = tx.Exec(ctx, `
-		INSERT INTO decisions (id, tenant_id, created_at)
-		VALUES ($1, $2, NOW())
+		INSERT INTO decisions (
+			id, tenant_id, title, statement, status,
+			domain, system, scope_domain, scope_system, scope,
+			owner, confidence, valid_from, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, 'PROPOSED', $5, $6, $7, $8, $9, $10, $11, NOW(), NOW(), NOW())
 		ON CONFLICT (tenant_id, id) DO NOTHING
-	`, decisionID, req.TenantID)
+	`, decisionID, req.TenantID, req.Title, req.Statement, domain, system, domain, system, scopeJSON, owner, req.Confidence)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create decision identity: %w", err)
 	}
@@ -74,18 +163,18 @@ func (s *PostgresStore) SubmitDecision(
 		return nil, fmt.Errorf("failed to lock decision identity: %w", err)
 	}
 
-	// 4. Calculate next revision number
+	// Next sequential revision number
 	var revisionNumber int
 	err = tx.QueryRow(ctx, `
 		SELECT COALESCE(MAX(revision_number), 0) + 1
 		FROM decision_revisions
 		WHERE tenant_id = $1 AND decision_id = $2
-	`, req.TenantID, decisionID).Scan(&revisionNumber)
+	`, req.TenantID, decisionID.String()).Scan(&revisionNumber)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compute revision number: %w", err)
 	}
 
-	// 5. Build canonical content and hashes
+	// Canonical payload and cryptographic hash
 	content := canonical.DecisionContent{
 		Title:      req.Title,
 		Statement:  req.Statement,
@@ -106,14 +195,13 @@ func (s *PostgresStore) SubmitDecision(
 		return nil, fmt.Errorf("failed to canonicalize content: %w", err)
 	}
 
-	// 6. Lock/Get Merkle root with robust UPSERT lock pattern
+	// Merkle root lock
 	var prevRootHex string
 	err = tx.QueryRow(ctx, `
 		SELECT root_hash FROM merkle_roots WHERE tenant_id = $1 FOR UPDATE
 	`, req.TenantID).Scan(&prevRootHex)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Hex-string genesis initialization
 		prevRootHex = merkle.HashDecision(uuid.Nil, "GENESIS_ROOT", "active", "system", "core", "garuda", nil)
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch and lock merkle root: %w", err)
@@ -124,36 +212,39 @@ func (s *PostgresStore) SubmitDecision(
 		return nil, fmt.Errorf("decode previous merkle root: %w", err)
 	}
 
-	// 7. Compute updated Merkle root hash chain: SHA256(prevRoot || contentHash)
+	// Hash chain update: SHA256(prevRoot || contentHash)
 	combined := append(prevRootBytes, contentHashBytes...)
 	newRoot := sha256.Sum256(combined)
 	newRootHex := hex.EncodeToString(newRoot[:])
 
-	// 8. Insert decision revision (append-only)
+	// Append revision record
 	revisionID := uuid.New()
 	_, err = tx.Exec(ctx, `
 		INSERT INTO decision_revisions (
 			id, tenant_id, decision_id, revision_number,
-			canonical_json, decision_hash, previous_revision_hash,
-			actor, request_id, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-	`, revisionID, req.TenantID, decisionID, revisionNumber,
-		canonicalJSON, contentHashBytes, prevRootBytes, actor, requestID)
+			assumptions, facts, canonical_json, decision_hash,
+			previous_revision_hash, actor, created_at
+		) VALUES ($1, $2, $3, $4, '[]'::jsonb, '[]'::jsonb, $5, $6, $7, $8, NOW())
+	`, revisionID, req.TenantID, decisionID.String(), revisionNumber,
+		canonicalJSON, contentHashBytes, prevRootBytes, actor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert decision revision: %w", err)
 	}
 
-	// 9. Update Merkle root INSIDE transaction (BEGIN tx context)
+	// Upsert Merkle root
 	_, err = tx.Exec(ctx, `
-        UPDATE merkle_roots
-        SET root_hash = $1, height = height + 1, updated_at = NOW()
-        WHERE tenant_id = $2
-    `, newRootHex, req.TenantID)
+		INSERT INTO merkle_roots (tenant_id, root_hash, block_height, updated_at)
+		VALUES ($1, $2, 1, NOW())
+		ON CONFLICT (tenant_id) DO UPDATE
+		SET root_hash = EXCLUDED.root_hash,
+		    block_height = merkle_roots.block_height + 1,
+		    updated_at = NOW()
+	`, req.TenantID, newRootHex)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update merkle root in transaction: %w", err)
 	}
 
-	// 10. Write audit log entry
+	// Append audit event
 	auditPayload := map[string]interface{}{
 		"decision_id": decisionID,
 		"revision_id": revisionID,
@@ -169,14 +260,14 @@ func (s *PostgresStore) SubmitDecision(
 	}
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO audit_events (tenant_id, event_type, actor, payload, request_id, created_at)
-		VALUES ($1, $2, $3, $4, $5, NOW())
-	`, req.TenantID, "decision_submitted", actor, auditJSON, requestID)
+		INSERT INTO audit_events (decision_id, actor, new_status, reason, timestamp)
+		VALUES ($1, $2, 'PROPOSED', $3, NOW())
+	`, decisionID.String(), actor, string(auditJSON))
 	if err != nil {
 		return nil, fmt.Errorf("failed to write audit event: %w", err)
 	}
 
-	// 11. Reference-counted evidence store insertion
+	// Reference-counted evidence store
 	if len(req.Evidence) > 0 {
 		for _, ev := range req.Evidence {
 			hashBytes := ev.Hash[:]
@@ -192,7 +283,7 @@ func (s *PostgresStore) SubmitDecision(
 		}
 	}
 
-	// 12. Save idempotency entry safely
+	// Record idempotency key
 	if req.IdempotencyKey != "" {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO idempotency_keys (tenant_id, idempotency_key, decision_id, revision_id, created_at)
@@ -204,7 +295,6 @@ func (s *PostgresStore) SubmitDecision(
 		}
 	}
 
-	// 13. Commit all changes atomically
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("transaction commit failed: %w", err)
 	}

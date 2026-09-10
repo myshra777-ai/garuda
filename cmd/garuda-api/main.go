@@ -43,7 +43,7 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	mainMux.HandleFunc("GET /api/v1/dashboard/search", server.HandleDashboardSearch)
 	mainMux.HandleFunc("GET /api/v1/graph", server.HandleGraph)
 	mainMux.HandleFunc("GET /api/v1/events", server.HandleLiveEvents)
-	mainMux.HandleFunc("POST /api/v1/telemetry/spans", server.HandleIngestRuntimeSpans)
+	mainMux.HandleFunc("POST /api/v1/telemetry/spans", server.HandleIngestTraces)
 	mainMux.HandleFunc("GET /api/v1/runtime/coverage", server.HandleGetRuntimeCoverage)
 	mainMux.HandleFunc("GET /api/v1/dashboard/stats", server.HandleDashboardStats)
 	mainMux.HandleFunc("GET /api/v1/merkle/latest", server.HandleGetMerkleState)
@@ -79,7 +79,7 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	protectedMux.HandleFunc("POST /api/v1/agents/warmup", server.HandleAgentWarmup)
 	protectedMux.HandleFunc("POST /api/v1/agents/checkpoint", server.HandleAgentCheckpoint)
 	protectedMux.HandleFunc("GET /api/v1/agents/checkpoint/{id}", server.HandleGetAgentCheckpoint)
-	protectedMux.HandleFunc("POST /api/v1/agents/resume", server.HandleAgentResume)
+	protectedMux.HandleFunc("POST /api/v1/agents/resume", server.HandleResume)
 	protectedMux.HandleFunc("POST /api/v1/agents/handoff", server.HandleAgentHandoff)
 
 	// Audit & Compliance
@@ -102,6 +102,14 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	protectedMux.HandleFunc("POST /api/v1/policies", server.HandleRememberPolicy)
 	protectedMux.HandleFunc("GET /api/v1/policies", server.HandleListPolicies)
 	protectedMux.HandleFunc("POST /api/v1/policies/{id}/supersede", server.HandleSupersedePolicy)
+
+	// Decisions
+	protectedMux.HandleFunc("POST /api/v1/decisions/propose", server.HandleProposeDecision)
+	protectedMux.HandleFunc("POST /decisions", server.HandleProposeDecision)
+
+	// Agent Warmup / Bootstrap
+	protectedMux.HandleFunc("GET /api/v1/agent/warmup", server.HandleAgentWarmup)
+	protectedMux.HandleFunc("GET /system/bootstrap", server.HandleSystemBootstrap)
 
 	// ----------------------------------------------------------------
 	// C. MIDDLEWARE PIPELINE

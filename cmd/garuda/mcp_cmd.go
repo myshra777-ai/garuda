@@ -3,8 +3,6 @@
 //
 // Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
-//
-
 package main
 
 import (
@@ -36,9 +34,10 @@ var mcpCmd = &cobra.Command{
 
 		tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 		var workspaceID uuid.UUID
-		err = pool.QueryRow(ctx, `SELECT id FROM workspaces WHERE name = 'uuid-ws' LIMIT 1`).Scan(&workspaceID)
+
+		err = pool.QueryRow(ctx, `SELECT id FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID)
 		if err != nil {
-			_ = pool.QueryRow(ctx, `SELECT id FROM workspaces LIMIT 1`).Scan(&workspaceID)
+			return fmt.Errorf("no workspace found; please run 'garuda init' before using MCP")
 		}
 
 		server := mcp.NewServer(pool, tenantID, workspaceID)

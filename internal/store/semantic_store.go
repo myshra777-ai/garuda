@@ -412,20 +412,20 @@ func (s *PostgresStore) SaveSemanticGraph(
 
 		claimID := uuid.New()
 		_, err := tx.Exec(ctx, `
-			INSERT INTO claims (
-				id, tenant_id, workspace_id, repository_id, analysis_id,
-				from_entity_id, to_entity_id, claim_type, epistemic_class, confidence,
-				file_path, commit_sha, line_start, line_end,
-				created_at
-			) VALUES (
-				$1, $2, $3, $4, $5,
-				$6, $7, $8, $9, $10,
-				$11, $12, $13, $14,
-				NOW()
-			)
-			ON CONFLICT (workspace_id, from_entity_id, to_entity_id, claim_type) DO UPDATE SET
-				analysis_id     = EXCLUDED.analysis_id,
-				epistemic_class = EXCLUDED.epistemic_class,
+    INSERT INTO claims (
+        id, tenant_id, workspace_id, repository_id, snapshot_id,
+        from_entity_id, to_entity_id, claim_type, epistemic_class, confidence,
+        file_path, commit_sha, line_start, line_end,
+        created_at
+    ) VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10,
+        $11, $12, $13, $14,
+        NOW()
+    )
+    ON CONFLICT (workspace_id, from_entity_id, to_entity_id, claim_type) DO UPDATE SET
+                snapshot_id     = EXCLUDED.snapshot_id,
+                epistemic_class = EXCLUDED.epistemic_class,
 				confidence      = EXCLUDED.confidence,
 				file_path       = EXCLUDED.file_path,
 				commit_sha      = EXCLUDED.commit_sha,

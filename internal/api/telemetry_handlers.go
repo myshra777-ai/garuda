@@ -54,7 +54,7 @@ func (s *Server) HandleIngestTraces(w http.ResponseWriter, r *http.Request) {
 	for _, span := range req.Spans {
 		wsName := span.Workspace
 		if wsName == "" {
-			wsName = "uuid-ws"
+			wsName = "default"
 		}
 
 		var wsID uuid.UUID

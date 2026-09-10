@@ -1,0 +1,10 @@
+FROM alpine:3.20 AS certs
+RUN apk --no-cache add ca-certificates tzdata
+
+FROM scratch
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=certs /usr/share/zoneinfo /usr/share/zoneinfo
+COPY bin/garuda-api-linux-amd64 /garuda-api
+
+EXPOSE 8080
+ENTRYPOINT ["/garuda-api"]

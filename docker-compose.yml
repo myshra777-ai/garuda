@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: garuda-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: garuda
+      POSTGRES_PASSWORD: garudapassword
+      POSTGRES_DB: garuda
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - garuda-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U garuda -d garuda"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  garuda-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: garuda/garuda-api:v1.0.0
+    container_name: garuda-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://garuda:garudapassword@postgres:5432/garuda?sslmode=disable
+      PORT: "8080"
+      GARUDA_ENV: development
+      JWT_SECRET: ${JWT_SECRET:-garuda-default-dev-secret}
+    volumes:
+      - ./migrations:/migrations:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - garuda-net
+
+volumes:
+  pgdata:
+
+networks:
+  garuda-net:
+    driver: bridge

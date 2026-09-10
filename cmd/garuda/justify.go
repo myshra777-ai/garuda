@@ -101,3 +101,7 @@ var justifyCmd = &cobra.Command{
 		return nil
 	},
 }
+
+func init() {
+	rootCmd.AddCommand(justifyCmd)
+}

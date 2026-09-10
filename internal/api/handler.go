@@ -38,9 +38,11 @@ type CheckpointRecord struct {
 
 // AgentCheckpointRequest defines the incoming payload for saving a checkpoint.
 type AgentCheckpointRequest struct {
-	ID     string                 `json:"id"`
-	Status string                 `json:"status,omitempty"`
-	State  map[string]interface{} `json:"state,omitempty"`
+	ID        string                 `json:"id"`
+	Workspace string                 `json:"workspace,omitempty"`
+	AgentID   string                 `json:"agent_id,omitempty"`
+	Status    string                 `json:"status,omitempty"`
+	State     map[string]interface{} `json:"state,omitempty"`
 }
 
 // DashboardStatsResponse defines the structured JSON response for dashboard analytics.
@@ -119,14 +121,16 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 		w.WriteHeader(http.StatusNoContent)
 	}).Methods(http.MethodGet)
 	r.HandleFunc("/debug/token", s.HandleDebugToken).Methods(http.MethodGet)
+	r.HandleFunc("/system/discover", s.HandleSystemDiscover).Methods(http.MethodGet)
 
 	// Public Dashboard Telemetry, Graph & Global Search Endpoints
 	r.HandleFunc("/api/v1/dashboard/stats", s.HandleDashboardStats).Methods(http.MethodGet)
 	r.HandleFunc("/api/v1/dashboard/search", s.HandleDashboardSearch).Methods(http.MethodGet)
 	r.HandleFunc("/api/v1/graph", s.HandleGraph).Methods(http.MethodGet)
 	r.HandleFunc("/api/v1/events", s.HandleLiveEvents).Methods(http.MethodGet)
-	r.HandleFunc("/api/v1/telemetry/spans", s.HandleIngestRuntimeSpans).Methods(http.MethodPost)
-	r.HandleFunc("/api/v1/runtime/coverage", s.HandleGetRuntimeCoverage).Methods(http.MethodGet)
+
+	// Point telemetry ingestion directly to HandleIngestTraces
+	r.HandleFunc("/api/v1/telemetry/spans", s.HandleIngestTraces).Methods(http.MethodPost)
 
 	// =========================================================================
 	// PROTECTED API SUBROUTER (JWT Auth Required for Sensitive Actions)
@@ -134,20 +138,27 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	api := r.PathPrefix("/api/v1").Subrouter()
 	api.Use(s.AuthMiddleware)
 
-	// Live Telemetry SSE Stream Endpoint
-	api.Handle("/telemetry/stream", s.sseBroker).Methods(http.MethodGet)
+	// Decision Proposal & Verification Engine
+	api.HandleFunc("/decisions/propose", s.HandleProposeDecision).Methods(http.MethodPost)
 
-	// Pre-Flight Classification Router Evaluation
-	api.HandleFunc("/router/evaluate", s.HandleEvaluateRoute).Methods(http.MethodPost, http.MethodOptions)
+	// Two-Minute AI Agent Onboarding / Warmup
+	api.HandleFunc("/agent/warmup", s.HandleAgentWarmup).Methods(http.MethodGet)
 
-	// Multi-Agent Execution & Lineage
+	// Multi-Agent Execution, Checkpointing & State Handoff
+	api.HandleFunc("/agents/checkpoint", s.HandleAgentCheckpoint).Methods(http.MethodPost)
 	api.HandleFunc("/agents/handoff", s.HandleHandoff).Methods(http.MethodPost)
 	api.HandleFunc("/agents/resume", s.HandleResume).Methods(http.MethodPost)
 	api.HandleFunc("/tasks/{task_id}/lineage", s.HandleGetLineage).Methods(http.MethodGet)
 
+	// Pre-Flight Classification Router Evaluation
+	api.HandleFunc("/router/evaluate", s.HandleEvaluateRoute).Methods(http.MethodPost, http.MethodOptions)
+
 	// Audit Log & Compliance Endpoints
 	api.HandleFunc("/audit/export", s.HandleExportAuditLogs).Methods(http.MethodGet)
 	api.HandleFunc("/audit/verify/{id}", s.HandleVerifyAuditLog).Methods(http.MethodGet)
+
+	// Live Telemetry SSE Stream Endpoint
+	api.Handle("/telemetry/stream", s.sseBroker).Methods(http.MethodGet)
 }
 
 // ServeHTTP implements http.Handler for the Server struct.
@@ -155,12 +166,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.router.ServeHTTP(w, r)
 }
 
-// RespondWithError writes a standard JSON error response to the client.
-
 // HandleHealth returns gateway health status.
 func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		s.RespondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		s.RespondWithError(w, http.StatusMethodNotAllowed, "method not allowed", "")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -168,20 +177,20 @@ func (s *Server) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }
 
-// HandleDebugToken generates a tenant-scoped JWT for testing (disabled in production).
+// HandleDebugToken generates a tenant-scoped JWT for testing.
 func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
 	if os.Getenv("GARUDA_ENV") == "production" {
-		s.RespondWithError(w, http.StatusNotFound, "debug endpoint disabled in production")
+		s.RespondWithError(w, http.StatusNotFound, "debug endpoint disabled in production", "")
 		return
 	}
 
 	if r.Method != http.MethodGet {
-		s.RespondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		s.RespondWithError(w, http.StatusMethodNotAllowed, "method not allowed", "")
 		return
 	}
 
 	if s.jwtConfig == nil {
-		s.RespondWithError(w, http.StatusInternalServerError, "jwt config unavailable")
+		s.RespondWithError(w, http.StatusInternalServerError, "jwt config unavailable", "")
 		return
 	}
 
@@ -190,22 +199,17 @@ func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
 		actor = "debug-user"
 	}
 
-	tenantIDStr := r.URL.Query().Get("tenant_id")
-	var tenantID uuid.UUID
-	if tenantIDStr != "" {
-		var err error
-		tenantID, err = uuid.Parse(tenantIDStr)
-		if err != nil {
-			s.RespondWithError(w, http.StatusBadRequest, "invalid tenant_id format")
-			return
+	// Align default tenant with the system dashboard tenant ID
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	if tenantIDStr := r.URL.Query().Get("tenant_id"); tenantIDStr != "" {
+		if parsed, err := uuid.Parse(tenantIDStr); err == nil {
+			tenantID = parsed
 		}
-	} else {
-		tenantID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(actor))
 	}
 
 	token, err := s.jwtConfig.GenerateToken(actor, tenantID)
 	if err != nil {
-		s.RespondWithError(w, http.StatusInternalServerError, "failed to generate token")
+		s.RespondWithError(w, http.StatusInternalServerError, "failed to generate token", "")
 		return
 	}
 
@@ -218,25 +222,25 @@ func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleVerifyAuditLog verifies a given audit event ID against the tenant's active Merkle root.
+// HandleVerifyAuditLog verifies a given audit event ID against the active Merkle root.
 func (s *Server) HandleVerifyAuditLog(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	eventIDStr := vars["id"]
 	eventID, err := uuid.Parse(eventIDStr)
 	if err != nil {
-		s.RespondWithError(w, http.StatusBadRequest, "invalid audit event id format")
+		s.RespondWithError(w, http.StatusBadRequest, "invalid audit event id format", "")
 		return
 	}
 
 	tenantID, err := resolveTenantID(r, uuid.Nil)
 	if err != nil {
-		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required")
+		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required", "")
 		return
 	}
 
 	verification, err := s.store.VerifyAuditEvent(r.Context(), tenantID, eventID)
 	if err != nil {
-		s.RespondWithError(w, http.StatusNotFound, err.Error())
+		s.RespondWithError(w, http.StatusNotFound, err.Error(), "")
 		return
 	}
 

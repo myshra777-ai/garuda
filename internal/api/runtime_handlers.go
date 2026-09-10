@@ -40,7 +40,7 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 
 	workspaceName := r.URL.Query().Get("workspace")
 	if workspaceName == "" {
-		workspaceName = "uuid-ws"
+		workspaceName = "default"
 	}
 
 	var workspaceID uuid.UUID
@@ -148,7 +148,7 @@ func (s *Server) HandleGetRuntimeCoverage(w http.ResponseWriter, r *http.Request
 
 	workspaceName := r.URL.Query().Get("workspace")
 	if workspaceName == "" {
-		workspaceName = "uuid-ws"
+		workspaceName = "default"
 	}
 
 	var workspaceID uuid.UUID

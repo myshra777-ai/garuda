@@ -6,6 +6,7 @@
 package api
 
 import (
+	"strconv"
 	"encoding/json"
 	"net/http"
 
@@ -160,7 +161,7 @@ func (s *Server) HandleSystemBootstrap(w http.ResponseWriter, r *http.Request) {
 
 	// Add Merkle headers
 	w.Header().Set("X-Garuda-Merkle-Root", rootHash)
-	w.Header().Set("X-Garuda-Block-Height", string(rune(blockHeight)))
+	w.Header().Set("X-Garuda-Block-Height", strconv.Itoa(int(blockHeight)))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

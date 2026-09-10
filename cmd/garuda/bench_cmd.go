@@ -3,8 +3,6 @@
 //
 // Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
-//
-
 package main
 
 import (
@@ -37,16 +35,19 @@ var benchCmd = &cobra.Command{
 
 		tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 		var workspaceID uuid.UUID
-		err = pool.QueryRow(ctx, `SELECT id FROM workspaces WHERE name = 'uuid-ws' LIMIT 1`).Scan(&workspaceID)
+		var workspaceName string
+
+		// Resolve the most recently updated workspace dynamically
+		err = pool.QueryRow(ctx, `SELECT id, name FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID, &workspaceName)
 		if err != nil {
-			_ = pool.QueryRow(ctx, `SELECT id FROM workspaces LIMIT 1`).Scan(&workspaceID)
+			return fmt.Errorf("no workspace found. Please run 'garuda init' or 'garuda workspace create' first")
 		}
 
 		fmt.Println("🦅 Running GAP-20 Epistemic Grounding Benchmark Suite...")
-		fmt.Printf("📦 Workspace: uuid-ws (%s)\n\n", workspaceID)
+		fmt.Printf("📦 Workspace: %s (%s)\n\n", workspaceName, workspaceID)
 
 		runner := benchmark.NewRunner(pool, tenantID, workspaceID)
-		report, err := runner.RunSuite(ctx, "uuid-ws")
+		report, err := runner.RunSuite(ctx, workspaceName)
 		if err != nil {
 			return fmt.Errorf("benchmark run failed: %w", err)
 		}
