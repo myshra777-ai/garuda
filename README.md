@@ -157,7 +157,7 @@ flowchart LR
     GARUDA -->|invalidated on resume| B
 ```
 
-Checkpoint and resume state transitions are guaranteed via **atomic Compare-And-Swap**, executed under PostgreSQL `SERIALIZABLE` isolation.
+Checkpoint and resume state transitions are guaranteed via **atomic Compare-and-Swap**, executed under PostgreSQL `SERIALIZABLE` isolation.
 
 ---
 
@@ -320,12 +320,12 @@ The decision submission engine was subjected to high-concurrency load testing to
 
 Measured via end-to-end HTTP traces against the local Unix socket / TCP loopback interface:
 
-| Operation                          | Route                              | Status        | Duration     |
-| :--------------------------------- | :--------------------------------- | :------------ | :----------- |
-| **System Bootstrap Handshake**     | `GET /system/bootstrap`            | `200 OK`      | **3 – 4 ms** |
-| **Telemetry Span Ingestion**       | `POST /api/v1/telemetry/spans`     | `200 OK`      | **4 ms**     |
-| **Agent Checkpoint Creation**      | `POST /api/v1/agents/checkpoint`   | `201 Created` | **4 ms**     |
-| **Agent State Resume (CAS Lock)**  | `POST /api/v1/agents/resume`       | `200 OK`      | **7 ms**     |
+| Operation                          | Route                              | Status        | Duration       |
+| :--------------------------------- | :--------------------------------- | :------------ | :------------- |
+| **System Bootstrap Handshake**     | `GET /system/bootstrap`            | `200 OK`      | **3 – 4 ms**   |
+| **Telemetry Span Ingestion**       | `POST /api/v1/telemetry/spans`     | `200 OK`      | **4 ms**       |
+| **Agent Checkpoint Creation**      | `POST /api/v1/agents/checkpoint`   | `201 Created` | **4 ms**       |
+| **Agent State Resume (CAS Lock)**  | `POST /api/v1/agents/resume`       | `200 OK`      | **7 ms**       |
 | **Single Decision Hash Commit**    | `POST /api/v1/decisions`           | `201 Created` | **10 – 34 ms** |
 | **Dashboard Analytics Rollup**     | `GET /api/v1/dashboard/stats`      | `200 OK`      | **69 – 97 ms** |
 
@@ -379,15 +379,15 @@ The distribution pipeline compiles a hermetic, statically linked ELF executable 
 
 The GAP-20 benchmark compares unassisted LLM exploration against Garuda-grounded workflows.
 
-| Metric                        | Naive LLM | Garuda-Grounded |     Observed Difference |
-| ----------------------------- | --------: | --------------: | ----------------------: |
-| Symbol precision              |     40.0% |          100.0% |   +60 percentage points |
-| Structural hallucination rate |     66.7% |            0.0% | −66.7 percentage points |
-| Prompt token overhead         |     4,850 |             620 |        ~87.2% reduction |
-| Cross-Agent Handoff Success   |      0.0% |          100.0% | CAS checkpoint state restored |
-| Upstream caller recall        |     20.0% |          100.0% |   +80 percentage points |
-| Downstream dependency recall  |     33.0% |          100.0% |   +67 percentage points |
-| Violation quarantine rate     |      0.0% |          100.0% |  +100 percentage points |
+| Metric                        | Naive LLM | Garuda-Grounded |     Observed Difference       |
+| ----------------------------- | --------: | --------------: | ----------------------------: |
+| Symbol precision              |     40.0% |          100.0% |   +60 percentage points        |
+| Structural hallucination rate |     66.7% |            0.0% | −66.7 percentage points        |
+| Prompt token overhead         |     4,850 |             620 |        ~87.2% reduction        |
+| Cross-Agent Handoff Success   |      0.0% |          100.0% | CAS checkpoint state restored  |
+| Upstream caller recall        |     20.0% |          100.0% |   +80 percentage points        |
+| Downstream dependency recall  |     33.0% |          100.0% |   +67 percentage points        |
+| Violation quarantine rate     |      0.0% |          100.0% |  +100 percentage points        |
 
 ### What the benchmark demonstrates
 
@@ -655,16 +655,16 @@ Cryptographic mechanisms provide tamper-evident state and verification. They do 
 
 ## Documentation
 
-| Document                                                            | Purpose                                                         |
-| ------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [Playbook](PLAYBOOK.md)                                             | Installation, commands, workflows, telemetry, MCP and IDE usage |
-| [Evidence](EVIDENCE.md)                                             | Validation results, benchmarks, screenshots and methodology     |
-| [Benchmarks (v1.0.0)](BENCHMARKS_AND_VERIFICATION_v1.0.0.md)        | System verification & benchmark report                          |
-| [Architecture](docs/)                                               | Technical architecture and design                               |
-| [Walkthrough](docs/WALKTHROUGH.md)                                  | Dashboard and IDE workflow tour                                 |
-| [Security](SECURITY.md)                                             | Security model and vulnerability reporting                      |
-| [Contributing](CONTRIBUTING.md)                                     | Contribution and development workflow                           |
-| [Changelog](CHANGELOG.md)                                           | Project history and implementation changes                      |
+| Document                                                     | Purpose                                                         |
+| ------------------------------------------------------------ | --------------------------------------------------------------- |
+| [Playbook](PLAYBOOK.md)                                      | Installation, commands, workflows, telemetry, MCP and IDE usage |
+| [Evidence](EVIDENCE.md)                                      | Validation results, benchmarks, screenshots and methodology     |
+| [Benchmarks (v1.0.0)](BENCHMARKS_AND_VERIFICATION_v1.0.0.md) | System verification & benchmark report                          |
+| [Architecture](docs/)                                        | Technical architecture and design                               |
+| [Walkthrough](docs/WALKTHROUGH.md)                           | Dashboard and IDE workflow tour                                 |
+| [Security](SECURITY.md)                                      | Security model and vulnerability reporting                      |
+| [Contributing](CONTRIBUTING.md)                              | Contribution and development workflow                           |
+| [Changelog](CHANGELOG.md)                                    | Project history and implementation changes                      |
 
 ---
 
@@ -762,4 +762,3 @@ This README describes Garuda according to the current implementation and documen
   </sub>
 </p>
 ```
-
