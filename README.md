@@ -1,5 +1,4 @@
-# 🦅 Garuda
-
+```markdown
 <p align="center">
   <img src="assets/garuda-logo.png" width="128" alt="Garuda — Evidence-backed software intelligence">
 </p>
@@ -18,7 +17,7 @@
   <a href="https://github.com/myshra777-ai/garuda/releases"><img src="https://img.shields.io/badge/version-v1.0.0-blue.svg?style=flat-square" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-green.svg?style=flat-square" alt="License"></a>
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25-00ADD8.svg?style=flat-square&logo=go" alt="Go Version"></a>
-  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/verification-14%20repos%20passed-success.svg?style=flat-square" alt="Verification Status"></a>
+  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/languages-Go%20%C2%B7%20Python%20%C2%B7%20TypeScript-success.svg?style=flat-square" alt="Languages"></a>
   <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/GAP--20-~87.2%25%20token%20reduction-purple.svg?style=flat-square" alt="GAP-20 Benchmark"></a>
 </p>
 
@@ -45,8 +44,8 @@ Without a shared semantic state, each participant repeatedly reconstructs the ar
 
 Garuda is a **deterministic data governance plane** that persists system understanding as structured, verifiable data. It connects:
 
-- Canonical semantic entities and dependencies
-- Bitemporal architectural decisions and policies
+- Canonical semantic entities and dependencies across multiple languages
+- Bitemporal architectural decisions and enforcement policies
 - Cryptographic state verification (Merkle ledgers)
 - Agent checkpoints and CAS (Compare-and-Swap) handoffs
 - Runtime observations and telemetry
@@ -60,13 +59,16 @@ flowchart LR
     CODE["Source & Runtime"] --> GARUDA["Garuda Workspace"]
     GARUDA --> MERKLE["Merkle Ledger"]
     GARUDA --> MCP["MCP Bridge"]
+    GARUDA --> POLICY["Policy Engine"]
     GARUDA --> CAS["Agent CAS Checkpoints"]
 
     MERKLE --> AI["AI Agents"]
     MCP --> AI
+    POLICY --> AI
     CAS --> AI
 
     MERKLE --> HUMANS["Developers & CI"]
+    POLICY --> HUMANS
 ```
 
 ---
@@ -80,6 +82,7 @@ Garuda Engine
    │
    ├── Semantic Graph (Entities, Topology, Lineage)
    ├── Decision Ledger (Bitemporal Policies, Quarantines)
+   ├── Policy Enforcement (YAML Rules, Anchored Decisions)
    ├── Agent Handoffs (CAS Checkpoints, State Resumption)
    ├── Cryptographic State (Merkle Roots, Block Heights)
    ├── Telemetry Pipeline (Observations, Span Ingestion)
@@ -96,7 +99,7 @@ Garuda is therefore **not simply a graph generator**. The graph is one represent
 | --------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | **Analyze**     | Extracts topology, entities, and dependencies from source and telemetry.                      | Creates a structured, machine-readable software understanding.         |
 | **Verify**      | Hashes state into an immutable Merkle tree ledger (`X-Garuda-Block-Height`).                  | Ensures deterministic integrity of all architectural claims.           |
-| **Govern**      | Enforces bitemporal decision policies and contradictions.                                     | Separates verified knowledge from assumptions and flags architectural drift. |
+| **Govern**      | Enforces bitemporal decision policies; anchors every ALLOW / WARN / REVIEW / BLOCK to the same Merkle ledger. | Separates verified knowledge from assumptions; closes the enforcement loop. |
 | **Collaborate** | Manages CAS-based agent handoffs and context resumption.                                      | Allows multiple AI models (e.g., Claude, GPT-4o) to safely pause and resume tasks. |
 
 ```mermaid
@@ -106,6 +109,35 @@ flowchart LR
     GOVERN["GOVERN<br/>Enforce policies & quarantine drift"] -->
     COLLABORATE["COLLABORATE<br/>Share state across agents"]
 ```
+
+---
+
+## Multi-Language Semantic Graph
+
+Garuda produces **one unified semantic graph** across multiple languages. Language-specific parsers feed the same entity/relationship pipeline; nothing downstream is forked.
+
+| Language   | Status      | Parser                                  | Extraction                                                    |
+| ---------- | ----------- | --------------------------------------- | ------------------------------------------------------------- |
+| **Go**         | Stable      | Go AST + `go/types`                     | Packages, structs, interfaces, functions, methods, fields, imports, calls, implements, embeds |
+| **Python**     | Stable      | Structural scanner (pure Go)            | Classes, base classes, methods, functions, imports, inheritance |
+| **TypeScript** | Stable      | tree-sitter + cgo                       | Classes, interfaces, functions, methods, decorators, extends, implements, imports |
+
+**Coming soon:** Rust, Java, Kotlin, C#.
+
+The language column is a property of the entity, not a property of the workspace. Adding a language does not require a new schema, a new dashboard, or a new verification pipeline.
+
+### Validation Snapshot (2026-09-10)
+
+```text
+Workspace: go-validation-10
+Repositories: 12 (11 Go + 1 Python)
+Languages:   Go 90.1%  ·  Python 9.9%
+Entities:    12,917
+Relationships: 25,269
+Cross-repo bridges: 247
+```
+
+See [EVIDENCE.md](EVIDENCE.md) for the full multi-language validation.
 
 ---
 
@@ -120,27 +152,82 @@ flowchart TB
     EVID["EVIDENCE<br/>Why the claim is supported"]
     VERIFY["VERIFICATION<br/>What has been confirmed"]
     DECISION["DECISIONS<br/>What the team agreed"]
+    POLICY["POLICY<br/>What is enforced"]
     LINEAGE["LINEAGE<br/>How the state evolved"]
 
     OBS --> CLAIM
     CLAIM --> EVID
     EVID --> VERIFY
     VERIFY --> DECISION
-    DECISION --> LINEAGE
+    DECISION --> POLICY
+    POLICY --> LINEAGE
 ```
 
 1. **Observation** — AST structures, resolved symbols, source declarations, runtime telemetry, runtime spans.
 2. **Claim** — calls, interface, dependency relationships, repository topology.
 3. **Evidence** — source files, line locations, revisions, runtime observations, provenance.
 4. **Verification** — `SUPPORTED`, `UNVERIFIED`, or `CONTRADICTED`.
-5. **Decision** — architectural choices, accepted / rejected approaches, policies, unresolved decisions.
-6. **Lineage** — how the current state evolved.
+5. **Decision** — architectural choices, accepted / rejected approaches, unresolved decisions.
+6. **Policy** — declarative enforcement rules with authority, scope, and consequence.
+7. **Lineage** — how the current state evolved.
+
+---
+
+## Policy Enforcement (Deterministic Plane)
+
+Garuda policies are declarative YAML. Every evaluation produces a decision that is **anchored to the same Merkle ledger as the evidence it cited**.
+
+A policy declares:
+
+- **Authority** — who owns the rule
+- **Scope** — domain, system, or entity pattern
+- **Predicates** — deterministic checks (`claim_exists`, `contradiction_exists`, `verification_missing`, `entity_exists`, `language_matches`)
+- **Outcome** — `ALLOW` · `WARN` · `REVIEW` · `BLOCK`
+
+Every evaluation records:
+
+- The matched predicates
+- The entities / claims / contradictions cited as evidence
+- The Merkle block height and inclusion proof
+- The actor, subject, and timestamp
+
+```yaml
+id: payment-no-direct-db
+version: v1
+title: "Payment code must not import database/sql directly"
+priority: 200
+language: go
+authority: "team-platform@company.com"
+scope:
+  domain: payments
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*Payment.*"
+      to_name_pattern: ".*sql.*"
+then:
+  decision: BLOCK
+  reason: "Direct database/sql import from payment code violates hexagonal boundary."
+```
+
+Every decision is inspectable and re-verifiable:
+
+```bash
+garuda policy validate ./policies
+garuda policy evaluate ./policies --workspace prod
+garuda policy verify <evaluation-id>
+```
+
+The verify command re-derives the Merkle proof for the decision without trusting the graph alone.
+
+See [internal/policy/](internal/policy/) for the DSL and evaluator source.
 
 ---
 
 ## Agent Checkpoints & CAS Handoffs
 
-Garuda v1.0.0 introduces **Compare-and-Swap (CAS) state handoffs**, allowing long-running AI workflows to span multiple agent executions without losing context.
+Garuda supports **Compare-and-Swap (CAS) state handoffs**, allowing long-running AI workflows to span multiple agent executions without losing context.
 
 Instead of passing massive context windows between sessions, agents checkpoint their state into Garuda and hand off a UUID to another agent:
 
@@ -162,11 +249,12 @@ Checkpoint and resume state transitions are guaranteed via **atomic Compare-and-
 
 ## Cryptographic State & The Merkle Ledger
 
-Garuda guarantees that architectural invariants are tamper-evident. Every decision, policy change, and semantic update increments the engine's block height and produces a new Merkle root.
+Garuda guarantees that architectural invariants are tamper-evident. Every decision, policy evaluation, and semantic update increments the engine's block height and produces a new Merkle root.
 
 ```mermaid
 flowchart TD
     DECISION["Architectural Decision"] --> HASH["Hash Invariant"]
+    POLICY["Policy Evaluation"] --> HASH
     HASH --> TREE["Merkle Tree"]
     TREE --> ROOT["Active Merkle Root"]
     ROOT --> HEADER["X-Garuda-Merkle-Root"]
@@ -247,7 +335,7 @@ Status updates propagate immediately to the Mission Control analytics stream wit
 
 ## One-Click Deployment
 
-Garuda v1.0.0 ships as a production-ready, zero-friction Docker Compose stack. The API gateway is compiled as a fully static, non-root scratch container (Go 1.25) running behind an Ed25519 JWT security boundary.
+Garuda ships as a production-ready, zero-friction Docker Compose stack. The API gateway is compiled as a fully static, non-root scratch container (Go 1.25) running behind an Ed25519 JWT security boundary.
 
 ### 1. Start the Engine
 
@@ -255,7 +343,7 @@ Garuda v1.0.0 ships as a production-ready, zero-friction Docker Compose stack. T
 docker compose up -d
 ```
 
-This automatically provisions the isolated `garuda-net` bridge, boots PostgreSQL, and executes all 58+ schema migrations.
+This automatically provisions the isolated `garuda-net` bridge, boots PostgreSQL, and executes all schema migrations.
 
 ### 2. Verify Bootstrap State
 
@@ -290,9 +378,15 @@ docker build \
   -t garuda-api:v1.0.0 .
 ```
 
+### Build Requirements
+
+- Go 1.25+
+- `CGO_ENABLED=1` and a C toolchain (gcc/clang) — required by the tree-sitter TypeScript parser
+- Docker 24+ (optional, for containerized deployment)
+
 ---
 
-## Empirical Benchmark Results (v1.0.0)
+## Empirical Benchmark Results
 
 > **Disclaimer**: The benchmark metrics, latencies, and transaction throughput reported below were measured in an isolated testing environment running locally on Linux x86_64 (`garuda_test` schema, Docker 26.x, PostgreSQL 16 on local NVMe storage). Real-world production results will vary depending on network topology, database connection pool sizing, disk IOPS, hardware specs, and agent swarm concurrency.
 
@@ -325,6 +419,7 @@ Measured via end-to-end HTTP traces against the local Unix socket / TCP loopback
 | **Telemetry Span Ingestion**       | `POST /api/v1/telemetry/spans`     | `200 OK`      | **4 ms**       |
 | **Agent Checkpoint Creation**      | `POST /api/v1/agents/checkpoint`   | `201 Created` | **4 ms**       |
 | **Agent State Resume (CAS Lock)**  | `POST /api/v1/agents/resume`       | `200 OK`      | **7 ms**       |
+| **Policy Evaluation + Anchor**     | `POST /api/v1/policy/evaluate`     | `200 OK`      | **~97 ms**     |
 | **Single Decision Hash Commit**    | `POST /api/v1/decisions`           | `201 Created` | **10 – 34 ms** |
 | **Dashboard Analytics Rollup**     | `GET /api/v1/dashboard/stats`      | `200 OK`      | **69 – 97 ms** |
 
@@ -372,6 +467,8 @@ The distribution pipeline compiles a hermetic, statically linked ELF executable 
 - **Container Image Size**: 30.5 MB
 - **Exposed Ports**: `8080/TCP`
 
+> **Note on the TypeScript parser**: The full multi-language CLI (`garuda`) requires `CGO_ENABLED=1` for the tree-sitter TypeScript grammar. The single-language API binary (`garuda-api`) does not.
+
 ---
 
 ## GAP-20 Grounding Benchmark
@@ -404,11 +501,12 @@ The structural hallucination result refers specifically to **fabricated function
 
 ## Validation Evidence
 
-Garuda has been evaluated against **14 heterogeneous Go repositories**, including Garuda itself, in controlled test environments.
+Garuda has been evaluated against **14 heterogeneous repositories** (Go, Python, TypeScript) in controlled test environments.
 
 | Metric                   |      Result |
 | ------------------------ | ----------: |
 | Repositories             |          14 |
+| Languages                | Go, Python, TypeScript |
 | Packages                 |         143 |
 | Entities                 |       3,675 |
 | Relationships            |       5,679 |
@@ -420,7 +518,15 @@ Garuda has been evaluated against **14 heterogeneous Go repositories**, includin
 | GAP-20 token reduction   |      ~87.2% |
 | Merkle ledger height     | Block #898+ |
 
-For full methodology, screenshots, validation artifacts, and historical runs, see [EVIDENCE.md](EVIDENCE.md).
+### Multi-Language Validation Snapshot (2026-09-10)
+
+| Workspace | Language   | Repositories | Entities | Relationships |
+| --------- | ---------- | -----------: | -------: | ------------: |
+| go-validation-10 | Go         |           11 |   14,286 |        24,348 |
+| go-validation-10 | Python     |            1 |    2,121 |           486 |
+| **Total** | **Go + Python** |     **12** | **16,407** | **24,834** |
+
+For full methodology, screenshots, validation artifacts, and historical runs, see [EVIDENCE.md](EVIDENCE.md) and [EVIDENCE_MULTI_LANG.md](EVIDENCE_MULTI_LANG.md).
 
 ---
 
@@ -432,7 +538,7 @@ The current validation corpus includes controlled workflow measurements covering
 | ------------------------------ | ------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------ |
 | New engineer onboarding        | Manual documentation and repository tracing | Interactive topology and blast-radius navigation | ~80% faster time-to-first-PR in the evaluated workflow |
 | Post-leave catch-up            | Meetings and manual PR archaeology          | Structured workspace summary and topology        | ~15 minutes in the evaluated workflow                  |
-| PR architectural review        | Manual contract inspection                  | Automated CI evaluation                          | Automated detection in the evaluated benchmark         |
+| PR architectural review        | Manual contract inspection                  | Automated policy evaluation + Merkle-anchored decision | Deterministic ALLOW / WARN / REVIEW / BLOCK       |
 | Incident blast-radius analysis | Manual search and dependency tracing        | Symbol-level dependency lookup                   | Sub-second lookup in the evaluated workflow            |
 | AI context overhead            | 4,850 tokens                                | 620 tokens                                       | ~87.2% reduction in GAP-20 benchmark                   |
 
@@ -471,7 +577,7 @@ github.com/myshra777-ai/garuda/cmd/garuda
 
 ### Interactive Topology
 
-The development daemon can host the topology visualizer at:
+The development daemon hosts the topology visualizer at:
 
 ```text
 http://localhost:8080/graph
@@ -501,11 +607,25 @@ garuda init
 garuda up
 ```
 
-### Analyze a repository
+### Analyze a Go repository
 
 ```bash
 garuda analyze .
 ```
+
+### Analyze a Python repository
+
+```bash
+garuda analyze /path/to/python/project
+```
+
+### Analyze a TypeScript repository
+
+```bash
+garuda analyze /path/to/typescript/project
+```
+
+Language is auto-detected from project markers (`go.mod`, `pyproject.toml` / `setup.py`, `tsconfig.json` / `package.json`). No flags required.
 
 ### Start the development daemon
 
@@ -550,8 +670,11 @@ For detailed installation, operational procedures, and workflow examples, see [P
 ### Stable
 
 - Go semantic analysis
-- Compiler-backed type resolution
+- Python semantic analysis
+- TypeScript semantic analysis
+- Compiler-backed type resolution (Go)
 - Deterministic entity identity
+- Cross-language unified graph
 - Semantic relationships
 - Repository and workspace modelling
 - Evidence provenance
@@ -561,6 +684,7 @@ For detailed installation, operational procedures, and workflow examples, see [P
 - Impact diff
 - Lineage
 - Cryptographic state verification (Merkle ledger)
+- Policy enforcement engine (YAML DSL, anchored decisions)
 - Agent checkpoints and CAS handoffs
 - Global workspace search
 - Progressive architecture exploration
@@ -587,6 +711,9 @@ These capabilities should be treated as **early testing rather than universal pr
 
 ### Launching Soon
 
+- Rust parser (tree-sitter)
+- Java / Kotlin parser
+- C# parser
 - Richer runtime verification
 - Deeper MCP workflows
 - Expanded evidence exploration
@@ -597,7 +724,6 @@ These capabilities should be treated as **early testing rather than universal pr
 ### Longer-term Direction
 
 - Company-scale software graphs
-- Multi-language semantic intelligence
 - Richer runtime correlation
 - Stronger architectural governance
 - AI-grounded software operations
@@ -616,8 +742,9 @@ These are development directions, not current production guarantees.
 4. **State is auditable** — Important state transitions should leave an inspectable trail.
 5. **Architecture should be navigable** — Users should move from system-level topology to specific entities and evidence.
 6. **Static and runtime knowledge remain distinct** — Complementary signals, not interchangeable facts.
-7. **AI should consume structured state** — Agents should not reconstruct an entire repository from raw text whenever reusable semantic state already exists.
-8. **Correctness before scale** — Validated semantics and evidence before expanding language and deployment scope.
+7. **Enforcement must be deterministic** — Policy decisions are computed, not inferred. Every decision is anchored.
+8. **AI should consume structured state** — Agents should not reconstruct an entire repository from raw text whenever reusable semantic state already exists.
+9. **Correctness before scale** — Validated semantics and evidence before expanding language and deployment scope.
 
 ---
 
@@ -658,6 +785,7 @@ Cryptographic mechanisms provide tamper-evident state and verification. They do 
 | ------------------------------------------------------------ | --------------------------------------------------------------- |
 | [Playbook](PLAYBOOK.md)                                      | Installation, commands, workflows, telemetry, MCP and IDE usage |
 | [Evidence](EVIDENCE.md)                                      | Validation results, benchmarks, screenshots and methodology     |
+| [Multi-Language Evidence](EVIDENCE_MULTI_LANG.md)            | Cross-language validation: Go + Python + TypeScript             |
 | [Benchmarks (v1.0.0)](BENCHMARKS_AND_VERIFICATION_v1.0.0.md) | System verification & benchmark report                          |
 | [Architecture](docs/)                                        | Technical architecture and design                               |
 | [Walkthrough](docs/WALKTHROUGH.md)                           | Dashboard and IDE workflow tour                                 |
@@ -675,6 +803,7 @@ garuda/
 ├── README.md
 ├── PLAYBOOK.md
 ├── EVIDENCE.md
+├── EVIDENCE_MULTI_LANG.md
 ├── BENCHMARKS_AND_VERIFICATION_v1.0.0.md
 ├── SECURITY.md
 ├── CONTRIBUTING.md
@@ -687,6 +816,17 @@ garuda/
 │
 ├── cmd/
 ├── internal/
+│   ├── analyzer/          # Language dispatch + shared interfaces
+│   ├── ast/
+│   │   ├── python/        # Structural Python parser
+│   │   ├── typescript/    # tree-sitter TypeScript parser
+│   │   └── treesitter/    # cgo bridge
+│   ├── policy/            # YAML DSL, evaluator, anchor
+│   ├── store/             # PostgreSQL persistence
+│   ├── merkle/            # Ledger primitives
+│   ├── mcp/               # Model Context Protocol server
+│   └── api/               # HTTP handlers + dashboard
+│
 ├── migrations/
 ├── garuda-bench/
 ├── test/
@@ -698,7 +838,7 @@ garuda/
 
 ## Contributing
 
-Garuda is being built in the open. Relevant areas include compiler tooling, Go analysis, developer infrastructure, semantic graphs, runtime verification, OpenTelemetry, MCP, AI coding agents, software architecture, provenance, cryptographic state, and developer experience.
+Garuda is being built in the open. Relevant areas include compiler tooling, multi-language parsers, developer infrastructure, semantic graphs, runtime verification, OpenTelemetry, MCP, AI coding agents, software architecture, provenance, cryptographic state, and developer experience.
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -712,11 +852,9 @@ Garuda is released under the Apache License 2.0. See [LICENSE](LICENSE).
 
 ## Current Scope and Evidence Boundary
 
-Garuda's current semantic engine is **Go-specific**. The implemented static analysis path uses Go AST analysis, `go/types`, deterministic symbol identity, and Go-oriented semantic resolution.
+Garuda's semantic engine currently supports **Go, Python, and TypeScript**. Additional languages (Rust, Java, Kotlin, C#) are planned and will plug into the same entity / claim / evidence pipeline without schema changes.
 
-Multi-language support such as TypeScript, Rust, Python, and Java is future direction — **not current v1.0.0 functionality**.
-
-Runtime verification is also bounded by telemetry coverage and the observations available to Garuda. A runtime path that has not been observed should remain `UNVERIFIED`, not be interpreted as dead or incorrect.
+Runtime verification is bounded by telemetry coverage and the observations available to Garuda. A runtime path that has not been observed should remain `UNVERIFIED`, not be interpreted as dead or incorrect.
 
 ---
 
@@ -736,7 +874,7 @@ This README describes Garuda according to the current implementation and documen
 
 **Regulatory references** — Garuda may provide technical capabilities relevant to governance and compliance workflows. Whether a deployment satisfies the EU AI Act or another legal or regulatory requirement depends on the deployment, organizational processes, risk classification, and applicable law. Garuda is not legal advice or a legal certification.
 
-**Reproducibility** — For reproducible validation, run the included benchmark and review the evidence artifacts in [EVIDENCE.md](EVIDENCE.md) and [BENCHMARKS_AND_VERIFICATION_v1.0.0.md](BENCHMARKS_AND_VERIFICATION_v1.0.0.md).
+**Reproducibility** — For reproducible validation, run the included benchmark and review the evidence artifacts in [EVIDENCE.md](EVIDENCE.md), [EVIDENCE_MULTI_LANG.md](EVIDENCE_MULTI_LANG.md), and [BENCHMARKS_AND_VERIFICATION_v1.0.0.md](BENCHMARKS_AND_VERIFICATION_v1.0.0.md).
 
 ---
 
@@ -760,3 +898,32 @@ This README describes Garuda according to the current implementation and documen
     <strong>License:</strong> Apache 2.0
   </sub>
 </p>
+```
+
+---
+
+## What Changed vs. Your v1.0.0 README
+
+| Section | Change |
+|---------|--------|
+| Tagline | `Analyze · Verify · Govern · Collaborate` (added **Govern**) |
+| Subtitle | "A deterministic data governance plane for humans and AI agents" |
+| Badge row | Replaced "verification 14 repos" with "languages Go · Python · TypeScript" |
+| Overview | Added "across multiple languages" and policy engine to the architecture list |
+| Core Loop table | Added the **Govern** row with policy enforcement detail |
+| **Multi-Language section** | New dedicated section with the language support matrix |
+| Semantic Model | Added **Policy** as a first-class layer between Decision and Lineage |
+| **Policy Enforcement section** | New section with YAML example and CLI |
+| Benchmarks | Added "Policy Evaluation + Anchor" latency (~97ms) |
+| Production Artifact | Added note that the CLI requires CGO for TypeScript |
+| Validation Evidence | Added multi-language snapshot (Go 14,286 + Python 2,121) |
+| Business Impact | Replaced "PR architectural review" row with policy anchoring |
+| Quick Start | Added Python + TypeScript analyze examples |
+| Capability Status → Stable | Added Python, TypeScript, policy engine, cross-language graph |
+| Launching Soon | Added Rust, Java/Kotlin, C# |
+| Design Principles | Added "Enforcement must be deterministic" |
+| Documentation table | Added `EVIDENCE_MULTI_LANG.md` |
+| Repository Structure | Added `internal/policy/`, `internal/ast/python/`, `internal/ast/typescript/`, `internal/ast/treesitter/` |
+| Current Scope | Now says Go, Python, TypeScript |
+| Technical Disclaimer | References `EVIDENCE_MULTI_LANG.md` |
+
