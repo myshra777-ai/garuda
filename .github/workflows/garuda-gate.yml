@@ -1,133 +1,58 @@
-name: Garuda Architectural PR Gate
+name: Garuda Knowledge Integrity Gate
 
 on:
   pull_request:
-    branches: [ main ]
-    types: [ opened, synchronize, reopened ]
-
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
+    branches: [ main, master ]
+  push:
+    branches: [ main, master ]
 
 jobs:
-  architectural-gate:
-    name: Epistemic Drift & Schema Verification
+  verify-integrity:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: garuda
+          POSTGRES_PASSWORD: garudapassword
+          POSTGRES_DB: garuda
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
-      - name: Checkout Base Branch
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.base_ref }}
-          fetch-depth: 0
-          path: base-repo
-
-      - name: Checkout PR Branch
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          path: pr-repo
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
-          cache: true
-          cache-dependency-path: pr-repo/go.sum
+          go-version: '1.25'
 
-      - name: Build Garuda CLI
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
         run: |
-          cd pr-repo
-          go build -o ../bin/garuda ./cmd/garuda
-          cd ..
-          chmod +x ./bin/garuda
+          psql $DATABASE_URL -f migrations/059_document_claims.sql
 
-      - name: Extract Base Snapshot
-        run: |
-          cd base-repo
-          ../bin/garuda analyze ./cmd ./internal --json -o ../baseline.json || echo "{}" > ../baseline.json
-          cd ..
+      - name: Build Garuda Engine CLI
+        run: go build -o bin/garuda ./cmd/garuda
 
-      - name: Extract Proposed PR Snapshot
-        run: |
-          cd pr-repo
-          ../bin/garuda analyze ./cmd ./internal --json -o ../proposed.json
-          cd ..
+      - name: Ingest Architecture Documentation & ADRs
+        env:
+          DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
+        run: ./bin/garuda docs ingest docs/adr/
 
-      - name: Run Garuda Governance Judge & Diff
-        id: judge
-        continue-on-error: true
-        run: |
-          ./bin/garuda judge baseline.json proposed.json --json -o judge_report.json || true
-          ./bin/garuda diff baseline.json proposed.json -o diff_summary.json || true
-          
-          # Inspect evaluation output
-          cat judge_report.json || echo '{"verdict":"UNKNOWN"}' > judge_report.json
+      - name: Analyze Codebase AST
+        env:
+          DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
+        run: ./bin/garuda analyze .
 
-      - name: Post / Update PR Evaluation Comment
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            
-            let report = { verdict: "APPROVED", breaking_changes: [], warnings: [], score: 100 };
-            try {
-              report = JSON.parse(fs.readFileSync('judge_report.json', 'utf8'));
-            } catch (e) {
-              console.log("Could not parse judge_report.json:", e);
-            }
-
-            const isBlocked = report.verdict === 'BLOCKED' || (report.breaking_changes && report.breaking_changes.length > 0);
-            const statusIcon = isBlocked ? '🛑' : '✅';
-            const statusBadge = isBlocked ? '**BLOCKED (Architectural Invariant Violation)**' : '**PASSED (Truth-Preserving Change)**';
-
-            let commentBody = `### ${statusIcon} Garuda Architectural Gate: ${statusBadge}\n\n`;
-            commentBody += `| Metric | Evaluation |\n`;
-            commentBody += `| :--- | :--- |\n`;
-            commentBody += `| **Verdict** | \`${report.verdict || "APPROVED"}\` |\n`;
-            commentBody += `| **Integrity Score** | \`${report.score ?? 100} / 100\` |\n`;
-            commentBody += `| **Breaking Changes** | \`${(report.breaking_changes || []).length}\` |\n`;
-            commentBody += `| **Warnings / Drift** | \`${(report.warnings || []).length}\` |\n\n`;
-
-            if (report.breaking_changes && report.breaking_changes.length > 0) {
-              commentBody += `#### ⚠️ Breaking Architectural Changes Detected:\n`;
-              report.breaking_changes.forEach((b) => {
-                commentBody += `- **${b.entity || b.name || "Symbol"}**: ${b.description || b.reason || "Interface or signature mutation"}\n`;
-              });
-              commentBody += `\n> *This Pull Request is blocked by the Garuda ACGM Invariant. Either revert breaking modifications or submit a formal superseding decision.*`;
-            } else {
-              commentBody += `> *All proposed AST entities, interface contracts, and cross-package call graphs preserve system invariants.*`;
-            }
-
-            const commentIdentifier = '<!-- garuda-pr-gate-comment -->';
-            const fullBody = `${commentIdentifier}\n${commentBody}`;
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const existingComment = comments.find(c => c.body.includes(commentIdentifier));
-
-            if (existingComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existingComment.id,
-                body: fullBody
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: fullBody
-              });
-            }
-
-            if (isBlocked) {
-              core.setFailed('Garuda Gate blocked this PR due to breaking architectural invariants.');
-            }
+      - name: Run Garuda Knowledge Integrity Gate
+        env:
+          DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
+        run: ./bin/garuda ci check --fail-on-contradiction=true

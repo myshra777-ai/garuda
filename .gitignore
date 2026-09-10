@@ -105,3 +105,12 @@ YC_APPLICATION_NOTES.md
 .env
 .env.local
 *.private.md
+
+# Local workspace configuration (contains machine-specific paths)
+.garuda/
+
+# Test workspace (local validation data)
+test_workspace/
+
+# Stale graph HTML output
+garuda_graph_*.html
