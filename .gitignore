@@ -114,3 +114,4 @@ test_workspace/
 
 # Stale graph HTML output
 garuda_graph_*.html
+/migrate
