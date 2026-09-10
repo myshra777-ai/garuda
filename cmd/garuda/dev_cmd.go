@@ -96,6 +96,9 @@ var devCmd = &cobra.Command{
 		mux.HandleFunc("/api/v1/dashboard/search", server.HandleDashboardSearch)
 		mux.HandleFunc("/api/v1/events", server.HandleLiveEvents)
 
+		mux.HandleFunc("/api/v1/dashboard/policies", server.HandleDashboardPolicies)
+		mux.HandleFunc("/api/v1/dashboard/policies/verify", server.HandleDashboardPolicyVerify)
+
 		// ─────────────────────────────────────────────────────────────
 		// Graph routes
 		//   /graph        → standalone D3 visualizer (lightweight, for iframe/embed)

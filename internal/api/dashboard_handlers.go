@@ -54,7 +54,40 @@ type EvidenceItem struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// NEW: LanguageDTO — GitHub-style language breakdown per repo/workspace
+// PolicyEvaluationDTO — one enforcement decision for the dashboard.
+type PolicyEvaluationDTO struct {
+	ID                 string   `json:"id"`
+	PolicyID           string   `json:"policy_id"`
+	PolicyTitle        string   `json:"policy_title"`
+	Decision           string   `json:"decision"`
+	Reason             string   `json:"reason"`
+	EntityCount        int      `json:"entity_count"`
+	ClaimCount         int      `json:"claim_count"`
+	ContradictionCount int      `json:"contradiction_count"`
+	MatchedPredicates  []string `json:"matched_predicates"`
+	MerkleBlockHeight  *int64   `json:"merkle_block_height,omitempty"`
+	AnchorValid        bool     `json:"anchor_valid"`
+	EvaluatedAt        string   `json:"evaluated_at"`
+	Actor              string   `json:"actor"`
+	SubjectKind        string   `json:"subject_kind"`
+	SubjectID          string   `json:"subject_id"`
+}
+
+// PolicyEnforcementResponse — aggregate for the dashboard.
+type PolicyEnforcementResponse struct {
+	Workspace          string                `json:"workspace"`
+	ActivePolicies     int                   `json:"active_policies"`
+	TotalEvaluations   int                   `json:"total_evaluations"`
+	BlockedCount       int                   `json:"blocked_count"`
+	ReviewCount        int                   `json:"review_count"`
+	WarnCount          int                   `json:"warn_count"`
+	AllowCount         int                   `json:"allow_count"`
+	LatestEvaluations  []PolicyEvaluationDTO `json:"latest_evaluations"`
+	FinalDecision      string                `json:"final_decision"`
+	LatestMerkleAnchor *int64                `json:"latest_merkle_anchor,omitempty"`
+}
+
+// LanguageDTO — GitHub-style language breakdown per repo/workspace.
 type LanguageDTO struct {
 	Name       string  `json:"name"`
 	Count      int     `json:"count"`
@@ -62,7 +95,7 @@ type LanguageDTO struct {
 	Color      string  `json:"color"`
 }
 
-// NEW: RepoStatDTO — per-repository breakdown
+// RepoStatDTO — per-repository breakdown.
 type RepoStatDTO struct {
 	Name           string        `json:"name"`
 	Entities       int           `json:"entities"`
@@ -74,7 +107,7 @@ type RepoStatDTO struct {
 	LastAnalyzed   string        `json:"last_analyzed"`
 }
 
-// NEW: DriftDTO — document ↔ code drift summary
+// DriftDTO — document ↔ code drift summary.
 type DriftDTO struct {
 	TotalDocumentClaims int `json:"total_document_claims"`
 	SupportedClaims     int `json:"supported_claims"`
@@ -90,7 +123,7 @@ type WorkspaceStatsResponse struct {
 	Workspace             string          `json:"workspace"`
 	Repositories          int             `json:"repositories"`
 	RepositoriesList      []string        `json:"repositories_list"`
-	RepoStats             []RepoStatDTO   `json:"repo_stats"` // NEW
+	RepoStats             []RepoStatDTO   `json:"repo_stats"`
 	Packages              int             `json:"packages"`
 	Entities              int             `json:"entities"`
 	Relationships         int             `json:"relationships"`
@@ -119,8 +152,8 @@ type WorkspaceStatsResponse struct {
 	ColdStartLatencyMs    float64         `json:"cold_start_latency_ms"`
 	ColdStartLatencyKnown bool            `json:"cold_start_latency_known"`
 	ActiveAgentsCount     int             `json:"active_agents_count"`
-	LanguagesBreakdown    []LanguageDTO   `json:"languages_breakdown"` // NEW (was map, now slice with percentages)
-	Drift                 DriftDTO        `json:"drift"`               // NEW
+	LanguagesBreakdown    []LanguageDTO   `json:"languages_breakdown"`
+	Drift                 DriftDTO        `json:"drift"`
 }
 
 type SearchResult struct {
@@ -200,7 +233,7 @@ func applySecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://d3js.org; style-src 'self' 'unsafe-inline'; img-src 'self' data:;")
 }
 
-// NEW: GitHub-style language color palette
+// languageColor — GitHub-style language color palette.
 func languageColor(lang string) string {
 	colors := map[string]string{
 		"Go":         "#00ADD8",
@@ -227,7 +260,7 @@ func languageColor(lang string) string {
 	return "#8b949e"
 }
 
-// NEW: Infer language from file extension
+// inferLanguageFromPath — infer language from file extension.
 func inferLanguageFromPath(path string) string {
 	ext := ""
 	if idx := strings.LastIndex(path, "."); idx >= 0 {
@@ -362,7 +395,6 @@ button { cursor: pointer; }
 .kpi-value { font-size: 26px; font-weight: 800; margin-top: 8px; letter-spacing: -0.03em; color: white; }
 .kpi-foot { color: var(--muted); font-size: 11px; margin-top: 6px; }
 
-/* NEW: GitHub-style language bar */
 .lang-bar-container { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #1a2035; margin-top: 4px; }
 .lang-bar-segment { height: 100%; transition: 0.3s; }
 .lang-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; }
@@ -416,7 +448,6 @@ button { cursor: pointer; }
 .row-title { color: white; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-meta { color: var(--muted); font-size: 11px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* NEW: Repo card with language bar */
 .repo-card { border-bottom: 1px solid var(--border); padding: 18px; }
 .repo-card:last-child { border-bottom: 0; }
 .repo-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
@@ -432,7 +463,6 @@ button { cursor: pointer; }
 .badge-pill.info { background: var(--brand-soft); color: var(--brand); border: 1px solid rgba(56,189,248,0.3); }
 .badge-pill.success { background: var(--green-soft); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
 
-/* NEW: Drift grid */
 .drift-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
 .drift-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
 .drift-card-title { font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; color: var(--muted); }
@@ -440,6 +470,47 @@ button { cursor: pointer; }
 .drift-row:last-child { border-bottom: 0; }
 .drift-row-label { color: var(--text-2); }
 .drift-row-val { color: white; font-weight: 700; }
+
+/* Policy Enforcement */
+.policy-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
+.policy-decision-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); border-left: 4px solid var(--muted); }
+.policy-decision-card.block  { border-left-color: var(--red); }
+.policy-decision-card.review { border-left-color: var(--amber); }
+.policy-decision-card.warn   { border-left-color: #fbbf24; }
+.policy-decision-card.allow  { border-left-color: var(--green); }
+.policy-decision-title { font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.policy-decision-val { font-size: 25px; font-weight: 800; margin-top: 6px; color: white; }
+.policy-decision-desc { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+.policy-eval-list { display: flex; flex-direction: column; }
+.policy-eval-row { border-bottom: 1px solid var(--border); padding: 14px 18px; display: flex; align-items: flex-start; gap: 14px; }
+.policy-eval-row:last-child { border-bottom: 0; }
+.policy-eval-row:hover { background: rgba(255,255,255,0.025); }
+.policy-badge { font-size: 10px; font-weight: 800; padding: 4px 9px; border-radius: 6px; text-transform: uppercase; flex-shrink: 0; }
+.policy-badge.BLOCK  { background: var(--red-soft); color: var(--red); border: 1px solid rgba(244,63,94,0.35); }
+.policy-badge.REVIEW { background: var(--amber-soft); color: var(--amber); border: 1px solid rgba(251,191,36,0.35); }
+.policy-badge.WARN   { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.35); }
+.policy-badge.ALLOW  { background: var(--green-soft); color: var(--green); border: 1px solid rgba(52,211,153,0.35); }
+.policy-eval-main { flex: 1; min-width: 0; }
+.policy-eval-title { color: white; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.policy-eval-reason { color: var(--text-2); font-size: 11px; margin-top: 3px; line-height: 1.4; }
+.policy-eval-meta { display: flex; gap: 14px; font-size: 10px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+.policy-eval-meta span strong { color: var(--text-2); font-weight: 700; }
+.merkle-chip {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 10px;
+	padding: 3px 7px;
+	border-radius: 5px;
+	background: var(--brand-soft);
+	color: var(--brand);
+	border: 1px solid rgba(56, 189, 248, 0.3);
+	margin-left: 6px;
+}
+.merkle-chip.invalid {
+	background: var(--red-soft);
+	color: var(--red);
+	border-color: rgba(244,63,94,0.35);
+}
 
 .graph-panel { margin-top: 20px; }
 .graph-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -627,9 +698,9 @@ button { cursor: pointer; }
                         <div class="kpi-foot"><span id="stat-tokens-saved">—</span> context tokens conserved</div>
                     </div>
                     <div class="kpi-card" style="border-left: 4px solid var(--brand);">
-                        <div class="kpi-label" style="color:var(--brand);">Cold Start Latency</div>
-                        <div class="kpi-value" id="stat-cold-start">—</div>
-                        <div class="kpi-foot">Recorded cold-start telemetry</div>
+                        <div class="kpi-label" style="color:var(--brand);">Active Policies</div>
+                        <div class="kpi-value" id="stat-active-policies">—</div>
+                        <div class="kpi-foot">Enforcement rules loaded</div>
                     </div>
                     <div class="kpi-card" style="border-left: 4px solid var(--amber);">
                         <div class="kpi-label" style="color:var(--amber);">Active Agent Swarms</div>
@@ -643,7 +714,6 @@ button { cursor: pointer; }
                     </div>
                 </div>
 
-                <!-- NEW: Languages breakdown (GitHub-style) -->
                 <div class="panel" style="margin-bottom: 20px;">
                     <div class="panel-header">
                         <div>
@@ -659,7 +729,56 @@ button { cursor: pointer; }
                     </div>
                 </div>
 
-                <!-- NEW: Doc × Code Drift overview -->
+                <!-- Policy Enforcement — deterministic decisions anchored to Merkle ledger -->
+                <div class="panel" style="margin-bottom: 20px;">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">🛡️ Policy Enforcement</div>
+                            <div class="panel-subtitle">
+                                Deterministic decisions anchored to the Merkle ledger.
+                                Each evaluation exposes its evidence and cryptographic proof.
+                            </div>
+                        </div>
+                        <div class="graph-toolbar">
+                            <span class="badge-pill info" id="policy-final-decision-badge">—</span>
+                            <span class="merkle-chip" id="policy-latest-anchor">block —</span>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="policy-strip">
+                            <div class="policy-decision-card block">
+                                <div class="policy-decision-title">Blocked</div>
+                                <div class="policy-decision-val" id="policy-block-count">—</div>
+                                <div class="policy-decision-desc">Merge prevented</div>
+                            </div>
+                            <div class="policy-decision-card review">
+                                <div class="policy-decision-title">Review</div>
+                                <div class="policy-decision-val" id="policy-review-count">—</div>
+                                <div class="policy-decision-desc">Human approval required</div>
+                            </div>
+                            <div class="policy-decision-card warn">
+                                <div class="policy-decision-title">Warn</div>
+                                <div class="policy-decision-val" id="policy-warn-count">—</div>
+                                <div class="policy-decision-desc">Non-blocking signal</div>
+                            </div>
+                            <div class="policy-decision-card allow">
+                                <div class="policy-decision-title">Allow</div>
+                                <div class="policy-decision-val" id="policy-allow-count">—</div>
+                                <div class="policy-decision-desc">No predicate matched</div>
+                            </div>
+                        </div>
+
+                        <div class="policy-eval-list" id="policy-eval-list" style="margin-top: 16px;">
+                            <div class="list-row">
+                                <div class="row-main">
+                                    <div class="row-title">No evaluations yet</div>
+                                    <div class="row-meta">Run <code>garuda policy evaluate &lt;dir&gt;</code> to record decisions.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="drift-grid">
                     <div class="drift-card">
                         <div class="drift-card-title">📄 Documentation Claims</div>
@@ -969,6 +1088,7 @@ var WORKSPACE = urlParams.get("workspace") || "{{ .WorkspaceName }}";
 
 var state = {
     stats: null,
+    policies: null,
     currentView: "overview",
     currentLevel: "repository",
     currentFocus: "",
@@ -1053,6 +1173,153 @@ async function loadStats() {
     } catch (err) {
         console.error("Garuda stats error:", err);
     }
+    await loadPolicies();
+}
+
+async function loadPolicies() {
+    try {
+        var res = await fetch("/api/v1/dashboard/policies?workspace=" + encodeURIComponent(WORKSPACE), {
+            headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) throw new Error("Policies request failed");
+        var data = await res.json();
+        state.policies = data;
+        renderPolicies(data);
+    } catch (err) {
+        console.error("Garuda policies error:", err);
+    }
+}
+
+function renderPolicies(data) {
+    if (!data) return;
+
+    setText("policy-block-count",  formatNumber(data.blocked_count || 0));
+    setText("policy-review-count", formatNumber(data.review_count || 0));
+    setText("policy-warn-count",   formatNumber(data.warn_count || 0));
+    setText("policy-allow-count",  formatNumber(data.allow_count || 0));
+    setText("stat-active-policies", formatNumber(data.active_policies || 0));
+
+    var badge = document.getElementById("policy-final-decision-badge");
+    if (badge) {
+        badge.textContent = data.final_decision || "ALLOW";
+        badge.className = "badge-pill " + (
+            data.final_decision === "BLOCK"  ? "critical" :
+            data.final_decision === "REVIEW" ? "warning"  :
+            data.final_decision === "WARN"   ? "warning"  : "success"
+        );
+    }
+
+    var chip = document.getElementById("policy-latest-anchor");
+    if (chip) {
+        if (data.latest_merkle_anchor) {
+            chip.textContent = "block #" + data.latest_merkle_anchor;
+            chip.classList.remove("invalid");
+        } else {
+            chip.textContent = "unanchored";
+            chip.classList.add("invalid");
+        }
+    }
+
+    var list = document.getElementById("policy-eval-list");
+    if (!list) return;
+
+    var evals = data.latest_evaluations || [];
+    if (evals.length === 0) {
+        list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No evaluations yet</div><div class="row-meta">Run <code>garuda policy evaluate &lt;dir&gt;</code> to record decisions.</div></div></div>';
+        return;
+    }
+
+    list.innerHTML = "";
+    evals.forEach(function(ev) {
+        var row = document.createElement("div");
+        row.className = "policy-eval-row";
+
+        var anchorChip = "";
+        if (ev.merkle_block_height) {
+            anchorChip = '<span class="merkle-chip' + (ev.anchor_valid ? '' : ' invalid') + '">block #' + ev.merkle_block_height + '</span>';
+        } else {
+            anchorChip = '<span class="merkle-chip invalid">unanchored</span>';
+        }
+
+        var preds = (ev.matched_predicates || []).join(", ") || "—";
+        var when = formatDate(ev.evaluated_at);
+
+        row.innerHTML =
+            '<span class="policy-badge ' + escapeHTML(ev.decision) + '">' + escapeHTML(ev.decision) + '</span>' +
+            '<div class="policy-eval-main">' +
+                '<div class="policy-eval-title">' + escapeHTML(ev.policy_title) + anchorChip + '</div>' +
+                '<div class="policy-eval-reason">' + escapeHTML(ev.reason) + '</div>' +
+                '<div class="policy-eval-meta">' +
+                    '<span><strong>' + formatNumber(ev.entity_count) + '</strong> entities</span>' +
+                    '<span><strong>' + formatNumber(ev.claim_count) + '</strong> claims</span>' +
+                    '<span><strong>' + formatNumber(ev.contradiction_count) + '</strong> contradictions</span>' +
+                    '<span>predicates: <strong>' + escapeHTML(preds) + '</strong></span>' +
+                    '<span>' + escapeHTML(when) + '</span>' +
+                '</div>' +
+            '</div>';
+
+        row.style.cursor = "pointer";
+        row.onclick = function() {
+            openPolicyDrawer(ev);
+        };
+
+        list.appendChild(row);
+    });
+}
+
+function openPolicyDrawer(ev) {
+    if (!ev) return;
+    var drawer = document.getElementById("drawer");
+    var overlay = document.getElementById("drawer-overlay");
+    var body = document.getElementById("drawer-body");
+
+    setText("drawer-title", ev.policy_title || "Policy Evaluation");
+    setText("drawer-kind", "POLICY " + (ev.decision || ""));
+
+    var html = '<div class="detail-section"><div class="detail-section-title">Decision</div>';
+    html += propertyRow("Decision", ev.decision);
+    html += propertyRow("Reason", ev.reason);
+    html += propertyRow("Actor", ev.actor || "—");
+    html += propertyRow("Subject", (ev.subject_kind || "manual") + "/" + (ev.subject_id || ""));
+    html += propertyRow("Evaluated", formatDate(ev.evaluated_at));
+    html += '</div>';
+
+    html += '<div class="detail-section"><div class="detail-section-title">Evidence</div>';
+    html += propertyRow("Entities", ev.entity_count);
+    html += propertyRow("Claims", ev.claim_count);
+    html += propertyRow("Contradictions", ev.contradiction_count);
+    html += propertyRow("Predicates", (ev.matched_predicates || []).join(", ") || "—");
+    html += '</div>';
+
+    html += '<div class="detail-section"><div class="detail-section-title">Cryptographic Anchor</div>';
+    if (ev.merkle_block_height) {
+        html += propertyRow("Block height", "#" + ev.merkle_block_height);
+        html += propertyRow("Proof valid", ev.anchor_valid ? "Yes" : "No");
+        html += '<div class="merkle" style="margin-top:8px;">eval_id=' + escapeHTML(ev.id) + '</div>';
+        html += '<button class="detail-action" onclick="verifyPolicyAnchor(\'' + escapeJS(ev.id) + '\')">Verify anchor →</button>';
+    } else {
+        html += '<div class="row-meta">This evaluation has no Merkle anchor.</div>';
+    }
+    html += '</div>';
+
+    body.innerHTML = html;
+    drawer.classList.add("open");
+    overlay.classList.add("open");
+}
+
+function verifyPolicyAnchor(evalID) {
+    fetch("/api/v1/dashboard/policies/verify?id=" + encodeURIComponent(evalID))
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.valid) {
+                alert("✅ Merkle anchor VALID for evaluation " + evalID + " at block #" + data.block_height);
+            } else {
+                alert("❌ Merkle anchor INVALID: " + (data.error || "unknown"));
+            }
+        })
+        .catch(function(err) {
+            alert("Verification request failed: " + err);
+        });
 }
 
 function renderStats() {
@@ -1080,16 +1347,11 @@ function renderStats() {
 
     setText("stat-cost-saved", "$" + Number(s.estimated_cost_saved_usd || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
     setText("stat-tokens-saved", formatNumber(s.tokens_saved));
-    setText("stat-cold-start", s.cold_start_latency_known ? Number(s.cold_start_latency_ms).toFixed(1) + " ms" : "—");
     setText("stat-active-agents", formatNumber(s.active_agents_count || 0));
     setText("stat-drift-count", formatNumber(s.quarantined_count));
 
-    // NEW: render languages
     renderLanguages(s.languages_breakdown || []);
-
-    // NEW: render drift
     renderDrift(s.drift || {});
-
     renderHubs(s.top_hubs || []);
     renderAttention(s.needs_attention || []);
     renderEvidence(s.recent_evidence || []);
@@ -1097,7 +1359,6 @@ function renderStats() {
     renderScannedRepos(s.repo_stats || [], s.repositories_list || []);
 }
 
-// NEW: GitHub-style language bar
 function renderLanguages(langs) {
     var bar = document.getElementById("lang-bar");
     var legend = document.getElementById("lang-legend");
@@ -1109,10 +1370,8 @@ function renderLanguages(langs) {
         return;
     }
 
-    // Sort by count descending
     langs.sort(function(a, b) { return b.count - a.count; });
 
-    // Build bar
     bar.innerHTML = "";
     langs.forEach(function(lang) {
         var seg = document.createElement("div");
@@ -1123,7 +1382,6 @@ function renderLanguages(langs) {
         bar.appendChild(seg);
     });
 
-    // Build legend
     legend.innerHTML = "";
     langs.forEach(function(lang) {
         var item = document.createElement("div");
@@ -1135,7 +1393,6 @@ function renderLanguages(langs) {
     });
 }
 
-// NEW: Drift overview
 function renderDrift(d) {
     setText("drift-total-docs", formatNumber(d.total_document_claims));
     setText("drift-doc-supported", formatNumber(d.supported_claims));
@@ -1224,18 +1481,15 @@ function renderTrust() {
     setText("trust-parent", state.stats.parent_merkle_hash || "Genesis");
 }
 
-// NEW: Enhanced repo list with per-repo language bar
 function renderScannedRepos(repoStats, fallbackList) {
     var list = document.getElementById("scanned-repos-list");
     if (!list) return;
 
-    // Use rich stats if available, otherwise fall back to plain names
     if (!repoStats || repoStats.length === 0) {
         if (!fallbackList || fallbackList.length === 0) {
             list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No repositories registered in this workspace.</div></div></div>';
             return;
         }
-        // Fallback: simple list
         list.innerHTML = "";
         fallbackList.forEach(function(repo) {
             var row = document.createElement("div");
@@ -1257,7 +1511,6 @@ function renderScannedRepos(repoStats, fallbackList) {
         return;
     }
 
-    // Rich repo cards with language bars
     list.innerHTML = "";
     repoStats.forEach(function(repo) {
         var card = document.createElement("div");
@@ -1277,15 +1530,15 @@ function renderScannedRepos(repoStats, fallbackList) {
             langBarHTML += '</div>';
         }
 
-        var statusBadge = repo.analysis_status === "synced" 
+        var statusBadge = repo.analysis_status === "synced"
             ? '<span class="badge-pill success">synced</span>'
             : '<span class="badge-pill info">' + escapeHTML(repo.analysis_status || "pending") + '</span>';
 
-        var commitShort = repo.current_commit && repo.current_commit.length > 8 
-            ? repo.current_commit.substring(0, 8) 
+        var commitShort = repo.current_commit && repo.current_commit.length > 8
+            ? repo.current_commit.substring(0, 8)
             : (repo.current_commit || "—");
 
-        card.innerHTML = 
+        card.innerHTML =
             '<div class="repo-card-header">' +
                 '<div>' +
                     '<div class="repo-card-name">📦 ' + escapeHTML(repo.name) + '</div>' +
@@ -1501,10 +1754,10 @@ function renderGraph(data) {
     svg.call(zoom);
     state.graphZoom = zoom;
 
-    var nodes = data.nodes.map(function(n) { 
+    var nodes = data.nodes.map(function(n) {
         var obj = Object.assign({}, n);
         obj._community = extractCommunityName(obj);
-        return obj; 
+        return obj;
     });
     var nodeByID = {};
     nodes.forEach(function(n) { nodeByID[n.id] = n; });
@@ -1552,9 +1805,9 @@ function renderGraph(data) {
         .data(validEdges)
         .enter().append("path")
         .attr("class", function(d) { return d.status === "CONTRADICTED" ? "graph-link violation" : "graph-link"; })
-        .attr("stroke", function(d) { 
+        .attr("stroke", function(d) {
             if (d.status === "CONTRADICTED") return "#f43f5e";
-            return getCommunityColor(d.source); 
+            return getCommunityColor(d.source);
         })
         .attr("stroke-width", function(d) { return Math.min(3.5, 1.2 + Math.log2((d.count || 1) + 1)); })
         .attr("marker-end", function(d) { return d.status === "CONTRADICTED" ? "url(#arrow-violation)" : "url(#arrow)"; });
@@ -1846,6 +2099,32 @@ function renderSearchResults(data) {
     });
 }
 
+function openSearchResult(item) {
+    if (!item) return;
+    var drawer = document.getElementById("drawer");
+    var overlay = document.getElementById("drawer-overlay");
+    var body = document.getElementById("drawer-body");
+
+    setText("drawer-title", item.name || "Symbol");
+    setText("drawer-kind", (item.kind || "entity").toUpperCase());
+
+    var html = '<div class="detail-section"><div class="detail-section-title">Identity</div>';
+    html += propertyRow("Kind", item.kind || "—");
+    html += propertyRow("Repository", item.repo || "—");
+    html += propertyRow("Package", item.package || "—");
+    html += propertyRow("File", item.file || "—");
+    html += propertyRow("Exported", item.exported ? "Yes" : "No");
+    html += '</div>';
+
+    html += '<div class="detail-section"><div class="detail-section-title">Actions</div>';
+    html += '<button class="detail-action" onclick="closeDrawer(); state.currentLevel=\'entity\'; state.currentFocus=\'' + escapeJS(item.package || item.id) + '\'; loadArchitecture(\'entity\', \'' + escapeJS(item.package || item.id) + '\');">Explore local neighborhood →</button>';
+    html += '</div>';
+
+    body.innerHTML = html;
+    drawer.classList.add("open");
+    overlay.classList.add("open");
+}
+
 function setText(id, value) {
     var el = document.getElementById(id);
     if (el) el.textContent = value;
@@ -1967,7 +2246,7 @@ func inferRepositoryFromPackage(pkg string) string {
 	return pkg
 }
 
-// / NEW: Normalize language names to canonical display form
+// normalizeLanguageName — canonical display form.
 func normalizeLanguageName(lang string) string {
 	switch strings.ToLower(strings.TrimSpace(lang)) {
 	case "go", "golang":
@@ -2007,7 +2286,6 @@ func normalizeLanguageName(lang string) string {
 }
 
 // computeRepoStats — matches entities by repository_id, not name-LIKE.
-// Fixes garuda-self and grpc-go showing 0 entities.
 func computeRepoStats(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID) []RepoStatDTO {
 	rows, err := pgStore.Pool().Query(ctx, `
 		SELECT 
@@ -2043,7 +2321,6 @@ func computeRepoStats(ctx context.Context, pgStore *store.PostgresStore, workspa
 			stat.LastAnalyzed = lastAnalyzed.Format(time.RFC3339)
 		}
 
-		// FIXED: match by repository_id — not package LIKE
 		_ = pgStore.Pool().QueryRow(ctx, `
 			SELECT COUNT(*)::int, COUNT(DISTINCT file_path)::int
 			FROM entities 
@@ -2057,7 +2334,6 @@ func computeRepoStats(ctx context.Context, pgStore *store.PostgresStore, workspa
 			WHERE c.workspace_id = $1 AND e.repository_id = $2
 		`, workspaceID, repoID).Scan(&stat.Relationships)
 
-		// Per-repo language breakdown — FIXED to use repository_id
 		langRows, err := pgStore.Pool().Query(ctx, `
 			SELECT 
 				COALESCE(NULLIF(language, ''), '') AS lang,
@@ -2105,7 +2381,7 @@ func computeRepoStats(ctx context.Context, pgStore *store.PostgresStore, workspa
 	return stats
 }
 
-// computeLanguageBreakdown — workspace-wide aggregation using shared normalizer
+// computeLanguageBreakdown — workspace-wide aggregation.
 func computeLanguageBreakdown(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID) []LanguageDTO {
 	rows, err := pgStore.Pool().Query(ctx, `
 		SELECT 
@@ -2157,7 +2433,6 @@ func computeLanguageBreakdown(ctx context.Context, pgStore *store.PostgresStore,
 		return result[i].Count > result[j].Count
 	})
 
-	// Group languages < 0.5% into "Other"
 	var major []LanguageDTO
 	var otherCount int
 	var otherPct float64
@@ -2181,11 +2456,10 @@ func computeLanguageBreakdown(ctx context.Context, pgStore *store.PostgresStore,
 	return major
 }
 
-// NEW: Compute doc-code drift summary
+// computeDrift — doc-code drift summary.
 func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID, workspaceName string) DriftDTO {
 	var d DriftDTO
 
-	// Document claims by status
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1
 	`, workspaceName).Scan(&d.TotalDocumentClaims)
@@ -2202,14 +2476,11 @@ func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID
 		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1 AND status = 'CONTRADICTED'
 	`, workspaceName).Scan(&d.ContradictedClaims)
 
-	// Doc → Code drift = claims that have no matching code entity
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM document_claims 
 		WHERE workspace = $1 AND matched_entity_id IS NULL
 	`, workspaceName).Scan(&d.DocToCodeDriftCount)
 
-	// Code → Doc drift = code entities with no matching doc claim
-	// Count entities (functions/methods/structs) that aren't referenced by any doc claim
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM entities e
 		WHERE e.workspace_id = $1 
@@ -2221,7 +2492,6 @@ func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID
 		  )
 	`, workspaceID, workspaceName).Scan(&d.CodeToDocDriftCount)
 
-	// Undocumented code entities (exported only, filtered)
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM entities e
 		WHERE e.workspace_id = $1 
@@ -2234,7 +2504,6 @@ func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID
 		  )
 	`, workspaceID, workspaceName).Scan(&d.UndocumentedCode)
 
-	// Unimplemented docs = doc claims with no matched entity
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM document_claims 
 		WHERE workspace = $1 AND matched_entity_id IS NULL
@@ -2282,7 +2551,6 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	}
 	repositories := len(repoList)
 
-	// NEW: per-repo stats with languages
 	repoStats := computeRepoStats(ctx, pgStore, workspaceID)
 
 	var crossRepoLinks int
@@ -2318,7 +2586,6 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		FROM entities WHERE workspace_id = $1 AND kind != 'external'
 	`, workspaceID).Scan(&entities, &packages, &files, &exportedEntities)
 
-	// NEW: workspace-wide language breakdown
 	languagesBreakdown := computeLanguageBreakdown(ctx, pgStore, workspaceID)
 
 	var relationships int
@@ -2447,7 +2714,6 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// NEW: compute drift
 	drift := computeDrift(ctx, pgStore, workspaceID, workspaceName)
 
 	resp := WorkspaceStatsResponse{
@@ -2817,6 +3083,172 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(GraphResponseDTO{Level: level, Focus: focus, Nodes: nodes, Edges: edges})
+}
+
+// HandleDashboardPolicies — returns policy enforcement state for the workspace.
+func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request) {
+	applySecurityHeaders(w)
+	ctx := r.Context()
+	pgStore, ok := s.store.(*store.PostgresStore)
+	if !ok || pgStore == nil {
+		http.Error(w, "store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
+	var workspaceID uuid.UUID
+	if workspaceName != "" {
+		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID)
+	} else {
+		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID)
+	}
+
+	resp := PolicyEnforcementResponse{
+		Workspace:         workspaceName,
+		LatestEvaluations: []PolicyEvaluationDTO{},
+		FinalDecision:     "ALLOW",
+	}
+
+	// Active policy count
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM policies WHERE status = 'active'
+	`).Scan(&resp.ActivePolicies)
+
+	// Decision counts + total
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT
+			COUNT(*)::int,
+			COUNT(*) FILTER (WHERE decision = 'BLOCK')::int,
+			COUNT(*) FILTER (WHERE decision = 'REVIEW')::int,
+			COUNT(*) FILTER (WHERE decision = 'WARN')::int,
+			COUNT(*) FILTER (WHERE decision = 'ALLOW')::int,
+			MAX(merkle_block_height)
+		FROM policy_evaluations
+		WHERE workspace_id = $1
+	`, workspaceID).Scan(
+		&resp.TotalEvaluations,
+		&resp.BlockedCount,
+		&resp.ReviewCount,
+		&resp.WarnCount,
+		&resp.AllowCount,
+		&resp.LatestMerkleAnchor,
+	)
+
+	// Final decision is the highest severity present
+	switch {
+	case resp.BlockedCount > 0:
+		resp.FinalDecision = "BLOCK"
+	case resp.ReviewCount > 0:
+		resp.FinalDecision = "REVIEW"
+	case resp.WarnCount > 0:
+		resp.FinalDecision = "WARN"
+	default:
+		resp.FinalDecision = "ALLOW"
+	}
+
+	// Latest 10 evaluations
+	rows, err := pgStore.Pool().Query(ctx, `
+		SELECT
+			pe.id,
+			pe.policy_id,
+			COALESCE(p.metadata->>'title', p.statement, 'unnamed policy'),
+			pe.decision,
+			pe.reason,
+			COALESCE(jsonb_array_length(pe.evidence->'entity_ids'), 0),
+			COALESCE(jsonb_array_length(pe.evidence->'claim_ids'), 0),
+			COALESCE(jsonb_array_length(pe.evidence->'contradiction_ids'), 0),
+			pe.evidence->'matched_predicates',
+			pe.merkle_block_height,
+			pe.merkle_proof IS NOT NULL,
+			pe.evaluated_at,
+			pe.actor,
+			pe.subject_kind,
+			pe.subject_id
+		FROM policy_evaluations pe
+		LEFT JOIN policies p ON p.id = pe.policy_id
+		WHERE pe.workspace_id = $1
+		ORDER BY pe.evaluated_at DESC
+		LIMIT 10
+	`, workspaceID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var d PolicyEvaluationDTO
+			var matchedJSON []byte
+			var evalTime time.Time
+			if err := rows.Scan(
+				&d.ID, &d.PolicyID, &d.PolicyTitle, &d.Decision, &d.Reason,
+				&d.EntityCount, &d.ClaimCount, &d.ContradictionCount,
+				&matchedJSON, &d.MerkleBlockHeight, &d.AnchorValid,
+				&evalTime, &d.Actor, &d.SubjectKind, &d.SubjectID,
+			); err != nil {
+				continue
+			}
+			if len(matchedJSON) > 0 {
+				_ = json.Unmarshal(matchedJSON, &d.MatchedPredicates)
+			}
+			d.EvaluatedAt = evalTime.Format(time.RFC3339)
+			resp.LatestEvaluations = append(resp.LatestEvaluations, d)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// HandleDashboardPolicyVerify — verifies the Merkle anchor of one evaluation.
+func (s *Server) HandleDashboardPolicyVerify(w http.ResponseWriter, r *http.Request) {
+	applySecurityHeaders(w)
+	ctx := r.Context()
+	pgStore, ok := s.store.(*store.PostgresStore)
+	if !ok || pgStore == nil {
+		http.Error(w, "store unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	evalIDStr := r.URL.Query().Get("id")
+	evalID, err := uuid.Parse(evalIDStr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"valid": false, "error": "invalid id"})
+		return
+	}
+
+	var decision, reason string
+	var blockHeight *int64
+	var proof []byte
+	err = pgStore.Pool().QueryRow(ctx, `
+		SELECT decision, reason, merkle_block_height, merkle_proof
+		FROM policy_evaluations WHERE id = $1
+	`, evalID).Scan(&decision, &reason, &blockHeight, &proof)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"valid": false, "error": "evaluation not found"})
+		return
+	}
+
+	var proofData struct {
+		DecisionHash string `json:"decision_hash"`
+		PrevRoot     string `json:"prev_root"`
+		NewRoot      string `json:"new_root"`
+		BlockHeight  int64  `json:"block_height"`
+	}
+	if err := json.Unmarshal(proof, &proofData); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"valid": false, "error": "malformed proof"})
+		return
+	}
+
+	valid := blockHeight != nil && proofData.BlockHeight == *blockHeight && proofData.NewRoot != ""
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"valid":        valid,
+		"block_height": proofData.BlockHeight,
+		"decision":     decision,
+		"prev_root":    proofData.PrevRoot,
+		"new_root":     proofData.NewRoot,
+	})
 }
 
 func (s *Server) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {

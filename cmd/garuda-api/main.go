@@ -111,6 +111,8 @@ func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api
 	protectedMux.HandleFunc("GET /api/v1/agent/warmup", server.HandleAgentWarmup)
 	protectedMux.HandleFunc("GET /system/bootstrap", server.HandleSystemBootstrap)
 
+	protectedMux.HandleFunc("GET /api/v1/dashboard/policies", server.HandleDashboardPolicies)
+	protectedMux.HandleFunc("GET /api/v1/dashboard/policies/verify", server.HandleDashboardPolicyVerify)
 	// ----------------------------------------------------------------
 	// C. MIDDLEWARE PIPELINE
 	// ----------------------------------------------------------------

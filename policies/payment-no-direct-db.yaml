@@ -1,0 +1,36 @@
+# Copyright 2026 Rohit Mishra
+# SPDX-License-Identifier: Apache-2.0
+#
+# Example Garuda policy.
+#
+# A policy is a declarative intent. The evaluator computes the decision.
+# The decision is anchored to the Merkle ledger with its evidence.
+
+id: payment-no-direct-db
+version: v1
+title: "Payment code must not import database/sql directly"
+description: |
+  Payment services must use the PaymentRepository interface rather than
+  directly importing database/sql. This enforces the hexagonal architecture
+  decision recorded in ADR-017.
+
+priority: 200
+language: go
+authority: "team-platform@company.com"
+
+scope:
+  domain: payments
+  pattern: ".*Payment.*|.*Refund.*|.*Charge.*"
+
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*Payment.*|.*Refund.*"
+      to_name_pattern: "^database/sql$"
+
+then:
+  decision: BLOCK
+  reason: |
+    Direct import of database/sql from payment code violates the hexagonal
+    boundary established in ADR-017. Route through PaymentRepository.

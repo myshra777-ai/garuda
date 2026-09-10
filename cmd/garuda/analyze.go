@@ -334,6 +334,7 @@ func handleAnalyze(path string) {
 			fmt.Printf("   🧠 Semantic graph saved (%d entities, %d relationships, commit: %s)\n",
 				len(result.Entities), len(result.Relationships), commitSHA[:min(8, len(commitSHA))])
 			_ = st.UpdateRepositorySyncStatus(persistCtx, tenantIDStr, repoID, commitSHA, "synced")
+
 		}
 	}
 }

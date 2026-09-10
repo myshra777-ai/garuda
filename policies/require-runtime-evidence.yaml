@@ -1,0 +1,30 @@
+# Copyright 2026 Rohit Mishra
+# SPDX-License-Identifier: Apache-2.0
+
+id: require-runtime-evidence-for-exported
+version: v1
+title: "Exported payment handlers must have runtime evidence"
+description: |
+  Exported HTTP handlers in the payment domain must be observed in
+  runtime telemetry. Absence of runtime evidence blocks the PR until
+  a smoke test confirms the handler is reachable.
+
+priority: 150
+language: go
+authority: "team-sre@company.com"
+
+scope:
+  domain: payments
+  pattern: "Handle.*|Process.*|Create.*"
+
+when:
+  - type: verification_missing
+    params:
+      kind: function
+      exported: true
+
+then:
+  decision: REVIEW
+  reason: |
+    Exported handler has no runtime evidence. Requires SRE review
+    before merge. Add a smoke test or confirm the handler is exercised.
