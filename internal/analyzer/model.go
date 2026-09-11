@@ -100,12 +100,14 @@ type Evidence struct {
 
 // Relationship represents a semantic dependency between entities.
 type Relationship struct {
-	From           string   `json:"from"`
-	To             string   `json:"to"`
-	Type           string   `json:"type"`
-	Confidence     float64  `json:"confidence,omitempty"`
-	EpistemicClass string   `json:"epistemic_class,omitempty"`
-	Evidence       Evidence `json:"evidence,omitempty"`
+	From             string   `json:"from"`
+	To               string   `json:"to"`
+	Type             string   `json:"type"`
+	Confidence       float64  `json:"confidence,omitempty"`
+	ResolutionStatus string   `json:"resolution_status,omitempty"`
+	ResolutionMethod string   `json:"resolution_method,omitempty"`
+	EpistemicClass   string   `json:"epistemic_class,omitempty"`
+	Evidence         Evidence `json:"evidence,omitempty"`
 }
 
 // Stats holds high-level extraction metrics.

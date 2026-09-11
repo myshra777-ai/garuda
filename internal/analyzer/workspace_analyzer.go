@@ -314,10 +314,12 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 						m, _, _ := types.LookupFieldOrMethod(candidate, true, pkg, ifaceMethod.Name)
 						if m != nil {
 							rels = append(rels, Relationship{
-								From:       fmt.Sprintf("%s.%s", pkgPath, name),
-								To:         fmt.Sprintf("%s.%s", target.Package, target.Name),
-								Type:       string(RelImplements),
-								Confidence: 1.0,
+								From:             fmt.Sprintf("%s.%s", pkgPath, name),
+								To:               fmt.Sprintf("%s.%s", target.Package, target.Name),
+								Type:             string(RelImplements),
+								Confidence:       1.0,
+								ResolutionStatus: "RESOLVED",
+								ResolutionMethod: "GO_TYPES",
 							})
 							break
 						}
@@ -332,10 +334,12 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 		for _, imp := range file.Imports {
 			importPath := strings.Trim(imp.Path.Value, `"`)
 			rels = append(rels, Relationship{
-				From:       pkgPath,
-				To:         importPath,
-				Type:       string(RelImports),
-				Confidence: 1.0,
+				From:             pkgPath,
+				To:               importPath,
+				Type:             string(RelImports),
+				Confidence:       0.95,
+				ResolutionStatus: "RESOLVED",
+				ResolutionMethod: "IMPORT_RESOLUTION",
 			})
 		}
 
@@ -349,10 +353,12 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 				if obj, exists := info.Uses[sel.Sel]; exists && obj != nil {
 					if obj.Pkg() != nil {
 						rels = append(rels, Relationship{
-							From:       pkgPath,
-							To:         fmt.Sprintf("%s.%s", obj.Pkg().Path(), obj.Name()),
-							Type:       string(RelCalls),
-							Confidence: 1.0,
+							From:             pkgPath,
+							To:               fmt.Sprintf("%s.%s", obj.Pkg().Path(), obj.Name()),
+							Type:             string(RelCalls),
+							Confidence:       1.0,
+							ResolutionStatus: "RESOLVED",
+							ResolutionMethod: "GO_TYPES",
 						})
 					}
 				}

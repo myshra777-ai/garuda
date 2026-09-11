@@ -100,40 +100,21 @@ func handleAnalyze(path string) {
 	var language string
 
 	// Priority order (most specific first):
-	//   1. TypeScript — has tsconfig.json or package.json + .ts files
-	//   2. Python     — has pyproject.toml/setup.py/requirements.txt
-	//   3. Go         — has go.mod (fallback)
-	if analyzer.IsTypeScriptProject(absPath) {
-		fmt.Printf("🟦 Analyzing TypeScript project %s...\n", absPath)
-		tsResult, err := analyzer.AnalyzeTypeScriptWorkspace(ctx, absPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ TypeScript analysis failed: %v\n", err)
-			os.Exit(1)
-		}
-		if len(tsResult.Entities) == 0 {
-			fmt.Fprintf(os.Stderr, "❌ No TypeScript entities extracted from '%s'. Aborting.\n", path)
-			os.Exit(1)
-		}
-		result = tsResult
-		language = "typescript"
-		fmt.Printf("✓ %d entities, %d relationships extracted\n",
-			len(result.Entities), len(result.Relationships))
-	} else if analyzer.IsPythonProject(absPath) {
-		fmt.Printf("🐍 Analyzing Python project %s...\n", absPath)
-		pyResult, err := analyzer.AnalyzePythonWorkspace(ctx, absPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Python analysis failed: %v\n", err)
-			os.Exit(1)
-		}
-		if len(pyResult.Entities) == 0 {
-			fmt.Fprintf(os.Stderr, "❌ No Python entities extracted from '%s'. Aborting.\n", path)
-			os.Exit(1)
-		}
-		result = pyResult
-		language = "python"
-		fmt.Printf("✓ %d entities, %d relationships extracted\n",
-			len(result.Entities), len(result.Relationships))
-	} else {
+	//   1. Go         — go.mod at root is an unambiguous module marker
+	//   2. TypeScript — tsconfig.json, or package.json + .ts files
+	//   3. Python     — pyproject.toml, setup.py, or .py files (excluding venv)
+	//
+	// Rationale: requirements.txt alone is NOT a Python signal. It is a
+	// dependency-pin file that can appear in any repo with tooling scripts.
+	// A Go repo that vendors Python helpers must still be dispatched as Go.
+	// A Go module is a hard signal, so it takes priority over all heuristics.
+	goModPresent := false
+	if _, err := os.Stat(filepath.Join(absPath, "go.mod")); err == nil {
+		goModPresent = true
+	}
+
+	switch {
+	case goModPresent:
 		fmt.Printf("🔍 Analyzing Go workspace %s...\n", absPath)
 		wsMeta, err := analyzer.DiscoverWorkspace(absPath)
 		if err != nil {
@@ -163,6 +144,44 @@ func handleAnalyze(path string) {
 		}
 		result = goResult
 		language = "go"
+
+	case analyzer.IsTypeScriptProject(absPath):
+		fmt.Printf("🟦 Analyzing TypeScript project %s...\n", absPath)
+		tsResult, err := analyzer.AnalyzeTypeScriptWorkspace(ctx, absPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ TypeScript analysis failed: %v\n", err)
+			os.Exit(1)
+		}
+		if len(tsResult.Entities) == 0 {
+			fmt.Fprintf(os.Stderr, "❌ No TypeScript entities extracted from '%s'. Aborting.\n", path)
+			os.Exit(1)
+		}
+		result = tsResult
+		language = "typescript"
+		fmt.Printf("✓ %d entities, %d relationships extracted\n",
+			len(result.Entities), len(result.Relationships))
+
+	case analyzer.IsPythonProject(absPath):
+		fmt.Printf("🐍 Analyzing Python project %s...\n", absPath)
+		pyResult, err := analyzer.AnalyzePythonWorkspace(ctx, absPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Python analysis failed: %v\n", err)
+			os.Exit(1)
+		}
+		if len(pyResult.Entities) == 0 {
+			fmt.Fprintf(os.Stderr, "❌ No Python entities extracted from '%s'. Aborting.\n", path)
+			os.Exit(1)
+		}
+		result = pyResult
+		language = "python"
+		fmt.Printf("✓ %d entities, %d relationships extracted\n",
+			len(result.Entities), len(result.Relationships))
+
+	default:
+		fmt.Fprintf(os.Stderr, "❌ No supported project marker found in '%s'.\n", absPath)
+		fmt.Fprintf(os.Stderr, "   Expected one of: go.mod, tsconfig.json, package.json, pyproject.toml, setup.py\n")
+		fmt.Fprintf(os.Stderr, "   (requirements.txt alone is not sufficient — it can appear in non-Python projects.)\n")
+		os.Exit(1)
 	}
 	// ─────────────────────────────────────────────────────────────
 	// JSON output (both languages)

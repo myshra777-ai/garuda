@@ -32,7 +32,7 @@ type Options struct {
 // Run executes the self-describe command
 func Run(ctx context.Context, opts *Options) error {
 	// 1. Run analysis on the path
-	result, err := analyzer.Analyze(opts.Path)
+	result, err := analyzer.AnalyzeDirectory(ctx, opts.Path)
 	if err != nil {
 		return fmt.Errorf("analysis failed: %w", err)
 	}

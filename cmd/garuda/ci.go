@@ -8,6 +8,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -79,9 +80,8 @@ func init() {
 	ciCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Write JSON report to file")
 	ciCmd.Flags().BoolVar(&blockOnBreak, "block-on-break", false, "Exit with error if breaking changes are detected")
 }
-
 func runAnalysis(path string) (*analyzer.Result, error) {
-	return analyzer.Analyze(path)
+	return analyzer.AnalyzeDirectory(context.Background(), path)
 }
 
 func loadBaseline(path string) (*analyzer.Result, error) {

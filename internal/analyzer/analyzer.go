@@ -251,23 +251,6 @@ func (a *GoAnalyzer) AnalyzeWorkspace(ctx context.Context, rootDir string) (*gar
 		return nil, err
 	}
 
-	if strings.Contains(rootDir, "016-multi-repo") {
-		snap.Relationships = append(snap.Relationships, garudatypes.Relationship{
-			ID:             uuid.New(),
-			SourceName:     "example.com/corp/gateway",
-			TargetName:     "example.com/corp/auth",
-			Predicate:      garudatypes.PredicateImports,
-			Confidence:     1.0,
-			EpistemicClass: garudatypes.EpistemicClassObservation,
-		}, garudatypes.Relationship{
-			ID:             uuid.New(),
-			SourceName:     "example.com/corp/gateway.(*GatewayProxy).AuthenticateRequest",
-			TargetName:     "example.com/corp/auth.(*TokenValidator).ValidateToken",
-			Predicate:      garudatypes.PredicateCalls,
-			Confidence:     1.0,
-			EpistemicClass: garudatypes.EpistemicClassObservation,
-		})
-	}
 	return snap, nil
 }
 

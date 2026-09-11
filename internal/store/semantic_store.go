@@ -399,7 +399,17 @@ func (s *PostgresStore) SaveSemanticGraph(
 		}
 		confidence := rel.Confidence
 		if confidence <= 0 {
-			confidence = 1.0
+			// No confidence value means the caller did not classify this edge.
+			// Treat as AMBIGUOUS rather than silently upgrading to certain.
+			confidence = 0.50
+		}
+		resolutionStatus := rel.ResolutionStatus
+		if resolutionStatus == "" {
+			resolutionStatus = "AMBIGUOUS"
+		}
+		resolutionMethod := rel.ResolutionMethod
+		if resolutionMethod == "" {
+			resolutionMethod = "HEURISTIC"
 		}
 
 		filePath := rel.Evidence.File
@@ -417,25 +427,30 @@ func (s *PostgresStore) SaveSemanticGraph(
     INSERT INTO claims (
         id, tenant_id, workspace_id, repository_id, snapshot_id,
         from_entity_id, to_entity_id, claim_type, epistemic_class, confidence,
+        resolution_status, resolution_method,
         file_path, commit_sha, line_start, line_end,
         created_at
     ) VALUES (
         $1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
-        $11, $12, $13, $14,
+        $11, $12,
+        $13, $14, $15, $16,
         NOW()
     )
     ON CONFLICT (workspace_id, from_entity_id, to_entity_id, claim_type) DO UPDATE SET
-                snapshot_id     = EXCLUDED.snapshot_id,
-                epistemic_class = EXCLUDED.epistemic_class,
-				confidence      = EXCLUDED.confidence,
-				file_path       = EXCLUDED.file_path,
-				commit_sha      = EXCLUDED.commit_sha,
-				line_start      = EXCLUDED.line_start,
-				line_end        = EXCLUDED.line_end
+                snapshot_id        = EXCLUDED.snapshot_id,
+                epistemic_class    = EXCLUDED.epistemic_class,
+				confidence         = EXCLUDED.confidence,
+				resolution_status  = EXCLUDED.resolution_status,
+				resolution_method  = EXCLUDED.resolution_method,
+				file_path          = EXCLUDED.file_path,
+				commit_sha         = EXCLUDED.commit_sha,
+				line_start         = EXCLUDED.line_start,
+				line_end           = EXCLUDED.line_end
 		`,
 			claimID, tenantID, workspaceID, repoID, analysisID,
 			fromID, toID, rel.Type, epistemicClass, confidence,
+			resolutionStatus, resolutionMethod,
 			filePath, commitSHA, lineStart, lineEnd,
 		)
 		if err != nil {

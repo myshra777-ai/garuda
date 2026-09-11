@@ -142,6 +142,7 @@ func (c *CallGraphExtractor) resolveCallExpr(call *ast.CallExpr, callerQualified
 
 	var targetQualifiedName string
 	var isInterfaceCall bool
+	resolvedByTypeCheck := false
 
 	// 1. Type-aware resolution via types.Info
 	if c.info != nil {
@@ -236,6 +237,9 @@ func (c *CallGraphExtractor) resolveCallExpr(call *ast.CallExpr, callerQualified
 				targetQualifiedName = fmt.Sprintf("%s/%s.%s", c.pkgPath, ident.Name, sel.Sel.Name)
 			}
 		}
+	} else {
+		// Reached here from branch 1 — types.Info resolved the target.
+		resolvedByTypeCheck = true
 	}
 
 	if targetQualifiedName == "" {
@@ -252,20 +256,38 @@ func (c *CallGraphExtractor) resolveCallExpr(call *ast.CallExpr, callerQualified
 		predicate = garudatypes.PredicateCallsInterface
 	}
 
+	// Confidence and resolution method depend on which branch resolved the
+	// target. A types.Info resolution is authoritative; an AST selector
+	// fallback is a name-only guess.
+	var confidence float64
+	var resolutionStatus garudatypes.ResolutionStatus
+	var resolutionMethod garudatypes.ResolutionMethod
+	if resolvedByTypeCheck {
+		confidence = 1.0
+		resolutionStatus = garudatypes.ResolutionStatusResolved
+		resolutionMethod = garudatypes.ResolutionMethodGoTypes
+	} else {
+		confidence = 0.40
+		resolutionStatus = garudatypes.ResolutionStatusAmbiguous
+		resolutionMethod = garudatypes.ResolutionMethodHeuristic
+	}
+
 	return &garudatypes.Relationship{
-		ID:             uuid.New(),
-		TenantID:       c.tenantID,
-		WorkspaceID:    c.workspaceID,
-		RepositoryID:   c.repositoryID,
-		SourceName:     callerQualifiedName,
-		TargetName:     targetQualifiedName,
-		Predicate:      predicate,
-		Confidence:     1.0,
-		EpistemicClass: garudatypes.EpistemicClassObservation,
-		EvidenceHash:   evidenceHash,
-		LineStart:      pos.Line,
-		LineEnd:        end.Line,
-		CreatedAt:      time.Now().UTC(),
+		ID:               uuid.New(),
+		TenantID:         c.tenantID,
+		WorkspaceID:      c.workspaceID,
+		RepositoryID:     c.repositoryID,
+		SourceName:       callerQualifiedName,
+		TargetName:       targetQualifiedName,
+		Predicate:        predicate,
+		Confidence:       confidence,
+		ResolutionStatus: resolutionStatus,
+		ResolutionMethod: resolutionMethod,
+		EpistemicClass:   garudatypes.EpistemicClassObservation,
+		EvidenceHash:     evidenceHash,
+		LineStart:        pos.Line,
+		LineEnd:          end.Line,
+		CreatedAt:        time.Now().UTC(),
 	}
 }
 
