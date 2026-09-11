@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/myshra777-ai/garuda/internal/analyzer"
+	"github.com/myshra777-ai/garuda/internal/merkle"
 )
 
 // SaveAnalysisDecision persists an analysis result into the immutable ledger.
@@ -162,7 +163,7 @@ func (s *PostgresStore) SaveAnalysisDecision(
 	`, tenantID).Scan(&currentRootBytes)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			currentRootBytes = make([]byte, 32)
+			currentRootBytes = merkle.GenesisRoot(tenantID)
 		} else {
 			return "", uuid.Nil, 0, fmt.Errorf("failed to fetch merkle root: %w", err)
 		}

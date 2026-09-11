@@ -202,7 +202,7 @@ func (s *PostgresStore) submitDecisionTx(
 	`, req.TenantID).Scan(&prevRootHex)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		prevRootHex = merkle.HashDecision(uuid.Nil, "GENESIS_ROOT", "active", "system", "core", "garuda", nil)
+		prevRootHex = merkle.GenesisRootHex(req.TenantID)
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to fetch and lock merkle root: %w", err)
 	}

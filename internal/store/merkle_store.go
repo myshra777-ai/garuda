@@ -54,7 +54,7 @@ func (s *PostgresStore) GetMerkleRoot(ctx context.Context, tenantID uuid.UUID) (
 }
 
 func (s *PostgresStore) createGenesisMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleRoot, error) {
-	genesisHash := merkle.HashDecision(uuid.Nil, "GENESIS_ROOT", "active", "system", "core", "garuda", nil)
+	genesisHash := merkle.GenesisRootHex(tenantID)
 	query := `
 		INSERT INTO merkle_roots (tenant_id, root_hash, block_height, created_at, updated_at)
 		VALUES ($1, $2, 0, NOW(), NOW())
@@ -89,7 +89,7 @@ func (s *PostgresStore) AppendMerkleChain(ctx context.Context, tenantID uuid.UUI
 	`
 	err = tx.QueryRow(ctx, lockQuery, tenantID).Scan(&currentRoot, &currentHeight)
 	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) || (err != nil && strings.Contains(err.Error(), "no rows")) {
-		genHash := merkle.HashDecision(uuid.Nil, "GENESIS_ROOT", "active", "system", "core", "garuda", nil)
+		genHash := merkle.GenesisRootHex(tenantID)
 		_, err = tx.Exec(ctx, `INSERT INTO merkle_roots (tenant_id, root_hash, block_height) VALUES ($1, $2, 0);`, tenantID, genHash)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert genesis root: %w", err)

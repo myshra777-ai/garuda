@@ -73,7 +73,7 @@ func (a *Anchor) AppendEvaluation(ctx context.Context, ev *Evaluation) (int64, [
 
 	// Genesis path — no row for this tenant yet
 	if currentRoot == "" {
-		gen := merkle.HashDecision(uuid.Nil, "GENESIS_POLICY_ROOT", "active", "system", "policy", "garuda", nil)
+		gen := merkle.GenesisRootHex(ev.TenantID)
 		// gen is already a string; use it directly
 		_, ierr := tx.Exec(ctx, `
 			INSERT INTO merkle_roots (tenant_id, root_hash, block_height, created_at, updated_at)
