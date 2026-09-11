@@ -59,7 +59,6 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 	}
 	sort.Strings(sortedPkgPaths)
 
-	// 1. Compute tree hash per package and evaluate cache hits
 	var packagesToParse []string
 
 	for _, pkgPath := range sortedPkgPaths {
@@ -70,10 +69,8 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		}
 		packageHashes[pkgPath] = treeHash
 
-		// Incorporate into repository fingerprint
 		repoHasher.Write(fmt.Appendf(nil, "%s:%x:", pkgPath, treeHash))
 
-		// Check cache
 		var cacheHit bool
 		if opts.Cache != nil {
 			cached, hit, err := opts.Cache.GetPackage(ctx, opts.TenantID, pkgPath, treeHash)
@@ -91,7 +88,6 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 
 	result.Fingerprint = fmt.Sprintf("%x", repoHasher.Sum(nil))
 
-	// 2. Parse only packages that missed cache or need type checking
 	for _, pkgPath := range packagesToParse {
 		dirPath := ws.PackageRoots[pkgPath]
 		entries, err := os.ReadDir(dirPath)
@@ -128,7 +124,6 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		}
 	}
 
-	// 3. Type-check and extract entities + relationships for parsed packages
 	for _, pkgPath := range packagesToParse {
 		files, exists := packageFiles[pkgPath]
 		if !exists || len(files) == 0 {
@@ -153,10 +148,9 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		pkgEntities := extractWorkspaceEntities(fset, pkgPath, files, pkg, info)
 		result.Entities = append(result.Entities, pkgEntities...)
 
-		pkgRels := extractWorkspaceRelationships(pkgPath, files, pkg, info, result.Entities)
+		pkgRels := extractWorkspaceRelationships(fset, pkgPath, files, pkg, info, result.Entities)
 		result.Relationships = append(result.Relationships, pkgRels...)
 
-		// Populate cache for newly analyzed package
 		if opts.Cache != nil {
 			_ = opts.Cache.PutPackage(ctx, opts.TenantID, pkgPath, packageHashes[pkgPath], CachedPackageData{
 				Entities:      pkgEntities,
@@ -165,7 +159,6 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		}
 	}
 
-	// 4. Update summary stats
 	result.Stats.Packages = len(sortedPkgPaths)
 	for _, e := range result.Entities {
 		switch e.Kind {
@@ -179,6 +172,71 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 	}
 
 	return result, nil
+}
+
+// evidenceIndex maps every declared types.Object to the source position
+// where its identifier appears. Built once per package from info.Defs
+// and consulted by every relationship emitter.
+//
+// This is the single source of evidence for the workspace analyzer.
+// Adding an emitter without consulting the index means adding an edge
+// with empty evidence — that is a bug, not a feature. The
+// TestEvidencePopulation_NoEmptyEdges test enforces it.
+type evidenceIndex struct {
+	positions map[types.Object]Evidence
+}
+
+// buildEvidenceIndex walks info.Defs for a package and records the
+// source position of every declaration identifier.
+func buildEvidenceIndex(fset *token.FileSet, files []*ast.File, info *types.Info) *evidenceIndex {
+	idx := &evidenceIndex{
+		positions: make(map[types.Object]Evidence),
+	}
+	if info == nil || info.Defs == nil {
+		return idx
+	}
+	for ident, obj := range info.Defs {
+		if obj == nil || ident == nil {
+			continue
+		}
+		pos := fset.Position(ident.Pos())
+		end := fset.Position(ident.End())
+		idx.positions[obj] = Evidence{
+			File:      pos.Filename,
+			Line:      pos.Line,
+			LineStart: pos.Line,
+			LineEnd:   end.Line,
+			Analyzer:  "workspace_analyzer",
+		}
+	}
+	return idx
+}
+
+// lookup returns the position of obj, or a zero-value Evidence when obj
+// is not present in the index.
+func (idx *evidenceIndex) lookup(obj types.Object) Evidence {
+	if idx == nil || obj == nil {
+		return Evidence{}
+	}
+	if ev, ok := idx.positions[obj]; ok {
+		return ev
+	}
+	return Evidence{}
+}
+
+// evidenceAt builds an Evidence value from a token position range.
+// Used by emitters that have the AST node in hand (imports, call
+// expressions, composite literals) and do not need an object lookup.
+func evidenceAt(fset *token.FileSet, pos, end token.Pos) Evidence {
+	start := fset.Position(pos)
+	finish := fset.Position(end)
+	return Evidence{
+		File:      start.Filename,
+		Line:      start.Line,
+		LineStart: start.Line,
+		LineEnd:   finish.Line,
+		Analyzer:  "workspace_analyzer",
+	}
 }
 
 func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.File, pkg *types.Package, info *types.Info) []Entity {
@@ -196,6 +254,8 @@ func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.
 
 					name := typeSpec.Name.Name
 					canonicalID := uuid.NewSHA1(uuid.NameSpaceURL, fmt.Appendf(nil, "%s:%s", pkgPath, name))
+					startPos := fset.Position(typeSpec.Pos())
+					endPos := fset.Position(typeSpec.End())
 
 					switch t := typeSpec.Type.(type) {
 					case *ast.StructType:
@@ -220,14 +280,16 @@ func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.
 						}
 
 						entities = append(entities, Entity{
-							ID:       canonicalID.String(),
-							Name:     name,
-							Kind:     KindStruct,
-							Package:  pkgPath,
-							File:     fset.Position(typeSpec.Pos()).Filename,
-							Line:     fset.Position(typeSpec.Pos()).Line,
-							Exported: ast.IsExported(name),
-							Fields:   fields,
+							ID:        canonicalID.String(),
+							Name:      name,
+							Kind:      KindStruct,
+							Package:   pkgPath,
+							File:      startPos.Filename,
+							Line:      startPos.Line,
+							LineStart: startPos.Line,
+							LineEnd:   endPos.Line,
+							Exported:  ast.IsExported(name),
+							Fields:    fields,
 						})
 
 					case *ast.InterfaceType:
@@ -244,32 +306,33 @@ func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.
 						}
 
 						entities = append(entities, Entity{
-							ID:       canonicalID.String(),
-							Name:     name,
-							Kind:     KindInterface,
-							Package:  pkgPath,
-							File:     fset.Position(typeSpec.Pos()).Filename,
-							Line:     fset.Position(typeSpec.Pos()).Line,
-							Exported: ast.IsExported(name),
-							Methods:  methods,
+							ID:        canonicalID.String(),
+							Name:      name,
+							Kind:      KindInterface,
+							Package:   pkgPath,
+							File:      startPos.Filename,
+							Line:      startPos.Line,
+							LineStart: startPos.Line,
+							LineEnd:   endPos.Line,
+							Exported:  ast.IsExported(name),
+							Methods:   methods,
 						})
 
 					default:
-						// Non-struct, non-interface type declaration.
-						//   type A = B  → alias      (Assign != 0, '=' present)
-						//   type A B    → defined    (Assign == 0, no '=')
 						kind := KindType
 						if typeSpec.Assign != 0 {
 							kind = KindAlias
 						}
 						entities = append(entities, Entity{
-							ID:       canonicalID.String(),
-							Name:     name,
-							Kind:     kind,
-							Package:  pkgPath,
-							File:     fset.Position(typeSpec.Pos()).Filename,
-							Line:     fset.Position(typeSpec.Pos()).Line,
-							Exported: ast.IsExported(name),
+							ID:        canonicalID.String(),
+							Name:      name,
+							Kind:      kind,
+							Package:   pkgPath,
+							File:      startPos.Filename,
+							Line:      startPos.Line,
+							LineStart: startPos.Line,
+							LineEnd:   endPos.Line,
+							Exported:  ast.IsExported(name),
 						})
 					}
 				}
@@ -286,6 +349,8 @@ func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.
 
 				canonicalID := uuid.NewSHA1(uuid.NameSpaceURL, fmt.Appendf(nil, "%s:%s:%s", pkgPath, receiver, funcName))
 				sig := types.ExprString(d.Type)
+				startPos := fset.Position(d.Pos())
+				endPos := fset.Position(d.End())
 
 				entities = append(entities, Entity{
 					ID:        canonicalID.String(),
@@ -293,8 +358,10 @@ func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.
 					Kind:      kind,
 					Package:   pkgPath,
 					Signature: sig,
-					File:      fset.Position(d.Pos()).Filename,
-					Line:      fset.Position(d.Pos()).Line,
+					File:      startPos.Filename,
+					Line:      startPos.Line,
+					LineStart: startPos.Line,
+					LineEnd:   endPos.Line,
 					Exported:  ast.IsExported(funcName),
 				})
 			}
@@ -304,8 +371,13 @@ func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.
 	return entities
 }
 
-func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types.Package, info *types.Info, allEntities []Entity) []Relationship {
+func extractWorkspaceRelationships(fset *token.FileSet, pkgPath string, files []*ast.File, pkg *types.Package, info *types.Info, allEntities []Entity) []Relationship {
 	var rels []Relationship
+
+	// Build the evidence index once. Every emitter below consults it for
+	// object-keyed positions, or uses evidenceAt(fset, ...) when the AST
+	// node is already in hand.
+	idx := buildEvidenceIndex(fset, files, info)
 
 	// ─── 1. IMPORTS edges ───
 	for _, file := range files {
@@ -319,11 +391,12 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 				ResolutionStatus: "RESOLVED",
 				ResolutionMethod: "IMPORT_RESOLUTION",
 				EpistemicClass:   "OBSERVATION",
+				Evidence:         evidenceAt(fset, imp.Pos(), imp.End()),
 			})
 		}
 	}
 
-	// ─── 2. CALLS edges via info.Uses on selector expressions ───
+	// ─── 2. CALLS edges ───
 	for _, file := range files {
 		ast.Inspect(file, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
@@ -341,6 +414,7 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 							ResolutionStatus: "RESOLVED",
 							ResolutionMethod: "GO_TYPES",
 							EpistemicClass:   "OBSERVATION",
+							Evidence:         evidenceAt(fset, call.Pos(), call.End()),
 						})
 					}
 				}
@@ -362,9 +436,18 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 				continue
 			}
 
-			// 3a. DEFINES: type → each declared method
+			srcEvidence := idx.lookup(namedType.Obj())
+			if srcEvidence.File == "" {
+				srcEvidence = Evidence{Analyzer: "workspace_analyzer"}
+			}
+
+			// 3a. DEFINES
 			for i := 0; i < namedType.NumMethods(); i++ {
 				m := namedType.Method(i)
+				methodEv := idx.lookup(m)
+				if methodEv.File == "" {
+					methodEv = srcEvidence
+				}
 				rels = append(rels, Relationship{
 					From:             fmt.Sprintf("%s.%s", pkgPath, name),
 					To:               fmt.Sprintf("%s.%s", pkgPath, m.Name()),
@@ -373,10 +456,11 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 					ResolutionStatus: "RESOLVED",
 					ResolutionMethod: "AST_EXACT",
 					EpistemicClass:   "OBSERVATION",
+					Evidence:         methodEv,
 				})
 			}
 
-			// 3b. EMBEDS: outer struct → embedded field types
+			// 3b. EMBEDS
 			if st, ok := namedType.Underlying().(*types.Struct); ok {
 				for i := 0; i < st.NumFields(); i++ {
 					f := st.Field(i)
@@ -391,6 +475,10 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 					if !ok || inner.Obj().Pkg() == nil {
 						continue
 					}
+					fieldEv := idx.lookup(f)
+					if fieldEv.File == "" {
+						fieldEv = srcEvidence
+					}
 					rels = append(rels, Relationship{
 						From:             fmt.Sprintf("%s.%s", pkgPath, name),
 						To:               fmt.Sprintf("%s.%s", inner.Obj().Pkg().Path(), inner.Obj().Name()),
@@ -399,18 +487,16 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 						ResolutionStatus: "RESOLVED",
 						ResolutionMethod: "AST_EXACT",
 						EpistemicClass:   "OBSERVATION",
+						Evidence:         fieldEv,
 					})
 				}
 			}
 
-			// 3c. IMPLEMENTS: struct → interface via types.Implements
+			// 3c. IMPLEMENTS
 			for _, target := range allEntities {
 				if target.Kind != KindInterface {
 					continue
 				}
-				// An interface satisfies itself under types.Implements.
-				// That is technically true but not a useful semantic edge.
-				// Skip to avoid Self-IMPLEMENTS noise on every interface.
 				if name == target.Name && pkgPath == target.Package {
 					continue
 				}
@@ -447,13 +533,14 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 						ResolutionStatus: "RESOLVED",
 						ResolutionMethod: "GO_TYPES",
 						EpistemicClass:   "OBSERVATION",
+						Evidence:         srcEvidence,
 					})
 				}
 			}
 		}
 	}
 
-	// ─── 4. REFERENCES via function signatures (go/types) ───
+	// ─── 4. REFERENCES via function signatures ───
 	if pkg != nil && pkg.Scope() != nil {
 		scope := pkg.Scope()
 		for _, name := range scope.Names() {
@@ -469,17 +556,21 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 			if sig == nil {
 				continue
 			}
+			fnEvidence := idx.lookup(fn)
+			if fnEvidence.File == "" {
+				fnEvidence = Evidence{Analyzer: "workspace_analyzer"}
+			}
 			seen := map[string]bool{}
 			for i := 0; i < sig.Params().Len(); i++ {
-				emitReferencesForType(pkgPath, name, sig.Params().At(i).Type(), seen, &rels)
+				emitReferencesForType(pkgPath, name, sig.Params().At(i).Type(), fnEvidence, seen, &rels)
 			}
 			for i := 0; i < sig.Results().Len(); i++ {
-				emitReferencesForType(pkgPath, name, sig.Results().At(i).Type(), seen, &rels)
+				emitReferencesForType(pkgPath, name, sig.Results().At(i).Type(), fnEvidence, seen, &rels)
 			}
 		}
 	}
 
-	// ─── 5. REFERENCES via composite literals in function bodies ───
+	// ─── 5. REFERENCES via composite literals ───
 	for _, file := range files {
 		ast.Inspect(file, func(n ast.Node) bool {
 			fd, ok := n.(*ast.FuncDecl)
@@ -504,6 +595,7 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 					ResolutionStatus: "RESOLVED",
 					ResolutionMethod: "AST_EXACT",
 					EpistemicClass:   "OBSERVATION",
+					Evidence:         evidenceAt(fset, cl.Pos(), cl.End()),
 				})
 				return true
 			})
@@ -511,7 +603,7 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 		})
 	}
 
-	// ─── 6. Deduplicate edges by (From, To, Type) ───
+	// ─── 6. Deduplicate by (From, To, Type) ───
 	seen := map[string]bool{}
 	deduped := rels[:0]
 	for _, r := range rels {
@@ -525,22 +617,20 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 	return deduped
 }
 
-// emitReferencesForType unwraps pointer/slice/map/chan types and emits a
-// REFERENCES edge from funcName to each named type it uncovers.
-func emitReferencesForType(pkgPath, funcName string, t types.Type, seen map[string]bool, rels *[]Relationship) {
+func emitReferencesForType(pkgPath, funcName string, t types.Type, evidence Evidence, seen map[string]bool, rels *[]Relationship) {
 	switch tt := t.(type) {
 	case *types.Pointer:
-		emitReferencesForType(pkgPath, funcName, tt.Elem(), seen, rels)
+		emitReferencesForType(pkgPath, funcName, tt.Elem(), evidence, seen, rels)
 		return
 	case *types.Slice:
-		emitReferencesForType(pkgPath, funcName, tt.Elem(), seen, rels)
+		emitReferencesForType(pkgPath, funcName, tt.Elem(), evidence, seen, rels)
 		return
 	case *types.Chan:
-		emitReferencesForType(pkgPath, funcName, tt.Elem(), seen, rels)
+		emitReferencesForType(pkgPath, funcName, tt.Elem(), evidence, seen, rels)
 		return
 	case *types.Map:
-		emitReferencesForType(pkgPath, funcName, tt.Key(), seen, rels)
-		emitReferencesForType(pkgPath, funcName, tt.Elem(), seen, rels)
+		emitReferencesForType(pkgPath, funcName, tt.Key(), evidence, seen, rels)
+		emitReferencesForType(pkgPath, funcName, tt.Elem(), evidence, seen, rels)
 		return
 	case *types.Named:
 		if tt.Obj().Pkg() == nil {
@@ -559,13 +649,10 @@ func emitReferencesForType(pkgPath, funcName string, t types.Type, seen map[stri
 			ResolutionStatus: "RESOLVED",
 			ResolutionMethod: "GO_TYPES",
 			EpistemicClass:   "OBSERVATION",
+			Evidence:         evidence,
 		})
 
 	case *types.Alias:
-		// Go represents `type A = B` as *types.Alias, not *types.Named.
-		// The alias is a distinct named declaration in source even though
-		// its underlying type is transparent to the type-checker. Emit a
-		// REFERENCES edge to preserve the source-level name.
 		if tt.Obj().Pkg() == nil {
 			return
 		}
@@ -582,13 +669,11 @@ func emitReferencesForType(pkgPath, funcName string, t types.Type, seen map[stri
 			ResolutionStatus: "RESOLVED",
 			ResolutionMethod: "GO_TYPES",
 			EpistemicClass:   "OBSERVATION",
+			Evidence:         evidence,
 		})
 	}
 }
 
-// extractCompositeLitTypeName returns the fully-qualified name of the type
-// being constructed in a composite literal, or "" if the type cannot be
-// resolved (e.g., an anonymous struct literal).
 func extractCompositeLitTypeName(expr ast.Expr, info *types.Info) string {
 	tv, ok := info.Types[expr]
 	if !ok || tv.Type == nil {
