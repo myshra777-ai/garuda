@@ -38,9 +38,11 @@
 package merkle
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
 )
@@ -68,6 +70,31 @@ const (
 	fieldEpochRuntimeRoot byte = 0x11
 	fieldEpochParentRoot  byte = 0x12
 	fieldEpochBlockHeight byte = 0x13
+)
+
+// Field IDs used in policy evaluation hashing.
+//
+// Deliberately excluded from the evaluation hash:
+//   - ID, TenantID, WorkspaceID — identity and scope, not content
+//   - EvaluatedAt               — non-deterministic wall clock
+//   - MerkleBlockHeight         — set after hashing
+//   - MerkleProof               — set after hashing
+//
+// Including any of those would break determinism across runs.
+const (
+	fieldEvalPolicyID          byte = 0x20
+	fieldEvalPolicyVersion     byte = 0x21
+	fieldEvalDecision          byte = 0x22
+	fieldEvalReason            byte = 0x23
+	fieldEvalClaimIDs          byte = 0x24
+	fieldEvalEntityIDs         byte = 0x25
+	fieldEvalContradictionIDs  byte = 0x26
+	fieldEvalMatchedPredicates byte = 0x27
+	fieldEvalReasoningNotes    byte = 0x28
+	fieldEvalSnapshotID        byte = 0x29
+	fieldEvalSubjectKind       byte = 0x2A
+	fieldEvalSubjectID         byte = 0x2B
+	fieldEvalActor             byte = 0x2C
 )
 
 // ErrCanonicalFieldOrder indicates fields were written out of ID order.
@@ -182,6 +209,42 @@ func (e *Encoder) StringSlice(id byte, ss []string) {
 		binary.BigEndian.PutUint32(lenBuf[:], uint32(len(s)))
 		nested = append(nested, lenBuf[:]...)
 		nested = append(nested, []byte(s)...)
+	}
+
+	e.writeField(id, nested)
+}
+
+// UUIDSlice writes a length-prefixed sequence of UUIDs.
+// The slice is sorted by raw 16-byte order before encoding, so the
+// canonical form is independent of input order.
+//
+// Ordering rule: byte-wise comparison of the 16 UUID bytes. This is
+// language-independent — any implementation that agrees the input is
+// a sequence of 16-byte values will produce the same sorted order.
+// For canonical lowercase-hex UUIDs this matches string order, but
+// the rule itself does not depend on string formatting.
+//
+// Encoding:
+//
+//	[element_count:u32_be]
+//	For each element: [16 bytes]
+func (e *Encoder) UUIDSlice(id byte, ids []uuid.UUID) {
+	if e.err != nil {
+		return
+	}
+
+	sorted := make([]uuid.UUID, len(ids))
+	copy(sorted, ids)
+	sort.Slice(sorted, func(i, j int) bool {
+		return bytes.Compare(sorted[i][:], sorted[j][:]) < 0
+	})
+
+	var nested []byte
+	var cntBuf [4]byte
+	binary.BigEndian.PutUint32(cntBuf[:], uint32(len(sorted)))
+	nested = append(nested, cntBuf[:]...)
+	for _, u := range sorted {
+		nested = append(nested, u[:]...)
 	}
 
 	e.writeField(id, nested)

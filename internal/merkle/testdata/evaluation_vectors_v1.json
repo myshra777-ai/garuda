@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "generated": "2026-09-11",
+  "note": "Frozen golden vectors for CanonicalEvaluation. Any code change that alters these hex values is a breaking change to every evaluation hash ever recorded. Requires a version byte bump and a new ADR.",
+  "vectors": [
+    {
+      "name": "empty",
+      "input": {
+        "policy_id": "00000000-0000-0000-0000-000000000000",
+        "policy_version": "",
+        "decision": "",
+        "reason": "",
+        "claim_ids": [],
+        "entity_ids": [],
+        "contradiction_ids": [],
+        "matched_predicates": [],
+        "reasoning_notes": [],
+        "subject_kind": "",
+        "subject_id": "",
+        "actor": ""
+      },
+      "hash_hex": "e28b49e1d3c87d88ea2af726927009403f7f298751f935b1debfe29313f75203"
+    },
+    {
+      "name": "minimal",
+      "input": {
+        "policy_id": "11111111-1111-1111-1111-111111111111",
+        "policy_version": "",
+        "decision": "ALLOW",
+        "reason": "no predicate matched",
+        "claim_ids": [],
+        "entity_ids": [],
+        "contradiction_ids": [],
+        "matched_predicates": [],
+        "reasoning_notes": [],
+        "subject_kind": "",
+        "subject_id": "subj-1",
+        "actor": ""
+      },
+      "hash_hex": "ac895fe5f87157b60a43d7143e96e75c708babd68ac50f3c1d1a0c663221670c"
+    },
+    {
+      "name": "full_no_snapshot",
+      "input": {
+        "policy_id": "11111111-1111-1111-1111-111111111111",
+        "policy_version": "v1",
+        "decision": "WARN",
+        "reason": "runtime evidence missing",
+        "claim_ids": [
+          "aaaaaaaa-0000-0000-0000-000000000001",
+          "aaaaaaaa-0000-0000-0000-000000000002"
+        ],
+        "entity_ids": [
+          "bbbbbbbb-0000-0000-0000-000000000001"
+        ],
+        "contradiction_ids": [],
+        "matched_predicates": ["verification_missing"],
+        "reasoning_notes": ["checked 5 entities"],
+        "subject_kind": "claim",
+        "subject_id": "subj-1",
+        "actor": "cli-operator"
+      },
+      "hash_hex": "15606f8d3303e874ab8256e6a8656f5060d89eb01e75a3762bc3ad713344214f"
+    },
+    {
+      "name": "full_with_snapshot",
+      "input": {
+        "policy_id": "11111111-1111-1111-1111-111111111111",
+        "policy_version": "v1",
+        "decision": "BLOCK",
+        "reason": "contradiction detected",
+        "claim_ids": [
+          "aaaaaaaa-0000-0000-0000-000000000001"
+        ],
+        "entity_ids": [],
+        "contradiction_ids": [
+          "aaaaaaaa-0000-0000-0000-000000000002"
+        ],
+        "matched_predicates": ["contradiction_exists"],
+        "reasoning_notes": [],
+        "snapshot_id": "99999999-0000-0000-0000-000000000001",
+        "subject_kind": "claim",
+        "subject_id": "subj-1",
+        "actor": "cli-operator"
+      },
+      "hash_hex": "9cb7684b4f2019d61dc880a6fb54ede1aa7f8e389b0600eecf72c8f96baba3e0"
+    },
+    {
+      "name": "unicode_reason",
+      "input": {
+        "policy_id": "11111111-1111-1111-1111-111111111111",
+        "policy_version": "",
+        "decision": "WARN",
+        "reason": "日本語の理由",
+        "claim_ids": [],
+        "entity_ids": [],
+        "contradiction_ids": [],
+        "matched_predicates": [],
+        "reasoning_notes": [],
+        "subject_kind": "",
+        "subject_id": "subj-1",
+        "actor": ""
+      },
+      "hash_hex": "7e05cd4a510ad1c40cb6f86869fc6857ad3300df8bbdb72cca872cd62cc2f5a1"
+    }
+  ]
+}
