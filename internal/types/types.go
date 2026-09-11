@@ -142,7 +142,6 @@ type DecisionStore interface {
 	ListContradictions(ctx context.Context, tenantID uuid.UUID, resolved bool) ([]Contradiction, error)
 	GetContradiction(ctx context.Context, tenantID, id uuid.UUID) (*Contradiction, error)
 	IngestEvidence(ctx context.Context, tenantID uuid.UUID, evidence []Evidence) error
-	ConsumeBudget(ctx context.Context, tenantID uuid.UUID, tokens int) error
 
 	// Topology methods
 	SaveTopology(ctx context.Context, top *Topology) error

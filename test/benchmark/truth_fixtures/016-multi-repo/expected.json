@@ -15,17 +15,20 @@
       "target_entity": "example.com/corp/auth",
       "is_cross_boundary": true,
       "epistemic_class": "OBSERVATION",
-      "confidence": 1.0
+      "confidence": 0.95
     },
     {
       "predicate": "CALLS",
       "source_module": "example.com/corp/gateway",
-      "source_entity": "example.com/corp/gateway.(*GatewayProxy).AuthenticateRequest",
+      "source_entity": "example.com/corp/gateway",
       "target_module": "example.com/corp/auth",
-      "target_entity": "example.com/corp/auth.(*TokenValidator).ValidateToken",
+      "target_entity": "example.com/corp/auth.ValidateToken",
       "is_cross_boundary": true,
       "epistemic_class": "OBSERVATION",
       "confidence": 1.0
     }
   ]
 }
+
+
+

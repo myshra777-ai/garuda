@@ -2847,7 +2847,16 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	focus := strings.TrimSpace(r.URL.Query().Get("focus"))
 
 	entityMap := make(map[string]EntityRecord)
-	eRows, err := pgStore.Pool().Query(ctx, `SELECT id::text, name, kind, package, file_path, is_exported FROM entities WHERE workspace_id = $1`, workspaceID)
+	// Exclude external dependency stubs (kind='external'). They are module
+	// references created when an edge targets a symbol outside the repo,
+	// not part of the workspace's source architecture. Including them floods
+	// the graph with 400+ nodes that aren't source.
+	eRows, err := pgStore.Pool().Query(ctx, `
+		SELECT id::text, name, kind, package, file_path, is_exported
+		FROM entities
+		WHERE workspace_id = $1
+		  AND kind != 'external'
+	`, workspaceID)
 	if err == nil {
 		defer eRows.Close()
 		for eRows.Next() {

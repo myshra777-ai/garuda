@@ -134,32 +134,38 @@ func initDatabaseWithRetry(ctx context.Context, dbURL string, collector *Collect
 
 		slog.Info("Attempting database connection...")
 		pool, err := pgxpool.New(ctx, dbURL)
-		if err == nil {
-			// Ensure schema exists
-			createTableQuery := `
-			CREATE TABLE IF NOT EXISTS telemetry_events (
-				id BIGSERIAL PRIMARY KEY,
-				instance_hash TEXT,
-				session_id TEXT,
-				mode TEXT,
-				garuda_version TEXT,
-				agent_runtime TEXT,
-				model_provider TEXT,
-				model_name TEXT,
-				tokens_saved BIGINT,
-				created_at TIMESTAMPTZ DEFAULT NOW()
-			);`
-
-			if _, err := pool.Exec(ctx, createTableQuery); err == nil {
-				slog.Info("Database pool connected and schema validated successfully")
-				collector.setPool(pool)
-				return
-			} else {
-				slog.Warn("Failed to execute telemetry schema creation", "error", err)
-				pool.Close()
-			}
-		} else {
+		if err != nil {
 			slog.Warn("Failed to create database pool", "error", err)
+			slog.Info("Retrying database connection", "retry_in", backoff)
+			time.Sleep(backoff)
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
+		}
+
+		// Migrations own the schema. This function only verifies it exists
+		// with the expected shape. If verification fails, the operator must
+		// run migrations before the collector can start.
+		var columnCount int
+		err = pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM information_schema.columns
+			WHERE table_name = 'telemetry_events'
+		`).Scan(&columnCount)
+		if err != nil {
+			slog.Warn("Failed to verify telemetry schema", "error", err)
+			pool.Close()
+		} else if columnCount < 30 {
+			slog.Error("telemetry_events schema incomplete",
+				"expected_min_columns", 30,
+				"actual", columnCount,
+				"hint", "run migrations before starting the collector")
+			pool.Close()
+		} else {
+			slog.Info("Telemetry schema verified", "column_count", columnCount)
+			collector.setPool(pool)
+			return
 		}
 
 		slog.Info("Retrying database connection", "retry_in", backoff)
