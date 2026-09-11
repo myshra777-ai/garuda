@@ -289,47 +289,7 @@ func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.
 func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types.Package, info *types.Info, allEntities []Entity) []Relationship {
 	var rels []Relationship
 
-	// 1. Resolve IMPLEMENTS edges via go/types method sets
-	if pkg != nil && pkg.Scope() != nil {
-		scope := pkg.Scope()
-		for _, name := range scope.Names() {
-			obj := scope.Lookup(name)
-			if obj == nil {
-				continue
-			}
-
-			namedType, ok := obj.Type().(*types.Named)
-			if !ok {
-				continue
-			}
-
-			for _, target := range allEntities {
-				if target.Kind != KindInterface {
-					continue
-				}
-
-				ptrType := types.NewPointer(namedType)
-				for _, candidate := range []types.Type{namedType, ptrType} {
-					for _, ifaceMethod := range target.Methods {
-						m, _, _ := types.LookupFieldOrMethod(candidate, true, pkg, ifaceMethod.Name)
-						if m != nil {
-							rels = append(rels, Relationship{
-								From:             fmt.Sprintf("%s.%s", pkgPath, name),
-								To:               fmt.Sprintf("%s.%s", target.Package, target.Name),
-								Type:             string(RelImplements),
-								Confidence:       1.0,
-								ResolutionStatus: "RESOLVED",
-								ResolutionMethod: "GO_TYPES",
-							})
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// 2. Resolve CALLS and IMPORTS edges from AST
+	// ─── 1. IMPORTS edges ───
 	for _, file := range files {
 		for _, imp := range file.Imports {
 			importPath := strings.Trim(imp.Path.Value, `"`)
@@ -340,15 +300,18 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 				Confidence:       0.95,
 				ResolutionStatus: "RESOLVED",
 				ResolutionMethod: "IMPORT_RESOLUTION",
+				EpistemicClass:   "OBSERVATION",
 			})
 		}
+	}
 
+	// ─── 2. CALLS edges via info.Uses on selector expressions ───
+	for _, file := range files {
 		ast.Inspect(file, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok {
 				return true
 			}
-
 			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 				if obj, exists := info.Uses[sel.Sel]; exists && obj != nil {
 					if obj.Pkg() != nil {
@@ -359,6 +322,7 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 							Confidence:       1.0,
 							ResolutionStatus: "RESOLVED",
 							ResolutionMethod: "GO_TYPES",
+							EpistemicClass:   "OBSERVATION",
 						})
 					}
 				}
@@ -367,5 +331,229 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 		})
 	}
 
-	return rels
+	// ─── 3. Type-level edges via go/types ───
+	if pkg != nil && pkg.Scope() != nil {
+		scope := pkg.Scope()
+		for _, name := range scope.Names() {
+			obj := scope.Lookup(name)
+			if obj == nil {
+				continue
+			}
+			namedType, ok := obj.Type().(*types.Named)
+			if !ok {
+				continue
+			}
+
+			// 3a. DEFINES: type → each declared method
+			for i := 0; i < namedType.NumMethods(); i++ {
+				m := namedType.Method(i)
+				rels = append(rels, Relationship{
+					From:             fmt.Sprintf("%s.%s", pkgPath, name),
+					To:               fmt.Sprintf("%s.%s", pkgPath, m.Name()),
+					Type:             string(RelDefines),
+					Confidence:       0.90,
+					ResolutionStatus: "RESOLVED",
+					ResolutionMethod: "AST_EXACT",
+					EpistemicClass:   "OBSERVATION",
+				})
+			}
+
+			// 3b. EMBEDS: outer struct → embedded field types
+			if st, ok := namedType.Underlying().(*types.Struct); ok {
+				for i := 0; i < st.NumFields(); i++ {
+					f := st.Field(i)
+					if !f.Embedded() {
+						continue
+					}
+					ft := f.Type()
+					if ptr, ok := ft.(*types.Pointer); ok {
+						ft = ptr.Elem()
+					}
+					inner, ok := ft.(*types.Named)
+					if !ok || inner.Obj().Pkg() == nil {
+						continue
+					}
+					rels = append(rels, Relationship{
+						From:             fmt.Sprintf("%s.%s", pkgPath, name),
+						To:               fmt.Sprintf("%s.%s", inner.Obj().Pkg().Path(), inner.Obj().Name()),
+						Type:             string(RelEmbeds),
+						Confidence:       0.90,
+						ResolutionStatus: "RESOLVED",
+						ResolutionMethod: "AST_EXACT",
+						EpistemicClass:   "OBSERVATION",
+					})
+				}
+			}
+
+			// 3c. IMPLEMENTS: struct → interface via types.Implements
+			for _, target := range allEntities {
+				if target.Kind != KindInterface {
+					continue
+				}
+				var ifaceNamed *types.Named
+				if target.Package == "" || target.Package == pkgPath {
+					if tn, ok := scope.Lookup(target.Name).(*types.TypeName); ok {
+						ifaceNamed, _ = tn.Type().(*types.Named)
+					}
+				} else {
+					for _, imp := range pkg.Imports() {
+						if imp.Path() == target.Package {
+							if tn, ok := imp.Scope().Lookup(target.Name).(*types.TypeName); ok {
+								ifaceNamed, _ = tn.Type().(*types.Named)
+							}
+							break
+						}
+					}
+				}
+				if ifaceNamed == nil {
+					continue
+				}
+				iface, ok := ifaceNamed.Underlying().(*types.Interface)
+				if !ok {
+					continue
+				}
+				iface.Complete()
+
+				if types.Implements(namedType, iface) || types.Implements(types.NewPointer(namedType), iface) {
+					rels = append(rels, Relationship{
+						From:             fmt.Sprintf("%s.%s", pkgPath, name),
+						To:               fmt.Sprintf("%s.%s", target.Package, target.Name),
+						Type:             string(RelImplements),
+						Confidence:       1.0,
+						ResolutionStatus: "RESOLVED",
+						ResolutionMethod: "GO_TYPES",
+						EpistemicClass:   "OBSERVATION",
+					})
+				}
+			}
+		}
+	}
+
+	// ─── 4. REFERENCES via function signatures (go/types) ───
+	if pkg != nil && pkg.Scope() != nil {
+		scope := pkg.Scope()
+		for _, name := range scope.Names() {
+			obj := scope.Lookup(name)
+			if obj == nil {
+				continue
+			}
+			fn, ok := obj.(*types.Func)
+			if !ok {
+				continue
+			}
+			sig, _ := fn.Type().(*types.Signature)
+			if sig == nil {
+				continue
+			}
+			seen := map[string]bool{}
+			for i := 0; i < sig.Params().Len(); i++ {
+				emitReferencesForType(pkgPath, name, sig.Params().At(i).Type(), seen, &rels)
+			}
+			for i := 0; i < sig.Results().Len(); i++ {
+				emitReferencesForType(pkgPath, name, sig.Results().At(i).Type(), seen, &rels)
+			}
+		}
+	}
+
+	// ─── 5. REFERENCES via composite literals in function bodies ───
+	for _, file := range files {
+		ast.Inspect(file, func(n ast.Node) bool {
+			fd, ok := n.(*ast.FuncDecl)
+			if !ok || fd.Body == nil {
+				return true
+			}
+			funcName := fd.Name.Name
+			ast.Inspect(fd.Body, func(inner ast.Node) bool {
+				cl, ok := inner.(*ast.CompositeLit)
+				if !ok || cl.Type == nil {
+					return true
+				}
+				qname := extractCompositeLitTypeName(cl.Type, info)
+				if qname == "" {
+					return true
+				}
+				rels = append(rels, Relationship{
+					From:             fmt.Sprintf("%s.%s", pkgPath, funcName),
+					To:               qname,
+					Type:             string(RelReferences),
+					Confidence:       0.90,
+					ResolutionStatus: "RESOLVED",
+					ResolutionMethod: "AST_EXACT",
+					EpistemicClass:   "OBSERVATION",
+				})
+				return true
+			})
+			return true
+		})
+	}
+
+	// ─── 6. Deduplicate edges by (From, To, Type) ───
+	seen := map[string]bool{}
+	deduped := rels[:0]
+	for _, r := range rels {
+		key := r.From + "|" + r.To + "|" + r.Type
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		deduped = append(deduped, r)
+	}
+	return deduped
+}
+
+// emitReferencesForType unwraps pointer/slice/map/chan types and emits a
+// REFERENCES edge from funcName to each named type it uncovers.
+func emitReferencesForType(pkgPath, funcName string, t types.Type, seen map[string]bool, rels *[]Relationship) {
+	switch tt := t.(type) {
+	case *types.Pointer:
+		emitReferencesForType(pkgPath, funcName, tt.Elem(), seen, rels)
+		return
+	case *types.Slice:
+		emitReferencesForType(pkgPath, funcName, tt.Elem(), seen, rels)
+		return
+	case *types.Chan:
+		emitReferencesForType(pkgPath, funcName, tt.Elem(), seen, rels)
+		return
+	case *types.Map:
+		emitReferencesForType(pkgPath, funcName, tt.Key(), seen, rels)
+		emitReferencesForType(pkgPath, funcName, tt.Elem(), seen, rels)
+		return
+	case *types.Named:
+		if tt.Obj().Pkg() == nil {
+			return
+		}
+		qname := tt.Obj().Pkg().Path() + "." + tt.Obj().Name()
+		if seen[qname] {
+			return
+		}
+		seen[qname] = true
+		*rels = append(*rels, Relationship{
+			From:             fmt.Sprintf("%s.%s", pkgPath, funcName),
+			To:               qname,
+			Type:             string(RelReferences),
+			Confidence:       1.0,
+			ResolutionStatus: "RESOLVED",
+			ResolutionMethod: "GO_TYPES",
+			EpistemicClass:   "OBSERVATION",
+		})
+	}
+}
+
+// extractCompositeLitTypeName returns the fully-qualified name of the type
+// being constructed in a composite literal, or "" if the type cannot be
+// resolved (e.g., an anonymous struct literal).
+func extractCompositeLitTypeName(expr ast.Expr, info *types.Info) string {
+	tv, ok := info.Types[expr]
+	if !ok || tv.Type == nil {
+		return ""
+	}
+	t := tv.Type
+	if ptr, ok := t.(*types.Pointer); ok {
+		t = ptr.Elem()
+	}
+	named, ok := t.(*types.Named)
+	if !ok || named.Obj().Pkg() == nil {
+		return ""
+	}
+	return named.Obj().Pkg().Path() + "." + named.Obj().Name()
 }

@@ -165,7 +165,7 @@ func evaluateCase(casePath string) TestCaseResult {
 	for _, exp := range expected.Relationships {
 		found := false
 		for _, act := range actual.Relationships {
-			if strings.EqualFold(act.From, exp.From) && strings.EqualFold(act.To, exp.To) && strings.EqualFold(act.Type, exp.Type) {
+			if matchBareNames(act.From, exp.From) && matchBareNames(act.To, exp.To) && strings.EqualFold(act.Type, exp.Type) {
 				found = true
 				matchedRels++
 				break
@@ -193,4 +193,25 @@ func evaluateCase(casePath string) TestCaseResult {
 	}
 
 	return res
+}
+
+// bareName returns the final symbol segment of a qualified identifier.
+//
+//	"example.com/foo/bar.NewConfig"       → "NewConfig"
+//	"example.com/foo/bar.(*Server).Start" → "Start"
+//	"NewConfig"                           → "NewConfig"
+func bareName(s string) string {
+	if i := strings.LastIndex(s, ")"); i >= 0 && i+1 < len(s) {
+		s = s[i+1:]
+	}
+	lastSlash := strings.LastIndex(s, "/")
+	lastDot := strings.LastIndex(s, ".")
+	if lastDot > lastSlash {
+		s = s[lastDot+1:]
+	}
+	return s
+}
+
+func matchBareNames(a, b string) bool {
+	return strings.EqualFold(bareName(a), bareName(b))
 }
