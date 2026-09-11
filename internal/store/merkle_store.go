@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -324,9 +325,28 @@ func (s *PostgresStore) ListMerkleSnapshots(ctx context.Context, tenantID uuid.U
 }
 
 // CreateUnifiedMerkleSnapshot generates a dual-rooted Merkle snapshot covering static claims and runtime verifications.
+// CreateUnifiedMerkleSnapshot generates a workspace-state snapshot
+// covering entities (static tier) and claim verifications (runtime
+// tier).
+//
+// Deprecated (v0): this function builds a v0 workspace snapshot, not a
+// v1 decision-log entry. The two Merkle models are distinct:
+//
+//   - The decision log (merkle_roots, driven by AppendLeafAndSealTx)
+//     anchors one leaf per decision or evaluation. Every row is v1.
+//
+//   - The workspace snapshot (merkle_snapshots, this function) commits
+//     a hash of everything that existed at time T. It serves a
+//     different purpose and does not share a leaf model with the
+//     decision log.
+//
+// A v1 workspace snapshot design is tracked in ADR-0003. Until that
+// ADR is accepted, this function writes verification_version = 0 and
+// is not a candidate for the decision-log v1 path.
 func (s *PostgresStore) CreateUnifiedMerkleSnapshot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleSnapshot, error) {
-	// 1. Get latest snapshot for block chain continuity
-	var prevHash string = "0000000000000000000000000000000000000000000000000000000000000000"
+	// 1. Get latest snapshot for block chain continuity.
+	//    The genesis root is tenant-scoped, not a fixed zero hash.
+	var prevHash string = merkle.GenesisRootHex(tenantID)
 	var prevHeight int64 = 0
 	var parentID *uuid.UUID
 
@@ -338,18 +358,29 @@ func (s *PostgresStore) CreateUnifiedMerkleSnapshot(ctx context.Context, tenantI
 	}
 	currentHeight := prevHeight + 1
 
-	// 2. Compute Static AST Root from Entities and Claims
+	// 2. Compute static tier root over entity IDs.
+	//
+	// The concat-and-hash construction differs from the two-tier
+	// EpochRoot model in epoch.go. That difference is deliberate: this
+	// snapshot is a workspace-state proof, not a decision-log entry.
+	// See ADR-0003.
 	var staticRoot string
 	var staticLeafCount int64
 	err = s.pool.QueryRow(ctx, `
-		SELECT 
-			COALESCE(encode(sha256(string_agg(id::text, '|' ORDER BY id)::bytea), 'hex'), 'GARUDA_EMPTY_STATIC_TREE'),
+		SELECT
+			COALESCE(encode(sha256(string_agg(id::text, '|' ORDER BY id)::bytea), 'hex'), ''),
 			COUNT(*)
 		FROM entities
 		WHERE tenant_id = $1 OR workspace_id IN (SELECT id FROM workspaces WHERE tenant_id = $1)
 	`, tenantID).Scan(&staticRoot, &staticLeafCount)
-	if err != nil || staticRoot == "" {
-		staticRoot = "GARUDA_EMPTY_STATIC_TREE"
+	if err != nil {
+		return nil, fmt.Errorf("compute static root: %w", err)
+	}
+	if staticLeafCount == 0 || staticRoot == "" {
+		// No entities → use the defined empty-tree hash, not a sentinel
+		// string. Migration 069 enforces a 64-char hex CHECK on this
+		// column; the sentinel would fail it.
+		staticRoot = hex.EncodeToString(merkle.BuildRoot(nil))
 	}
 
 	// 3. Query Claim Verifications for Runtime Evidence Root
@@ -399,8 +430,9 @@ func (s *PostgresStore) CreateUnifiedMerkleSnapshot(ctx context.Context, tenantI
 			id, tenant_id, parent_snapshot_id, block_height,
 			snapshot_hash, root_hash, epoch_timestamp,
 			static_root_hash, runtime_root_hash, runtime_leaf_count,
-			verified_claims_count, contradicted_claims_count, created_at
-		) VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12)
+			verified_claims_count, contradicted_claims_count,
+			verification_version, created_at
+		) VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, 0, $12)
 		ON CONFLICT (tenant_id, snapshot_hash) DO NOTHING;
 	`, snapshotID, tenantID, parentID, currentHeight,
 		unifiedHash, now.Unix(), staticRoot, runtimeRoot,
