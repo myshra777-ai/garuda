@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "canonical_version_byte": "0x01",
+  "generated": "2026-09-11",
+  "note": "Frozen golden vectors for the canonical encoding. Any code change that alters these hex values is a breaking change to the Merkle layer. Bump the version byte and open a new ADR.",
+  "vectors": [
+    {
+      "name": "empty",
+      "hex": "010000"
+    },
+    {
+      "name": "single_uuid",
+      "hex": "010001010000001000000000000000000000000000000000"
+    },
+    {
+      "name": "single_string",
+      "hex": "010001020000000568656c6c6f"
+    },
+    {
+      "name": "unicode_string",
+      "hex": "0100010200000009e697a5e69cace8aa9e"
+    },
+    {
+      "name": "empty_string_slice",
+      "hex": "010001070000000400000000"
+    },
+    {
+      "name": "multi_string_slice",
+      "input": ["zeta", "alpha", "mu"],
+      "hex": "010001070000001b0000000300000005616c706861000000026d75000000047a657461"
+    },
+    {
+      "name": "full_decision",
+      "input": {
+        "id": "11111111-2222-3333-4444-555555555555",
+        "title": "Test decision",
+        "status": "active",
+        "scope_domain": "security",
+        "scope_system": "auth",
+        "owner": "rohit",
+        "evidence_ids": ["e1", "e2", "e3"]
+      },
+      "hex": "010007010000001011111111222233334444555555555555020000000d54657374206465636973696f6e0300000006616374697665040000000873656375726974790500000004617574680600000005726f686974070000001600000003000000026531000000026532000000026533"
+    }
+  ]
+}

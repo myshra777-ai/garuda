@@ -115,3 +115,10 @@ test_workspace/
 # Stale graph HTML output
 garuda_graph_*.html
 /migrate
+
+# Merkle golden vectors — frozen test data. Must be committed.
+# Merkle golden test vectors — source artifacts, not generated output.
+# These define the canonical encoding contract. They MUST be committed.
+# Placed after the global *.json rule so the negation takes effect.
+!internal/merkle/testdata/
+!internal/merkle/testdata/**
