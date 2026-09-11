@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "generated": "2026-09-11",
+  "note": "Frozen golden vectors for the RFC 6962 Merkle tree. Any code change that alters a root or proof is a breaking change. Bump the version byte in canonical.go and open a new ADR.",
+  "trees": [
+    {
+      "name": "empty",
+      "leaves": [],
+      "root": "92458de35affdce640d5e98f1cc170885d2725b3c912d2fd0ce7a8d7b683aed2"
+    },
+    {
+      "name": "1-leaf",
+      "leaves": ["a"],
+      "root": "022a6979e6dab7aa5ae4c3e5e45f7e977112a7e63593820dbec1ec738a24f93c",
+      "proofs": [
+        {"index": 0, "path": []}
+      ]
+    },
+    {
+      "name": "2-leaf",
+      "leaves": ["a", "b"],
+      "root": "b137985ff484fb600db93107c77b0365c80d78f5b429ded0fd97361d077999eb",
+      "proofs": [
+        {"index": 0, "path": [{"position": "R", "hash": "57eb35615d47f34ec714cacdf5fd74608a5e8e102724e80b24b287c0c27b6a31"}]},
+        {"index": 1, "path": [{"position": "L", "hash": "022a6979e6dab7aa5ae4c3e5e45f7e977112a7e63593820dbec1ec738a24f93c"}]}
+      ]
+    },
+    {
+      "name": "3-leaf",
+      "leaves": ["a", "b", "c"],
+      "root": "36642e73c2540ab121e3a6bf9545b0a24982cd830eb13d3cd19de3ce6c021ec1",
+      "proofs": [
+        {"index": 0, "path": [
+          {"position": "R", "hash": "57eb35615d47f34ec714cacdf5fd74608a5e8e102724e80b24b287c0c27b6a31"},
+          {"position": "R", "hash": "597fcb31282d34654c200d3418fca5705c648ebf326ec73d8ddef11841f876d8"}
+        ]},
+        {"index": 1, "path": [
+          {"position": "L", "hash": "022a6979e6dab7aa5ae4c3e5e45f7e977112a7e63593820dbec1ec738a24f93c"},
+          {"position": "R", "hash": "597fcb31282d34654c200d3418fca5705c648ebf326ec73d8ddef11841f876d8"}
+        ]},
+        {"index": 2, "path": [
+          {"position": "L", "hash": "b137985ff484fb600db93107c77b0365c80d78f5b429ded0fd97361d077999eb"}
+        ]}
+      ]
+    },
+    {
+      "name": "4-leaf",
+      "leaves": ["a", "b", "c", "d"],
+      "root": "33376a3bd63e9993708a84ddfe6c28ae58b83505dd1fed711bd924ec5a6239f0",
+      "proofs": [
+        {"index": 0, "path": [
+          {"position": "R", "hash": "57eb35615d47f34ec714cacdf5fd74608a5e8e102724e80b24b287c0c27b6a31"},
+          {"position": "R", "hash": "dbbd68c325614a73dacb4e7a87a2b7b4ae9724b489e5629ee83151fe8f0eafd7"}
+        ]},
+        {"index": 1, "path": [
+          {"position": "L", "hash": "022a6979e6dab7aa5ae4c3e5e45f7e977112a7e63593820dbec1ec738a24f93c"},
+          {"position": "R", "hash": "dbbd68c325614a73dacb4e7a87a2b7b4ae9724b489e5629ee83151fe8f0eafd7"}
+        ]},
+        {"index": 2, "path": [
+          {"position": "R", "hash": "d070dc5b8da9aea7dc0f5ad4c29d89965200059c9a0ceca3abd5da2492dcb71d"},
+          {"position": "L", "hash": "b137985ff484fb600db93107c77b0365c80d78f5b429ded0fd97361d077999eb"}
+        ]},
+        {"index": 3, "path": [
+          {"position": "L", "hash": "597fcb31282d34654c200d3418fca5705c648ebf326ec73d8ddef11841f876d8"},
+          {"position": "L", "hash": "b137985ff484fb600db93107c77b0365c80d78f5b429ded0fd97361d077999eb"}
+        ]}
+      ]
+    },
+    {
+      "name": "7-leaf",
+      "leaves": ["a", "b", "c", "d", "e", "f", "g"],
+      "root": "4ae191939f548d9934740b88dea2c5cb89bb8870fc4505cd79dec6bbfaaee9cb",
+      "proofs": [
+        {"index": 0, "path": [
+          {"position": "R", "hash": "57eb35615d47f34ec714cacdf5fd74608a5e8e102724e80b24b287c0c27b6a31"},
+          {"position": "R", "hash": "dbbd68c325614a73dacb4e7a87a2b7b4ae9724b489e5629ee83151fe8f0eafd7"},
+          {"position": "R", "hash": "e286d3390665a7cdc759453bed0b00cded1842d757e3e6cfe87df53db177e725"}
+        ]},
+        {"index": 1, "path": [
+          {"position": "L", "hash": "022a6979e6dab7aa5ae4c3e5e45f7e977112a7e63593820dbec1ec738a24f93c"},
+          {"position": "R", "hash": "dbbd68c325614a73dacb4e7a87a2b7b4ae9724b489e5629ee83151fe8f0eafd7"},
+          {"position": "R", "hash": "e286d3390665a7cdc759453bed0b00cded1842d757e3e6cfe87df53db177e725"}
+        ]},
+        {"index": 2, "path": [
+          {"position": "R", "hash": "d070dc5b8da9aea7dc0f5ad4c29d89965200059c9a0ceca3abd5da2492dcb71d"},
+          {"position": "L", "hash": "b137985ff484fb600db93107c77b0365c80d78f5b429ded0fd97361d077999eb"},
+          {"position": "R", "hash": "e286d3390665a7cdc759453bed0b00cded1842d757e3e6cfe87df53db177e725"}
+        ]},
+        {"index": 3, "path": [
+          {"position": "L", "hash": "597fcb31282d34654c200d3418fca5705c648ebf326ec73d8ddef11841f876d8"},
+          {"position": "L", "hash": "b137985ff484fb600db93107c77b0365c80d78f5b429ded0fd97361d077999eb"},
+          {"position": "R", "hash": "e286d3390665a7cdc759453bed0b00cded1842d757e3e6cfe87df53db177e725"}
+        ]},
+        {"index": 4, "path": [
+          {"position": "R", "hash": "f5a06d3c52937089c51b7c6c1cc1948ccdc5581328b2ebb578e8cca66a7b5221"},
+          {"position": "R", "hash": "5aeb196e83598231b45c61f3e0c5a0fda49b0d4f86a6db5f893aacccf514fa99"},
+          {"position": "L", "hash": "33376a3bd63e9993708a84ddfe6c28ae58b83505dd1fed711bd924ec5a6239f0"}
+        ]},
+        {"index": 5, "path": [
+          {"position": "L", "hash": "2824a7ccda2caa720c85c9fba1e8b5b735eecfdb03878e4f8dfe6c3625030bc4"},
+          {"position": "R", "hash": "5aeb196e83598231b45c61f3e0c5a0fda49b0d4f86a6db5f893aacccf514fa99"},
+          {"position": "L", "hash": "33376a3bd63e9993708a84ddfe6c28ae58b83505dd1fed711bd924ec5a6239f0"}
+        ]},
+        {"index": 6, "path": [
+          {"position": "L", "hash": "918566184c9d5be235ad2b6dd60828f5cec14fc409f02f7db8647009ec6da588"},
+          {"position": "L", "hash": "33376a3bd63e9993708a84ddfe6c28ae58b83505dd1fed711bd924ec5a6239f0"}
+        ]}
+      ]
+    }
+  ]
+}
