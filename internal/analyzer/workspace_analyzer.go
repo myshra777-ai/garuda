@@ -408,6 +408,12 @@ func extractWorkspaceRelationships(pkgPath string, files []*ast.File, pkg *types
 				if target.Kind != KindInterface {
 					continue
 				}
+				// An interface satisfies itself under types.Implements.
+				// That is technically true but not a useful semantic edge.
+				// Skip to avoid Self-IMPLEMENTS noise on every interface.
+				if name == target.Name && pkgPath == target.Package {
+					continue
+				}
 				var ifaceNamed *types.Named
 				if target.Package == "" || target.Package == pkgPath {
 					if tn, ok := scope.Lookup(target.Name).(*types.TypeName); ok {
