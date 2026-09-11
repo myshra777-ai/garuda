@@ -288,6 +288,51 @@ func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 				"required": []string{"title"},
 			},
 		},
+		// ── Governance tools (Phase 2.2a) ──
+		{
+			"name":        "garuda.policy.list",
+			"description": "List policies registered for a tenant. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID; falls back to GARUDA_TENANT_ID env or default tenant"},
+				},
+			},
+		},
+		{
+			"name":        "garuda.governance.status",
+			"description": "Aggregate governance state: active policies, documentation health, contradiction count. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name; falls back to GARUDA_WORKSPACE env or 'default'"},
+				},
+			},
+		},
+		{
+			"name":        "garuda.check_drift",
+			"description": "Documentation-to-code drift report. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				},
+			},
+		},
+		{
+			"name":        "garuda.query_claims",
+			"description": "Query document claims matching a subject. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+					"subject":   map[string]interface{}{"type": "string", "description": "Filter by subject or object (substring)"},
+				},
+			},
+		},
 	}
 
 	return MCPResponse{
@@ -357,6 +402,18 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleGetImpact(args)
 	case "garuda.propose_decision":
 		result, err = s.handleProposeDecision(args)
+
+	// Governance tools (Phase 2.2a). All read-only. None anchor to
+	// the Merkle ledger — only the decision proposals do.
+	case "garuda.policy.list":
+		result, err = s.handlePolicyList(args)
+	case "garuda.governance.status":
+		result, err = s.handleGovernanceStatus(args)
+	case "garuda.check_drift":
+		result, err = s.handleCheckDrift(args)
+	case "garuda.query_claims":
+		result, err = s.handleQueryClaims(args)
+
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
 	}
