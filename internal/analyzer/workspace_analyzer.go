@@ -253,6 +253,24 @@ func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.
 							Exported: ast.IsExported(name),
 							Methods:  methods,
 						})
+
+					default:
+						// Non-struct, non-interface type declaration.
+						//   type A = B  → alias      (Assign != 0, '=' present)
+						//   type A B    → defined    (Assign == 0, no '=')
+						kind := KindType
+						if typeSpec.Assign != 0 {
+							kind = KindAlias
+						}
+						entities = append(entities, Entity{
+							ID:       canonicalID.String(),
+							Name:     name,
+							Kind:     kind,
+							Package:  pkgPath,
+							File:     fset.Position(typeSpec.Pos()).Filename,
+							Line:     fset.Position(typeSpec.Pos()).Line,
+							Exported: ast.IsExported(name),
+						})
 					}
 				}
 
@@ -519,6 +537,29 @@ func emitReferencesForType(pkgPath, funcName string, t types.Type, seen map[stri
 		emitReferencesForType(pkgPath, funcName, tt.Elem(), seen, rels)
 		return
 	case *types.Named:
+		if tt.Obj().Pkg() == nil {
+			return
+		}
+		qname := tt.Obj().Pkg().Path() + "." + tt.Obj().Name()
+		if seen[qname] {
+			return
+		}
+		seen[qname] = true
+		*rels = append(*rels, Relationship{
+			From:             fmt.Sprintf("%s.%s", pkgPath, funcName),
+			To:               qname,
+			Type:             string(RelReferences),
+			Confidence:       1.0,
+			ResolutionStatus: "RESOLVED",
+			ResolutionMethod: "GO_TYPES",
+			EpistemicClass:   "OBSERVATION",
+		})
+
+	case *types.Alias:
+		// Go represents `type A = B` as *types.Alias, not *types.Named.
+		// The alias is a distinct named declaration in source even though
+		// its underlying type is transparent to the type-checker. Emit a
+		// REFERENCES edge to preserve the source-level name.
 		if tt.Obj().Pkg() == nil {
 			return
 		}
