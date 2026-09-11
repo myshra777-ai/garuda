@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "generated": "2026-09-11",
+  "note": "Frozen golden vectors for CanonicalDecision. Any code change that alters these hex values is a breaking change to every decision hash ever recorded. Requires a version byte bump and a new ADR.",
+  "vectors": [
+    {
+      "name": "empty_decision",
+      "id": "00000000-0000-0000-0000-000000000000",
+      "title": "",
+      "status": "",
+      "scope_domain": "",
+      "scope_system": "",
+      "owner": "",
+      "evidence_ids": [],
+      "hash_hex": "00be2ff5ce3d6de70e4b5de4019319335d57f48d737a0c98138183957f924e90"
+    },
+    {
+      "name": "minimal_decision",
+      "id": "11111111-2222-3333-4444-555555555555",
+      "title": "t",
+      "status": "s",
+      "scope_domain": "d",
+      "scope_system": "sys",
+      "owner": "own",
+      "evidence_ids": [],
+      "hash_hex": "c4f7a38b182e07c123ebf513d926f42da0582b33d2a8c2f33388f4c44e4f5bf1"
+    },
+    {
+      "name": "decision_with_evidence",
+      "id": "11111111-2222-3333-4444-555555555555",
+      "title": "Test decision",
+      "status": "active",
+      "scope_domain": "security",
+      "scope_system": "auth",
+      "owner": "rohit",
+      "evidence_ids": ["e1", "e2", "e3"],
+      "hash_hex": "d4f2e3b0bb40edbae1af44f7ca3d579d0fdfdcf9b960a1347b11fb5791096f77"
+    },
+    {
+      "name": "unicode_decision",
+      "id": "11111111-2222-3333-4444-555555555555",
+      "title": "日本語",
+      "status": "active",
+      "scope_domain": "sec",
+      "scope_system": "auth",
+      "owner": "rohit",
+      "evidence_ids": [],
+      "hash_hex": "f7fe0dd1354bd334ca17ba9d18bed469e1dd9fbf88b78d7b992e9c4a7a014674"
+    }
+  ]
+}
