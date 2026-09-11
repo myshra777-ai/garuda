@@ -18,7 +18,13 @@ import (
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
-// SaveDecision inserts or updates a decision record writing flat scope fields, JSONB scope, and registers its Merkle leaf.
+// SaveDecision inserts or updates a decision record and anchors its
+// canonical leaf in the tenant's v1 Merkle log.
+//
+// Both the decision row and the Merkle leaf are written in one
+// transaction. If either fails, both roll back. This replaces the v0
+// pattern where the row and the Merkle chain update committed in
+// separate transactions and could diverge on failure.
 func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) error {
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
@@ -52,20 +58,13 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 		return fmt.Errorf("failed to marshal scope: %w", err)
 	}
 
-	// 1. Fetch parent Merkle root for tenant (creates genesis if missing)
-	root, err := s.GetMerkleRoot(ctx, d.TenantID)
-	if err != nil {
-		return fmt.Errorf("failed to fetch parent Merkle root: %w", err)
-	}
-	parentHash := root.RootHash
-
-	// 2. Compute decision leaf hash
+	// Compute the v1 canonical leaf hash. Evidence IDs are sorted
+	// inside CanonicalDecision, so caller order does not matter.
 	evidenceIDs := make([]string, len(d.EvidenceIDs))
 	for i, h := range d.EvidenceIDs {
 		evidenceIDs[i] = hex.EncodeToString(h[:])
 	}
-
-	decisionHash := merkle.HashDecision(
+	leafHash := merkle.CanonicalDecision(
 		d.ID,
 		d.Title,
 		string(d.Status),
@@ -75,15 +74,35 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 		evidenceIDs,
 	)
 
-	d.MerkleHash = decisionHash
-	d.ParentMerkleHash = parentHash
+	// One transaction: leaf anchoring and the decision row commit
+	// together or not at all.
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin save decision tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 
-	// 3. Upsert decision into PostgreSQL writing scope_domain, scope_system AND scope (JSONB)
+	res, err := appendLeafAndSealTx(ctx, tx, d.TenantID, TierStatic, leafHash)
+	if err != nil {
+		return fmt.Errorf("anchor decision leaf: %w", err)
+	}
+
+	proof := EncodeV1Proof(res)
+	proofJSON, err := proof.Marshal()
+	if err != nil {
+		return fmt.Errorf("marshal proof: %w", err)
+	}
+
+	d.MerkleHash = hex.EncodeToString(res.EpochRoot)
+	d.ParentMerkleHash = hex.EncodeToString(res.ParentRoot)
+
 	insertQuery := `
 		INSERT INTO decisions (
 			tenant_id, id, title, status, scope_domain, scope_system, scope, owner, confidence,
-			merkle_hash, parent_merkle_hash, created_at, updated_at, approved_at, valid_from, valid_to
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW(), $12, $13, $14)
+			merkle_hash, parent_merkle_hash, merkle_proof, verification_version,
+			created_at, updated_at, approved_at, valid_from, valid_to
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1,
+			NOW(), NOW(), $13, $14, $15)
 		ON CONFLICT (tenant_id, id) DO UPDATE SET
 			title = EXCLUDED.title,
 			status = EXCLUDED.status,
@@ -94,26 +113,26 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 			confidence = EXCLUDED.confidence,
 			merkle_hash = EXCLUDED.merkle_hash,
 			parent_merkle_hash = EXCLUDED.parent_merkle_hash,
+			merkle_proof = EXCLUDED.merkle_proof,
+			verification_version = EXCLUDED.verification_version,
 			updated_at = NOW(),
 			approved_at = EXCLUDED.approved_at,
 			valid_from = EXCLUDED.valid_from,
 			valid_to = EXCLUDED.valid_to;
 	`
 
-	_, err = s.pool.Exec(ctx, insertQuery,
+	_, err = tx.Exec(ctx, insertQuery,
 		d.TenantID, d.ID, d.Title, d.Status.String(),
 		d.ScopeDomain, d.ScopeSystem, scopeJSON, d.Owner, d.Confidence,
-		d.MerkleHash, d.ParentMerkleHash, d.ApprovedAt,
-		d.ValidFrom, d.ValidTo,
+		d.MerkleHash, d.ParentMerkleHash, proofJSON,
+		d.ApprovedAt, d.ValidFrom, d.ValidTo,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save decision: %w", err)
 	}
 
-	// 4. Append decision hash to tenant Merkle chain
-	_, err = s.AppendMerkleChain(ctx, d.TenantID, decisionHash)
-	if err != nil {
-		return fmt.Errorf("failed to append to Merkle chain: %w", err)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit save decision: %w", err)
 	}
 
 	return nil

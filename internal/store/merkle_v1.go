@@ -61,6 +61,10 @@ type V1WriteResult struct {
 // The caller is responsible for supplying a 32-byte leafHash. If
 // len(leafHash) != 32, the call returns an error without touching the
 // database.
+// AppendLeafAndSeal opens a transaction and delegates to the internal
+// helper. Use this when the leaf is the only thing being written.
+// When the leaf must be committed atomically with another row (e.g., a
+// decision), use appendLeafAndSealTx directly with an outer transaction.
 func (s *PostgresStore) AppendLeafAndSeal(ctx context.Context, tenantID uuid.UUID, tier int, leafHash []byte) (*V1WriteResult, error) {
 	if len(leafHash) != 32 {
 		return nil, fmt.Errorf("append leaf: hash must be 32 bytes, got %d", len(leafHash))
@@ -75,10 +79,36 @@ func (s *PostgresStore) AppendLeafAndSeal(ctx context.Context, tenantID uuid.UUI
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// Lock current root.
+	res, err := appendLeafAndSealTx(ctx, tx, tenantID, tier, leafHash)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit v1 write: %w", err)
+	}
+	return res, nil
+}
+
+// appendLeafAndSealTx is the transaction-scoped core of AppendLeafAndSeal.
+// It does not begin or commit — the caller owns the transaction. Used by
+// SaveDecision and other writers that must anchor a leaf atomically
+// alongside their own row insert.
+//
+// On return, the caller may inspect the leaf row (in merkle_epoch_leaves),
+// the updated merkle_roots row, and res. All are visible within the
+// caller's transaction and committed or rolled back with it.
+func appendLeafAndSealTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, tier int, leafHash []byte) (*V1WriteResult, error) {
+	if len(leafHash) != 32 {
+		return nil, fmt.Errorf("append leaf: hash must be 32 bytes, got %d", len(leafHash))
+	}
+	if tier != TierStatic && tier != TierRuntime {
+		return nil, fmt.Errorf("append leaf: invalid tier %d", tier)
+	}
+
 	var currentRoot string
 	var currentHeight int64
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		SELECT root_hash, block_height
 		FROM merkle_roots
 		WHERE tenant_id = $1
@@ -107,10 +137,7 @@ func (s *PostgresStore) AppendLeafAndSeal(ctx context.Context, tenantID uuid.UUI
 
 	newHeight := currentHeight + 1
 
-	// Build tier roots. Single-leaf tree in the leaf's tier, empty tree
-	// in the other.
 	var staticRoot, runtimeRoot []byte
-	var proofPath []merkle.ProofNode
 	if tier == TierStatic {
 		staticRoot = merkle.BuildRoot([][]byte{leafHash})
 		runtimeRoot = merkle.BuildRoot(nil)
@@ -118,8 +145,7 @@ func (s *PostgresStore) AppendLeafAndSeal(ctx context.Context, tenantID uuid.UUI
 		staticRoot = merkle.BuildRoot(nil)
 		runtimeRoot = merkle.BuildRoot([][]byte{leafHash})
 	}
-	// Single-leaf tree → empty proof path.
-	proofPath, err = merkle.BuildProof([][]byte{leafHash}, 0)
+	proofPath, err := merkle.BuildProof([][]byte{leafHash}, 0)
 	if err != nil {
 		return nil, fmt.Errorf("build v1 proof: %w", err)
 	}
@@ -142,10 +168,6 @@ func (s *PostgresStore) AppendLeafAndSeal(ctx context.Context, tenantID uuid.UUI
 	`, hex.EncodeToString(epochRoot), newHeight, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("update merkle root: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit v1 write: %w", err)
 	}
 
 	return &V1WriteResult{

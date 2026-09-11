@@ -9,8 +9,11 @@ import (
 	"crypto/sha256"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/merkle"
+	"github.com/myshra777-ai/garuda/internal/types"
 )
 
 func testDB(t *testing.T) (*PostgresStore, func()) {
@@ -203,5 +206,70 @@ func TestAppendLeafAndSeal_InvalidInput(t *testing.T) {
 	// Invalid tier.
 	if _, err := s.AppendLeafAndSeal(ctx, tenantID, 99, leafFromSeed("x")); err == nil {
 		t.Error("expected error for invalid tier")
+	}
+}
+
+func TestSaveDecision_V1WritesAndVerifies(t *testing.T) {
+	s, cleanup := testDB(t)
+	defer cleanup()
+
+	tenantID := uuid.New()
+	defer cleanupTenant(t, s, tenantID)
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	decisionID := uuid.New()
+
+	d := &types.Decision{
+		ID:          decisionID,
+		TenantID:    tenantID,
+		Title:       "Test v1 decision",
+		Status:      types.StatusDraft,
+		ScopeDomain: "security",
+		ScopeSystem: "auth",
+		Owner:       "test-runner",
+		Confidence:  0.9,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		ValidFrom:   now,
+	}
+
+	if err := s.SaveDecision(ctx, d); err != nil {
+		t.Fatalf("SaveDecision: %v", err)
+	}
+
+	var proofJSON []byte
+	var version int
+	err := s.pool.QueryRow(ctx, `
+		SELECT merkle_proof, verification_version
+		FROM decisions
+		WHERE tenant_id = $1 AND id = $2
+	`, tenantID, decisionID).Scan(&proofJSON, &version)
+	if err != nil {
+		t.Fatalf("read decision: %v", err)
+	}
+	if version != 1 {
+		t.Errorf("verification_version = %d, want 1", version)
+	}
+	if len(proofJSON) == 0 {
+		t.Fatal("merkle_proof is empty")
+	}
+
+	proof, err := UnmarshalV1Proof(proofJSON)
+	if err != nil {
+		t.Fatalf("unmarshal proof: %v", err)
+	}
+
+	recomputed := merkle.CanonicalDecision(
+		d.ID, d.Title, string(d.Status),
+		d.ScopeDomain, d.ScopeSystem, d.Owner, nil,
+	)
+
+	ok, err := VerifyV1Proof(recomputed, proof)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if !ok {
+		t.Fatal("freshly written decision proof did not verify")
 	}
 }
