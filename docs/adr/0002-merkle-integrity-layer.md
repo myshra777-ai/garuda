@@ -224,3 +224,54 @@ a fabricated sibling. This produces a tree shape that depends on the
 exact leaf count, so [A, B, C] and [A, B, C, C] cannot collide. The
 leaf and internal domain-separation prefixes (first paragraph of D3)
 prevent leaf-vs-internal confusion.
+
+
+---
+
+## Amendment 1 — Storage encoding (2026-09-11, Commit 4)
+
+**Amends:** D7.
+
+**Original decision:** Hash columns stored as `BYTEA`, with hex encoding at
+the API boundary only.
+
+**Amended decision:** Hash columns stored as lowercase hex `TEXT` (64
+characters), enforced by a strict `CHECK (col ~ '^[0-9a-f]{64}$')`
+constraint on every Merkle table.
+
+**Rationale:**
+
+The original D7 was written before the full call-site inventory existed.
+During Commit 3 migration planning, eleven call sites were identified that
+scan Merkle hash columns into Go `string` fields:
+
+- `internal/store/merkle_store.go` (six sites)
+- `internal/store/revision_store.go` (one)
+- `internal/store/decision_store.go` (one)
+- `internal/policy/anchor.go` (three)
+
+Migrating these to `[]byte` for `BYTEA` would require touching each call
+site, changing type signatures across package boundaries, and re-testing
+every hash comparison. The safety gain over the amended approach is zero:
+both `BYTEA` and `TEXT` with a 64-hex CHECK constraint guarantee
+
+1. Exactly 32 bytes of entropy (a SHA-256 digest).
+2. Well-formed values — no truncation, no uppercase, no non-hex characters.
+3. Database-enforced rejection of malformed inserts.
+
+The one remaining argument for `BYTEA` is storage size. A `BYTEA` column
+holds 32 bytes; a `TEXT` column holds 64 bytes as hex. For a Merkle log
+that grows by hundreds of rows per day, this is under 100 KB per year of
+overhead. Not a material cost.
+
+**Consequence:** The `encode(text, 'hex')` bug (SQLSTATE 42883) that was
+the origin of this migration cannot recur — the CHECK constraint fires at
+insert time, long before any hash value reaches a query. Additionally,
+`internal/merkle/testdata/*.json` stores hashes as hex strings, which are
+now the exact wire format the database expects. No translation layer is
+needed between the two.
+
+**Migration path:** No data conversion. Existing hex values are already
+well-formed; all rows pass the new CHECK constraint. A future migration
+to `BYTEA` remains possible if the storage economics change materially;
+it would be a purely mechanical `USING decode(col, 'hex')` cast.
