@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "generated": "2026-09-11",
+  "note": "Frozen golden vectors for EpochRoot. Seeds are UTF-8 strings; each seed is converted to a leaf by SHA256(seed). This is the convention used by the test. If the hashing convention changes, every root in this file will mismatch — which is the intended detection.",
+  "vectors": [
+    {
+      "name": "empty_both_tiers",
+      "static_seeds": [],
+      "runtime_seeds": [],
+      "parent_seed": "genesis_default",
+      "height": 1,
+      "root_hex": "406364054c0ac4504b4868b21ea9c4cc8bfeadb747ca36e107c4216f5fc2496f"
+    },
+    {
+      "name": "static_only",
+      "static_seeds": ["d1", "d2", "d3"],
+      "runtime_seeds": [],
+      "parent_seed": "genesis_default",
+      "height": 1,
+      "root_hex": "5c58934b164884f5a987a02f3542bc0b2828b7b4772cffe977320427149d635e"
+    },
+    {
+      "name": "runtime_only",
+      "static_seeds": [],
+      "runtime_seeds": ["r1", "r2"],
+      "parent_seed": "genesis_default",
+      "height": 1,
+      "root_hex": "7c3f3ed351d453d769710185a1f0d2b2063720a44679030ce1e1c3222f21f415"
+    },
+    {
+      "name": "both_tiers",
+      "static_seeds": ["d1", "d2"],
+      "runtime_seeds": ["r1", "r2", "r3"],
+      "parent_seed": "genesis_default",
+      "height": 1,
+      "root_hex": "fc745b3ef2b3667b0737dcb2c67d38a66581907c601f5ad775dfbafb57d1d2fc"
+    },
+    {
+      "name": "height_100",
+      "static_seeds": ["d1"],
+      "runtime_seeds": ["r1"],
+      "parent_seed": "genesis_default",
+      "height": 100,
+      "root_hex": "1a44b3ef92b9fe042c9a34a3dfa7ea540d7b56bcd6c448ea79874033703ae3eb"
+    }
+  ]
+}
