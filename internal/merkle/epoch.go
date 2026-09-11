@@ -43,7 +43,17 @@ import (
 func EpochRoot(staticLeaves, runtimeLeaves [][]byte, parentRoot []byte, blockHeight uint64) []byte {
 	staticRoot := BuildRoot(staticLeaves)
 	runtimeRoot := BuildRoot(runtimeLeaves)
+	return EpochRootFromTiers(staticRoot, runtimeRoot, parentRoot, blockHeight)
+}
 
+// EpochRootFromTiers computes the epoch root from precomputed tier
+// roots. This is the same computation as EpochRoot, exposed separately
+// because verification has the tier roots already (from the proof) and
+// cannot rebuild the leaves.
+//
+// Both roots must be 32 bytes. parentRoot must be 32 bytes.
+// blockHeight is encoded as 8-byte big-endian.
+func EpochRootFromTiers(staticRoot, runtimeRoot, parentRoot []byte, blockHeight uint64) []byte {
 	enc := NewEncoder()
 	enc.Bytes(fieldEpochStaticRoot, staticRoot)
 	enc.Bytes(fieldEpochRuntimeRoot, runtimeRoot)
@@ -53,9 +63,7 @@ func EpochRoot(staticLeaves, runtimeLeaves [][]byte, parentRoot []byte, blockHei
 	out, err := enc.Finish()
 	if err != nil {
 		// Same reasoning as GenesisRoot and CanonicalDecision: an error
-		// here means a coding bug, not a runtime condition. Panicking
-		// is correct because a wrong epoch root silently recorded would
-		// corrupt the audit log.
+		// here means a coding bug, not a runtime condition.
 		panic("merkle: epoch root encoding failed: " + err.Error())
 	}
 
