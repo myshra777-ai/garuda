@@ -25,24 +25,61 @@ import (
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
+// MCPServer holds the process-scoped state of one MCP session.
+//
+// A session begins when the host (Claude Desktop, Cursor, or any
+// other MCP client) spawns this process and ends when the process
+// exits. The session ID is generated once at startup and is included
+// in every log line and, in future commits, in every telemetry event.
+//
+// Store, engines, and auth service are all constructed once. The
+// stdio loop can handle hundreds of tool calls without reconnecting
+// to the database.
 type MCPServer struct {
 	store               *store.PostgresStore
 	lineageEngine       *engine.LineageEngine
 	contradictionEngine *engine.ContradictionEngine
 	authService         *auth.AuthService
 	jwtConfig           *auth.JWTConfig
+
+	// sessionID is generated at startup and does not change for the
+	// lifetime of the process.
+	sessionID string
+	startedAt time.Time
 }
 
 func main() {
-	slog.Info("Starting Garuda MCP Server...")
+	// All logging goes to stderr. stdout is the JSON-RPC channel and
+	// must contain nothing but line-delimited MCP messages.
+	slog.Info("Garuda MCP Server starting")
 
+	enc := json.NewEncoder(os.Stdout)
+
+	// DATABASE_URL is required. There is no fallback: a missing value
+	// in production should fail loudly, not connect to a local test
+	// database.
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+		_ = enc.Encode(MCPResponse{
+			JSONRPC: "2.0",
+			Error: &MCPError{
+				Code:    -32000,
+				Message: "DATABASE_URL environment variable is required",
+			},
+		})
+		slog.Error("DATABASE_URL is not set")
+		os.Exit(1)
 	}
 
 	dbStore, err := store.NewPostgresStore(dbURL)
 	if err != nil {
+		_ = enc.Encode(MCPResponse{
+			JSONRPC: "2.0",
+			Error: &MCPError{
+				Code:    -32000,
+				Message: fmt.Sprintf("database connection failed: %v", err),
+			},
+		})
 		slog.Error("Failed to connect to database", "error", err)
 		os.Exit(1)
 	}
@@ -59,46 +96,78 @@ func main() {
 		contradictionEngine: contradictionEngine,
 		authService:         authService,
 		jwtConfig:           jwtConfig,
+		sessionID:           uuid.New().String(),
+		startedAt:           time.Now().UTC(),
 	}
 
+	slog.Info("Garuda MCP Server ready",
+		"session_id", server.sessionID,
+		"pid", os.Getpid(),
+	)
+
+	// Graceful shutdown on SIGINT/SIGTERM.
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		slog.Info("Shutting down MCP server...")
+		slog.Info("Received shutdown signal", "session_id", server.sessionID)
 		os.Exit(0)
 	}()
 
-	inputBytes, err := io.ReadAll(os.Stdin)
-	if err != nil || len(inputBytes) == 0 {
-		slog.Error("Failed or empty input from stdin")
-		return
-	}
+	// Line-delimited JSON-RPC over stdio. The loop handles one request
+	// at a time and exits when stdin closes (EOF), which the MCP host
+	// signals by closing the pipe.
+	//
+	// A parse error does not terminate the process. The host may send
+	// another well-formed request; we respond with a JSON-RPC parse
+	// error and continue reading.
+	dec := json.NewDecoder(os.Stdin)
+	requestCount := 0
 
-	var req MCPRequest
-	if err := json.Unmarshal(inputBytes, &req); err != nil {
-		slog.Error("Failed to parse MCP request", "error", err)
-		resp := MCPResponse{
-			JSONRPC: "2.0",
-			ID:      nil,
-			Error: &MCPError{
-				Code:    -32700,
-				Message: fmt.Sprintf("Parse error: %v", err),
-			},
+	for {
+		var req MCPRequest
+		if err := dec.Decode(&req); err != nil {
+			if err == io.EOF {
+				slog.Info("stdin closed, shutting down",
+					"session_id", server.sessionID,
+					"requests_handled", requestCount,
+				)
+				return
+			}
+			// Malformed input. Respond with a parse error and keep the
+			// loop alive; the host may recover.
+			slog.Warn("Failed to parse MCP request",
+				"session_id", server.sessionID,
+				"error", err,
+			)
+			_ = enc.Encode(MCPResponse{
+				JSONRPC: "2.0",
+				ID:      nil,
+				Error: &MCPError{
+					Code:    -32700,
+					Message: fmt.Sprintf("Parse error: %v", err),
+				},
+			})
+			continue
 		}
-		if respBytes, err := json.Marshal(resp); err == nil {
-			fmt.Println(string(respBytes))
-		}
-		return
-	}
 
-	resp := server.handleRequest(req)
-	if respBytes, err := json.Marshal(resp); err == nil {
-		fmt.Println(string(respBytes))
+		requestCount++
+		resp := server.handleRequest(req)
+
+		if err := enc.Encode(resp); err != nil {
+			slog.Error("Failed to write MCP response",
+				"session_id", server.sessionID,
+				"error", err,
+			)
+			return
+		}
 	}
 }
 
-// MCP JSON-RPC structures
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP JSON-RPC types
+// ─────────────────────────────────────────────────────────────────────────────
+
 type MCPRequest struct {
 	JSONRPC string                 `json:"jsonrpc"`
 	ID      interface{}            `json:"id"`
@@ -118,6 +187,10 @@ type MCPError struct {
 	Message string `json:"message"`
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Request dispatch
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (s *MCPServer) handleRequest(req MCPRequest) MCPResponse {
 	switch req.Method {
 	case "initialize":
@@ -127,7 +200,7 @@ func (s *MCPServer) handleRequest(req MCPRequest) MCPResponse {
 	case "tools/call":
 		return s.handleToolsCall(req)
 	default:
-		return s.errorResponse(req.ID, -32601, "Method not found")
+		return s.errorResponse(req.ID, -32601, "Method not found: "+req.Method)
 	}
 }
 
@@ -147,6 +220,10 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 		},
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool listing
+// ─────────────────────────────────────────────────────────────────────────────
 
 func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 	tools := []map[string]interface{}{
@@ -222,7 +299,13 @@ func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 	}
 }
 
-// checkAndConsumeBudget provides pre-flight checks and returns a commit closure.
+// ─────────────────────────────────────────────────────────────────────────────
+// Budget enforcement
+// ─────────────────────────────────────────────────────────────────────────────
+
+// checkAndConsumeBudget performs a pre-flight budget check and returns
+// a commit closure. The caller invokes commit only after business
+// logic has succeeded, so failed operations consume no tokens.
 func (s *MCPServer) checkAndConsumeBudget(ctx context.Context, tenantID uuid.UUID, agentID, toolName string, payload interface{}) (func(), error) {
 	budgetState, err := s.store.GetTenantBudget(ctx, tenantID)
 	if err != nil {
@@ -247,6 +330,10 @@ func (s *MCPServer) checkAndConsumeBudget(ctx context.Context, tenantID uuid.UUI
 	return commit, nil
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool dispatch
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	toolName, ok := req.Params["name"].(string)
 	if !ok {
@@ -258,7 +345,7 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	var result interface{}
 	var err error
 
-	// Handlers control their own pre-flight and post-commit budget lifecycles
+	// Handlers control their own pre-flight and post-commit budget lifecycles.
 	switch toolName {
 	case "garuda.query":
 		result, err = s.handleQuery(args)
@@ -292,7 +379,9 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	}
 }
 
-// Handlers with Pre-Flight & Post-Commit pattern
+// ─────────────────────────────────────────────────────────────────────────────
+// Tool handlers
+// ─────────────────────────────────────────────────────────────────────────────
 
 func (s *MCPServer) handleProposeDecision(args map[string]interface{}) (interface{}, error) {
 	tenantID, _ := s.resolveTenant(args)
@@ -301,19 +390,16 @@ func (s *MCPServer) handleProposeDecision(args map[string]interface{}) (interfac
 		agentID = "mcp-agent"
 	}
 
-	// Pre-flight budget check
 	commitBudget, err := s.checkAndConsumeBudget(context.Background(), tenantID, agentID, "propose_decision", args)
 	if err != nil {
 		return nil, err
 	}
 
-	// Business Logic Execution
 	result, err := s.processProposeDecisionLogic(args)
 	if err != nil {
-		return nil, err // Operation failed -> zero tokens deducted
+		return nil, err
 	}
 
-	// Execution succeeded -> Commit deduction
 	commitBudget()
 
 	return result, nil
@@ -374,7 +460,7 @@ func (s *MCPServer) handleQuery(args map[string]interface{}) (interface{}, error
 		return nil, err
 	}
 
-	var results []map[string]interface{}
+	results := make([]map[string]interface{}, 0)
 	for _, d := range decisions {
 		if strings.Contains(strings.ToLower(d.Title), strings.ToLower(query)) {
 			results = append(results, map[string]interface{}{
@@ -485,6 +571,10 @@ func (s *MCPServer) handleGetImpact(args map[string]interface{}) (interface{}, e
 		"impact_children": children,
 	}, nil
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 func (s *MCPServer) resolveTenant(args map[string]interface{}) (uuid.UUID, error) {
 	if tenantStr, ok := args["tenant_id"].(string); ok && tenantStr != "" {
