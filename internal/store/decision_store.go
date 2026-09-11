@@ -82,7 +82,7 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	res, err := appendLeafAndSealTx(ctx, tx, d.TenantID, TierStatic, leafHash)
+	res, err := AppendLeafAndSealTx(ctx, tx, d.TenantID, TierStatic, leafHash)
 	if err != nil {
 		return fmt.Errorf("anchor decision leaf: %w", err)
 	}

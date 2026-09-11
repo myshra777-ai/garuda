@@ -15,13 +15,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/merkle"
+	"github.com/myshra777-ai/garuda/internal/store"
 )
 
 // Anchor persists evaluations to the shared Merkle ledger.
 //
-// The ledger stores a monotonically increasing block height per tenant.
-// Each evaluation is hashed and chained with the previous root via
-// merkle.ChainHash — the same primitive the rest of Garuda uses.
+// Every new evaluation is written as a v1 Merkle entry: a canonical
+// leaf hash, an epoch root computed over one leaf per epoch, and a
+// self-contained JSON inclusion proof stored alongside the row.
+//
+// v0 evaluations — those written before this commit — remain
+// verifiable through the deprecated ChainHash path. VerifyEvaluation
+// branches on the proof's version field.
 type Anchor struct {
 	pool *pgxpool.Pool
 }
@@ -30,116 +35,103 @@ func NewAnchor(pool *pgxpool.Pool) *Anchor {
 	return &Anchor{pool: pool}
 }
 
-// AppendEvaluation hashes the evaluation, chains it into the tenant's
-// Merkle ledger, and returns (blockHeight, inclusionProof, error).
+// AppendEvaluation anchors a policy evaluation in the tenant's v1
+// Merkle log and returns the epoch height plus the serialized proof.
 //
-// The inclusion proof is a compact byte slice sufficient to verify that
-// this evaluation's hash is committed to the current root. Storage is
-// not the point of the proof — the block height is what ties the
-// evaluation to the immutable ledger.
-// AppendEvaluation hashes the evaluation, chains it into the tenant's
-// Merkle ledger, and returns (blockHeight, inclusionProof, error).
+// The proof is a JSON V1Proof: leaf hash, tier roots, parent root,
+// epoch root, epoch height, and the inclusion proof path. It is
+// self-contained — verification requires no database access.
 func (a *Anchor) AppendEvaluation(ctx context.Context, ev *Evaluation) (int64, []byte, error) {
-	// 1. Canonicalize the evaluation into a deterministic byte sequence.
-	canonical, err := canonicalEvaluationBytes(ev)
-	if err != nil {
-		return 0, nil, fmt.Errorf("canonicalize evaluation: %w", err)
-	}
+	leafHash := merkle.CanonicalEvaluation(evaluationInput(ev))
 
-	decisionHash := sha256.Sum256(canonical)
-	decisionHashHex := fmt.Sprintf("%x", decisionHash)
-
-	// 2. Lock the current root row and chain.
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		return 0, nil, fmt.Errorf("begin anchor tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var currentRoot string
-	var currentHeight int64
-
-	// FIXED: no encode() — root_hash is TEXT
-	err = tx.QueryRow(ctx, `
-		SELECT root_hash, block_height
-		FROM merkle_roots
-		WHERE tenant_id = $1
-		FOR UPDATE
-	`, ev.TenantID).Scan(&currentRoot, &currentHeight)
-
-	if err != nil && err.Error() != "no rows in result set" {
-		return 0, nil, fmt.Errorf("lock root: %w", err)
-	}
-
-	// Genesis path — no row for this tenant yet
-	if currentRoot == "" {
-		gen := merkle.GenesisRootHex(ev.TenantID)
-		// gen is already a string; use it directly
-		_, ierr := tx.Exec(ctx, `
-			INSERT INTO merkle_roots (tenant_id, root_hash, block_height, created_at, updated_at)
-			VALUES ($1, $2, 0, NOW(), NOW())
-			ON CONFLICT (tenant_id) DO NOTHING
-		`, ev.TenantID, gen)
-		if ierr != nil {
-			return 0, nil, fmt.Errorf("insert genesis: %w", ierr)
-		}
-		currentRoot = gen
-		currentHeight = 0
-	}
-
-	// 3. Compute new root + block height.
-	newRoot := merkle.ChainHash(currentRoot, decisionHashHex)
-	newHeight := currentHeight + 1
-
-	_, err = tx.Exec(ctx, `
-		UPDATE merkle_roots
-		SET root_hash = $1, block_height = $2, updated_at = NOW()
-		WHERE tenant_id = $3
-	`, newRoot, newHeight, ev.TenantID)
+	res, err := store.AppendLeafAndSealTx(ctx, tx, ev.TenantID, store.TierStatic, leafHash)
 	if err != nil {
-		return 0, nil, fmt.Errorf("update root: %w", err)
+		return 0, nil, fmt.Errorf("anchor leaf: %w", err)
 	}
-
-	// 4. Serialize inclusion proof
-	proof := map[string]any{
-		"decision_hash": decisionHashHex,
-		"prev_root":     currentRoot,
-		"new_root":      newRoot,
-		"block_height":  newHeight,
-	}
-	proofBytes, _ := json.Marshal(proof)
 
 	if err := tx.Commit(ctx); err != nil {
 		return 0, nil, fmt.Errorf("commit anchor: %w", err)
 	}
 
-	return newHeight, proofBytes, nil
+	proofBytes, err := store.EncodeV1Proof(res).Marshal()
+	if err != nil {
+		return 0, nil, fmt.Errorf("marshal proof: %w", err)
+	}
+
+	return res.EpochHeight, proofBytes, nil
 }
 
-// VerifyEvaluation checks that an evaluation's inclusion proof is valid
-// against the current (or historical) Merkle root.
+// evaluationInput constructs the canonical input for hashing an
+// evaluation. See merkle.EvaluationInput for the field exclusion
+// rationale.
+func evaluationInput(ev *Evaluation) merkle.EvaluationInput {
+	return merkle.EvaluationInput{
+		PolicyID:          ev.PolicyID,
+		PolicyVersion:     ev.PolicyVersion,
+		Decision:          string(ev.Decision),
+		Reason:            ev.Reason,
+		ClaimIDs:          ev.Evidence.ClaimIDs,
+		EntityIDs:         ev.Evidence.EntityIDs,
+		ContradictionIDs:  ev.Evidence.ContradictionIDs,
+		MatchedPredicates: ev.Evidence.MatchedPredicates,
+		ReasoningNotes:    ev.Evidence.ReasoningNotes,
+		SnapshotID:        ev.Evidence.SnapshotID,
+		SubjectKind:       ev.SubjectKind,
+		SubjectID:         ev.SubjectID,
+		Actor:             ev.Actor,
+	}
+}
+
+// VerifyEvaluation checks that an evaluation's inclusion proof is valid.
 //
-// This is what makes the enforcement decision auditable: any agent or
-// auditor can reconstruct the chain and verify the decision was committed
-// at a specific block height.
+// Version 1 proofs use store.VerifyV1Proof (pure function, no chain
+// replay, O(log n) hashes). Version 0 or absent proofs use the
+// deprecated ChainHash path retained for historical rows.
 func (a *Anchor) VerifyEvaluation(ctx context.Context, ev *Evaluation) (bool, error) {
 	if ev.MerkleBlockHeight == nil {
 		return false, fmt.Errorf("evaluation has no merkle anchor")
 	}
 
-	canonical, err := canonicalEvaluationBytes(ev)
-	if err != nil {
-		return false, err
-	}
-	decisionHash := sha256.Sum256(canonical)
-
 	var storedProof []byte
-	err = a.pool.QueryRow(ctx, `
+	err := a.pool.QueryRow(ctx, `
 		SELECT merkle_proof FROM policy_evaluations WHERE id = $1
 	`, ev.ID).Scan(&storedProof)
 	if err != nil {
 		return false, fmt.Errorf("fetch proof: %w", err)
 	}
+
+	// Try v1 first. If the JSON parses as a V1Proof, the version is 1
+	// and verification is a pure function of the proof.
+	if v1, err := store.UnmarshalV1Proof(storedProof); err == nil {
+		leafHash := merkle.CanonicalEvaluation(evaluationInput(ev))
+		ok, err := store.VerifyV1Proof(leafHash, v1)
+		if err != nil {
+			return false, fmt.Errorf("v1 verify: %w", err)
+		}
+		if v1.EpochHeight != *ev.MerkleBlockHeight {
+			return false, fmt.Errorf("block height mismatch: proof=%d eval=%d", v1.EpochHeight, *ev.MerkleBlockHeight)
+		}
+		return ok, nil
+	}
+
+	// Fall back to v0.
+	return a.verifyV0(ev, storedProof)
+}
+
+// verifyV0 is the deprecated verification path for evaluations written
+// before the v1 write path was adopted.
+func (a *Anchor) verifyV0(ev *Evaluation, storedProof []byte) (bool, error) {
+	canonical, err := canonicalEvaluationBytes(ev)
+	if err != nil {
+		return false, err
+	}
+	decisionHash := sha256.Sum256(canonical)
 
 	var proof struct {
 		DecisionHash string `json:"decision_hash"`
@@ -151,23 +143,21 @@ func (a *Anchor) VerifyEvaluation(ctx context.Context, ev *Evaluation) (bool, er
 		return false, fmt.Errorf("parse proof: %w", err)
 	}
 
-	// Recompute the chain from prev → new and compare.
 	expectedNewRoot := merkle.ChainHash(proof.PrevRoot, fmt.Sprintf("%x", decisionHash))
 	if expectedNewRoot != proof.NewRoot {
-		return false, fmt.Errorf("merkle proof mismatch: expected %s got %s", expectedNewRoot, proof.NewRoot)
+		return false, nil
 	}
 	if proof.BlockHeight != *ev.MerkleBlockHeight {
 		return false, fmt.Errorf("block height mismatch: proof=%d eval=%d", proof.BlockHeight, *ev.MerkleBlockHeight)
 	}
-
 	return true, nil
 }
 
-// canonicalEvaluationBytes produces a stable byte sequence for an evaluation.
-// Ordering matters: two evaluations with the same logical content must hash
-// to the same bytes.
+// canonicalEvaluationBytes is the deprecated v0 encoder. Retained only
+// for verifying historical proofs.
+//
+// Deprecated: use merkle.CanonicalEvaluation via evaluationInput.
 func canonicalEvaluationBytes(ev *Evaluation) ([]byte, error) {
-	// Sort evidence slices for determinism
 	claimIDs := sortUUIDs(ev.Evidence.ClaimIDs)
 	entityIDs := sortUUIDs(ev.Evidence.EntityIDs)
 	contradictionIDs := sortUUIDs(ev.Evidence.ContradictionIDs)
@@ -194,10 +184,6 @@ func canonicalEvaluationBytes(ev *Evaluation) ([]byte, error) {
 	}
 	return json.Marshal(payload)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sorting helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 func sortUUIDs(ids []uuid.UUID) []uuid.UUID {
 	out := append([]uuid.UUID{}, ids...)

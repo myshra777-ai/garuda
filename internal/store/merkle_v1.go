@@ -79,7 +79,7 @@ func (s *PostgresStore) AppendLeafAndSeal(ctx context.Context, tenantID uuid.UUI
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	res, err := appendLeafAndSealTx(ctx, tx, tenantID, tier, leafHash)
+	res, err := AppendLeafAndSealTx(ctx, tx, tenantID, tier, leafHash)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (s *PostgresStore) AppendLeafAndSeal(ctx context.Context, tenantID uuid.UUI
 // On return, the caller may inspect the leaf row (in merkle_epoch_leaves),
 // the updated merkle_roots row, and res. All are visible within the
 // caller's transaction and committed or rolled back with it.
-func appendLeafAndSealTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, tier int, leafHash []byte) (*V1WriteResult, error) {
+func AppendLeafAndSealTx(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, tier int, leafHash []byte) (*V1WriteResult, error) {
 	if len(leafHash) != 32 {
 		return nil, fmt.Errorf("append leaf: hash must be 32 bytes, got %d", len(leafHash))
 	}
