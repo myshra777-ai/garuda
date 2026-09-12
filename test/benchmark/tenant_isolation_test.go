@@ -46,6 +46,28 @@ func TestTenantIsolation_ConcurrentSymbolCacheCollisions(t *testing.T) {
 	tenantA := uuid.New()
 	tenantB := uuid.New()
 
+	t.Cleanup(func() {
+		// symbol_cache is keyed by tenant_id only — it does NOT cascade
+		// from workspaces. Delete it explicitly by the two tenants used
+		// by this test. workspace_modules, cross_module_edges, and
+		// runtime_observations cascade via the workspaces FK and need no
+		// explicit delete here.
+		//
+		// t.Cleanup fires even when t.Fatal or a panic aborts the test,
+		// which a defer inside the test body would not.
+		cleanupCtx := context.Background()
+		if _, err := pgStore.Pool().Exec(cleanupCtx,
+			`DELETE FROM symbol_cache WHERE tenant_id = ANY($1)`,
+			[]uuid.UUID{tenantA, tenantB}); err != nil {
+			t.Logf("cleanup: symbol_cache delete failed: %v", err)
+		}
+		if _, err := pgStore.Pool().Exec(cleanupCtx,
+			`DELETE FROM workspaces WHERE tenant_id = ANY($1)`,
+			[]uuid.UUID{tenantA, tenantB}); err != nil {
+			t.Logf("cleanup: workspaces delete failed: %v", err)
+		}
+	})
+
 	collidingPkgPath := "github.com/enterprise/core/auth"
 	collidingSymbolName := "TokenManager"
 
