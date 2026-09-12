@@ -579,12 +579,20 @@ func (s *PostgresStore) detectCrossRepoImports(
 		}
 
 		if toEntityID != nil {
+			// The unique index that covers this ON CONFLICT target is
+			// partial (WHERE to_entity_id IS NOT NULL). A bare target
+			// cannot match a partial index in PostgreSQL; the WHERE
+			// clause must mirror the index predicate exactly. Before
+			// this fix, every resolved cross-repo edge threw
+			// SQLSTATE 42P10 and was swallowed by the Warn below — the
+			// table has been empty since it was created.
 			_, err = s.pool.Exec(ctx, `
 				INSERT INTO cross_repo_edges (
 					id, tenant_id, workspace_id, from_repo_id, to_repo_id,
 					from_entity_id, to_entity_id, relationship_type, evidence, resolved, created_at, updated_at
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, NOW(), NOW())
 				ON CONFLICT (tenant_id, from_repo_id, to_repo_id, from_entity_id, to_entity_id, relationship_type)
+					WHERE to_entity_id IS NOT NULL
 				DO UPDATE SET evidence = EXCLUDED.evidence, updated_at = NOW()
 			`, uuid.New(), tenantID, workspaceID, repoID, targetRepoID,
 				fromEntityID, toEntityID, rel.Type, evidenceJSON)
@@ -592,21 +600,25 @@ func (s *PostgresStore) detectCrossRepoImports(
 				slog.Warn("Failed to insert cross-repo edge", "error", err)
 			}
 		} else {
-			var existingID uuid.UUID
-			err = s.pool.QueryRow(ctx, `
-				SELECT id FROM cross_repo_edges
-				WHERE tenant_id = $1 AND from_repo_id = $2 AND to_repo_id = $3
-				AND from_entity_id = $4 AND to_entity_id IS NULL AND relationship_type = $5
-				LIMIT 1
-			`, tenantID, repoID, targetRepoID, fromEntityID, rel.Type).Scan(&existingID)
-			if err == nil {
-				continue
-			}
+			// Partial unique index on the unresolved case is
+			// idx_cross_repo_edges_unique_unresolved, keyed on
+			// (tenant_id, from_repo_id, to_repo_id, from_entity_id,
+			// relationship_type) WHERE to_entity_id IS NULL. The
+			// conflict target must carry the matching predicate.
+			//
+			// Before this fix the SELECT-then-INSERT was racy under
+			// concurrent analysis: two goroutines could both observe
+			// "no existing row" and both insert, leaving duplicates
+			// that no index prevented. ON CONFLICT moves the check
+			// into the write.
 			_, err = s.pool.Exec(ctx, `
 				INSERT INTO cross_repo_edges (
 					id, tenant_id, workspace_id, from_repo_id, to_repo_id,
 					from_entity_id, to_entity_id, relationship_type, evidence, resolved, created_at, updated_at
 				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false, NOW(), NOW())
+				ON CONFLICT (tenant_id, from_repo_id, to_repo_id, from_entity_id, relationship_type)
+					WHERE to_entity_id IS NULL
+				DO UPDATE SET evidence = EXCLUDED.evidence, updated_at = NOW()
 			`, uuid.New(), tenantID, workspaceID, repoID, targetRepoID,
 				fromEntityID, nil, rel.Type, evidenceJSON)
 			if err != nil {

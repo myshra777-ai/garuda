@@ -2828,32 +2828,32 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 
 	repoStats := computeRepoStats(ctx, pgStore, workspaceID)
 
+	// Cross-repo bridges: query the resolved cross_repo_edges table
+	// directly. Before this fix the number was derived by comparing
+	// package name strings via inferRepositoryFromPackage — a
+	// heuristic that was written for Go and produced nonsense on
+	// Python and TypeScript. Every distinct dotted TS package pair
+	// counted as a bridge.
+	//
+	// The real count comes from cross_repo_edges, populated by the
+	// analyzer when a claim's source and target entities resolve to
+	// different repositories within the same workspace.
+	// Cross-repo bridges: distinct (from_repo, to_repo) pairs with at
+	// least one edge between them. resolved = true is intentionally
+	// NOT a filter: an unresolved edge is still a bridge — the
+	// analyzer found an import from repo A into a package of repo B
+	// and failed to map it to a specific entity in B. The dependency
+	// exists. Filtering it out undercounts.
+	//
+	// The string concatenation is used because Postgres does not
+	// support COUNT(DISTINCT (a, b)) directly; the ::text cast of a
+	// UUID is unambiguous and short.
 	var crossRepoLinks int
-	crossRows, err := pgStore.Pool().Query(ctx, `
-		SELECT e1.package, e2.package
-		FROM claims c
-		JOIN entities e1 ON e1.id = c.from_entity_id
-		JOIN entities e2 ON e2.id = c.to_entity_id
-		WHERE c.workspace_id = $1
-	`, workspaceID)
-	if err == nil {
-		defer crossRows.Close()
-		seenBridges := make(map[string]bool)
-		for crossRows.Next() {
-			var pkg1, pkg2 string
-			if err := crossRows.Scan(&pkg1, &pkg2); err == nil {
-				r1 := inferRepositoryFromPackage(pkg1)
-				r2 := inferRepositoryFromPackage(pkg2)
-				if r1 != r2 && r1 != "stdlib" && r2 != "stdlib" && r1 != "unknown" && r2 != "unknown" {
-					bridge := r1 + "->" + r2
-					if !seenBridges[bridge] {
-						seenBridges[bridge] = true
-						crossRepoLinks++
-					}
-				}
-			}
-		}
-	}
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COUNT(DISTINCT (from_repo_id::text || '->' || to_repo_id::text))
+		FROM cross_repo_edges
+		WHERE workspace_id = $1
+	`, workspaceID).Scan(&crossRepoLinks)
 
 	var packages, entities, files, exportedEntities int
 	_ = pgStore.Pool().QueryRow(ctx, `
