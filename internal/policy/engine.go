@@ -46,12 +46,30 @@ type RunResult struct {
 //
 // The final decision is the highest-severity decision across all evaluations.
 // BLOCK > REVIEW > WARN > ALLOW.
+// RunOptions tunes the behavior of one policy pass.
+type RunOptions struct {
+	// DryRun, when true, evaluates policies and returns decisions
+	// without persisting policy rows, anchoring decisions to the
+	// Merkle ledger, or writing policy_evaluations. Used by callers
+	// that want to preview decisions (e.g. MCP tools) without leaving
+	// a trace in the audit log.
+	//
+	// Real evaluations must never use DryRun. The CLI always passes
+	// no options, so the zero value is false.
+	DryRun bool
+}
+
 func (e *Engine) Run(
 	ctx context.Context,
 	tenantID, workspaceID uuid.UUID,
 	policyDir string,
 	subjectKind, subjectID, actor string,
+	opts ...RunOptions,
 ) (*RunResult, error) {
+	var dryRun bool
+	if len(opts) > 0 {
+		dryRun = opts[0].DryRun
+	}
 
 	policies, hashes, err := ParseDirectory(policyDir)
 	if err != nil {
@@ -94,6 +112,23 @@ func (e *Engine) Run(
 			continue
 		}
 		ev.EvaluatedAt = time.Now().UTC()
+
+		if dryRun {
+			// Dry run: skip upsert, anchor, and persist. Synthesize a
+			// stable PolicyID so callers can correlate decisions with
+			// the policy that produced them.
+			if ev.PolicyID == uuid.Nil {
+				ev.PolicyID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(p.ID))
+			}
+			result.Evaluations = append(result.Evaluations, ev)
+			if ev.Decision.Severity() > result.FinalDecision.Severity() {
+				result.FinalDecision = ev.Decision
+				id := ev.PolicyID
+				result.BlockedBy = &id
+			}
+			continue
+		}
+
 		// Persist the policy row (idempotent upsert by policy_id)
 		policyUUID, err := e.upsertPolicy(ctx, tenantID, p, hashes)
 		if err != nil {

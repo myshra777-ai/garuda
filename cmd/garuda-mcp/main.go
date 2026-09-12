@@ -333,6 +333,49 @@ func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 				},
 			},
 		},
+		// ── Policy + semantic tools (Phase 2.2b/2.2c) ──
+		{
+			"name":        "garuda.policy.evaluate",
+			"description": "Dry-run the policy engine against a workspace and return the decisions it would make. Does NOT persist or Merkle-anchor. Use 'garuda policy evaluate' from the CLI to anchor a real governance decision.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id":    map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace":    map[string]interface{}{"type": "string", "description": "Workspace name"},
+					"policy_dir":   map[string]interface{}{"type": "string", "description": "Directory containing policy YAML. Defaults to GARUDA_POLICY_DIR or ./policies"},
+					"subject_kind": map[string]interface{}{"type": "string", "description": "Optional subject kind"},
+					"subject_id":   map[string]interface{}{"type": "string", "description": "Optional subject ID"},
+					"actor":        map[string]interface{}{"type": "string", "description": "Optional actor identifier"},
+				},
+			},
+		},
+		{
+			"name":        "garuda.entities",
+			"description": "List semantic entities in a workspace. Filterable by package and kind. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+					"package":   map[string]interface{}{"type": "string", "description": "Optional package name substring"},
+					"kind":      map[string]interface{}{"type": "string", "description": "Optional entity kind (struct, interface, function, method)"},
+					"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 100, cap 1000"},
+				},
+			},
+		},
+		{
+			"name":        "garuda.inspect",
+			"description": "Inspect one entity with its incoming and outgoing relationships. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+					"entity_id": map[string]interface{}{"type": "string", "description": "Entity UUID"},
+				},
+				"required": []string{"entity_id"},
+			},
+		},
 	}
 
 	return MCPResponse{
@@ -413,6 +456,16 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleCheckDrift(args)
 	case "garuda.query_claims":
 		result, err = s.handleQueryClaims(args)
+
+	// Policy and semantic tools (Phase 2.2b/2.2c). All read-only.
+	// garuda.policy.evaluate runs the engine in dry-run mode and does
+	// not persist or anchor.
+	case "garuda.policy.evaluate":
+		result, err = s.handlePolicyEvaluate(args)
+	case "garuda.entities":
+		result, err = s.handleEntities(args)
+	case "garuda.inspect":
+		result, err = s.handleInspect(args)
 
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)

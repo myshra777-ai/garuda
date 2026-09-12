@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
+	"github.com/myshra777-ai/garuda/internal/policy"
 )
 
 // defaultTenantID is the fallback tenant used when neither the request
@@ -351,4 +352,85 @@ func previewDrift(findings []knowledge.CodeDriftFinding, n int) []knowledge.Code
 		return findings
 	}
 	return findings[:n]
+}
+
+// handlePolicyEvaluate runs the policy engine against a workspace in
+// dry-run mode. Decisions are computed and returned but are NOT
+// persisted or Merkle-anchored. A separate human-driven CLI invocation
+// (garuda policy evaluate) is required to anchor a governance decision
+// to the ledger.
+//
+// Rationale: policy evaluation is a governance act. If an agent could
+// trigger arbitrary anchored evaluations, the audit log fills with
+// exploratory noise. Preview is safe for agents; commit requires a
+// human.
+func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface{}, error) {
+	tenantID, workspace, err := s.resolveTenantAndWorkspace(args)
+	if err != nil {
+		return nil, err
+	}
+
+	policyDir, _ := args["policy_dir"].(string)
+	if policyDir == "" {
+		policyDir = os.Getenv("GARUDA_POLICY_DIR")
+	}
+	if policyDir == "" {
+		policyDir = "./policies"
+	}
+
+	subjectKind, _ := args["subject_kind"].(string)
+	subjectID, _ := args["subject_id"].(string)
+	actor, _ := args["actor"].(string)
+	if actor == "" {
+		actor = "mcp-policy-preview"
+	}
+
+	// Resolve workspace name to UUID.
+	var workspaceID uuid.UUID
+	if err := s.store.Pool().QueryRow(context.Background(), `
+		SELECT id FROM workspaces WHERE name = $1 LIMIT 1
+	`, workspace).Scan(&workspaceID); err != nil {
+		return nil, fmt.Errorf("workspace %q not found: %w", workspace, err)
+	}
+
+	engine := policy.NewEngine(s.store.Pool())
+	result, err := engine.Run(
+		context.Background(),
+		tenantID, workspaceID,
+		policyDir,
+		subjectKind, subjectID, actor,
+		policy.RunOptions{DryRun: true},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("policy evaluation failed: %w", err)
+	}
+
+	// Shape the response with the fields that matter for an agent
+	// deciding whether to proceed.
+	evaluations := make([]map[string]interface{}, 0, len(result.Evaluations))
+	for _, ev := range result.Evaluations {
+		evaluations = append(evaluations, map[string]interface{}{
+			"policy_id":           ev.PolicyID.String(),
+			"decision":            string(ev.Decision),
+			"reason":              ev.Reason,
+			"matched_predicates":  ev.Evidence.MatchedPredicates,
+			"entity_count":        len(ev.Evidence.EntityIDs),
+			"claim_count":         len(ev.Evidence.ClaimIDs),
+			"contradiction_count": len(ev.Evidence.ContradictionIDs),
+			"anchor":              nil, // always nil in dry run
+		})
+	}
+
+	return map[string]interface{}{
+		"tenant_id":      tenantID.String(),
+		"workspace":      workspace,
+		"policy_dir":     policyDir,
+		"dry_run":        true,
+		"final_decision": string(result.FinalDecision),
+		"evaluations":    evaluations,
+		"summary":        result.Summary,
+		"note": "Dry-run only. No evaluation was persisted or anchored. " +
+			"Run 'garuda policy evaluate <dir> --workspace " + workspace +
+			"' from the CLI to record and anchor these decisions.",
+	}, nil
 }
