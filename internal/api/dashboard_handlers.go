@@ -7,6 +7,7 @@ package api
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -87,7 +88,7 @@ type PolicyEnforcementResponse struct {
 	LatestMerkleAnchor *int64                `json:"latest_merkle_anchor,omitempty"`
 }
 
-// LanguageDTO — GitHub-style language breakdown per repo/workspace.
+// LanguageDTO — language breakdown per repo/workspace.
 type LanguageDTO struct {
 	Name       string  `json:"name"`
 	Count      int     `json:"count"`
@@ -212,10 +213,18 @@ type EntityRecord struct {
 	Repo     string
 }
 
+// -----------------------------------------------------------------------------
+// Package-level constants and helpers
+// -----------------------------------------------------------------------------
+
 const dashboardTenantID = "00000000-0000-0000-0000-000000000001"
 
+// Parse the tenant UUID once at package load. Any malformed constant
+// panics at process start, not on every request.
+var dashboardTenantUUID = uuid.MustParse(dashboardTenantID)
+
 func getDashboardTenant() uuid.UUID {
-	return uuid.MustParse(dashboardTenantID)
+	return dashboardTenantUUID
 }
 
 func normalizeLimit(value string, fallback, maximum int) int {
@@ -235,7 +244,74 @@ func applySecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://d3js.org; style-src 'self' 'unsafe-inline'; img-src 'self' data:;")
 }
 
-// languageColor — GitHub-style language color palette.
+// writeJSONError writes a small JSON error body with the given status code.
+func writeJSONError(w http.ResponseWriter, status int, msg string, extra map[string]any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	body := map[string]any{"error": msg}
+	for k, v := range extra {
+		body[k] = v
+	}
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+// resolveWorkspaceID returns the workspace UUID and canonical name for
+// the requested workspace. If name is empty, returns the most recently
+// updated workspace. If name is non-empty and not found, returns an
+// error — the caller MUST respond 404, not fall back silently. Silent
+// fallback previously served workspace B's data under workspace A's
+// label, which is a cross-tenant leak.
+func resolveWorkspaceID(ctx context.Context, pgStore *store.PostgresStore, name string) (uuid.UUID, string, error) {
+	var id uuid.UUID
+	var resolvedName string
+	var err error
+	if name == "" {
+		err = pgStore.Pool().QueryRow(ctx,
+			`SELECT id, name FROM workspaces ORDER BY updated_at DESC LIMIT 1`,
+		).Scan(&id, &resolvedName)
+		if err != nil {
+			return uuid.Nil, "", fmt.Errorf("no workspaces exist")
+		}
+		return id, resolvedName, nil
+	}
+	err = pgStore.Pool().QueryRow(ctx,
+		`SELECT id, name FROM workspaces WHERE name = $1 LIMIT 1`,
+		name,
+	).Scan(&id, &resolvedName)
+	if err != nil {
+		return uuid.Nil, name, fmt.Errorf("workspace not found")
+	}
+	return id, resolvedName, nil
+}
+
+// proofIsInternallyValid checks that a stored Merkle proof is well-formed
+// and structurally self-consistent. It does not re-derive the full
+// inclusion proof against the current epoch root — that lives in the CLI
+// `garuda policy verify` path. This is the dashboard's conservative
+// answer to "should we show a green anchor chip?".
+//
+// Previously this was `merkle_proof IS NOT NULL`, which showed green for
+// any non-null blob. That was a lie of omission.
+func proofIsInternallyValid(proofJSON []byte) bool {
+	if len(proofJSON) == 0 {
+		return false
+	}
+	if v1, err := store.UnmarshalV1Proof(proofJSON); err == nil {
+		if v1.LeafHash == "" || v1.EpochRoot == "" {
+			return false
+		}
+		return true
+	}
+	var v0 struct {
+		NewRoot string `json:"new_root"`
+	}
+	if err := json.Unmarshal(proofJSON, &v0); err != nil {
+		return false
+	}
+	return v0.NewRoot != ""
+}
+
+// languageColor — standard language color palette.
 func languageColor(lang string) string {
 	colors := map[string]string{
 		"Go":         "#00ADD8",
@@ -303,6 +379,78 @@ func inferLanguageFromPath(path string) string {
 		return "CSS"
 	}
 	return "Other"
+}
+
+// normalizeLanguageName — canonical display form.
+func normalizeLanguageName(lang string) string {
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "go", "golang":
+		return "Go"
+	case "python", "py":
+		return "Python"
+	case "typescript", "ts":
+		return "TypeScript"
+	case "javascript", "js":
+		return "JavaScript"
+	case "rust", "rs":
+		return "Rust"
+	case "java":
+		return "Java"
+	case "c":
+		return "C"
+	case "c++", "cpp":
+		return "C++"
+	case "c#", "csharp":
+		return "C#"
+	case "ruby", "rb":
+		return "Ruby"
+	case "php":
+		return "PHP"
+	case "swift":
+		return "Swift"
+	case "kotlin", "kt":
+		return "Kotlin"
+	case "shell", "bash", "sh":
+		return "Shell"
+	case "html":
+		return "HTML"
+	case "css", "scss":
+		return "CSS"
+	}
+	return lang
+}
+
+func inferRepositoryFromPackage(pkg string) string {
+	if pkg == "" {
+		return "unknown"
+	}
+
+	pkg = strings.TrimPrefix(pkg, "file://")
+	if idx := strings.Index(pkg, "/go/pkg/mod/"); idx != -1 {
+		pkg = pkg[idx+len("/go/pkg/mod/"):]
+		if atIdx := strings.Index(pkg, "@"); atIdx != -1 {
+			pkg = pkg[:atIdx]
+		}
+	}
+
+	parts := strings.Split(strings.Trim(pkg, "/"), "/")
+	firstSegment := parts[0]
+
+	if !strings.Contains(firstSegment, ".") && firstSegment != "garuda" && firstSegment != "myshra777-ai" {
+		return "stdlib"
+	}
+
+	if strings.Contains(pkg, "myshra777-ai/garuda") || strings.HasPrefix(pkg, "github.com/myshra777-ai/garuda") {
+		return "garuda"
+	}
+
+	if len(parts) >= 3 && (parts[0] == "github.com" || parts[0] == "golang.org") {
+		return parts[0] + "/" + parts[1] + "/" + parts[2]
+	}
+	if len(parts) >= 2 {
+		return parts[0] + "/" + parts[1]
+	}
+	return pkg
 }
 
 // -----------------------------------------------------------------------------
@@ -473,7 +621,6 @@ button { cursor: pointer; }
 .drift-row-label { color: var(--text-2); }
 .drift-row-val { color: white; font-weight: 700; }
 
-/* Policy Enforcement */
 .policy-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 20px; }
 .policy-decision-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); border-left: 4px solid var(--muted); }
 .policy-decision-card.block  { border-left-color: var(--red); }
@@ -705,9 +852,9 @@ button { cursor: pointer; }
                         <div class="kpi-foot">Enforcement rules loaded</div>
                     </div>
                     <div class="kpi-card" style="border-left: 4px solid var(--amber);">
-                        <div class="kpi-label" style="color:var(--amber);">Active Agent Swarms</div>
+                        <div class="kpi-label" style="color:var(--amber);">Agent Peak (24h)</div>
                         <div class="kpi-value" id="stat-active-agents">—</div>
-                        <div class="kpi-foot">Concurrent AI/CLI sessions</div>
+                        <div class="kpi-foot">Peak concurrent AI/CLI sessions</div>
                     </div>
                     <div class="kpi-card" style="border-left: 4px solid var(--red);">
                         <div class="kpi-label" style="color:var(--red);">Drift Prevented</div>
@@ -731,7 +878,6 @@ button { cursor: pointer; }
                     </div>
                 </div>
 
-                <!-- Policy Enforcement — deterministic decisions anchored to Merkle ledger -->
                 <div class="panel" style="margin-bottom: 20px;">
                     <div class="panel-header">
                         <div>
@@ -766,7 +912,7 @@ button { cursor: pointer; }
                             <div class="policy-decision-card allow">
                                 <div class="policy-decision-title">Allow</div>
                                 <div class="policy-decision-val" id="policy-allow-count">—</div>
-                                <div class="policy-decision-desc">No predicate matched</div>
+                                <div class="policy-decision-desc">No violation detected</div>
                             </div>
                         </div>
 
@@ -804,19 +950,19 @@ button { cursor: pointer; }
                     <div class="drift-card">
                         <div class="drift-card-title">🔍 Knowledge Drift</div>
                         <div class="drift-row">
-                            <span class="drift-row-label">Doc → Code drift (documented, not implemented)</span>
+                            <span class="drift-row-label">Doc claims with no code reference</span>
                             <span class="drift-row-val" id="drift-doc-to-code" style="color:var(--amber);">—</span>
                         </div>
                         <div class="drift-row">
-                            <span class="drift-row-label">Code → Doc drift (implemented, not documented)</span>
+                            <span class="drift-row-label">Code entities with no doc claim</span>
                             <span class="drift-row-val" id="drift-code-to-doc" style="color:var(--amber);">—</span>
                         </div>
                         <div class="drift-row">
-                            <span class="drift-row-label">Undocumented code entities</span>
+                            <span class="drift-row-label">Undocumented exported code entities</span>
                             <span class="drift-row-val" id="drift-undocumented-code" style="color:var(--amber);">—</span>
                         </div>
                         <div class="drift-row">
-                            <span class="drift-row-label">Doc claims not matched to code</span>
+                            <span class="drift-row-label">Doc claims unverified at runtime</span>
                             <span class="drift-row-val" id="drift-unimplemented-docs" style="color:var(--amber);">—</span>
                         </div>
                     </div>
@@ -843,7 +989,7 @@ button { cursor: pointer; }
                     <div class="trust-card unverified">
                         <div class="trust-card-title">? Unverified Claims</div>
                         <div class="trust-card-val" id="stat-unverified">—</div>
-                        <div class="trust-card-desc">Code exists, zero recent executions</div>
+                        <div class="trust-card-desc" id="stat-unverified-desc">Awaiting runtime verification</div>
                     </div>
                     <div class="trust-card contradicted">
                         <div class="trust-card-title">⚠ Contradictions</div>
@@ -1090,7 +1236,6 @@ var WORKSPACE = urlParams.get("workspace") || "{{ .WorkspaceName }}";
 
 var state = {
     stats: null,
-    policies: null,
     currentView: "overview",
     currentLevel: "repository",
     currentFocus: "",
@@ -1123,7 +1268,9 @@ function getCommunityColor(node) {
 function promptWorkspaceSwitch() {
     var ws = prompt("Enter workspace name to switch context:", WORKSPACE);
     if (ws && ws.trim() !== "" && ws !== WORKSPACE) {
-        window.location.search = "?workspace=" + encodeURIComponent(ws.trim());
+        var params = new URLSearchParams(window.location.search);
+        params.set("workspace", ws.trim());
+        window.location.search = params.toString();
     }
 }
 
@@ -1169,7 +1316,7 @@ async function loadStats() {
         var res = await fetch("/api/v1/dashboard/stats?workspace=" + encodeURIComponent(WORKSPACE), {
             headers: { "Accept": "application/json" }
         });
-        if (!res.ok) throw new Error("Stats request failed");
+        if (!res.ok) throw new Error("Stats request failed: " + res.status);
         state.stats = await res.json();
         renderStats();
     } catch (err) {
@@ -1183,9 +1330,8 @@ async function loadPolicies() {
         var res = await fetch("/api/v1/dashboard/policies?workspace=" + encodeURIComponent(WORKSPACE), {
             headers: { "Accept": "application/json" }
         });
-        if (!res.ok) throw new Error("Policies request failed");
+        if (!res.ok) throw new Error("Policies request failed: " + res.status);
         var data = await res.json();
-        state.policies = data;
         renderPolicies(data);
     } catch (err) {
         console.error("Garuda policies error:", err);
@@ -1296,7 +1442,7 @@ function openPolicyDrawer(ev) {
     html += '<div class="detail-section"><div class="detail-section-title">Cryptographic Anchor</div>';
     if (ev.merkle_block_height) {
         html += propertyRow("Block height", "#" + ev.merkle_block_height);
-        html += propertyRow("Proof valid", ev.anchor_valid ? "Yes" : "No");
+        html += propertyRow("Proof stored", ev.anchor_valid ? "Yes" : "No");
         html += '<div class="merkle" style="margin-top:8px;">eval_id=' + escapeHTML(ev.id) + '</div>';
         html += '<button class="detail-action" onclick="verifyPolicyAnchor(\'' + escapeJS(ev.id) + '\')">Verify anchor →</button>';
     } else {
@@ -1310,13 +1456,16 @@ function openPolicyDrawer(ev) {
 }
 
 function verifyPolicyAnchor(evalID) {
-    fetch("/api/v1/dashboard/policies/verify?id=" + encodeURIComponent(evalID))
+    var url = "/api/v1/dashboard/policies/verify?workspace=" +
+        encodeURIComponent(WORKSPACE) + "&id=" + encodeURIComponent(evalID);
+    fetch(url)
         .then(function(res) { return res.json(); })
         .then(function(data) {
             if (data.valid) {
-                alert("✅ Merkle anchor VALID for evaluation " + evalID + " at block #" + data.block_height);
+                var versionTag = data.version === 1 ? "v1" : "v0";
+                alert("Merkle anchor VALID (" + versionTag + ") for evaluation " + evalID + " at block #" + data.block_height);
             } else {
-                alert("❌ Merkle anchor INVALID: " + (data.error || "unknown"));
+                alert("Merkle anchor INVALID: " + (data.error || "unknown"));
             }
         })
         .catch(function(err) {
@@ -1337,6 +1486,14 @@ function renderStats() {
     setText("stat-supported", formatNumber(s.supported_claims));
     setText("stat-unverified", formatNumber(s.unverified_claims));
     setText("stat-contradicted", formatNumber(s.contradicted));
+
+    // Honest card description: distinguish "attempted and found none"
+    // from "never attempted".
+    if (s.verification_attempted) {
+        setText("stat-unverified-desc", "Code exists, zero recent executions");
+    } else {
+        setText("stat-unverified-desc", "Runtime verification not yet attempted");
+    }
 
     setText("explorer-repos", formatNumber(s.repositories));
     setText("explorer-packages", formatNumber(s.packages));
@@ -1403,7 +1560,8 @@ function renderDrift(d) {
     setText("drift-doc-to-code", formatNumber(d.doc_to_code_drift_count));
     setText("drift-code-to-doc", formatNumber(d.code_to_doc_drift_count));
     setText("drift-undocumented-code", formatNumber(d.undocumented_code));
-    setText("drift-unimplemented-docs", formatNumber(d.unimplemented_docs));
+    // Field name matches DriftDTO JSON tag (unverified_docs), not the DOM id.
+    setText("drift-unimplemented-docs", formatNumber(d.unverified_docs));
 }
 
 function renderHubs(hubs) {
@@ -1464,12 +1622,18 @@ function renderEvidence(items) {
     items.forEach(function(item) {
         var row = document.createElement("div");
         row.className = "list-row";
+        // Previously every row was badged "Verified" regardless of source.
+        // Runtime observations are records, not verified claims. Badge them
+        // by kind so a trace does not look like a Merkle anchor.
+        var badgeClass = "info";
+        var badgeText = "Recorded";
+        if (item.kind === "Runtime Trace") { badgeText = "Observed"; }
         row.innerHTML = '<div class="row-icon">📜</div>' +
             '<div class="row-main">' +
                 '<div class="row-title">' + escapeHTML(item.summary) + '</div>' +
                 '<div class="row-meta">' + escapeHTML(item.kind) + ' · ' + escapeHTML(item.source) + ' · ' + formatDate(item.timestamp) + '</div>' +
             '</div>' +
-            '<span class="badge-pill success">Verified</span>';
+            '<span class="badge-pill ' + badgeClass + '">' + badgeText + '</span>';
         list.appendChild(row);
     });
 }
@@ -2129,7 +2293,11 @@ function openSearchResult(item) {
 
 function setText(id, value) {
     var el = document.getElementById(id);
-    if (el) el.textContent = value;
+    if (!el) {
+        console.warn("setText: missing element #" + id);
+        return;
+    }
+    el.textContent = value;
 }
 
 function formatNumber(value) {
@@ -2163,8 +2331,19 @@ function escapeHTML(value) {
         .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+// escapeJS — broader than the previous version. Escapes backslash,
+// both quote styles, newlines, carriage returns, and the Unicode line
+// and paragraph separators that terminate JS source. Values embedded
+// in inline handlers (onclick="f('...')") cannot break out.
 function escapeJS(value) {
-    return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    return String(value)
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "\\r")
+        .replace(/\u2028/g, "\\u2028")
+        .replace(/\u2029/g, "\\u2029");
 }
 
 async function loadAll() {
@@ -2186,8 +2365,37 @@ window.addEventListener("resize", function() {
 </body>
 </html>`
 
+const notFoundHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Workspace not found — Garuda</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #060810; color: #f8fafc; margin: 0; padding: 60px 40px; }
+.card { max-width: 560px; margin: 60px auto; background: #0e1424; border: 1px solid #1f2b45; border-radius: 12px; padding: 32px; }
+h1 { font-size: 22px; margin: 0 0 12px; }
+p { color: #94a3b8; line-height: 1.5; margin: 8px 0; }
+code { background: #162035; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+a { color: #38bdf8; text-decoration: none; font-weight: 600; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Workspace not found</h1>
+  <p>The workspace <code>{{ .Workspace }}</code> does not exist.</p>
+  <p>Requesting a workspace that does not exist returns 404 rather than silently serving another workspace's data.</p>
+  <p style="margin-top: 20px;"><a href="/dashboard">Return to default workspace</a></p>
+</div>
+</body>
+</html>`
+
 var parsedProdDashboardTmpl = template.Must(
 	template.New("dashboard").Parse(prodDashboardHTML),
+)
+
+var parsedNotFoundTmpl = template.Must(
+	template.New("notfound").Parse(notFoundHTML),
 )
 
 // -----------------------------------------------------------------------------
@@ -2200,103 +2408,43 @@ func (s *Server) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 	wsName := strings.TrimSpace(r.URL.Query().Get("workspace"))
 
 	pgStore, ok := s.store.(*store.PostgresStore)
-	if wsName == "" && ok && pgStore != nil {
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT name FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&wsName)
+	if !ok || pgStore == nil {
+		http.Error(w, "store unavailable", http.StatusServiceUnavailable)
+		return
 	}
-	if wsName == "" {
-		wsName = "default"
+
+	_, resolvedName, err := resolveWorkspaceID(ctx, pgStore, wsName)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		_ = parsedNotFoundTmpl.Execute(w, map[string]string{"Workspace": wsName})
+		return
 	}
 
 	data := DashboardData{
 		TenantID:      dashboardTenantID,
-		WorkspaceName: wsName,
+		WorkspaceName: resolvedName,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = parsedProdDashboardTmpl.Execute(w, data)
 }
 
-func inferRepositoryFromPackage(pkg string) string {
-	if pkg == "" {
-		return "unknown"
-	}
-
-	pkg = strings.TrimPrefix(pkg, "file://")
-	if idx := strings.Index(pkg, "/go/pkg/mod/"); idx != -1 {
-		pkg = pkg[idx+len("/go/pkg/mod/"):]
-		if atIdx := strings.Index(pkg, "@"); atIdx != -1 {
-			pkg = pkg[:atIdx]
-		}
-	}
-
-	parts := strings.Split(strings.Trim(pkg, "/"), "/")
-	firstSegment := parts[0]
-
-	if !strings.Contains(firstSegment, ".") && firstSegment != "garuda" && firstSegment != "myshra777-ai" {
-		return "stdlib"
-	}
-
-	if strings.Contains(pkg, "myshra777-ai/garuda") || strings.HasPrefix(pkg, "github.com/myshra777-ai/garuda") {
-		return "garuda"
-	}
-
-	if len(parts) >= 3 && (parts[0] == "github.com" || parts[0] == "golang.org") {
-		return parts[0] + "/" + parts[1] + "/" + parts[2]
-	}
-	if len(parts) >= 2 {
-		return parts[0] + "/" + parts[1]
-	}
-	return pkg
-}
-
-// normalizeLanguageName — canonical display form.
-func normalizeLanguageName(lang string) string {
-	switch strings.ToLower(strings.TrimSpace(lang)) {
-	case "go", "golang":
-		return "Go"
-	case "python", "py":
-		return "Python"
-	case "typescript", "ts":
-		return "TypeScript"
-	case "javascript", "js":
-		return "JavaScript"
-	case "rust", "rs":
-		return "Rust"
-	case "java":
-		return "Java"
-	case "c":
-		return "C"
-	case "c++", "cpp":
-		return "C++"
-	case "c#", "csharp":
-		return "C#"
-	case "ruby", "rb":
-		return "Ruby"
-	case "php":
-		return "PHP"
-	case "swift":
-		return "Swift"
-	case "kotlin", "kt":
-		return "Kotlin"
-	case "shell", "bash", "sh":
-		return "Shell"
-	case "html":
-		return "HTML"
-	case "css", "scss":
-		return "CSS"
-	}
-	return lang
-}
-
-// computeRepoStats — matches entities by repository_id, not name-LIKE.
+// computeRepoStats — batched queries: 3 total instead of 3×N.
+//
+// Previous version issued three queries per repository
+// (entity count, relationship count, language breakdown). On a
+// workspace with 50 repositories that is 150 round-trips per
+// dashboard load. This version issues one query for each dimension
+// and assembles the per-repo DTOs in Go.
 func computeRepoStats(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID) []RepoStatDTO {
 	rows, err := pgStore.Pool().Query(ctx, `
-		SELECT 
+		SELECT
 			id,
 			COALESCE(name, '') AS name,
 			COALESCE(analysis_status, 'pending') AS status,
 			COALESCE(current_commit, '') AS commit,
 			last_analyzed_at
-		FROM repositories 
+		FROM repositories
 		WHERE workspace_id = $1
 		ORDER BY name
 	`, workspaceID)
@@ -2306,6 +2454,7 @@ func computeRepoStats(ctx context.Context, pgStore *store.PostgresStore, workspa
 	defer rows.Close()
 
 	var stats []RepoStatDTO
+	statIndexByRepo := make(map[uuid.UUID]int)
 	for rows.Next() {
 		var repoID uuid.UUID
 		var name, status, commit string
@@ -2313,7 +2462,6 @@ func computeRepoStats(ctx context.Context, pgStore *store.PostgresStore, workspa
 		if err := rows.Scan(&repoID, &name, &status, &commit, &lastAnalyzed); err != nil {
 			continue
 		}
-
 		stat := RepoStatDTO{
 			Name:           name,
 			AnalysisStatus: status,
@@ -2322,75 +2470,110 @@ func computeRepoStats(ctx context.Context, pgStore *store.PostgresStore, workspa
 		if lastAnalyzed != nil {
 			stat.LastAnalyzed = lastAnalyzed.Format(time.RFC3339)
 		}
+		stats = append(stats, stat)
+		statIndexByRepo[repoID] = len(stats) - 1
+	}
+	if len(stats) == 0 {
+		return stats
+	}
 
-		_ = pgStore.Pool().QueryRow(ctx, `
-			SELECT COUNT(*)::int, COUNT(DISTINCT file_path)::int
-			FROM entities 
-			WHERE workspace_id = $1 AND repository_id = $2 AND kind != 'external'
-		`, workspaceID, repoID).Scan(&stat.Entities, &stat.Files)
-
-		_ = pgStore.Pool().QueryRow(ctx, `
-			SELECT COUNT(*)::int 
-			FROM claims c
-			JOIN entities e ON e.id = c.from_entity_id
-			WHERE c.workspace_id = $1 AND e.repository_id = $2
-		`, workspaceID, repoID).Scan(&stat.Relationships)
-
-		langRows, err := pgStore.Pool().Query(ctx, `
-			SELECT 
-				COALESCE(NULLIF(language, ''), '') AS lang,
-				file_path,
-				COUNT(*)::int AS cnt
-			FROM entities 
-			WHERE workspace_id = $1 AND repository_id = $2 AND kind != 'external'
-			GROUP BY language, file_path
-		`, workspaceID, repoID)
-		if err == nil {
-			repoLangs := make(map[string]int)
-			repoTotal := 0
-			for langRows.Next() {
-				var lang, filePath string
-				var cnt int
-				if err := langRows.Scan(&lang, &filePath, &cnt); err != nil {
-					continue
+	// Batch 1: entity + file counts per repo
+	if er, err := pgStore.Pool().Query(ctx, `
+		SELECT repository_id, COUNT(*)::int, COUNT(DISTINCT file_path)::int
+		FROM entities
+		WHERE workspace_id = $1 AND kind != 'external' AND repository_id IS NOT NULL
+		GROUP BY repository_id
+	`, workspaceID); err == nil {
+		for er.Next() {
+			var rid uuid.UUID
+			var ec, fc int
+			if er.Scan(&rid, &ec, &fc) == nil {
+				if idx, ok := statIndexByRepo[rid]; ok {
+					stats[idx].Entities = ec
+					stats[idx].Files = fc
 				}
+			}
+		}
+		er.Close()
+	}
+
+	// Batch 2: relationship counts per repo (edges whose source is in the repo)
+	if rr, err := pgStore.Pool().Query(ctx, `
+		SELECT e.repository_id, COUNT(*)::int
+		FROM claims c
+		JOIN entities e ON e.id = c.from_entity_id
+		WHERE c.workspace_id = $1 AND e.repository_id IS NOT NULL
+		GROUP BY e.repository_id
+	`, workspaceID); err == nil {
+		for rr.Next() {
+			var rid uuid.UUID
+			var cnt int
+			if rr.Scan(&rid, &cnt) == nil {
+				if idx, ok := statIndexByRepo[rid]; ok {
+					stats[idx].Relationships = cnt
+				}
+			}
+		}
+		rr.Close()
+	}
+
+	// Batch 3: language breakdown per repo
+	langTotals := make(map[uuid.UUID]map[string]int)
+	if langRows, err := pgStore.Pool().Query(ctx, `
+		SELECT repository_id, COALESCE(NULLIF(language, ''), '') AS lang, file_path
+		FROM entities
+		WHERE workspace_id = $1 AND kind != 'external' AND repository_id IS NOT NULL
+	`, workspaceID); err == nil {
+		for langRows.Next() {
+			var rid uuid.UUID
+			var lang, filePath string
+			if langRows.Scan(&rid, &lang, &filePath) == nil {
 				if lang == "" {
 					lang = inferLanguageFromPath(filePath)
 				}
 				lang = normalizeLanguageName(lang)
-				repoLangs[lang] += cnt
-				repoTotal += cnt
-			}
-			langRows.Close()
-
-			if repoTotal > 0 {
-				var ls []LanguageDTO
-				for l, c := range repoLangs {
-					ls = append(ls, LanguageDTO{
-						Name:       l,
-						Count:      c,
-						Percentage: float64(c) / float64(repoTotal) * 100.0,
-						Color:      languageColor(l),
-					})
+				if langTotals[rid] == nil {
+					langTotals[rid] = make(map[string]int)
 				}
-				sort.Slice(ls, func(i, j int) bool { return ls[i].Count > ls[j].Count })
-				stat.Languages = ls
+				langTotals[rid][lang]++
 			}
 		}
-
-		stats = append(stats, stat)
+		langRows.Close()
 	}
+	for rid, langs := range langTotals {
+		total := 0
+		for _, c := range langs {
+			total += c
+		}
+		if total == 0 {
+			continue
+		}
+		var ls []LanguageDTO
+		for l, c := range langs {
+			ls = append(ls, LanguageDTO{
+				Name:       l,
+				Count:      c,
+				Percentage: float64(c) / float64(total) * 100.0,
+				Color:      languageColor(l),
+			})
+		}
+		sort.Slice(ls, func(i, j int) bool { return ls[i].Count > ls[j].Count })
+		if idx, ok := statIndexByRepo[rid]; ok {
+			stats[idx].Languages = ls
+		}
+	}
+
 	return stats
 }
 
 // computeLanguageBreakdown — workspace-wide aggregation.
 func computeLanguageBreakdown(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID) []LanguageDTO {
 	rows, err := pgStore.Pool().Query(ctx, `
-		SELECT 
+		SELECT
 			COALESCE(NULLIF(language, ''), '') AS lang,
 			file_path,
 			COUNT(*)::int AS cnt
-		FROM entities 
+		FROM entities
 		WHERE workspace_id = $1 AND kind != 'external'
 		GROUP BY language, file_path
 	`, workspaceID)
@@ -2458,7 +2641,14 @@ func computeLanguageBreakdown(ctx context.Context, pgStore *store.PostgresStore,
 	return major
 }
 
-// computeDrift — doc-code drift summary.
+// computeDrift — document ↔ code drift summary.
+//
+// NOTE: this function reads two tables that are keyed differently.
+// document_claims is keyed by workspace name (string); entities is
+// keyed by workspace_id (uuid). If a workspace is ever renamed, the
+// document_claims queries will silently return zero. Fixing this
+// requires adding workspace_id to document_claims — a schema change
+// tracked separately. Until then the workspace name must not change.
 func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID, workspaceName string) DriftDTO {
 	var d DriftDTO
 
@@ -2478,37 +2668,47 @@ func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID
 		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1 AND status = 'CONTRADICTED'
 	`, workspaceName).Scan(&d.ContradictedClaims)
 
+	// Doc → Code drift: claims whose subject could not be matched to any
+	// code entity. "We documented a thing and cannot find it in code."
 	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COUNT(*)::int FROM document_claims 
+		SELECT COUNT(*)::int FROM document_claims
 		WHERE workspace = $1 AND matched_entity_id IS NULL
 	`, workspaceName).Scan(&d.DocToCodeDriftCount)
 
+	// Code → Doc drift: code entities with no doc claim referencing them.
+	// "We ship a thing and nobody wrote it down."
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM entities e
-		WHERE e.workspace_id = $1 
+		WHERE e.workspace_id = $1
 		  AND e.kind IN ('function', 'method', 'struct', 'interface')
 		  AND NOT EXISTS (
-			SELECT 1 FROM document_claims dc 
-			WHERE dc.workspace = $2 
+			SELECT 1 FROM document_claims dc
+			WHERE dc.workspace = $2
 			  AND dc.subject ILIKE '%' || e.name || '%'
 		  )
 	`, workspaceID, workspaceName).Scan(&d.CodeToDocDriftCount)
 
+	// Undocumented exported code entities.
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM entities e
-		WHERE e.workspace_id = $1 
+		WHERE e.workspace_id = $1
 		  AND e.kind IN ('function', 'method', 'struct', 'interface')
 		  AND e.is_exported = TRUE
 		  AND NOT EXISTS (
-			SELECT 1 FROM document_claims dc 
-			WHERE dc.workspace = $2 
+			SELECT 1 FROM document_claims dc
+			WHERE dc.workspace = $2
 			  AND dc.subject ILIKE '%' || e.name || '%'
 		  )
 	`, workspaceID, workspaceName).Scan(&d.UndocumentedCode)
 
+	// UnverifiedDocs: doc claims that DO reference a code entity, but
+	// whose runtime behaviour has not been verified. Distinct from
+	// DocToCodeDriftCount (no code entity found at all).
 	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COUNT(*)::int FROM document_claims 
-		WHERE workspace = $1 AND matched_entity_id IS NULL
+		SELECT COUNT(*)::int FROM document_claims
+		WHERE workspace = $1
+		  AND matched_entity_id IS NOT NULL
+		  AND status = 'UNVERIFIED'
 	`, workspaceName).Scan(&d.UnverifiedDocs)
 
 	return d
@@ -2521,24 +2721,17 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
-		http.Error(w, "dashboard store unavailable", http.StatusServiceUnavailable)
+		writeJSONError(w, http.StatusServiceUnavailable, "dashboard store unavailable", nil)
 		return
 	}
 
 	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
-	var workspaceID uuid.UUID
-
-	if workspaceName != "" {
-		err := pgStore.Pool().QueryRow(ctx, `SELECT id, name FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID, &workspaceName)
-		if err != nil {
-			_ = pgStore.Pool().QueryRow(ctx, `SELECT id, name FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID, &workspaceName)
-		}
-	} else {
-		err := pgStore.Pool().QueryRow(ctx, `SELECT id, name FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID, &workspaceName)
-		if err != nil {
-			workspaceName = "default"
-		}
+	workspaceID, resolvedName, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
+		return
 	}
+	workspaceName = resolvedName
 
 	repoList := make([]string, 0)
 	repoRows, err := pgStore.Pool().Query(ctx, `SELECT name FROM repositories WHERE workspace_id = $1 ORDER BY name`, workspaceID)
@@ -2557,7 +2750,7 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 
 	var crossRepoLinks int
 	crossRows, err := pgStore.Pool().Query(ctx, `
-		SELECT e1.package, e2.package 
+		SELECT e1.package, e2.package
 		FROM claims c
 		JOIN entities e1 ON e1.id = c.from_entity_id
 		JOIN entities e2 ON e2.id = c.to_entity_id
@@ -2605,61 +2798,68 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	var idempotencySafeguards int
 	_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(COUNT(*)::int, 0) FROM idempotency_keys WHERE tenant_id = $1`, tenantID).Scan(&idempotencySafeguards)
 
+	// FIX: tenant-scoped. Previously counted every tenant's pending
+	// decisions, same class of leak as the Active Policies panel.
 	var pendingDecisions int
-	_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(COUNT(*)::int, 0) FROM decisions WHERE status = 'PENDING'`).Scan(&pendingDecisions)
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COALESCE(COUNT(*)::int, 0)
+		FROM decisions
+		WHERE tenant_id = $1 AND status = 'PENDING'
+	`, tenantID).Scan(&pendingDecisions)
 
 	var canonicalDecisions int
 	_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(COUNT(*)::int, 0) FROM decisions WHERE tenant_id = $1 AND status = 'CANONICAL'`, tenantID).Scan(&canonicalDecisions)
 
-	// Three orthogonal counts, no fabrication:
+	// Three orthogonal counts, kept separate on purpose:
 	//
-	//   - claimVerifications* are runtime verification results.
-	//     They are zero unless an evaluator has actually run.
+	//   - supportedClaims / unverifiedClaims / activeContradictions are
+	//     runtime verification results. Zero when no evaluator has run.
 	//
 	//   - staticClaims is the count of semantic edges in the graph.
-	//     Every edge exists; none have been runtime-verified unless
-	//     the counters above are non-zero.
+	//     Every one exists. None have been runtime-verified unless the
+	//     counters above are non-zero.
 	//
-	// The previous code assigned staticClaims to unverifiedClaims
-	// whenever all verification counters were zero. That asserted
-	// "we checked N claims and none passed" when the truth was
-	// "we have never attempted verification." Same class of lie as
-	// the MCP PASSED verdict we removed in Phase 2.2a.
+	// The frontend uses VerificationAttempted to distinguish
+	// "attempted and found nothing" from "never attempted".
 	var staticClaims int
 	_ = pgStore.Pool().QueryRow(ctx,
 		`SELECT COUNT(*)::int FROM claims WHERE workspace_id = $1`,
 		workspaceID).Scan(&staticClaims)
 
-	// totalClaims is the sum of all known claim categories. It is not
-	// assigned to any single counter.
-	totalClaims := supportedClaims + unverifiedClaims + activeContradictions
-	if totalClaims == 0 && staticClaims > 0 {
-		// No runtime verification has been attempted. The static claim
-		// count is real; the runtime counters are honestly zero.
+	runtimeTotal := supportedClaims + unverifiedClaims + activeContradictions
+	totalClaims := runtimeTotal
+	if runtimeTotal == 0 && staticClaims > 0 {
 		totalClaims = staticClaims
 	}
 
+	// FIX: tenant-scoped. Previously summed every tenant's telemetry.
 	var tokensSaved int64
 	var costSavedUSD float64
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COALESCE(SUM(tokens_saved), 0), COALESCE(SUM(cost_saved_usd), 0)
 		FROM telemetry_events
-	`).Scan(&tokensSaved, &costSavedUSD)
+		WHERE tenant_id = $1
+	`, tenantID).Scan(&tokensSaved, &costSavedUSD)
 
+	// FIX: tenant-scoped. Reports PEAK observed in the last 24 hours,
+	// not current — the label on the card has been updated to match.
 	var activeAgents int
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COALESCE(MAX(active_agents), 0)::int
 		FROM telemetry_events
-		WHERE created_at > NOW() - INTERVAL '24 hours'
-	`).Scan(&activeAgents)
+		WHERE tenant_id = $1
+		  AND created_at > NOW() - INTERVAL '24 hours'
+	`, tenantID).Scan(&activeAgents)
 
+	// FIX: tenant-scoped.
 	var coldStartLatency float64
 	var coldStartSamples int
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COALESCE(AVG(cold_start_latency_ms), 0), COUNT(cold_start_latency_ms)
 		FROM telemetry_events
-		WHERE created_at > NOW() - INTERVAL '7 days'
-	`).Scan(&coldStartLatency, &coldStartSamples)
+		WHERE tenant_id = $1
+		  AND created_at > NOW() - INTERVAL '7 days'
+	`, tenantID).Scan(&coldStartLatency, &coldStartSamples)
 
 	hubRows, err := pgStore.Pool().Query(ctx, `
 		SELECT e.id, e.name, e.kind, e.package, count(c.id) as callers
@@ -2722,18 +2922,25 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	latestSnap, _ := pgStore.GetLatestMerkleSnapshot(ctx, tenantID)
+	// FIX: read the decision log's current root from merkle_roots, not
+	// the worker's periodic snapshot counter in merkle_snapshots. The
+	// two advance at different rates. The dashboard "block height" is
+	// the decision log's height.
 	latestHash := "Genesis"
 	parentHash := "Genesis"
 	trustStatus := "Genesis"
-	var latestBlock int64 = 1
-	if latestSnap != nil {
+	var latestBlock int64 = 0
+	var rootHash string
+	var rootHeight int64
+	rootErr := pgStore.Pool().QueryRow(ctx, `
+		SELECT root_hash, block_height
+		FROM merkle_roots
+		WHERE tenant_id = $1
+	`, tenantID).Scan(&rootHash, &rootHeight)
+	if rootErr == nil {
 		trustStatus = "Verified"
-		latestHash = latestSnap.SnapshotHash
-		latestBlock = latestSnap.BlockHeight
-		if latestSnap.ParentSnapshotID != nil {
-			parentHash = latestSnap.ParentSnapshotID.String()
-		}
+		latestHash = rootHash
+		latestBlock = rootHeight
 	}
 
 	drift := computeDrift(ctx, pgStore, workspaceID, workspaceName)
@@ -2755,8 +2962,8 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		SupportedClaims:       supportedClaims,
 		Contradicted:          activeContradictions,
 		StaticClaims:          staticClaims,
-		VerificationAttempted: (supportedClaims + unverifiedClaims + activeContradictions) > 0,
-		UnverifiedClaims:      unverifiedClaims, // now honest — will be 0 if no verification ran
+		VerificationAttempted: runtimeTotal > 0,
+		UnverifiedClaims:      unverifiedClaims,
 		NeedsAttention:        needsAttention,
 		RecentEvidence:        recentEvidence,
 		CanonicalDecisions:    canonicalDecisions,
@@ -2786,7 +2993,7 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
-		http.Error(w, "search unavailable", http.StatusServiceUnavailable)
+		writeJSONError(w, http.StatusServiceUnavailable, "search unavailable", nil)
 		return
 	}
 
@@ -2798,15 +3005,10 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
-	var workspaceID uuid.UUID
-
-	if workspaceName != "" {
-		err := pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID)
-		if err != nil {
-			_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID)
-		}
-	} else {
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID)
+	workspaceID, _, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
+		return
 	}
 
 	limit := normalizeLimit(r.URL.Query().Get("limit"), 50, 100)
@@ -2825,7 +3027,7 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 		workspaceID, searchPattern, limit,
 	)
 	if err != nil {
-		http.Error(w, "search query failed: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "search query failed", map[string]any{"detail": err.Error()})
 		return
 	}
 	defer rows.Close()
@@ -2848,20 +3050,15 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
-		http.Error(w, "store unavailable", http.StatusServiceUnavailable)
+		writeJSONError(w, http.StatusServiceUnavailable, "store unavailable", nil)
 		return
 	}
 
 	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
-	var workspaceID uuid.UUID
-
-	if workspaceName != "" {
-		err := pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID)
-		if err != nil {
-			_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID)
-		}
-	} else {
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID)
+	workspaceID, _, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
+		return
 	}
 
 	level := r.URL.Query().Get("level")
@@ -2871,10 +3068,9 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	focus := strings.TrimSpace(r.URL.Query().Get("focus"))
 
 	entityMap := make(map[string]EntityRecord)
-	// Exclude external dependency stubs (kind='external'). They are module
-	// references created when an edge targets a symbol outside the repo,
-	// not part of the workspace's source architecture. Including them floods
-	// the graph with 400+ nodes that aren't source.
+	// Exclude external dependency stubs (kind='external'). They represent
+	// unresolved references to symbols outside the workspace, not part
+	// of the source architecture.
 	eRows, err := pgStore.Pool().Query(ctx, `
 		SELECT id::text, name, kind, package, file_path, is_exported
 		FROM entities
@@ -2911,8 +3107,8 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	var contras []rawContra
 	cvRows, err := pgStore.Pool().Query(ctx, `
-		SELECT source_entity_id::text, COALESCE(evidence_payload->>'raw_target', 'unapproved-endpoint'), runtime_observed_count 
-		FROM claim_verifications 
+		SELECT source_entity_id::text, COALESCE(evidence_payload->>'raw_target', 'unapproved-endpoint'), runtime_observed_count
+		FROM claim_verifications
 		WHERE workspace_id = $1 AND status = 'CONTRADICTED'
 	`, workspaceID)
 	if err == nil {
@@ -2978,10 +3174,6 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			nodesMap[repo] = node
 		}
 
-		if _, exists := nodesMap["garuda"]; !exists {
-			nodesMap["garuda"] = GraphNodeDTO{ID: "garuda", Label: "garuda", Kind: "repository", Repo: "garuda", Status: "SUPPORTED", Exported: true, Count: 100}
-		}
-
 		for _, c := range claims {
 			src := entityMap[c.from]
 			tgt := entityMap[c.to]
@@ -2999,14 +3191,10 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		for repo := range nodesMap {
-			if repo != "garuda" && !strings.HasPrefix(repo, "ext-") {
-				edgeKey := "garuda->" + repo
-				if _, exists := edgesMap[edgeKey]; !exists {
-					edgesMap[edgeKey] = GraphEdgeDTO{ID: edgeKey, Source: "garuda", Target: repo, Type: "MODULE_DEPENDENCY", Status: "SUPPORTED", Label: "imports", Count: 1, Confidence: 1.0}
-				}
-			}
-		}
+		// Previously fabricated a "garuda" node and a "garuda imports X"
+		// edge for every repository with Confidence: 1.0, regardless of
+		// whether any such import existed. Removed. If a repo has no
+		// edges, the graph shows no edges.
 
 		for _, cv := range contras {
 			src := entityMap[cv.src]
@@ -3125,30 +3313,27 @@ func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request)
 	tenantID := getDashboardTenant()
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
-		http.Error(w, "store unavailable", http.StatusServiceUnavailable)
+		writeJSONError(w, http.StatusServiceUnavailable, "store unavailable", nil)
 		return
 	}
 
 	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
-	var workspaceID uuid.UUID
-	if workspaceName != "" {
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID)
-	} else {
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID)
+	workspaceID, resolvedName, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
+		return
 	}
 
 	resp := PolicyEnforcementResponse{
-		Workspace:         workspaceName,
+		Workspace:         resolvedName,
 		LatestEvaluations: []PolicyEvaluationDTO{},
 		FinalDecision:     "ALLOW",
 	}
 
-	// Active policy count
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM policies WHERE tenant_id = $1 AND status = 'active'
 	`, tenantID).Scan(&resp.ActivePolicies)
 
-	// Decision counts + total
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT
 			COUNT(*)::int,
@@ -3168,7 +3353,6 @@ func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request)
 		&resp.LatestMerkleAnchor,
 	)
 
-	// Final decision is the highest severity present
 	switch {
 	case resp.BlockedCount > 0:
 		resp.FinalDecision = "BLOCK"
@@ -3180,7 +3364,8 @@ func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request)
 		resp.FinalDecision = "ALLOW"
 	}
 
-	// Latest 10 evaluations
+	// Fetch proof bytes alongside the row so we can evaluate AnchorValid
+	// honestly (not just "proof column is non-null").
 	rows, err := pgStore.Pool().Query(ctx, `
 		SELECT
 			pe.id,
@@ -3193,7 +3378,7 @@ func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request)
 			COALESCE(jsonb_array_length(pe.evidence->'contradiction_ids'), 0),
 			pe.evidence->'matched_predicates',
 			pe.merkle_block_height,
-			pe.merkle_proof IS NOT NULL,
+			pe.merkle_proof,
 			pe.evaluated_at,
 			pe.actor,
 			pe.subject_kind,
@@ -3209,11 +3394,12 @@ func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request)
 		for rows.Next() {
 			var d PolicyEvaluationDTO
 			var matchedJSON []byte
+			var proofBytes []byte
 			var evalTime time.Time
 			if err := rows.Scan(
 				&d.ID, &d.PolicyID, &d.PolicyTitle, &d.Decision, &d.Reason,
 				&d.EntityCount, &d.ClaimCount, &d.ContradictionCount,
-				&matchedJSON, &d.MerkleBlockHeight, &d.AnchorValid,
+				&matchedJSON, &d.MerkleBlockHeight, &proofBytes,
 				&evalTime, &d.Actor, &d.SubjectKind, &d.SubjectID,
 			); err != nil {
 				continue
@@ -3221,6 +3407,7 @@ func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request)
 			if len(matchedJSON) > 0 {
 				_ = json.Unmarshal(matchedJSON, &d.MatchedPredicates)
 			}
+			d.AnchorValid = proofIsInternallyValid(proofBytes)
 			d.EvaluatedAt = evalTime.Format(time.RFC3339)
 			resp.LatestEvaluations = append(resp.LatestEvaluations, d)
 		}
@@ -3231,20 +3418,39 @@ func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request)
 }
 
 // HandleDashboardPolicyVerify — verifies the Merkle anchor of one evaluation.
+//
+// Rewritten to handle both v1 (RFC 6962 canonical) and v0 (linear chain)
+// proof formats. The previous implementation tried to unmarshal every
+// proof as v0 and returned "malformed proof" for every well-formed v1
+// proof, which is what every current evaluation produces. The verify
+// button was effectively broken for all live data.
+//
+// The endpoint is also workspace-scoped: a caller must specify which
+// workspace the evaluation belongs to, and the query filters by it.
 func (s *Server) HandleDashboardPolicyVerify(w http.ResponseWriter, r *http.Request) {
 	applySecurityHeaders(w)
 	ctx := r.Context()
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
-		http.Error(w, "store unavailable", http.StatusServiceUnavailable)
+		writeJSONError(w, http.StatusServiceUnavailable, "store unavailable", nil)
+		return
+	}
+
+	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
+	if workspaceName == "" {
+		writeJSONError(w, http.StatusBadRequest, "workspace parameter required", nil)
+		return
+	}
+	workspaceID, _, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
 		return
 	}
 
 	evalIDStr := r.URL.Query().Get("id")
 	evalID, err := uuid.Parse(evalIDStr)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"valid": false, "error": "invalid id"})
+		writeJSONError(w, http.StatusBadRequest, "invalid id", nil)
 		return
 	}
 
@@ -3253,14 +3459,40 @@ func (s *Server) HandleDashboardPolicyVerify(w http.ResponseWriter, r *http.Requ
 	var proof []byte
 	err = pgStore.Pool().QueryRow(ctx, `
 		SELECT decision, reason, merkle_block_height, merkle_proof
-		FROM policy_evaluations WHERE id = $1
-	`, evalID).Scan(&decision, &reason, &blockHeight, &proof)
+		FROM policy_evaluations
+		WHERE id = $1 AND workspace_id = $2
+	`, evalID, workspaceID).Scan(&decision, &reason, &blockHeight, &proof)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"valid": false, "error": "evaluation not found"})
+		writeJSONError(w, http.StatusNotFound, "evaluation not found", nil)
 		return
 	}
 
+	// Try v1 first — the format every new evaluation produces.
+	if v1, err := store.UnmarshalV1Proof(proof); err == nil {
+		leafBytes, decodeErr := hex.DecodeString(v1.LeafHash)
+		if decodeErr != nil {
+			writeJSONError(w, http.StatusOK, "invalid leaf hash", map[string]any{"valid": false})
+			return
+		}
+		ok, verifyErr := store.VerifyV1Proof(leafBytes, v1)
+		if verifyErr != nil {
+			writeJSONError(w, http.StatusOK, verifyErr.Error(), map[string]any{"valid": false})
+			return
+		}
+		valid := ok && blockHeight != nil && v1.EpochHeight == *blockHeight
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"valid":        valid,
+			"version":      1,
+			"block_height": v1.EpochHeight,
+			"decision":     decision,
+			"epoch_root":   v1.EpochRoot,
+			"parent_root":  v1.ParentRoot,
+		})
+		return
+	}
+
+	// Fall back to v0 verification for historical rows.
 	var proofData struct {
 		DecisionHash string `json:"decision_hash"`
 		PrevRoot     string `json:"prev_root"`
@@ -3268,16 +3500,15 @@ func (s *Server) HandleDashboardPolicyVerify(w http.ResponseWriter, r *http.Requ
 		BlockHeight  int64  `json:"block_height"`
 	}
 	if err := json.Unmarshal(proof, &proofData); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"valid": false, "error": "malformed proof"})
+		writeJSONError(w, http.StatusOK, "malformed proof", map[string]any{"valid": false})
 		return
 	}
 
 	valid := blockHeight != nil && proofData.BlockHeight == *blockHeight && proofData.NewRoot != ""
-
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"valid":        valid,
+		"version":      0,
 		"block_height": proofData.BlockHeight,
 		"decision":     decision,
 		"prev_root":    proofData.PrevRoot,
