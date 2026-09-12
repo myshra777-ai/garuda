@@ -46,9 +46,14 @@ func (s *ClaimStore) SaveClaims(ctx context.Context, claims []knowledge.ClaimIR)
 	}
 
 	for path := range docPaths {
+		// Scoped by workspace_id so a rename does not orphan the delete.
+		// Falls back to the string for rows written before migration 075.
 		_, err := tx.Exec(ctx, `
 			DELETE FROM document_claims 
-			WHERE tenant_id = $1 AND workspace = $2 AND document_path = $3
+			WHERE tenant_id = $1
+			  AND (workspace_id = (SELECT id FROM workspaces WHERE name = $2 AND tenant_id = $1)
+			       OR (workspace_id IS NULL AND workspace = $2))
+			  AND document_path = $3
 		`, tenantID, workspace, path)
 		if err != nil {
 			return fmt.Errorf("failed to clear old claims for %s: %w", path, err)

@@ -2753,46 +2753,47 @@ func computeLanguageBreakdown(ctx context.Context, pgStore *store.PostgresStore,
 // document_claims queries will silently return zero. Fixing this
 // requires adding workspace_id to document_claims — a schema change
 // tracked separately. Until then the workspace name must not change.
-func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID, workspaceName string) DriftDTO {
+// computeDrift — document ↔ code drift summary.
+//
+// All queries scope by workspace_id. The previous implementation scoped
+// by the workspace name (string), which silently returned zero after a
+// rename because the string in document_claims was left stale while the
+// workspaces row kept its stable UUID.
+func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID uuid.UUID) DriftDTO {
 	var d DriftDTO
 
 	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1
-	`, workspaceName).Scan(&d.TotalDocumentClaims)
+		SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1
+	`, workspaceID).Scan(&d.TotalDocumentClaims)
 
 	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1 AND status = 'SUPPORTED'
-	`, workspaceName).Scan(&d.SupportedClaims)
+		SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1 AND status = 'SUPPORTED'
+	`, workspaceID).Scan(&d.SupportedClaims)
 
 	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1 AND status = 'UNVERIFIED'
-	`, workspaceName).Scan(&d.UnverifiedClaims)
+		SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1 AND status = 'UNVERIFIED'
+	`, workspaceID).Scan(&d.UnverifiedClaims)
 
 	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COUNT(*)::int FROM document_claims WHERE workspace = $1 AND status = 'CONTRADICTED'
-	`, workspaceName).Scan(&d.ContradictedClaims)
+		SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1 AND status = 'CONTRADICTED'
+	`, workspaceID).Scan(&d.ContradictedClaims)
 
-	// Doc → Code drift: claims whose subject could not be matched to any
-	// code entity. "We documented a thing and cannot find it in code."
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM document_claims
-		WHERE workspace = $1 AND matched_entity_id IS NULL
-	`, workspaceName).Scan(&d.DocToCodeDriftCount)
+		WHERE workspace_id = $1 AND matched_entity_id IS NULL
+	`, workspaceID).Scan(&d.DocToCodeDriftCount)
 
-	// Code → Doc drift: code entities with no doc claim referencing them.
-	// "We ship a thing and nobody wrote it down."
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM entities e
 		WHERE e.workspace_id = $1
 		  AND e.kind IN ('function', 'method', 'struct', 'interface')
 		  AND NOT EXISTS (
 			SELECT 1 FROM document_claims dc
-			WHERE dc.workspace = $2
+			WHERE dc.workspace_id = $1
 			  AND dc.subject ILIKE '%' || e.name || '%'
 		  )
-	`, workspaceID, workspaceName).Scan(&d.CodeToDocDriftCount)
+	`, workspaceID).Scan(&d.CodeToDocDriftCount)
 
-	// Undocumented exported code entities.
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM entities e
 		WHERE e.workspace_id = $1
@@ -2800,20 +2801,17 @@ func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID
 		  AND e.is_exported = TRUE
 		  AND NOT EXISTS (
 			SELECT 1 FROM document_claims dc
-			WHERE dc.workspace = $2
+			WHERE dc.workspace_id = $1
 			  AND dc.subject ILIKE '%' || e.name || '%'
 		  )
-	`, workspaceID, workspaceName).Scan(&d.UndocumentedCode)
+	`, workspaceID).Scan(&d.UndocumentedCode)
 
-	// UnverifiedDocs: doc claims that DO reference a code entity, but
-	// whose runtime behaviour has not been verified. Distinct from
-	// DocToCodeDriftCount (no code entity found at all).
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM document_claims
-		WHERE workspace = $1
+		WHERE workspace_id = $1
 		  AND matched_entity_id IS NOT NULL
 		  AND status = 'UNVERIFIED'
-	`, workspaceName).Scan(&d.UnverifiedDocs)
+	`, workspaceID).Scan(&d.UnverifiedDocs)
 
 	return d
 }
@@ -3148,7 +3146,7 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		latestBlock = rootHeight
 	}
 
-	drift := computeDrift(ctx, pgStore, workspaceID, workspaceName)
+	drift := computeDrift(ctx, pgStore, workspaceID)
 
 	resp := WorkspaceStatsResponse{
 		Workspace:              workspaceName,
