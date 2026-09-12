@@ -121,6 +121,43 @@ type DriftDTO struct {
 	CodeToDocDriftCount int `json:"code_to_doc_drift_count"`
 }
 
+// MeasuredMetric distinguishes three states that must never be
+// collapsed into one number:
+//
+//	HasData = true          → the value is a real measurement
+//	HasData = false         → the measurement was attempted but the
+//	                          source has no rows for this scope/time
+//	IsMeasured = false      → the measurement was not attempted, or
+//	                          the query failed. Value is meaningless.
+//
+// The previous implementation returned 0 for all three cases,
+// which read as "we measured and the answer is zero." This is the
+// same epistemic failure mode that was fixed for the governance
+// verdict in the MCP layer and for claim classifications at the DB
+// layer.
+type MeasuredMetric struct {
+	// Value is the aggregated number. Valid only when IsMeasured &&
+	// HasData. Clients must not display Value in any other case.
+	Value float64 `json:"value"`
+
+	// IsMeasured is true iff the backing query executed successfully.
+	// False means we do not know the value — not that the value is
+	// zero.
+	IsMeasured bool `json:"is_measured"`
+
+	// HasData is true iff the backing table had at least one row in
+	// the aggregation window with a non-NULL value for this column.
+	HasData bool `json:"has_data"`
+
+	// RowCount is the number of rows the aggregate considered. Useful
+	// for "we measured 0 of 0 rows" style messaging.
+	RowCount int64 `json:"row_count"`
+
+	// Reason is a human-readable explanation, populated when
+	// IsMeasured is false or HasData is false.
+	Reason string `json:"reason,omitempty"`
+}
+
 type WorkspaceStatsResponse struct {
 	Workspace             string          `json:"workspace"`
 	Repositories          int             `json:"repositories"`
@@ -151,13 +188,14 @@ type WorkspaceStatsResponse struct {
 	LastUpdated           string          `json:"last_updated"`
 	PendingDecisions      int             `json:"pending_decisions"`
 	IdempotencySafeguards int             `json:"idempotency_safeguards"`
-	TokensSaved           int64           `json:"tokens_saved"`
-	EstimatedCostSavedUSD float64         `json:"estimated_cost_saved_usd"`
-	ColdStartLatencyMs    float64         `json:"cold_start_latency_ms"`
-	ColdStartLatencyKnown bool            `json:"cold_start_latency_known"`
-	ActiveAgentsCount     int             `json:"active_agents_count"`
-	LanguagesBreakdown    []LanguageDTO   `json:"languages_breakdown"`
-	Drift                 DriftDTO        `json:"drift"`
+	// Class B runtime metrics. Each carries explicit measurement state.
+	// See MeasuredMetric doc comment above.
+	TokensSavedMetric      MeasuredMetric `json:"tokens_saved_metric"`
+	CostSavedUSDMetric     MeasuredMetric `json:"cost_saved_usd_metric"`
+	ColdStartLatencyMetric MeasuredMetric `json:"cold_start_latency_metric"`
+	ActiveAgentsMetric     MeasuredMetric `json:"active_agents_metric"`
+	LanguagesBreakdown     []LanguageDTO  `json:"languages_breakdown"`
+	Drift                  DriftDTO       `json:"drift"`
 }
 
 type SearchResult struct {
@@ -845,7 +883,7 @@ button { cursor: pointer; }
                     <div class="kpi-card" style="border-left: 4px solid var(--green);">
                         <div class="kpi-label" style="color:var(--green);">Financial ROI (Saved)</div>
                         <div class="kpi-value" id="stat-cost-saved">$—</div>
-                        <div class="kpi-foot"><span id="stat-tokens-saved">—</span> context tokens conserved</div>
+                        <div class="kpi-foot"><span id="stat-tokens-saved">—</span> context tokens (not yet measured)</div>
                     </div>
                     <div class="kpi-card" style="border-left: 4px solid var(--brand);">
                         <div class="kpi-label" style="color:var(--brand);">Active Policies</div>
@@ -855,7 +893,7 @@ button { cursor: pointer; }
                     <div class="kpi-card" style="border-left: 4px solid var(--amber);">
                         <div class="kpi-label" style="color:var(--amber);">Agent Peak (24h)</div>
                         <div class="kpi-value" id="stat-active-agents">—</div>
-                        <div class="kpi-foot">Peak concurrent AI/CLI sessions</div>
+                        <div class="kpi-foot">Peak in last 24h (not yet measured)</div>
                     </div>
                     <div class="kpi-card" style="border-left: 4px solid var(--red);">
                         <div class="kpi-label" style="color:var(--red);">Drift Prevented</div>
@@ -1474,6 +1512,41 @@ function verifyPolicyAnchor(evalID) {
         });
 }
 
+// renderMeasuredMetric renders a Class B metric with three honest
+// states:
+//
+//   has_data=true               → the value
+//   has_data=false, measured    → "No data"
+//   is_measured=false           → "Not measured"
+//
+// The previous code rendered 0 in all three cases, which read as
+// "we measured and the answer is zero."
+function renderMeasuredMetric(elementId, metric, valueFormatter) {
+    var el = document.getElementById(elementId);
+    if (!el) return;
+    if (!metric) {
+        el.textContent = "—";
+        el.title = "Not measured";
+        el.style.opacity = "0.5";
+        return;
+    }
+    if (!metric.is_measured) {
+        el.textContent = "—";
+        el.title = metric.reason || "Not measured";
+        el.style.opacity = "0.5";
+        return;
+    }
+    if (!metric.has_data) {
+        el.textContent = "—";
+        el.title = metric.reason || "No data in this window";
+        el.style.opacity = "0.6";
+        return;
+    }
+    el.textContent = valueFormatter(metric);
+    el.title = "Measured across " + metric.row_count + " telemetry event(s)";
+    el.style.opacity = "1";
+}
+
 function renderStats() {
     if (!state.stats) return;
     var s = state.stats;
@@ -1505,9 +1578,15 @@ function renderStats() {
     setText("workspace-breadcrumb", s.workspace || WORKSPACE);
     setText("repo-list-ws", s.workspace || WORKSPACE);
 
-    setText("stat-cost-saved", "$" + Number(s.estimated_cost_saved_usd || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
-    setText("stat-tokens-saved", formatNumber(s.tokens_saved));
-    setText("stat-active-agents", formatNumber(s.active_agents_count || 0));
+    renderMeasuredMetric("stat-cost-saved", s.cost_saved_usd_metric, function(m) {
+        return "$" + Number(m.value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    });
+    renderMeasuredMetric("stat-tokens-saved", s.tokens_saved_metric, function(m) {
+        return formatNumber(m.value);
+    });
+    renderMeasuredMetric("stat-active-agents", s.active_agents_metric, function(m) {
+        return formatNumber(m.value);
+    });
     setText("stat-drift-count", formatNumber(s.quarantined_count));
 
     renderLanguages(s.languages_breakdown || []);
@@ -2833,34 +2912,135 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		totalClaims = staticClaims
 	}
 
-	// FIX: tenant-scoped. Previously summed every tenant's telemetry.
-	var tokensSaved int64
-	var costSavedUSD float64
-	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COALESCE(SUM(tokens_saved), 0), COALESCE(SUM(cost_saved_usd), 0)
-		FROM telemetry_events
-		WHERE tenant_id = $1
-	`, tenantID).Scan(&tokensSaved, &costSavedUSD)
+	// Class B runtime metrics. Each query returns value + row count so
+	// the caller can distinguish "measured zero" from "not measured."
+	//
+	// The pattern for each:
+	//   SELECT COALESCE(SUM(col), 0), COUNT(col), COUNT(*)
+	//     → (sum, rows_with_non_null, rows_in_window)
+	// IsMeasured is set when the query succeeds; HasData is true only
+	// when at least one row had a non-NULL value for the column.
+	var tokensSavedMetric MeasuredMetric
+	{
+		var sum int64
+		var nonNull, total int64
+		err := pgStore.Pool().QueryRow(ctx, `
+			SELECT
+				COALESCE(SUM(tokens_saved), 0),
+				COUNT(tokens_saved),
+				COUNT(*)
+			FROM telemetry_events
+			WHERE tenant_id = $1
+		`, tenantID).Scan(&sum, &nonNull, &total)
+		if err != nil {
+			tokensSavedMetric = MeasuredMetric{
+				IsMeasured: false,
+				Reason:     "query failed: " + err.Error(),
+			}
+		} else {
+			tokensSavedMetric = MeasuredMetric{
+				Value:      float64(sum),
+				IsMeasured: true,
+				HasData:    nonNull > 0,
+				RowCount:   total,
+			}
+			if nonNull == 0 {
+				tokensSavedMetric.Reason = "no telemetry events carry a tokens_saved value"
+			}
+		}
+	}
 
-	// FIX: tenant-scoped. Reports PEAK observed in the last 24 hours,
-	// not current — the label on the card has been updated to match.
-	var activeAgents int
-	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COALESCE(MAX(active_agents), 0)::int
-		FROM telemetry_events
-		WHERE tenant_id = $1
-		  AND created_at > NOW() - INTERVAL '24 hours'
-	`, tenantID).Scan(&activeAgents)
+	var costSavedMetric MeasuredMetric
+	{
+		var sum float64
+		var nonNull, total int64
+		err := pgStore.Pool().QueryRow(ctx, `
+			SELECT
+				COALESCE(SUM(cost_saved_usd), 0),
+				COUNT(cost_saved_usd),
+				COUNT(*)
+			FROM telemetry_events
+			WHERE tenant_id = $1
+		`, tenantID).Scan(&sum, &nonNull, &total)
+		if err != nil {
+			costSavedMetric = MeasuredMetric{
+				IsMeasured: false,
+				Reason:     "query failed: " + err.Error(),
+			}
+		} else {
+			costSavedMetric = MeasuredMetric{
+				Value:      sum,
+				IsMeasured: true,
+				HasData:    nonNull > 0,
+				RowCount:   total,
+			}
+			if nonNull == 0 {
+				costSavedMetric.Reason = "no telemetry events carry a cost_saved_usd value"
+			}
+		}
+	}
 
-	// FIX: tenant-scoped.
-	var coldStartLatency float64
-	var coldStartSamples int
-	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COALESCE(AVG(cold_start_latency_ms), 0), COUNT(cold_start_latency_ms)
-		FROM telemetry_events
-		WHERE tenant_id = $1
-		  AND created_at > NOW() - INTERVAL '7 days'
-	`, tenantID).Scan(&coldStartLatency, &coldStartSamples)
+	var coldStartMetric MeasuredMetric
+	{
+		var avg float64
+		var nonNull, total int64
+		err := pgStore.Pool().QueryRow(ctx, `
+			SELECT
+				COALESCE(AVG(cold_start_latency_ms), 0),
+				COUNT(cold_start_latency_ms),
+				COUNT(*)
+			FROM telemetry_events
+			WHERE tenant_id = $1
+			  AND created_at > NOW() - INTERVAL '7 days'
+		`, tenantID).Scan(&avg, &nonNull, &total)
+		if err != nil {
+			coldStartMetric = MeasuredMetric{
+				IsMeasured: false,
+				Reason:     "query failed: " + err.Error(),
+			}
+		} else {
+			coldStartMetric = MeasuredMetric{
+				Value:      avg,
+				IsMeasured: true,
+				HasData:    nonNull > 0,
+				RowCount:   total,
+			}
+			if nonNull == 0 {
+				coldStartMetric.Reason = "no telemetry events carry a cold_start_latency_ms value in the last 7 days"
+			}
+		}
+	}
+
+	var activeAgentsMetric MeasuredMetric
+	{
+		var peak int
+		var nonNull, total int64
+		err := pgStore.Pool().QueryRow(ctx, `
+			SELECT
+				COALESCE(MAX(active_agents), 0)::int,
+				COUNT(active_agents),
+				COUNT(*)
+			FROM telemetry_events
+			WHERE tenant_id = $1
+			  AND created_at > NOW() - INTERVAL '24 hours'
+		`, tenantID).Scan(&peak, &nonNull, &total)
+		if err != nil {
+			activeAgentsMetric = MeasuredMetric{
+				IsMeasured: false,
+				Reason:     "query failed: " + err.Error(),
+			}
+		} else {
+			activeAgentsMetric = MeasuredMetric{
+				Value:      float64(peak),
+				IsMeasured: true,
+				HasData:    nonNull > 0,
+				RowCount:   total,
+			}
+			if nonNull == 0 {
+				activeAgentsMetric.Reason = "no telemetry events carry an active_agents value in the last 24 hours"
+			}
+		}
+	}
 
 	hubRows, err := pgStore.Pool().Query(ctx, `
 		SELECT e.id, e.name, e.kind, e.package, count(c.id) as callers
@@ -2947,42 +3127,41 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	drift := computeDrift(ctx, pgStore, workspaceID, workspaceName)
 
 	resp := WorkspaceStatsResponse{
-		Workspace:             workspaceName,
-		Repositories:          repositories,
-		RepositoriesList:      repoList,
-		RepoStats:             repoStats,
-		Packages:              packages,
-		Entities:              entities,
-		Relationships:         relationships,
-		CrossRepoLinks:        crossRepoLinks,
-		Files:                 files,
-		ExportedEntities:      exportedEntities,
-		ArchitecturalHubs:     len(topHubs),
-		TopHubs:               topHubs,
-		TotalClaims:           totalClaims,
-		SupportedClaims:       supportedClaims,
-		Contradicted:          activeContradictions,
-		StaticClaims:          staticClaims,
-		VerificationAttempted: runtimeTotal > 0,
-		UnverifiedClaims:      unverifiedClaims,
-		NeedsAttention:        needsAttention,
-		RecentEvidence:        recentEvidence,
-		CanonicalDecisions:    canonicalDecisions,
-		QuarantinedCount:      activeContradictions,
-		LatestBlockHeight:     latestBlock,
-		LatestMerkleHash:      latestHash,
-		ParentMerkleHash:      parentHash,
-		TrustStatus:           trustStatus,
-		LastUpdated:           time.Now().UTC().Format(time.RFC3339),
-		PendingDecisions:      pendingDecisions,
-		IdempotencySafeguards: idempotencySafeguards,
-		TokensSaved:           tokensSaved,
-		EstimatedCostSavedUSD: costSavedUSD,
-		ColdStartLatencyMs:    coldStartLatency,
-		ColdStartLatencyKnown: coldStartSamples > 0,
-		ActiveAgentsCount:     activeAgents,
-		LanguagesBreakdown:    languagesBreakdown,
-		Drift:                 drift,
+		Workspace:              workspaceName,
+		Repositories:           repositories,
+		RepositoriesList:       repoList,
+		RepoStats:              repoStats,
+		Packages:               packages,
+		Entities:               entities,
+		Relationships:          relationships,
+		CrossRepoLinks:         crossRepoLinks,
+		Files:                  files,
+		ExportedEntities:       exportedEntities,
+		ArchitecturalHubs:      len(topHubs),
+		TopHubs:                topHubs,
+		TotalClaims:            totalClaims,
+		SupportedClaims:        supportedClaims,
+		Contradicted:           activeContradictions,
+		StaticClaims:           staticClaims,
+		VerificationAttempted:  runtimeTotal > 0,
+		UnverifiedClaims:       unverifiedClaims,
+		NeedsAttention:         needsAttention,
+		RecentEvidence:         recentEvidence,
+		CanonicalDecisions:     canonicalDecisions,
+		QuarantinedCount:       activeContradictions,
+		LatestBlockHeight:      latestBlock,
+		LatestMerkleHash:       latestHash,
+		ParentMerkleHash:       parentHash,
+		TrustStatus:            trustStatus,
+		LastUpdated:            time.Now().UTC().Format(time.RFC3339),
+		PendingDecisions:       pendingDecisions,
+		IdempotencySafeguards:  idempotencySafeguards,
+		TokensSavedMetric:      tokensSavedMetric,
+		CostSavedUSDMetric:     costSavedMetric,
+		ColdStartLatencyMetric: coldStartMetric,
+		ActiveAgentsMetric:     activeAgentsMetric,
+		LanguagesBreakdown:     languagesBreakdown,
+		Drift:                  drift,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -3205,11 +3384,6 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 				edgesMap[edgeKey] = edge
 			}
 		}
-
-		// Previously fabricated a "garuda" node and a "garuda imports X"
-		// edge for every repository with Confidence: 1.0, regardless of
-		// whether any such import existed. Removed. If a repo has no
-		// edges, the graph shows no edges.
 
 		for _, cv := range contras {
 			src := entityMap[cv.src]
