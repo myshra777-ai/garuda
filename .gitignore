@@ -131,3 +131,9 @@ ENV/
 # Node modules (should never be committed)
 node_modules/
 **/node_modules/
+
+# Internal roadmap and architectural planning documents.
+# These describe the current state of the codebase and current priorities.
+# They are maintained locally and deliberately not published.
+docs/ROADMAP.md
+docs/roadmaps/
