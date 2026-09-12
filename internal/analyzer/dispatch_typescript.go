@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/ast/typescript"
 )
 
@@ -89,14 +90,29 @@ func AnalyzeTypeScriptWorkspace(ctx context.Context, absPath string) (*Result, e
 			Evidence:   Evidence{Analyzer: "typescript/tree-sitter"},
 		})
 	}
-
+	// Path A: import resolution.
+	{
+		fileIndex := make(map[string]uuid.UUID)
+		for _, e := range result.Entities {
+			if e.Kind == KindFile || e.Kind == KindPackage {
+				if id, err := uuid.Parse(e.ID); err == nil {
+					fileIndex[e.Name] = id
+				}
+			}
+		}
+		if len(fileIndex) > 0 {
+			if importRels, ierr := ResolveTypeScriptImports(absPath, fileIndex); ierr == nil {
+				result.Relationships = append(result.Relationships, importRels...)
+			}
+		}
+	}
 	return result, nil
 }
 
 func mapTSKindToEntityKind(kind string) EntityKind {
 	switch kind {
 	case "class":
-		return KindStruct
+		return KindClass
 	case "interface":
 		return KindInterface
 	case "function":

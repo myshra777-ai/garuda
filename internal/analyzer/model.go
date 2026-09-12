@@ -15,6 +15,7 @@ const (
 	KindDirectory  EntityKind = "directory"
 	KindFile       EntityKind = "file"
 	KindPackage    EntityKind = "package"
+	KindClass      EntityKind = "class"
 	KindStruct     EntityKind = "struct"
 	KindInterface  EntityKind = "interface"
 	KindFunction   EntityKind = "function"

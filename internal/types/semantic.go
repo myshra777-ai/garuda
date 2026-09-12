@@ -49,6 +49,15 @@ const (
 	ResolutionMethodASTExact         ResolutionMethod = "AST_EXACT"
 	ResolutionMethodHeuristic        ResolutionMethod = "HEURISTIC"
 	ResolutionMethodGraphDerived     ResolutionMethod = "GRAPH_DERIVED"
+
+	// Language-specific import resolution. Every claim produced by
+	// these methods crosses a module boundary and points to a target
+	// whose declaration exists in the workspace.
+	//
+	// These are distinct from IMPORT_RESOLUTION (the Go method) so
+	// that provenance remains language-attributable.
+	ResolutionMethodPythonImport ResolutionMethod = "PYTHON_IMPORT"
+	ResolutionMethodTSImport     ResolutionMethod = "TS_IMPORT"
 )
 
 // EntityKind defines semantic categorization of code nodes.

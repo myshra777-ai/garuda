@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/ast/python"
 )
 
@@ -104,7 +105,26 @@ func AnalyzePythonWorkspace(ctx context.Context, absPath string) (*Result, error
 			},
 		})
 	}
-
+	// Path A: import resolution.
+	//
+	// Build a name → UUID index from the entities we just extracted,
+	// then walk the source tree to resolve every import statement.
+	// Edges carry ResolutionMethodPythonImport.
+	//
+	// Skip if there are no package entities to correlate against.
+	{
+		pkgIndex := make(map[string]uuid.UUID)
+		for _, e := range result.Entities {
+			if e.Kind == KindPackage {
+				pkgIndex[e.Name] = uuid.MustParse(e.ID)
+			}
+		}
+		if len(pkgIndex) > 0 {
+			if importRels, ierr := ResolvePythonImports(absPath, pkgIndex); ierr == nil {
+				result.Relationships = append(result.Relationships, importRels...)
+			}
+		}
+	}
 	return result, nil
 }
 
@@ -112,7 +132,7 @@ func AnalyzePythonWorkspace(ctx context.Context, absPath string) (*Result, error
 func mapPythonKindToEntityKind(kind string) EntityKind {
 	switch kind {
 	case "class":
-		return KindStruct
+		return KindClass
 	case "function":
 		return KindFunction
 	case "method":
