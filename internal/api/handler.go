@@ -79,6 +79,7 @@ type Server struct {
 	router              *mux.Router
 	checkpointMu        sync.RWMutex
 	checkpointStore     map[string]CheckpointRecord
+	sessions            *SessionStore
 }
 
 // NewServer creates a new API server instance with initialized state, router, and SSE broker.
@@ -104,6 +105,7 @@ func NewServer(
 		sseBroker:           sseBroker,
 		router:              mux.NewRouter(),
 		checkpointStore:     make(map[string]CheckpointRecord),
+		sessions:            NewSessionStore(SessionTTL),
 	}
 
 	s.RegisterRoutes(s.router)
@@ -113,52 +115,64 @@ func NewServer(
 // RegisterRoutes sets up HTTP routing and subrouter middleware hierarchy.
 func (s *Server) RegisterRoutes(r *mux.Router) {
 	// =========================================================================
-	// PUBLIC ROUTES (No JWT Bearer Token Required)
+	// PUBLIC ROUTES (no authentication)
 	// =========================================================================
 	r.HandleFunc("/health", s.HandleHealth).Methods(http.MethodGet)
-	r.HandleFunc("/dashboard", s.HandleDashboard).Methods(http.MethodGet)
 	r.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}).Methods(http.MethodGet)
-	r.HandleFunc("/debug/token", s.HandleDebugToken).Methods(http.MethodGet)
-	r.HandleFunc("/system/discover", s.HandleSystemDiscover).Methods(http.MethodGet)
-
-	// Public Dashboard Telemetry, Graph & Global Search Endpoints
-	r.HandleFunc("/api/v1/dashboard/stats", s.HandleDashboardStats).Methods(http.MethodGet)
-	r.HandleFunc("/api/v1/dashboard/search", s.HandleDashboardSearch).Methods(http.MethodGet)
-	r.HandleFunc("/api/v1/graph", s.HandleGraph).Methods(http.MethodGet)
-	r.HandleFunc("/api/v1/events", s.HandleLiveEvents).Methods(http.MethodGet)
-
-	// Point telemetry ingestion directly to HandleIngestTraces
-	r.HandleFunc("/api/v1/telemetry/spans", s.HandleIngestTraces).Methods(http.MethodPost)
+	r.HandleFunc("/login", s.HandleLoginGET).Methods(http.MethodGet)
+	r.HandleFunc("/login", s.HandleLoginPOST).Methods(http.MethodPost)
+	r.HandleFunc("/logout", s.HandleLogout).Methods(http.MethodPost)
 
 	// =========================================================================
-	// PROTECTED API SUBROUTER (JWT Auth Required for Sensitive Actions)
+	// SESSION-PROTECTED ROUTES (browser)
+	//
+	// Wrapped in RequireSession. Requests without a valid session cookie
+	// are redirected to /login (HTML) or receive 401 (API).
+	// =========================================================================
+	sess := r.NewRoute().Subrouter()
+	sess.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			s.RequireSession(next.ServeHTTP)(w, r)
+		})
+	})
+
+	sess.HandleFunc("/dashboard", s.HandleDashboard).Methods(http.MethodGet)
+	sess.HandleFunc("/api/v1/dashboard/stats", s.HandleDashboardStats).Methods(http.MethodGet)
+	sess.HandleFunc("/api/v1/dashboard/search", s.HandleDashboardSearch).Methods(http.MethodGet)
+	sess.HandleFunc("/api/v1/dashboard/policies", s.HandleDashboardPolicies).Methods(http.MethodGet)
+	sess.HandleFunc("/api/v1/dashboard/policies/verify", s.HandleDashboardPolicyVerify).Methods(http.MethodGet)
+	sess.HandleFunc("/api/v1/graph", s.HandleGraph).Methods(http.MethodGet)
+	sess.HandleFunc("/api/v1/events", s.HandleLiveEvents).Methods(http.MethodGet)
+	sess.HandleFunc("/system/discover", s.HandleSystemDiscover).Methods(http.MethodGet)
+
+	// =========================================================================
+	// JWT-PROTECTED API SUBROUTER (CLI / MCP tokens)
+	//
+	// These are not used by browsers. They are for programmatic clients
+	// that hold a signed Ed25519 JWT issued by HandleDebugToken or an
+	// admin tool.
 	// =========================================================================
 	api := r.PathPrefix("/api/v1").Subrouter()
 	api.Use(s.AuthMiddleware)
 
-	// Decision Proposal & Verification Engine
 	api.HandleFunc("/decisions/propose", s.HandleProposeDecision).Methods(http.MethodPost)
-
-	// Two-Minute AI Agent Onboarding / Warmup
 	api.HandleFunc("/agent/warmup", s.HandleAgentWarmup).Methods(http.MethodGet)
-
-	// Multi-Agent Execution, Checkpointing & State Handoff
 	api.HandleFunc("/agents/checkpoint", s.HandleAgentCheckpoint).Methods(http.MethodPost)
 	api.HandleFunc("/agents/handoff", s.HandleHandoff).Methods(http.MethodPost)
 	api.HandleFunc("/agents/resume", s.HandleResume).Methods(http.MethodPost)
 	api.HandleFunc("/tasks/{task_id}/lineage", s.HandleGetLineage).Methods(http.MethodGet)
-
-	// Pre-Flight Classification Router Evaluation
 	api.HandleFunc("/router/evaluate", s.HandleEvaluateRoute).Methods(http.MethodPost, http.MethodOptions)
-
-	// Audit Log & Compliance Endpoints
 	api.HandleFunc("/audit/export", s.HandleExportAuditLogs).Methods(http.MethodGet)
 	api.HandleFunc("/audit/verify/{id}", s.HandleVerifyAuditLog).Methods(http.MethodGet)
-
-	// Live Telemetry SSE Stream Endpoint
 	api.Handle("/telemetry/stream", s.sseBroker).Methods(http.MethodGet)
+	api.HandleFunc("/telemetry/spans", s.HandleIngestTraces).Methods(http.MethodPost)
+	api.HandleFunc("/runtime/coverage", s.HandleGetRuntimeCoverage).Methods(http.MethodGet)
+	api.HandleFunc("/merkle/state", s.HandleGetMerkleState).Methods(http.MethodGet)
+
+	// Debug endpoint (only available outside production)
+	r.HandleFunc("/debug/token", s.HandleDebugToken).Methods(http.MethodGet)
 }
 
 // ServeHTTP implements http.Handler for the Server struct.

@@ -3,13 +3,12 @@
 //
 // Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
-// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
-
 package main
 
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -73,6 +72,13 @@ var devCmd = &cobra.Command{
 
 		server := api.NewServer(pgStore, authService, jwtConfig, contraEngine, lineageEngine, topoGen, topoExec)
 
+		// Create the default admin user on first boot. Prints the
+		// generated password once to stderr.
+		if err := server.BootstrapAdminIfEmpty(ctx); err != nil {
+			slog.Error("failed to bootstrap admin user", "error", err)
+			os.Exit(1)
+		}
+
 		mux := http.NewServeMux()
 
 		// ─────────────────────────────────────────────────────────────
@@ -83,21 +89,34 @@ var devCmd = &cobra.Command{
 			_, _ = w.Write([]byte(`{"status":"healthy","service":"garuda-unified"}`))
 		})
 		mux.HandleFunc("/api/v1/telemetry/spans", server.HandleIngestRuntimeSpans)
-		mux.HandleFunc("/api/v1/runtime/coverage", server.HandleGetRuntimeCoverage)
-		mux.HandleFunc("/api/v1/merkle/state", server.HandleGetMerkleState)
 
 		// ─────────────────────────────────────────────────────────────
 		// Dashboard routes — MUST be registered at the top level.
 		// Previously these were nested inside /api/v1/graph and only
 		// registered after that endpoint was hit once. That caused 404s.
 		// ─────────────────────────────────────────────────────────────
-		mux.HandleFunc("/dashboard", server.HandleDashboard)
-		mux.HandleFunc("/api/v1/dashboard/stats", server.HandleDashboardStats)
-		mux.HandleFunc("/api/v1/dashboard/search", server.HandleDashboardSearch)
-		mux.HandleFunc("/api/v1/events", server.HandleLiveEvents)
+		// Public authentication routes
+		mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				server.HandleLoginGET(w, r)
+			case http.MethodPost:
+				server.HandleLoginPOST(w, r)
+			default:
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
+		})
+		mux.HandleFunc("/logout", server.HandleLogout)
 
-		mux.HandleFunc("/api/v1/dashboard/policies", server.HandleDashboardPolicies)
-		mux.HandleFunc("/api/v1/dashboard/policies/verify", server.HandleDashboardPolicyVerify)
+		// Session-protected dashboard routes
+		mux.HandleFunc("/dashboard", server.RequireSession(server.HandleDashboard))
+		mux.HandleFunc("/api/v1/dashboard/stats", server.RequireSession(server.HandleDashboardStats))
+		mux.HandleFunc("/api/v1/dashboard/search", server.RequireSession(server.HandleDashboardSearch))
+		mux.HandleFunc("/api/v1/events", server.RequireSession(server.HandleLiveEvents))
+		mux.HandleFunc("/api/v1/dashboard/policies", server.RequireSession(server.HandleDashboardPolicies))
+		mux.HandleFunc("/api/v1/dashboard/policies/verify", server.RequireSession(server.HandleDashboardPolicyVerify))
+		mux.HandleFunc("/api/v1/runtime/coverage", server.RequireSession(server.HandleGetRuntimeCoverage))
+		mux.HandleFunc("/api/v1/merkle/state", server.RequireSession(server.HandleGetMerkleState))
 
 		// ─────────────────────────────────────────────────────────────
 		// Graph routes
@@ -105,14 +124,7 @@ var devCmd = &cobra.Command{
 		//   /api/v1/graph → full GraphResponseDTO (level/focus/nodes/edges)
 		//                   with an HTML fallback when Accept: text/html
 		// ─────────────────────────────────────────────────────────────
-		mux.HandleFunc("/graph", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte(visualizerHTML))
-		})
-
-		mux.HandleFunc("/api/v1/graph", func(w http.ResponseWriter, r *http.Request) {
-			// If the client wants HTML (browser navigation) serve the visualizer.
-			// Otherwise delegate to the JSON API handler.
+		graphHandler := func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.Header.Get("Accept"), "text/html") &&
 				!strings.Contains(r.URL.Query().Get("format"), "json") {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -120,7 +132,13 @@ var devCmd = &cobra.Command{
 				return
 			}
 			server.HandleGraph(w, r)
-		})
+		}
+		mux.HandleFunc("/api/v1/graph", server.RequireSession(graphHandler))
+
+		mux.HandleFunc("/graph", server.RequireSession(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(visualizerHTML))
+		}))
 
 		httpServer := &http.Server{
 			Addr:    ":8080",
@@ -171,6 +189,7 @@ var devCmd = &cobra.Command{
 		// ─────────────────────────────────────────────────────────────
 		go func() {
 			fmt.Println("🚀 Garuda Unified Daemon running at http://localhost:8080")
+			fmt.Println("   • Login:               GET  http://localhost:8080/login")
 			fmt.Println("   • Dashboard:           GET  http://localhost:8080/dashboard?workspace=<name>")
 			fmt.Println("   • Dashboard Stats API: GET  http://localhost:8080/api/v1/dashboard/stats?workspace=<name>")
 			fmt.Println("   • Dashboard Search:    GET  http://localhost:8080/api/v1/dashboard/search?q=<query>")

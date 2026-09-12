@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/auth"
 )
 
@@ -87,9 +88,20 @@ func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, token, err := s.authService.SignIn(r.Context(), req.Email, req.Password)
+	user, err := s.authService.SignIn(r.Context(), req.Email, req.Password)
 	if err != nil {
-		s.RespondWithError(w, http.StatusUnauthorized, err.Error())
+		// AuthService returns ErrInvalidCredentials for any failure.
+		// Do not echo the error text — it would reveal whether the
+		// email exists.
+		s.RespondWithError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	// Issue a JWT for API clients. Browser login uses a session cookie
+	// instead; see HandleLoginPOST in login_handlers.go.
+	token, err := s.jwtConfig.GenerateToken(user.Email, uuid.Nil)
+	if err != nil {
+		s.RespondWithError(w, http.StatusInternalServerError, "failed to issue token")
 		return
 	}
 
