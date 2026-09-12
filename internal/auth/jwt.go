@@ -6,25 +6,17 @@
 package auth
 
 import (
-	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-)
-
-// Unexported type to prevent context key collisions across packages.
-type contextKey string
-
-const (
-	actorContextKey    contextKey = "actor"
-	tenantIDContextKey contextKey = "tenant_id"
 )
 
 // CustomClaims extends standard JWT claims with multi-tenant and actor fields.
@@ -34,6 +26,10 @@ type CustomClaims struct {
 }
 
 // JWTConfig holds the configuration and key pairs for JWT signing and verification.
+//
+// Fields are unexported deliberately. The only legitimate consumer of the
+// public key is GetPublicKeyHex, used at daemon startup for logging. The
+// private key never leaves this type.
 type JWTConfig struct {
 	privateKey ed25519.PrivateKey
 	publicKey  ed25519.PublicKey
@@ -42,12 +38,53 @@ type JWTConfig struct {
 	expiry     time.Duration
 }
 
-// NewJWTConfig generates a new Ed25519 key pair for signing and verification.
+// NewJWTConfig loads the Ed25519 key pair from environment variables if
+// both are set, or generates a fresh pair otherwise.
+//
+// Environment:
+//
+//	JWT_PRIVATE_KEY_HEX — 64-byte Ed25519 private key, hex encoded
+//	JWT_PUBLIC_KEY_HEX  — 32-byte Ed25519 public key, hex encoded
+//
+// If both are set, they are used and every process with the same values
+// can validate every other process's tokens.
+//
+// If neither is set:
+//   - In production (GARUDA_ENV=production), refuse to start. A
+//     regenerated key on every restart invalidates every issued token.
+//   - In development, generate a fresh pair, print the hex to stderr
+//     once, and continue. Copy the output into .env to persist.
 func NewJWTConfig(issuer, audience string, expiry time.Duration) (*JWTConfig, error) {
+	privHex := strings.TrimSpace(os.Getenv("JWT_PRIVATE_KEY_HEX"))
+	pubHex := strings.TrimSpace(os.Getenv("JWT_PUBLIC_KEY_HEX"))
+
+	if privHex != "" && pubHex != "" {
+		return NewJWTConfigFromHex(privHex, pubHex, issuer, audience, expiry)
+	}
+	if privHex != "" || pubHex != "" {
+		return nil, fmt.Errorf("JWT_PRIVATE_KEY_HEX and JWT_PUBLIC_KEY_HEX must both be set or both be empty")
+	}
+
+	if os.Getenv("GARUDA_ENV") == "production" {
+		return nil, fmt.Errorf("JWT_PRIVATE_KEY_HEX and JWT_PUBLIC_KEY_HEX must be set in production")
+	}
+
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate Ed25519 key pair: %w", err)
 	}
+
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "═══════════════════════════════════════════════════════════════")
+	fmt.Fprintln(os.Stderr, "  GARUDA DEVELOPMENT JWT KEY PAIR GENERATED")
+	fmt.Fprintln(os.Stderr, "  Tokens issued by this process are valid only for this process.")
+	fmt.Fprintln(os.Stderr, "  Copy the two values below into .env to persist across restarts:")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "  JWT_PRIVATE_KEY_HEX="+hex.EncodeToString(priv))
+	fmt.Fprintln(os.Stderr, "  JWT_PUBLIC_KEY_HEX="+hex.EncodeToString(pub))
+	fmt.Fprintln(os.Stderr, "═══════════════════════════════════════════════════════════════")
+	fmt.Fprintln(os.Stderr, "")
+
 	return &JWTConfig{
 		privateKey: priv,
 		publicKey:  pub,
@@ -57,13 +94,14 @@ func NewJWTConfig(issuer, audience string, expiry time.Duration) (*JWTConfig, er
 	}, nil
 }
 
-// NewJWTConfigFromHex loads key pairs from hex strings for persistent environments.
+// NewJWTConfigFromHex loads key pairs from hex strings for persistent
+// environments.
 func NewJWTConfigFromHex(privateKeyHex, publicKeyHex, issuer, audience string, expiry time.Duration) (*JWTConfig, error) {
-	privBytes, err := hex.DecodeString(privateKeyHex)
+	privBytes, err := hex.DecodeString(strings.TrimSpace(privateKeyHex))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode private key hex: %w", err)
 	}
-	pubBytes, err := hex.DecodeString(publicKeyHex)
+	pubBytes, err := hex.DecodeString(strings.TrimSpace(publicKeyHex))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode public key hex: %w", err)
 	}
@@ -107,7 +145,8 @@ func (c *JWTConfig) GenerateToken(actor string, tenantID uuid.UUID) (string, err
 	return signedToken, nil
 }
 
-// GenerateTokenWithTenant is a convenience wrapper for callers that still pass tenant IDs as strings.
+// GenerateTokenWithTenant is a convenience wrapper for callers that
+// still pass tenant IDs as strings.
 func (c *JWTConfig) GenerateTokenWithTenant(actor, tenantID string) (string, error) {
 	parsedTenantID, err := uuid.Parse(tenantID)
 	if err != nil {
@@ -116,7 +155,9 @@ func (c *JWTConfig) GenerateTokenWithTenant(actor, tenantID string) (string, err
 	return c.GenerateToken(actor, parsedTenantID)
 }
 
-// GenerateRefreshToken creates a long-lived refresh token for session renewals.
+// GenerateRefreshToken creates a long-lived refresh token for session
+// renewals. Uses a fixed 7-day expiry independent of the config's
+// short-lived access token expiry.
 func (c *JWTConfig) GenerateRefreshToken(actor string, tenantID uuid.UUID) (string, error) {
 	now := time.Now().UTC()
 	claims := CustomClaims{
@@ -124,7 +165,7 @@ func (c *JWTConfig) GenerateRefreshToken(actor string, tenantID uuid.UUID) (stri
 			Issuer:    c.issuer,
 			Audience:  jwt.ClaimStrings{c.audience},
 			Subject:   actor,
-			ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)), // 7 Days
+			ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 		},
@@ -139,7 +180,8 @@ func (c *JWTConfig) GenerateRefreshToken(actor string, tenantID uuid.UUID) (stri
 	return signedToken, nil
 }
 
-// GenerateRefreshTokenWithTenant is a convenience wrapper for callers that still pass tenant IDs as strings.
+// GenerateRefreshTokenWithTenant is a convenience wrapper for callers
+// that still pass tenant IDs as strings.
 func (c *JWTConfig) GenerateRefreshTokenWithTenant(actor, tenantID string) (string, error) {
 	parsedTenantID, err := uuid.Parse(tenantID)
 	if err != nil {
@@ -173,7 +215,8 @@ func (c *JWTConfig) ValidateToken(tokenString string) (string, uuid.UUID, error)
 	return claims.Subject, claims.TenantID, nil
 }
 
-// ValidateRefreshToken validates a refresh token and returns the actor and tenant.
+// ValidateRefreshToken validates a refresh token and returns the actor
+// and tenant.
 func (c *JWTConfig) ValidateRefreshToken(tokenString string) (string, uuid.UUID, error) {
 	return c.ValidateToken(tokenString)
 }
@@ -183,49 +226,8 @@ func (c *JWTConfig) GetPublicKeyHex() string {
 	return hex.EncodeToString(c.publicKey)
 }
 
-// GetPrivateKeyHex returns the private key encoded as a hex string.
-func (c *JWTConfig) GetPrivateKeyHex() string {
-	return hex.EncodeToString(c.privateKey)
-}
-
-// ContextWithActorAndTenant attaches actor and tenant values to the request context.
-func ContextWithActorAndTenant(ctx context.Context, actor string, tenantID any) context.Context {
-	ctx = context.WithValue(ctx, actorContextKey, actor)
-
-	switch v := tenantID.(type) {
-	case uuid.UUID:
-		if v != uuid.Nil {
-			ctx = context.WithValue(ctx, tenantIDContextKey, v)
-		}
-	case string:
-		if parsed, err := uuid.Parse(strings.TrimSpace(v)); err == nil && parsed != uuid.Nil {
-			ctx = context.WithValue(ctx, tenantIDContextKey, parsed)
-		}
-	}
-
-	return ctx
-}
-
-// ActorFromContext retrieves the actor from the context.
-func ActorFromContext(ctx context.Context) (string, bool) {
-	actor, ok := ctx.Value(actorContextKey).(string)
-	return actor, ok
-}
-
-// TenantIDFromContext retrieves the tenant UUID from the context.
-func TenantIDFromContext(ctx context.Context) (uuid.UUID, bool) {
-	switch v := ctx.Value(tenantIDContextKey).(type) {
-	case uuid.UUID:
-		return v, true
-	case string:
-		if parsed, err := uuid.Parse(strings.TrimSpace(v)); err == nil {
-			return parsed, true
-		}
-	}
-	return uuid.Nil, false
-}
-
-// JWTMiddleware validates incoming Bearer tokens and enriches request context with actor and tenant claims.
+// JWTMiddleware validates incoming Bearer tokens and enriches request
+// context with actor and tenant claims.
 func JWTMiddleware(config *JWTConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -76,10 +77,12 @@ type Server struct {
 	topologyGenerator   *topology.Generator
 	topologyExecutor    *topology.Executor
 	sseBroker           *telemetry.SSEBroker
+	sseCount            chan struct{}
 	router              *mux.Router
 	checkpointMu        sync.RWMutex
 	checkpointStore     map[string]CheckpointRecord
 	sessions            *SessionStore
+	rateLimiter         *IPRateLimiter
 }
 
 // NewServer creates a new API server instance with initialized state, router, and SSE broker.
@@ -91,8 +94,16 @@ func NewServer(
 	lineageEngine *engine.LineageEngine,
 	topologyGenerator *topology.Generator,
 	topologyExecutor *topology.Executor,
+	rateLimiters ...*IPRateLimiter,
 ) *Server {
 	sseBroker := telemetry.NewSSEBroker()
+	rateLimiter := (*IPRateLimiter)(nil)
+	if len(rateLimiters) > 0 {
+		rateLimiter = rateLimiters[0]
+	}
+	if rateLimiter == nil {
+		rateLimiter = NewIPRateLimiter(readRateLimitPerMinute(), readRateLimitBurst())
+	}
 
 	s := &Server{
 		store:               store,
@@ -103,9 +114,11 @@ func NewServer(
 		topologyGenerator:   topologyGenerator,
 		topologyExecutor:    topologyExecutor,
 		sseBroker:           sseBroker,
+		sseCount:            make(chan struct{}, maxSSEConnections),
 		router:              mux.NewRouter(),
 		checkpointStore:     make(map[string]CheckpointRecord),
 		sessions:            NewSessionStore(SessionTTL),
+		rateLimiter:         rateLimiter,
 	}
 
 	s.RegisterRoutes(s.router)
@@ -114,6 +127,13 @@ func NewServer(
 
 // RegisterRoutes sets up HTTP routing and subrouter middleware hierarchy.
 func (s *Server) RegisterRoutes(r *mux.Router) {
+	// Rate limit every request before any authentication or session
+	// check. Applied at the top-level router so that /health, /login,
+	// /logout, and every subrouter inherit it. Subrouter middleware
+	// runs after this, so unauthenticated floods are dropped here
+	// before they reach the auth code.
+	r.Use(s.RateLimitMiddleware)
+
 	// =========================================================================
 	// PUBLIC ROUTES (no authentication)
 	// =========================================================================
@@ -146,7 +166,6 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	sess.HandleFunc("/api/v1/graph", s.HandleGraph).Methods(http.MethodGet)
 	sess.HandleFunc("/api/v1/events", s.HandleLiveEvents).Methods(http.MethodGet)
 	sess.HandleFunc("/system/discover", s.HandleSystemDiscover).Methods(http.MethodGet)
-
 	// =========================================================================
 	// JWT-PROTECTED API SUBROUTER (CLI / MCP tokens)
 	//
@@ -261,4 +280,22 @@ func (s *Server) HandleVerifyAuditLog(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(verification)
+}
+
+func readRateLimitPerMinute() int {
+	if v := os.Getenv("GARUDA_RATE_LIMIT_PER_MINUTE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultRateLimitPerMinute
+}
+
+func readRateLimitBurst() int {
+	if v := os.Getenv("GARUDA_RATE_LIMIT_BURST"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultRateLimitBurst
 }

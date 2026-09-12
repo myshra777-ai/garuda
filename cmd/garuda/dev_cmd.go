@@ -140,10 +140,12 @@ var devCmd = &cobra.Command{
 			_, _ = w.Write([]byte(visualizerHTML))
 		}))
 
+		bindAddr := getBindAddr()
 		httpServer := &http.Server{
-			Addr:    ":8080",
-			Handler: mux,
+			Addr:    bindAddr,
+			Handler: server.RateLimitMiddleware(mux),
 		}
+		slog.Info("binding HTTP server", "addr", bindAddr)
 
 		// ─────────────────────────────────────────────────────────────
 		// Background Worker Loop (10-second Merkle epoch)
@@ -307,4 +309,19 @@ const visualizerHTML = `<!DOCTYPE html>
 
 func init() {
 	rootCmd.AddCommand(devCmd)
+}
+
+// getBindAddr returns the address the daemon should bind to.
+//
+// Default is 127.0.0.1:8080 — loopback only, not reachable from the
+// network. To expose the daemon on all interfaces, set GARUDA_BIND
+// to an explicit address such as 0.0.0.0:8080 or ":8080". This is a
+// deliberate opt-in: the previous default was ":8080" (all
+// interfaces), which made every workspace reachable on any network
+// the host was connected to.
+func getBindAddr() string {
+	if v := strings.TrimSpace(os.Getenv("GARUDA_BIND")); v != "" {
+		return v
+	}
+	return "127.0.0.1:8080"
 }

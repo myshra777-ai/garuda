@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -3071,12 +3072,14 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	// Exclude external dependency stubs (kind='external'). They represent
 	// unresolved references to symbols outside the workspace, not part
 	// of the source architecture.
+	const maxGraphEntities = 50000
 	eRows, err := pgStore.Pool().Query(ctx, `
 		SELECT id::text, name, kind, package, file_path, is_exported
 		FROM entities
 		WHERE workspace_id = $1
 		  AND kind != 'external'
-	`, workspaceID)
+		LIMIT $2
+	`, workspaceID, maxGraphEntities)
 	if err == nil {
 		defer eRows.Close()
 		for eRows.Next() {
@@ -3086,11 +3089,20 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 				entityMap[e.ID] = e
 			}
 		}
+		if len(entityMap) >= maxGraphEntities {
+			slog.Warn("graph entity cap reached", "workspace", workspaceName, "cap", maxGraphEntities)
+		}
 	}
 
 	type rawClaim struct{ from, to string }
 	var claims []rawClaim
-	cRows, err := pgStore.Pool().Query(ctx, `SELECT from_entity_id::text, to_entity_id::text FROM claims WHERE workspace_id = $1`, workspaceID)
+	const maxGraphClaims = 200000
+	cRows, err := pgStore.Pool().Query(ctx, `
+		SELECT from_entity_id::text, to_entity_id::text
+		FROM claims
+		WHERE workspace_id = $1
+		LIMIT $2
+	`, workspaceID, maxGraphClaims)
 	if err == nil {
 		defer cRows.Close()
 		for cRows.Next() {
@@ -3098,6 +3110,9 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			if err := cRows.Scan(&c.from, &c.to); err == nil {
 				claims = append(claims, c)
 			}
+		}
+		if len(claims) >= maxGraphClaims {
+			slog.Warn("graph claim cap reached", "workspace", workspaceName, "cap", maxGraphClaims)
 		}
 	}
 
@@ -3516,8 +3531,22 @@ func (s *Server) HandleDashboardPolicyVerify(w http.ResponseWriter, r *http.Requ
 	})
 }
 
+const maxSSEConnections = 1000
+
 func (s *Server) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {
 	applySecurityHeaders(w)
+
+	if s.sseCount != nil {
+		select {
+		case s.sseCount <- struct{}{}:
+			defer func() { <-s.sseCount }()
+		default:
+			w.Header().Set("Retry-After", "30")
+			http.Error(w, `{"error":"too many concurrent streams"}`, http.StatusServiceUnavailable)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
