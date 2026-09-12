@@ -483,39 +483,6 @@ func normalizeLanguageName(lang string) string {
 	return lang
 }
 
-func inferRepositoryFromPackage(pkg string) string {
-	if pkg == "" {
-		return "unknown"
-	}
-
-	pkg = strings.TrimPrefix(pkg, "file://")
-	if idx := strings.Index(pkg, "/go/pkg/mod/"); idx != -1 {
-		pkg = pkg[idx+len("/go/pkg/mod/"):]
-		if atIdx := strings.Index(pkg, "@"); atIdx != -1 {
-			pkg = pkg[:atIdx]
-		}
-	}
-
-	parts := strings.Split(strings.Trim(pkg, "/"), "/")
-	firstSegment := parts[0]
-
-	if !strings.Contains(firstSegment, ".") && firstSegment != "garuda" && firstSegment != "myshra777-ai" {
-		return "stdlib"
-	}
-
-	if strings.Contains(pkg, "myshra777-ai/garuda") || strings.HasPrefix(pkg, "github.com/myshra777-ai/garuda") {
-		return "garuda"
-	}
-
-	if len(parts) >= 3 && (parts[0] == "github.com" || parts[0] == "golang.org") {
-		return parts[0] + "/" + parts[1] + "/" + parts[2]
-	}
-	if len(parts) >= 2 {
-		return parts[0] + "/" + parts[1]
-	}
-	return pkg
-}
-
 // -----------------------------------------------------------------------------
 // Embedded Dashboard HTML
 // -----------------------------------------------------------------------------
@@ -2852,7 +2819,6 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 
 	// Cross-repo bridges: query the resolved cross_repo_edges table
 	// directly. Before this fix the number was derived by comparing
-	// package name strings via inferRepositoryFromPackage — a
 	// heuristic that was written for Go and produced nonsense on
 	// Python and TypeScript. Every distinct dotted TS package pair
 	// counted as a bridge.
@@ -3065,11 +3031,13 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hubRows, err := pgStore.Pool().Query(ctx, `
-		SELECT e.id, e.name, e.kind, e.package, count(c.id) as callers
+		SELECT e.id, e.name, e.kind, e.package,
+		       COALESCE(r.name, 'unknown') AS repo, count(c.id) as callers
 		FROM entities e
 		JOIN claims c ON c.to_entity_id = e.id
+		LEFT JOIN repositories r ON r.id = e.repository_id
 		WHERE e.workspace_id = $1 AND e.kind != 'external'
-		GROUP BY e.id, e.name, e.kind, e.package
+		GROUP BY e.id, e.name, e.kind, e.package, r.name
 		ORDER BY callers DESC
 		LIMIT 5
 	`, workspaceID)
@@ -3078,8 +3046,7 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		defer hubRows.Close()
 		for hubRows.Next() {
 			var h HubDTO
-			if err := hubRows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.Callers); err == nil {
-				h.Repo = inferRepositoryFromPackage(h.Package)
+			if err := hubRows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.Repo, &h.Callers); err == nil {
 				topHubs = append(topHubs, h)
 			}
 		}
@@ -3219,11 +3186,13 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 	rows, err := pgStore.Pool().Query(
 		ctx,
 		`
-		SELECT id, name, kind, package, file_path, is_exported
-		FROM entities
-		WHERE workspace_id = $1
-		  AND (name ILIKE $2 OR package ILIKE $2 OR file_path ILIKE $2 OR kind ILIKE $2)
-		ORDER BY (kind != 'external') DESC, is_exported DESC, name
+		SELECT e.id, e.name, e.kind, e.package, e.file_path, e.is_exported,
+		       COALESCE(r.name, 'unknown')
+		FROM entities e
+		LEFT JOIN repositories r ON r.id = e.repository_id
+		WHERE e.workspace_id = $1
+		  AND (e.name ILIKE $2 OR e.package ILIKE $2 OR e.file_path ILIKE $2 OR e.kind ILIKE $2)
+		ORDER BY (e.kind != 'external') DESC, e.is_exported DESC, e.name
 		LIMIT $3
 		`,
 		workspaceID, searchPattern, limit,
@@ -3237,8 +3206,7 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 	results := make([]SearchResult, 0)
 	for rows.Next() {
 		var res SearchResult
-		if err := rows.Scan(&res.ID, &res.Name, &res.Kind, &res.Package, &res.File, &res.Exported); err == nil {
-			res.Repo = inferRepositoryFromPackage(res.Package)
+		if err := rows.Scan(&res.ID, &res.Name, &res.Kind, &res.Package, &res.File, &res.Exported, &res.Repo); err == nil {
 			results = append(results, res)
 		}
 	}
@@ -3275,18 +3243,19 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	// of the source architecture.
 	const maxGraphEntities = 50000
 	eRows, err := pgStore.Pool().Query(ctx, `
-		SELECT id::text, name, kind, package, file_path, is_exported
-		FROM entities
-		WHERE workspace_id = $1
-		  AND kind != 'external'
+		SELECT e.id::text, e.name, e.kind, e.package, e.file_path, e.is_exported,
+		       COALESCE(r.name, 'unknown')
+		FROM entities e
+		LEFT JOIN repositories r ON r.id = e.repository_id
+		WHERE e.workspace_id = $1
+		  AND e.kind != 'external'
 		LIMIT $2
 	`, workspaceID, maxGraphEntities)
 	if err == nil {
 		defer eRows.Close()
 		for eRows.Next() {
 			var e EntityRecord
-			if err := eRows.Scan(&e.ID, &e.Name, &e.Kind, &e.Package, &e.File, &e.Exported); err == nil {
-				e.Repo = inferRepositoryFromPackage(e.Package)
+			if err := eRows.Scan(&e.ID, &e.Name, &e.Kind, &e.Package, &e.File, &e.Exported, &e.Repo); err == nil {
 				entityMap[e.ID] = e
 			}
 		}

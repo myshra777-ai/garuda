@@ -133,8 +133,3 @@ func sortEdges(edges []GraphEdge) {
 		return edges[i].Type < edges[j].Type
 	})
 }
-
-// Deprecated: Preserved for backward-compatible AST schema diff verification.
-func inferRepository(filePath, pkg string) string {
-	return inferRepositoryFromPackage(pkg)
-}
