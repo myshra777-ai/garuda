@@ -378,8 +378,8 @@ func runDocsVerify(cmd *cobra.Command, args []string) error {
 	fmt.Println("═══════════════════════════════════════════════════════════")
 	fmt.Printf("  %d documented capabilities\n", stats.TotalClaims)
 	fmt.Printf("  %d backed by code                       ✓\n", stats.Supported)
-	if stats.Unimplemented > 0 {
-		fmt.Printf("  %d documented but no implementation     ?\n", stats.Unimplemented)
+	if stats.Unverified > 0 {
+		fmt.Printf("  %d documented but not yet verified       ?\n", stats.Unverified)
 	}
 	if stats.Contradicted > 0 {
 		fmt.Printf("  %d contradicted by code                 ✗\n", stats.Contradicted)

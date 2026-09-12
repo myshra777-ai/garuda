@@ -24,7 +24,7 @@ func NewEvaluator(pool *pgxpool.Pool) *Evaluator {
 type HealthStats struct {
 	TotalClaims      int
 	Supported        int
-	Unimplemented    int
+	Unverified       int
 	Contradicted     int
 	TotalEntities    int
 	UndocumentedCode int
@@ -76,7 +76,7 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID uuid.UUID, w
 		if err != nil {
 			status = StatusUnverified
 			reason = fmt.Sprintf("DOC->CODE DRIFT: Subject '%s' not found in codebase AST", c.Subject)
-			stats.Unimplemented++
+			stats.Unverified++
 			e.updateClaim(ctx, c.ID, nil, status, reason)
 			continue
 		}
@@ -92,7 +92,7 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID uuid.UUID, w
 		if err != nil && c.Predicate != PredicateIdempotent {
 			status = StatusUnverified
 			reason = fmt.Sprintf("DOC->CODE DRIFT: Target '%s' not found in codebase AST", c.Object)
-			stats.Unimplemented++
+			stats.Unverified++
 			e.updateClaim(ctx, c.ID, &subjectID, status, reason)
 			continue
 		}
@@ -115,7 +115,7 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID uuid.UUID, w
 				} else {
 					status = StatusUnverified
 					reason = "DOC->CODE DRIFT: Required call relationship not found in AST"
-					stats.Unimplemented++
+					stats.Unverified++
 				}
 			} else if c.Modality == ModalityMustNot {
 				if exists {
@@ -131,7 +131,7 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID uuid.UUID, w
 		} else {
 			status = StatusUnverified
 			reason = "Pending Runtime Telemetry / Invariant Validation"
-			stats.Unimplemented++
+			stats.Unverified++
 		}
 
 		e.updateClaim(ctx, c.ID, &subjectID, status, reason)
@@ -151,7 +151,7 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID uuid.UUID, w
 		ORDER BY e.file_path, e.name ASC
 		LIMIT 10
 	`, tenantID)
-	
+
 	var undocumented []CodeDriftFinding
 	if err == nil {
 		defer codeRows.Close()

@@ -114,7 +114,7 @@ type DriftDTO struct {
 	UnverifiedClaims    int `json:"unverified_claims"`
 	ContradictedClaims  int `json:"contradicted_claims"`
 	UndocumentedCode    int `json:"undocumented_code"`
-	UnimplementedDocs   int `json:"unimplemented_docs"`
+	UnverifiedDocs      int `json:"unverified_docs"`
 	DocToCodeDriftCount int `json:"doc_to_code_drift_count"`
 	CodeToDocDriftCount int `json:"code_to_doc_drift_count"`
 }
@@ -133,9 +133,11 @@ type WorkspaceStatsResponse struct {
 	ArchitecturalHubs     int             `json:"architectural_hubs"`
 	TopHubs               []HubDTO        `json:"top_hubs"`
 	TotalClaims           int             `json:"total_claims"`
+	StaticClaims          int             `json:"static_claims"`
 	SupportedClaims       int             `json:"supported_claims"`
 	Contradicted          int             `json:"contradicted"`
 	UnverifiedClaims      int             `json:"unverified_claims"`
+	VerificationAttempted bool            `json:"verification_attempted"`
 	NeedsAttention        []AttentionItem `json:"needs_attention"`
 	RecentEvidence        []EvidenceItem  `json:"recent_evidence"`
 	CanonicalDecisions    int             `json:"canonical_decisions"`
@@ -814,7 +816,7 @@ button { cursor: pointer; }
                             <span class="drift-row-val" id="drift-undocumented-code" style="color:var(--amber);">—</span>
                         </div>
                         <div class="drift-row">
-                            <span class="drift-row-label">Unimplemented doc claims</span>
+                            <span class="drift-row-label">Doc claims not matched to code</span>
                             <span class="drift-row-val" id="drift-unimplemented-docs" style="color:var(--amber);">—</span>
                         </div>
                     </div>
@@ -944,7 +946,7 @@ button { cursor: pointer; }
                 <div class="hero">
                     <div>
                         <h1 class="hero-title" id="architecture-title">Company Graph</h1>
-                        <div class="hero-subtitle" id="architecture-subtitle">Pristine Graphify-inspired force-directed topology map.</div>
+                        <div class="hero-subtitle" id="architecture-subtitle">Force-directed semantic topology map.</div>
                     </div>
                     <div class="graph-toolbar">
                         <button class="graph-button" id="btn-mode-repo" onclick="setArchitectureMode('repository')">Repositories</button>
@@ -1597,7 +1599,7 @@ async function loadArchitecture(level, focus) {
 
 function updateArchitectureHeader() {
     var title = "Company Graph";
-    var subtitle = "Pristine Graphify-inspired force-directed topology map.";
+    var subtitle = "Force-directed semantic topology map.";
     var breadcrumb = "Graph";
 
     if (state.currentLevel === "full") {
@@ -2507,7 +2509,7 @@ func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COUNT(*)::int FROM document_claims 
 		WHERE workspace = $1 AND matched_entity_id IS NULL
-	`, workspaceName).Scan(&d.UnimplementedDocs)
+	`, workspaceName).Scan(&d.UnverifiedDocs)
 
 	return d
 }
@@ -2609,12 +2611,32 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	var canonicalDecisions int
 	_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(COUNT(*)::int, 0) FROM decisions WHERE tenant_id = $1 AND status = 'CANONICAL'`, tenantID).Scan(&canonicalDecisions)
 
-	if supportedClaims == 0 && unverifiedClaims == 0 && activeContradictions == 0 {
-		unverifiedClaims = relationships
-	}
-	totalClaims := relationships
-	if totalClaims == 0 {
-		totalClaims = supportedClaims + unverifiedClaims + activeContradictions
+	// Three orthogonal counts, no fabrication:
+	//
+	//   - claimVerifications* are runtime verification results.
+	//     They are zero unless an evaluator has actually run.
+	//
+	//   - staticClaims is the count of semantic edges in the graph.
+	//     Every edge exists; none have been runtime-verified unless
+	//     the counters above are non-zero.
+	//
+	// The previous code assigned staticClaims to unverifiedClaims
+	// whenever all verification counters were zero. That asserted
+	// "we checked N claims and none passed" when the truth was
+	// "we have never attempted verification." Same class of lie as
+	// the MCP PASSED verdict we removed in Phase 2.2a.
+	var staticClaims int
+	_ = pgStore.Pool().QueryRow(ctx,
+		`SELECT COUNT(*)::int FROM claims WHERE workspace_id = $1`,
+		workspaceID).Scan(&staticClaims)
+
+	// totalClaims is the sum of all known claim categories. It is not
+	// assigned to any single counter.
+	totalClaims := supportedClaims + unverifiedClaims + activeContradictions
+	if totalClaims == 0 && staticClaims > 0 {
+		// No runtime verification has been attempted. The static claim
+		// count is real; the runtime counters are honestly zero.
+		totalClaims = staticClaims
 	}
 
 	var tokensSaved int64
@@ -2732,7 +2754,9 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		TotalClaims:           totalClaims,
 		SupportedClaims:       supportedClaims,
 		Contradicted:          activeContradictions,
-		UnverifiedClaims:      unverifiedClaims,
+		StaticClaims:          staticClaims,
+		VerificationAttempted: (supportedClaims + unverifiedClaims + activeContradictions) > 0,
+		UnverifiedClaims:      unverifiedClaims, // now honest — will be 0 if no verification ran
 		NeedsAttention:        needsAttention,
 		RecentEvidence:        recentEvidence,
 		CanonicalDecisions:    canonicalDecisions,
@@ -3098,6 +3122,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request) {
 	applySecurityHeaders(w)
 	ctx := r.Context()
+	tenantID := getDashboardTenant()
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
 		http.Error(w, "store unavailable", http.StatusServiceUnavailable)
@@ -3120,8 +3145,8 @@ func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request)
 
 	// Active policy count
 	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COUNT(*)::int FROM policies WHERE status = 'active'
-	`).Scan(&resp.ActivePolicies)
+		SELECT COUNT(*)::int FROM policies WHERE tenant_id = $1 AND status = 'active'
+	`, tenantID).Scan(&resp.ActivePolicies)
 
 	// Decision counts + total
 	_ = pgStore.Pool().QueryRow(ctx, `

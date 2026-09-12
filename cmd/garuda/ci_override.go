@@ -52,7 +52,7 @@ var ciCheckCmd = &cobra.Command{
 		fmt.Printf("==========================\n")
 		fmt.Printf("Total Document Claims : %d\n", stats.TotalClaims)
 		fmt.Printf("Supported (Passing)   : %d\n", stats.Supported)
-		fmt.Printf("Unimplemented (Drift) : %d\n", stats.Unimplemented)
+		fmt.Printf("Unverified (Drift)    : %d\n", stats.Unverified)
 		fmt.Printf("Contradictions        : %d\n", stats.Contradicted)
 
 		if stats.Contradicted > 0 && failOnContradiction {
