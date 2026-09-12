@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // Define context key type and constant to resolve undefined: TenantIDKey
@@ -74,7 +75,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 		r.Header.Set("X-Garuda-Token", token)
 
 		// Attach tenant context
-		defaultTenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		defaultTenantID := tenant.CanonicalID
 		ctx := context.WithValue(r.Context(), TenantIDKey, defaultTenantID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -86,7 +87,7 @@ func WithMerkleHeader(s *Server) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tenantID, ok := r.Context().Value(TenantIDKey).(uuid.UUID)
 			if !ok {
-				tenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+				tenantID = tenant.CanonicalID
 			}
 
 			if s != nil && s.store != nil {

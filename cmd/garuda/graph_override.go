@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/spf13/cobra"
 )
 
@@ -33,7 +33,7 @@ var graphExportCmd = &cobra.Command{
 		}
 		defer pool.Close()
 
-		tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		tenantID := tenant.CanonicalID
 		workspace := "default"
 
 		svc := knowledge.NewGraphService(pool)

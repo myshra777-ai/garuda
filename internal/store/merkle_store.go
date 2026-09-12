@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/myshra777-ai/garuda/internal/merkle"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -188,7 +189,7 @@ func (s *PostgresStore) ListAllTenants(ctx context.Context) ([]uuid.UUID, error)
 		}
 	}
 	if len(ids) == 0 {
-		ids = append(ids, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+		ids = append(ids, tenant.CanonicalID)
 	}
 	return ids, nil
 }

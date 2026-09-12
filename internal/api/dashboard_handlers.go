@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // -----------------------------------------------------------------------------
@@ -256,7 +257,7 @@ type EntityRecord struct {
 // Package-level constants and helpers
 // -----------------------------------------------------------------------------
 
-const dashboardTenantID = "00000000-0000-0000-0000-000000000001"
+const dashboardTenantID = tenant.CanonicalIDStr
 
 // Parse the tenant UUID once at package load. Any malformed constant
 // panics at process start, not on every request.

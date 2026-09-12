@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/spf13/cobra"
 )
 
@@ -97,22 +98,32 @@ func getDBURL() string {
 	return url
 }
 
+// getTenantIDString resolves the tenant for CLI commands.
+//
+// Behavior change from the previous implementation: an unset
+// GARUDA_TENANT_ID no longer aborts the process. It resolves to the
+// canonical tenant, matching the behavior of the API, the MCP server,
+// and the twelve CLI commands that already hardcoded the canonical
+// value. A malformed GARUDA_TENANT_ID still aborts — that is a
+// configuration error, not a default.
+//
+// See internal/tenant for the resolution contract.
 func getTenantIDString() string {
-	tenantID := os.Getenv("GARUDA_TENANT_ID")
-	if tenantID == "" {
-		fmt.Fprintln(os.Stderr, "❌ FATAL: GARUDA_TENANT_ID environment variable is required.")
-		os.Exit(1)
-	}
-	err := uuid.Validate(tenantID)
+	id, err := tenant.Resolve()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ FATAL: Invalid GARUDA_TENANT_ID format: %v\n", err)
+		fmt.Fprintf(os.Stderr, "❌ FATAL: %v\n", err)
 		os.Exit(1)
 	}
-	return tenantID
+	return id.String()
 }
 
 func getTenantID() uuid.UUID {
-	return uuid.MustParse(getTenantIDString())
+	id, err := tenant.Resolve()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ FATAL: %v\n", err)
+		os.Exit(1)
+	}
+	return id
 }
 
 func getAuthToken() string {

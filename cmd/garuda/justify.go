@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +38,7 @@ var justifyCmd = &cobra.Command{
 
 		tenantStr := os.Getenv("GARUDA_TENANT_ID")
 		if tenantStr == "" {
-			tenantStr = "00000000-0000-0000-0000-000000000001"
+			tenantStr = tenant.CanonicalIDStr
 		}
 		tenantID, err := uuid.Parse(tenantStr)
 		if err != nil {

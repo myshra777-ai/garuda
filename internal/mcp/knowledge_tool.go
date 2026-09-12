@@ -10,14 +10,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // HandleCheckDrift exposes the Knowledge Drift report over Model Context Protocol (MCP)
 func HandleCheckDrift(ctx context.Context, pool *pgxpool.Pool, arguments json.RawMessage) (any, error) {
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	tenantID := tenant.CanonicalID
 	workspace := "default"
 
 	evaluator := knowledge.NewEvaluator(pool)
@@ -51,7 +51,7 @@ func HandleQueryClaims(ctx context.Context, pool *pgxpool.Pool, arguments json.R
 		_ = json.Unmarshal(arguments, &params)
 	}
 
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	tenantID := tenant.CanonicalID
 	workspace := "default"
 
 	query := `

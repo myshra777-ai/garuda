@@ -6,11 +6,12 @@
 package api
 
 import (
-	"strconv"
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // HandleSystemDiscover returns a machine‑readable index of all endpoints.
@@ -89,7 +90,7 @@ func (s *Server) HandleSystemBootstrap(w http.ResponseWriter, r *http.Request) {
 
 	tenantID, err := resolveTenantID(r, uuid.Nil)
 	if err != nil || tenantID == uuid.Nil {
-		tenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		tenantID = tenant.CanonicalID
 	}
 
 	// Get Merkle root

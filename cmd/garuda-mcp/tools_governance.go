@@ -13,12 +13,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
 	"github.com/myshra777-ai/garuda/internal/policy"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // defaultTenantID is the fallback tenant used when neither the request
 // nor the environment specifies one. It matches the default used by
 // the CLI (getPolicyTenant in cmd/garuda/policy_eval_cmd.go).
-var defaultTenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+var defaultTenantID = tenant.CanonicalID
 
 // resolveTenantAndWorkspace extracts tenant_id and workspace from the
 // request arguments, with fallback to environment variables and then

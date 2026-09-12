@@ -16,6 +16,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/telemetry"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -25,7 +26,7 @@ func (s *Server) HandleHandoff(w http.ResponseWriter, r *http.Request) {
 	requestID := getRequestID(r)
 	tenantID, ok := r.Context().Value(TenantIDKey).(uuid.UUID)
 	if !ok {
-		tenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		tenantID = tenant.CanonicalID
 	}
 
 	var req store.HandoffRequest
@@ -72,7 +73,7 @@ func (s *Server) HandleResume(w http.ResponseWriter, r *http.Request) {
 	requestID := getRequestID(r)
 	tenantID, ok := r.Context().Value(TenantIDKey).(uuid.UUID)
 	if !ok {
-		tenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		tenantID = tenant.CanonicalID
 	}
 	var req struct {
 		AgentID      uuid.UUID `json:"agent_id"`
@@ -116,7 +117,7 @@ func (s *Server) HandleGetLineage(w http.ResponseWriter, r *http.Request) {
 	requestID := getRequestID(r)
 	tenantID, ok := r.Context().Value(TenantIDKey).(uuid.UUID)
 	if !ok {
-		tenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		tenantID = tenant.CanonicalID
 	}
 	taskID, err := uuid.Parse(mux.Vars(r)["task_id"])
 	if err != nil {

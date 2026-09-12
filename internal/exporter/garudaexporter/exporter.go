@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -27,7 +28,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Endpoint:     "http://localhost:8080/api/v1/telemetry/spans",
-		TenantID:     "00000000-0000-0000-0000-000000000001",
+		TenantID:     tenant.CanonicalIDStr,
 		WorkspaceID:  "532a8e33-975d-48a3-8f88-221cef52fec4",
 		Timeout:      5 * time.Second,
 		MaxBatchSize: 1000,
@@ -56,7 +57,7 @@ func New(cfg Config) (*GarudaSpanExporter, error) {
 		cfg.Endpoint = "http://localhost:8080/api/v1/telemetry/spans"
 	}
 	if cfg.TenantID == "" {
-		cfg.TenantID = "00000000-0000-0000-0000-000000000001"
+		cfg.TenantID = tenant.CanonicalIDStr
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 5 * time.Second

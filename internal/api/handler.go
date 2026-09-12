@@ -18,6 +18,7 @@ import (
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/engine"
 	"github.com/myshra777-ai/garuda/internal/telemetry"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/myshra777-ai/garuda/internal/topology"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
@@ -233,7 +234,7 @@ func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Align default tenant with the system dashboard tenant ID
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	tenantID := tenant.CanonicalID
 	if tenantIDStr := r.URL.Query().Get("tenant_id"); tenantIDStr != "" {
 		if parsed, err := uuid.Parse(tenantIDStr); err == nil {
 			tenantID = parsed

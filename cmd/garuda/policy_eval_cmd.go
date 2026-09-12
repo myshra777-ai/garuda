@@ -53,7 +53,7 @@ var policyListCmd = &cobra.Command{
 		}
 		defer pool.Close()
 
-		tenantID := getPolicyTenant()
+		tenantID := getTenantID()
 
 		rows, err := pool.Query(context.Background(), `
 			SELECT id, statement, scope_domain, scope_system, actor, status, created_at
@@ -172,7 +172,7 @@ var policyEvaluateCmd = &cobra.Command{
 		}
 		defer pool.Close()
 
-		tenantID := getPolicyTenant()
+		tenantID := getTenantID()
 
 		wsName := policyWorkspaceFlag
 		if wsName == "" {
@@ -437,14 +437,6 @@ func openPolicyPool() (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("connect: %w", err)
 	}
 	return pool, nil
-}
-
-func getPolicyTenant() uuid.UUID {
-	t := os.Getenv("GARUDA_TENANT_ID")
-	if t == "" {
-		return uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	}
-	return uuid.MustParse(t)
 }
 
 func shortUUID(id uuid.UUID) string {

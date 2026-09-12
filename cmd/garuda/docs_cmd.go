@@ -62,7 +62,7 @@ func runDocsIngest(cmd *cobra.Command, args []string) error {
 	defer pool.Close()
 
 	claimStore := store.NewClaimStore(pool)
-	tenantID := getDocsTenantID()
+	tenantID := getTenantID()
 	workspace := getDocsWorkspace()
 
 	files, err := collectFiles(targetPath)
@@ -243,7 +243,7 @@ func runDocsSync(cmd *cobra.Command, args []string) error {
 	defer pool.Close()
 
 	claimStore := store.NewClaimStore(pool)
-	tenantID := getDocsTenantID()
+	tenantID := getTenantID()
 
 	totalClaims := 0
 	for _, file := range files {
@@ -362,7 +362,7 @@ func runDocsVerify(cmd *cobra.Command, args []string) error {
 	}
 	defer pool.Close()
 
-	tenantID := getDocsTenantID()
+	tenantID := getTenantID()
 	workspace := getDocsWorkspace()
 
 	fmt.Println("🦅 Correlating Document Intent → Implementation AST → Runtime...")
@@ -439,14 +439,6 @@ func getDocsDBURL() string {
 		url = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
 	}
 	return url
-}
-
-func getDocsTenantID() uuid.UUID {
-	t := os.Getenv("GARUDA_TENANT_ID")
-	if t == "" {
-		return uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	}
-	return uuid.MustParse(t)
 }
 
 func getDocsWorkspace() string {

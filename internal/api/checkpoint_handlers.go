@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/telemetry"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -38,7 +39,7 @@ func (s *Server) HandleAgentCheckpoint(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	telemetry.RecordFeatureUsage("agent_checkpoint")
 
-	tenantID, err := resolveTenantID(r, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+	tenantID, err := resolveTenantID(r, tenant.CanonicalID)
 	if err != nil {
 		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required")
 		return
@@ -164,7 +165,7 @@ func (s *Server) HandleGetAgentCheckpoint(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	tenantID, err := resolveTenantID(r, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+	tenantID, err := resolveTenantID(r, tenant.CanonicalID)
 	if err != nil {
 		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required")
 		return
@@ -194,7 +195,7 @@ func (s *Server) HandleAgentHandoff(w http.ResponseWriter, r *http.Request) {
 		ToAgentID    string    `json:"to_agent_id"`
 	}
 
-	tenantID, err := resolveTenantID(r, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+	tenantID, err := resolveTenantID(r, tenant.CanonicalID)
 	if err != nil {
 		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required")
 		return

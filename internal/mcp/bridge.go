@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // CommandRequest represents the incoming MCP bridge payload.
@@ -127,7 +129,7 @@ func BridgeHandler(apiBaseURL string) http.HandlerFunc {
 
 		tenantID := req.TenantID
 		if tenantID == "" {
-			tenantID = "00000000-0000-0000-0000-000000000001"
+			tenantID = tenant.CanonicalIDStr
 		}
 
 		agentID := req.AgentID

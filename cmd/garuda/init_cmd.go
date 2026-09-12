@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/spf13/cobra"
 )
 
@@ -39,7 +40,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("  ✓ PostgreSQL connection verified")
 
 		// 2. Ensure Core Tables & Seed Workspace
-		tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		tenantID := tenant.CanonicalID
 		workspaceName := "default"
 		var workspaceID uuid.UUID
 
