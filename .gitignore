@@ -122,3 +122,12 @@ garuda_graph_*.html
 # Placed after the global *.json rule so the negation takes effect.
 !internal/merkle/testdata/
 !internal/merkle/testdata/**
+# Python virtualenv (should never be committed)
+.venv/
+venv/
+env/
+ENV/
+
+# Node modules (should never be committed)
+node_modules/
+**/node_modules/
