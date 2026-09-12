@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/store"
 )
 
@@ -52,17 +51,13 @@ func (s *Server) HandleIngestTraces(w http.ResponseWriter, r *http.Request) {
 	ingested := 0
 
 	for _, span := range req.Spans {
-		wsName := span.Workspace
-		if wsName == "" {
-			wsName = "default"
-		}
-
-		var wsID uuid.UUID
-		err := pgStore.Pool().QueryRow(
-			ctx,
-			`SELECT id FROM workspaces WHERE name = $1 LIMIT 1`,
-			wsName,
-		).Scan(&wsID)
+		// Empty workspace means "no workspace declared in the span."
+		// Resolve via store.ResolveWorkspaceID, which returns the most
+		// recently updated workspace for the tenant on empty input and
+		// is always tenant-scoped. The previous code queried by name
+		// alone with no tenant filter, and dropped the span silently
+		// when the name did not resolve.
+		wsID, err := store.ResolveWorkspaceID(ctx, pgStore.Pool(), getDashboardTenant(), span.Workspace)
 		if err != nil {
 			continue
 		}

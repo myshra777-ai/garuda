@@ -242,10 +242,7 @@ func handleAnalyze(path string) {
 
 		wsName := workspaceFlag
 		if wsName == "" {
-			wsName = os.Getenv("GARUDA_WORKSPACE")
-			if wsName == "" {
-				wsName = "default"
-			}
+			wsName = getWorkspaceName()
 		}
 
 		repoURL := repoFlag

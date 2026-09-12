@@ -63,10 +63,7 @@ func handlePonytail(path string) {
 	}
 	defer st.Close()
 
-	workspaceName := os.Getenv("GARUDA_WORKSPACE")
-	if workspaceName == "" {
-		workspaceName = "default"
-	}
+	workspaceName := getWorkspaceName()
 
 	tenantUUID := uuid.MustParse(tenantID)
 	ws, err := st.GetWorkspaceByName(ctx, tenantID, workspaceName)

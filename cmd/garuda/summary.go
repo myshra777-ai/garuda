@@ -109,10 +109,7 @@ var summaryCmd = &cobra.Command{
 
 		tenantID := getTenantID()
 
-		workspaceName := os.Getenv("GARUDA_WORKSPACE")
-		if workspaceName == "" {
-			workspaceName = "default"
-		}
+		workspaceName := getWorkspaceName()
 
 		workspaceID, resolvedName, err := st.ResolveWorkspaceTarget(ctx, workspaceName)
 		if err != nil {

@@ -282,10 +282,7 @@ func handleImpactDiff(baselineFile, proposedFile string) {
 		os.Exit(1)
 	}
 
-	workspaceName := os.Getenv("GARUDA_WORKSPACE")
-	if workspaceName == "" {
-		workspaceName = "default"
-	}
+	workspaceName := getWorkspaceName()
 
 	ws, err := st.GetWorkspaceByName(ctx, tenantUUID.String(), workspaceName)
 	if err != nil {

@@ -127,10 +127,7 @@ func handleListEntities() {
 	}
 	defer st.Close()
 
-	workspaceName := os.Getenv("GARUDA_WORKSPACE")
-	if workspaceName == "" {
-		workspaceName = "default"
-	}
+	workspaceName := getWorkspaceName()
 
 	ws, err := st.GetWorkspaceByName(ctx, tenantStr, workspaceName)
 	if err != nil {

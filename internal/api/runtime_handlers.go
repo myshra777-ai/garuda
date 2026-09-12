@@ -39,14 +39,16 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 	}
 
 	workspaceName := r.URL.Query().Get("workspace")
-	if workspaceName == "" {
-		workspaceName = "default"
-	}
 
-	var workspaceID uuid.UUID
-	err := pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID)
+	// Resolve via the tenant-scoped helper. Empty name selects the
+	// most recently updated workspace for the tenant. The previous
+	// code fell back to `SELECT id FROM workspaces LIMIT 1` with no
+	// tenant filter, which could return a workspace owned by another
+	// tenant.
+	workspaceID, err := store.ResolveWorkspaceID(ctx, pgStore.Pool(), getDashboardTenant(), workspaceName)
 	if err != nil {
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces LIMIT 1`).Scan(&workspaceID)
+		http.Error(w, "no workspaces exist for tenant", http.StatusNotFound)
+		return
 	}
 
 	var req IngestTelemetryRequestDTO
@@ -147,14 +149,16 @@ func (s *Server) HandleGetRuntimeCoverage(w http.ResponseWriter, r *http.Request
 	}
 
 	workspaceName := r.URL.Query().Get("workspace")
-	if workspaceName == "" {
-		workspaceName = "default"
-	}
 
-	var workspaceID uuid.UUID
-	err := pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces WHERE name = $1 LIMIT 1`, workspaceName).Scan(&workspaceID)
+	// Resolve via the tenant-scoped helper. Empty name selects the
+	// most recently updated workspace for the tenant. The previous
+	// code fell back to `SELECT id FROM workspaces LIMIT 1` with no
+	// tenant filter, which could return a workspace owned by another
+	// tenant.
+	workspaceID, err := store.ResolveWorkspaceID(ctx, pgStore.Pool(), getDashboardTenant(), workspaceName)
 	if err != nil {
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT id FROM workspaces LIMIT 1`).Scan(&workspaceID)
+		http.Error(w, "no workspaces exist for tenant", http.StatusNotFound)
+		return
 	}
 
 	tenantID := getDashboardTenant()

@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/myshra777-ai/garuda/internal/policy"
+	"github.com/myshra777-ai/garuda/internal/store"
 )
 
 var policyCmd = &cobra.Command{
@@ -176,18 +177,16 @@ var policyEvaluateCmd = &cobra.Command{
 
 		wsName := policyWorkspaceFlag
 		if wsName == "" {
-			wsName = os.Getenv("GARUDA_WORKSPACE")
-		}
-		if wsName == "" {
-			wsName = "default"
+			wsName = getWorkspaceName()
 		}
 
-		var workspaceID uuid.UUID
-		err = pool.QueryRow(context.Background(), `
-			SELECT id FROM workspaces WHERE tenant_id = $1 AND name = $2 LIMIT 1
-		`, tenantID, wsName).Scan(&workspaceID)
+		// Resolve via the tenant-scoped helper. Empty name selects the
+		// most recently updated workspace for the tenant. The previous
+		// code fell back to the literal "default", which matched no
+		// workspace row unless `garuda init` had seeded it.
+		workspaceID, err := store.ResolveWorkspaceID(context.Background(), pool, tenantID, wsName)
 		if err != nil {
-			return fmt.Errorf("workspace %q not found: %w", wsName, err)
+			return fmt.Errorf("resolve workspace %q: %w", wsName, err)
 		}
 
 		actor := policyActorFlag

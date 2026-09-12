@@ -447,11 +447,7 @@ func getDocsDBURL() string {
 }
 
 func getDocsWorkspace() string {
-	w := os.Getenv("GARUDA_WORKSPACE")
-	if w == "" {
-		return "default"
-	}
-	return w
+	return getWorkspaceName()
 }
 
 // -----------------------------------------------------------------------------

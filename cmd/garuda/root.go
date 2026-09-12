@@ -126,6 +126,23 @@ func getTenantID() uuid.UUID {
 	return id
 }
 
+// getWorkspaceName returns the workspace name for the current process.
+//
+// Precedence:
+//
+//	GARUDA_WORKSPACE environment variable  →  empty string
+//
+// An empty string is not "default" and not "no workspace". It means
+// the caller has not selected one, and the store layer will resolve it
+// to the most recently updated workspace for the tenant. The previous
+// behavior of defaulting to the literal "default" pointed every
+// caller at a workspace that only exists if `garuda init` was run;
+// on any other database, every downstream query silently returned
+// zero rows.
+func getWorkspaceName() string {
+	return os.Getenv("GARUDA_WORKSPACE")
+}
+
 func getAuthToken() string {
 	if token := os.Getenv("GARUDA_API_KEY"); token != "" {
 		return token

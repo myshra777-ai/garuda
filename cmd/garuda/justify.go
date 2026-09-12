@@ -45,10 +45,7 @@ var justifyCmd = &cobra.Command{
 			return fmt.Errorf("invalid tenant ID: %w", err)
 		}
 
-		workspaceName := os.Getenv("GARUDA_WORKSPACE")
-		if workspaceName == "" {
-			workspaceName = "default"
-		}
+		workspaceName := getWorkspaceName()
 
 		ws, err := st.GetWorkspaceByName(ctx, tenantID.String(), workspaceName)
 		if err != nil {
