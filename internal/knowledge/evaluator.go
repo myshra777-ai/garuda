@@ -36,12 +36,12 @@ type CodeDriftFinding struct {
 	Path       string
 }
 
-func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID uuid.UUID, workspace string) (*HealthStats, []CodeDriftFinding, error) {
+func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID, workspaceID uuid.UUID) (*HealthStats, []CodeDriftFinding, error) {
 	rows, err := e.pool.Query(ctx, `
 		SELECT id, subject, modality, predicate, object 
 		FROM document_claims 
-		WHERE tenant_id = $1 AND workspace = $2
-	`, tenantID, workspace)
+		WHERE tenant_id = $1 AND workspace_id = $2
+	`, tenantID, workspaceID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -144,13 +144,14 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID uuid.UUID, w
 		LEFT JOIN document_claims dc 
 		  ON (e.name = dc.subject OR e.name LIKE '%.' || dc.subject) 
 		  AND dc.tenant_id = e.tenant_id
+		  AND dc.workspace_id = $2
 		WHERE e.tenant_id = $1 
 		  AND e.is_exported = true
 		  AND e.kind IN ('function', 'method', 'struct')
 		  AND dc.id IS NULL
 		ORDER BY e.file_path, e.name ASC
 		LIMIT 10
-	`, tenantID)
+	`, tenantID, workspaceID)
 
 	var undocumented []CodeDriftFinding
 	if err == nil {

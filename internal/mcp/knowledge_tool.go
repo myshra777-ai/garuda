@@ -12,22 +12,33 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
+	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // HandleCheckDrift exposes the Knowledge Drift report over Model Context Protocol (MCP)
 func HandleCheckDrift(ctx context.Context, pool *pgxpool.Pool, arguments json.RawMessage) (any, error) {
 	tenantID := tenant.CanonicalID
-	workspace := "default"
+	workspaceName := ""
+
+	// Resolve the workspace for the tenant. Empty name selects the most
+	// recently updated workspace, replacing the previous hardcoded
+	// "default" — which did not correspond to any workspace row unless
+	// `garuda init` had seeded it, and silently returned zero rows.
+	workspaceID, err := store.ResolveWorkspaceID(ctx, pool, tenantID, workspaceName)
+	if err != nil {
+		return nil, fmt.Errorf("resolve workspace: %w", err)
+	}
+	workspaceName = workspaceID.String()
 
 	evaluator := knowledge.NewEvaluator(pool)
-	stats, undocumented, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspace)
+	stats, undocumented, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate workspace knowledge integrity: %w", err)
 	}
 
 	response := map[string]any{
-		"workspace":            workspace,
+		"workspace":            workspaceName,
 		"documentation_health": stats,
 		"undocumented_symbols": undocumented,
 		"status":               "success",
@@ -52,14 +63,18 @@ func HandleQueryClaims(ctx context.Context, pool *pgxpool.Pool, arguments json.R
 	}
 
 	tenantID := tenant.CanonicalID
-	workspace := "default"
+
+	workspaceID, err := store.ResolveWorkspaceID(ctx, pool, tenantID, "")
+	if err != nil {
+		return nil, fmt.Errorf("resolve workspace: %w", err)
+	}
 
 	query := `
 		SELECT document_title, section_title, subject, modality, predicate, object, status, contradiction_reason
 		FROM document_claims
-		WHERE tenant_id = $1 AND workspace = $2
+		WHERE tenant_id = $1 AND workspace_id = $2
 	`
-	args := []any{tenantID, workspace}
+	args := []any{tenantID, workspaceID}
 
 	if params.Subject != "" {
 		query += " AND (subject ILIKE $3 OR object ILIKE $3)"

@@ -39,7 +39,7 @@ func NewGraphService(pool *pgxpool.Pool) *GraphService {
 	return &GraphService{pool: pool}
 }
 
-func (g *GraphService) BuildUnifiedGraph(ctx context.Context, tenantID uuid.UUID, workspace string) (*UnifiedGraph, error) {
+func (g *GraphService) BuildUnifiedGraph(ctx context.Context, tenantID, workspaceID uuid.UUID) (*UnifiedGraph, error) {
 	graph := &UnifiedGraph{}
 	nodeMap := make(map[string]bool)
 
@@ -52,8 +52,8 @@ func (g *GraphService) BuildUnifiedGraph(ctx context.Context, tenantID uuid.UUID
 
 	// 1. Fetch Entities (AST)
 	entityRows, err := g.pool.Query(ctx, `
-		SELECT id, name, kind FROM entities WHERE tenant_id = $1
-	`, tenantID)
+		SELECT id, name, kind FROM entities WHERE tenant_id = $1 AND workspace_id = $2
+	`, tenantID, workspaceID)
 	if err == nil {
 		defer entityRows.Close()
 		for entityRows.Next() {
@@ -68,8 +68,8 @@ func (g *GraphService) BuildUnifiedGraph(ctx context.Context, tenantID uuid.UUID
 	// 2. Fetch Document Claims & Map Edges
 	claimRows, err := g.pool.Query(ctx, `
 		SELECT id, subject, predicate, object, modality, status, matched_entity_id 
-		FROM document_claims WHERE tenant_id = $1 AND workspace = $2
-	`, tenantID, workspace)
+		FROM document_claims WHERE tenant_id = $1 AND workspace_id = $2
+	`, tenantID, workspaceID)
 	if err == nil {
 		defer claimRows.Close()
 		for claimRows.Next() {
@@ -93,8 +93,8 @@ func (g *GraphService) BuildUnifiedGraph(ctx context.Context, tenantID uuid.UUID
 
 	// 3. Fetch AST Relationships (Calls, etc.)
 	relRows, err := g.pool.Query(ctx, `
-		SELECT source_id, target_id, kind FROM relationships WHERE tenant_id = $1
-	`, tenantID)
+		SELECT source_id, target_id, kind FROM relationships WHERE tenant_id = $1 AND workspace_id = $2
+	`, tenantID, workspaceID)
 	if err == nil {
 		defer relRows.Close()
 		for relRows.Next() {

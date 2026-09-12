@@ -13,51 +13,61 @@ import (
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
 	"github.com/myshra777-ai/garuda/internal/policy"
+	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // defaultTenantID is the fallback tenant used when neither the request
 // nor the environment specifies one. It matches the default used by
-// the CLI (getPolicyTenant in cmd/garuda/policy_eval_cmd.go).
+// the CLI (getTenantID in cmd/garuda/root.go).
 var defaultTenantID = tenant.CanonicalID
 
 // resolveTenantAndWorkspace extracts tenant_id and workspace from the
 // request arguments, with fallback to environment variables and then
-// to documented defaults.
+// to the most recently updated workspace for the tenant.
 //
 // Precedence:
 //
 //	tenant_id  →  GARUDA_TENANT_ID  →  defaultTenantID
-//	workspace  →  GARUDA_WORKSPACE  →  "default"
+//	workspace  →  GARUDA_WORKSPACE  →  most recently updated
 //
-// Callers that supply an invalid UUID receive an error, not a silent
-// fallback. Invalid input is a bug in the caller, not a case to paper
-// over.
-func (s *MCPServer) resolveTenantAndWorkspace(args map[string]interface{}) (uuid.UUID, string, error) {
+// Callers that supply an invalid tenant UUID receive an error, not a
+// silent fallback. Invalid input is a bug in the caller, not a case to
+// paper over. A workspace name that does not resolve to a row is also
+// an error.
+func (s *MCPServer) resolveTenantAndWorkspace(args map[string]interface{}) (uuid.UUID, uuid.UUID, error) {
 	tenantID := defaultTenantID
 
 	if raw, ok := args["tenant_id"].(string); ok && raw != "" {
 		parsed, err := uuid.Parse(raw)
 		if err != nil {
-			return uuid.Nil, "", fmt.Errorf("invalid tenant_id %q: %w", raw, err)
+			return uuid.Nil, uuid.Nil, fmt.Errorf("invalid tenant_id %q: %w", raw, err)
 		}
 		tenantID = parsed
 	} else if envTid := os.Getenv("GARUDA_TENANT_ID"); envTid != "" {
 		parsed, err := uuid.Parse(envTid)
 		if err != nil {
-			return uuid.Nil, "", fmt.Errorf("invalid GARUDA_TENANT_ID %q: %w", envTid, err)
+			return uuid.Nil, uuid.Nil, fmt.Errorf("invalid GARUDA_TENANT_ID %q: %w", envTid, err)
 		}
 		tenantID = parsed
 	}
 
-	workspace := "default"
+	// Workspace name comes from args, then env, then empty. Empty
+	// resolves to the most recently updated workspace for the tenant.
+	// The previous literal "default" matched no workspace row unless
+	// `garuda init` had seeded it.
+	workspaceName := ""
 	if raw, ok := args["workspace"].(string); ok && raw != "" {
-		workspace = raw
+		workspaceName = raw
 	} else if envWs := os.Getenv("GARUDA_WORKSPACE"); envWs != "" {
-		workspace = envWs
+		workspaceName = envWs
 	}
 
-	return tenantID, workspace, nil
+	workspaceID, err := store.ResolveWorkspaceID(context.Background(), s.store.Pool(), tenantID, workspaceName)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("resolve workspace %q: %w", workspaceName, err)
+	}
+	return tenantID, workspaceID, nil
 }
 
 // handlePolicyList returns every policy registered for the tenant.
@@ -118,7 +128,7 @@ func (s *MCPServer) handlePolicyList(args map[string]interface{}) (interface{}, 
 //
 // Read-only. The evaluator runs queries but writes nothing.
 func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interface{}, error) {
-	tenantID, workspace, err := s.resolveTenantAndWorkspace(args)
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +142,7 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 
 	// Documentation health and drift findings.
 	evaluator := knowledge.NewEvaluator(s.store.Pool())
-	stats, drift, err := evaluator.EvaluateWorkspace(context.Background(), tenantID, workspace)
+	stats, drift, err := evaluator.EvaluateWorkspace(context.Background(), tenantID, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate workspace: %w", err)
 	}
@@ -141,7 +151,7 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 
 	return map[string]interface{}{
 		"tenant_id":              tenantID.String(),
-		"workspace":              workspace,
+		"workspace":              workspaceID.String(),
 		"active_policies":        policyCount,
 		"documentation_health":   stats,
 		"drift_finding_count":    len(drift),
@@ -262,13 +272,13 @@ func computeVerdict(stats *knowledge.HealthStats) governanceVerdict {
 // internal/mcp/knowledge_tool.go returns, but resolves tenant and
 // workspace from the caller's args instead of hardcoding defaults.
 func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, error) {
-	tenantID, workspace, err := s.resolveTenantAndWorkspace(args)
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
 
 	evaluator := knowledge.NewEvaluator(s.store.Pool())
-	stats, drift, err := evaluator.EvaluateWorkspace(context.Background(), tenantID, workspace)
+	stats, drift, err := evaluator.EvaluateWorkspace(context.Background(), tenantID, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate workspace: %w", err)
 	}
@@ -277,7 +287,7 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 
 	return map[string]interface{}{
 		"tenant_id":            tenantID.String(),
-		"workspace":            workspace,
+		"workspace":            workspaceID.String(),
 		"documentation_health": stats,
 		"undocumented_symbols": drift,
 		"gate_verdict":         verdict,
@@ -290,7 +300,7 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 //
 // Read-only.
 func (s *MCPServer) handleQueryClaims(args map[string]interface{}) (interface{}, error) {
-	tenantID, workspace, err := s.resolveTenantAndWorkspace(args)
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
@@ -301,9 +311,9 @@ func (s *MCPServer) handleQueryClaims(args map[string]interface{}) (interface{},
 		SELECT document_title, section_title, subject, modality,
 		       predicate, object, status, contradiction_reason
 		FROM document_claims
-		WHERE tenant_id = $1 AND workspace = $2
+		WHERE tenant_id = $1 AND workspace_id = $2
 	`
-	dbArgs := []interface{}{tenantID, workspace}
+	dbArgs := []interface{}{tenantID, workspaceID}
 
 	if subject != "" {
 		query += " AND (subject ILIKE $3 OR object ILIKE $3)"
@@ -339,7 +349,7 @@ func (s *MCPServer) handleQueryClaims(args map[string]interface{}) (interface{},
 
 	return map[string]interface{}{
 		"tenant_id": tenantID.String(),
-		"workspace": workspace,
+		"workspace": workspaceID.String(),
 		"subject":   subject,
 		"count":     len(results),
 		"claims":    results,
@@ -366,9 +376,21 @@ func previewDrift(findings []knowledge.CodeDriftFinding, n int) []knowledge.Code
 // exploratory noise. Preview is safe for agents; commit requires a
 // human.
 func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface{}, error) {
-	tenantID, workspace, err := s.resolveTenantAndWorkspace(args)
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
+	}
+
+	// Keep the workspace name for display. resolveTenantAndWorkspace
+	// returns the UUID; the name is what a human reads in logs and
+	// responses, and it may be empty if the resolver picked the most
+	// recently updated workspace.
+	workspaceName, _ := args["workspace"].(string)
+	if workspaceName == "" {
+		workspaceName = os.Getenv("GARUDA_WORKSPACE")
+	}
+	if workspaceName == "" {
+		workspaceName = workspaceID.String()
 	}
 
 	policyDir, _ := args["policy_dir"].(string)
@@ -384,14 +406,6 @@ func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface
 	actor, _ := args["actor"].(string)
 	if actor == "" {
 		actor = "mcp-policy-preview"
-	}
-
-	// Resolve workspace name to UUID.
-	var workspaceID uuid.UUID
-	if err := s.store.Pool().QueryRow(context.Background(), `
-		SELECT id FROM workspaces WHERE name = $1 LIMIT 1
-	`, workspace).Scan(&workspaceID); err != nil {
-		return nil, fmt.Errorf("workspace %q not found: %w", workspace, err)
 	}
 
 	engine := policy.NewEngine(s.store.Pool())
@@ -424,14 +438,14 @@ func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface
 
 	return map[string]interface{}{
 		"tenant_id":      tenantID.String(),
-		"workspace":      workspace,
+		"workspace":      workspaceName,
 		"policy_dir":     policyDir,
 		"dry_run":        true,
 		"final_decision": string(result.FinalDecision),
 		"evaluations":    evaluations,
 		"summary":        result.Summary,
 		"note": "Dry-run only. No evaluation was persisted or anchored. " +
-			"Run 'garuda policy evaluate <dir> --workspace " + workspace +
+			"Run 'garuda policy evaluate <dir> --workspace " + workspaceName +
 			"' from the CLI to record and anchor these decisions.",
 	}, nil
 }

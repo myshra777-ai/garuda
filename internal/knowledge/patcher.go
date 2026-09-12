@@ -23,9 +23,9 @@ func NewDocPatcher(pool *pgxpool.Pool) *DocPatcher {
 }
 
 // GeneratePatch creates a suggested markdown snippet for undocumented code symbols or remediation of drift.
-func (p *DocPatcher) GeneratePatch(ctx context.Context, tenantID uuid.UUID, workspace string) (string, error) {
+func (p *DocPatcher) GeneratePatch(ctx context.Context, tenantID, workspaceID uuid.UUID) (string, error) {
 	evaluator := NewEvaluator(p.pool)
-	_, undocumented, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspace)
+	_, undocumented, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspaceID)
 	if err != nil {
 		return "", err
 	}

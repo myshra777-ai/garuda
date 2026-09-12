@@ -363,13 +363,18 @@ func runDocsVerify(cmd *cobra.Command, args []string) error {
 	defer pool.Close()
 
 	tenantID := getTenantID()
-	workspace := getDocsWorkspace()
+	workspaceName := getDocsWorkspace()
+
+	workspaceID, err := store.ResolveWorkspaceID(ctx, pool, tenantID, workspaceName)
+	if err != nil {
+		return fmt.Errorf("resolve workspace %q: %w", workspaceName, err)
+	}
 
 	fmt.Println("🦅 Correlating Document Intent → Implementation AST → Runtime...")
 	fmt.Println()
 
 	evaluator := knowledge.NewEvaluator(pool)
-	stats, undocumented, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspace)
+	stats, undocumented, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspaceID)
 	if err != nil {
 		return fmt.Errorf("evaluation failed: %w", err)
 	}
@@ -393,9 +398,9 @@ func runDocsVerify(cmd *cobra.Command, args []string) error {
 	rows, err := pool.Query(ctx, `
 		SELECT subject, modality, predicate, object, status, contradiction_reason
 		FROM document_claims
-		WHERE tenant_id = $1 AND workspace = $2 AND status != 'SUPPORTED'
+		WHERE tenant_id = $1 AND workspace_id = $2 AND status != 'SUPPORTED'
 		ORDER BY line_start ASC
-	`, tenantID, workspace)
+	`, tenantID, workspaceID)
 	if err == nil {
 		defer rows.Close()
 		fmt.Println("\nDocument → Code Drift:")

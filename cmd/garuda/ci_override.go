@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
+	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/spf13/cobra"
 )
@@ -36,14 +37,16 @@ var ciCheckCmd = &cobra.Command{
 		defer pool.Close()
 
 		tenantID := tenant.CanonicalID
-		workspace := os.Getenv("GARUDA_WORKSPACE")
-		if workspace == "" {
-			workspace = "default"
+		workspaceName := os.Getenv("GARUDA_WORKSPACE")
+
+		workspaceID, err := store.ResolveWorkspaceID(ctx, pool, tenantID, workspaceName)
+		if err != nil {
+			return fmt.Errorf("resolve workspace %q: %w", workspaceName, err)
 		}
 
 		fmt.Println("🛡️ Running Garuda Software Knowledge Integrity Gate...")
 		evaluator := knowledge.NewEvaluator(pool)
-		stats, _, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspace)
+		stats, _, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspaceID)
 		if err != nil {
 			return fmt.Errorf("evaluation failed: %w", err)
 		}
