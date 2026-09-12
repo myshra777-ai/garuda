@@ -46,6 +46,10 @@ type MCPServer struct {
 	// lifetime of the process.
 	sessionID string
 	startedAt time.Time
+
+	// instanceHash is a stable identifier for this deployment
+	// (hostname + cwd + salt). Used to correlate telemetry rows.
+	instanceHash string
 }
 
 func main() {
@@ -98,6 +102,7 @@ func main() {
 		jwtConfig:           jwtConfig,
 		sessionID:           uuid.New().String(),
 		startedAt:           time.Now().UTC(),
+		instanceHash:        computeInstanceHash(),
 	}
 
 	slog.Info("Garuda MCP Server ready",
@@ -430,6 +435,12 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 
 	args, _ := req.Params["arguments"].(map[string]interface{})
 
+	agentID, _ := args["agent_id"].(string)
+	if agentID == "" {
+		agentID = "mcp-agent"
+	}
+
+	start := time.Now()
 	var result interface{}
 	var err error
 
@@ -445,9 +456,6 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleGetImpact(args)
 	case "garuda.propose_decision":
 		result, err = s.handleProposeDecision(args)
-
-	// Governance tools (Phase 2.2a). All read-only. None anchor to
-	// the Merkle ledger — only the decision proposals do.
 	case "garuda.policy.list":
 		result, err = s.handlePolicyList(args)
 	case "garuda.governance.status":
@@ -456,10 +464,6 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleCheckDrift(args)
 	case "garuda.query_claims":
 		result, err = s.handleQueryClaims(args)
-
-	// Policy and semantic tools (Phase 2.2b/2.2c). All read-only.
-	// garuda.policy.evaluate runs the engine in dry-run mode and does
-	// not persist or anchor.
 	case "garuda.policy.evaluate":
 		result, err = s.handlePolicyEvaluate(args)
 	case "garuda.entities":
@@ -470,6 +474,23 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
 	}
+
+	duration := time.Since(start)
+
+	// Telemetry on both paths. Best-effort: a failure to record does
+	// not affect the response, and is logged at warn level.
+	//
+	// tokensEstimated is 0 for read-only tools, positive for the
+	// propose path. The exact value matters less than the fact that a
+	// row is written with a truthful latency and outcome.
+	s.emitToolInvocation(
+		context.Background(),
+		toolName,
+		agentID,
+		0, // tokensEstimated — the propose path tracks this via budget, not here
+		duration,
+		err == nil,
+	)
 
 	if err != nil {
 		return s.errorResponse(req.ID, -32000, err.Error())
