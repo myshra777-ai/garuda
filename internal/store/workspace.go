@@ -56,18 +56,16 @@ func (s *PostgresStore) CreateWorkspace(ctx context.Context, tenantIDStr, name, 
 	)
 
 	query := `
-		WITH ins AS (
-			INSERT INTO workspaces (id, tenant_id, name, root_path, is_go_work, description, created_at, updated_at)
-			VALUES ($1, $2, $3, '.', false, $4, NOW(), NOW())
-			ON CONFLICT (tenant_id, name) DO NOTHING
-			RETURNING id, root_path, is_go_work, created_at, updated_at, true AS inserted
-		)
-		SELECT id, root_path, is_go_work, created_at, updated_at, inserted FROM ins
-		UNION ALL
-		SELECT id, COALESCE(root_path, '.'), is_go_work, created_at, updated_at, false AS inserted 
-		FROM workspaces 
-		WHERE tenant_id = $2 AND name = $3
-		LIMIT 1;
+		INSERT INTO workspaces (id, tenant_id, name, root_path, is_go_work, description, created_at, updated_at)
+		VALUES ($1, $2, $3, '.', false, $4, NOW(), NOW())
+		ON CONFLICT (tenant_id, name) DO UPDATE
+			SET name = EXCLUDED.name
+		RETURNING id,
+		          COALESCE(root_path, '.'),
+		          is_go_work,
+		          created_at,
+		          updated_at,
+		          (xmax = 0) AS inserted;
 	`
 
 	newID := uuid.New()

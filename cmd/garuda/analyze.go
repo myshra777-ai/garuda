@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -302,13 +303,15 @@ func handleAnalyze(path string) {
 		var workspaceID uuid.UUID
 		wsRecord, err := st.GetWorkspaceByName(persistCtx, tenantIDStr, wsName)
 		if err != nil {
-			newWs, err := st.CreateWorkspace(persistCtx, tenantIDStr, wsName, "")
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "⚠️ Failed to create workspace '%s': %v\n", wsName, err)
+			newWs, createErr := st.CreateWorkspace(persistCtx, tenantIDStr, wsName, "")
+			if createErr != nil && !errors.Is(createErr, store.ErrWorkspaceExists) {
+				fmt.Fprintf(os.Stderr, "⚠️ Failed to create workspace '%s': %v\n", wsName, createErr)
 				return
 			}
 			workspaceID = newWs.ID
-			fmt.Printf("   Created workspace: %s\n", wsName)
+			if createErr == nil {
+				fmt.Printf("   Created workspace: %s\n", wsName)
+			}
 		} else {
 			workspaceID = wsRecord.ID
 		}
