@@ -304,18 +304,42 @@ func resolveWorkspaceID(ctx context.Context, pgStore *store.PostgresStore, name 
 	var id uuid.UUID
 	var resolvedName string
 	var err error
+
+	// Both branches are scoped to the dashboard tenant. The name-only
+	// lookup that preceded this fix could return a workspace belonging
+	// to a different tenant if the same name existed under more than one
+	// tenant — which UNIQUE (tenant_id, name) permits. Before migration
+	// 073 there were sixteen workspaces named 'workspace-core', each
+	// under its own tenant; a caller asking for that name would have
+	// received one of them nondeterministically.
+	//
+	// ORDER BY clauses make the choice deterministic when more than one
+	// row matches. Under the current constraint the result set is a
+	// singleton, so the ordering is defense in depth: a future migration
+	// that weakens the constraint, or a batch operation that produces
+	// identical timestamps, would otherwise silently change which row is
+	// returned. The id tiebreaker is stable because id is the primary
+	// key.
 	if name == "" {
 		err = pgStore.Pool().QueryRow(ctx,
-			`SELECT id, name FROM workspaces ORDER BY updated_at DESC LIMIT 1`,
+			`SELECT id, name FROM workspaces
+			  WHERE tenant_id = $1
+			  ORDER BY updated_at DESC, created_at DESC, id DESC
+			  LIMIT 1`,
+			dashboardTenantUUID,
 		).Scan(&id, &resolvedName)
 		if err != nil {
-			return uuid.Nil, "", fmt.Errorf("no workspaces exist")
+			return uuid.Nil, "", fmt.Errorf("no workspaces exist for tenant %s", dashboardTenantUUID)
 		}
 		return id, resolvedName, nil
 	}
+
 	err = pgStore.Pool().QueryRow(ctx,
-		`SELECT id, name FROM workspaces WHERE name = $1 LIMIT 1`,
-		name,
+		`SELECT id, name FROM workspaces
+		  WHERE tenant_id = $1 AND name = $2
+		  ORDER BY created_at ASC, id ASC
+		  LIMIT 1`,
+		dashboardTenantUUID, name,
 	).Scan(&id, &resolvedName)
 	if err != nil {
 		return uuid.Nil, name, fmt.Errorf("workspace not found")
