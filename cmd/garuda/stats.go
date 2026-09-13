@@ -57,12 +57,18 @@ func printROIReport(ctx context.Context, db *sql.DB) error {
 		decisionsCount  int
 	)
 
-	// Fetch counts matching the exact Garuda Postgres schema
-	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM entities").Scan(&entityCount)
-	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM claims").Scan(&claimsCount)
-	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM cross_repo_edges").Scan(&crossRepoCount)
-	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM merkle_snapshots").Scan(&merkleSnapshots)
-	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM decisions").Scan(&decisionsCount)
+	tenantID := getTenantID().String()
+
+	// Counts are tenant-scoped. The four CLI tables that carry a
+	// tenant_id column (entities, claims, cross_repo_edges, decisions)
+	// and merkle_snapshots (also tenant-scoped) are counted for the
+	// active tenant only. $1 is cast to uuid explicitly because the
+	// driver is lib/pq, which sends parameters as text.
+	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM entities         WHERE tenant_id = $1::uuid", tenantID).Scan(&entityCount)
+	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM claims           WHERE tenant_id = $1::uuid", tenantID).Scan(&claimsCount)
+	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM cross_repo_edges WHERE tenant_id = $1::uuid", tenantID).Scan(&crossRepoCount)
+	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM merkle_snapshots WHERE tenant_id = $1::uuid", tenantID).Scan(&merkleSnapshots)
+	_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM decisions        WHERE tenant_id = $1::uuid", tenantID).Scan(&decisionsCount)
 
 	// Benchmark constants (GAP-20 / Claude 3.5 Sonnet baseline)
 	const (
@@ -84,7 +90,7 @@ func printROIReport(ctx context.Context, db *sql.DB) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "🦅 Garuda Epistemic Workspace ROI & Grounding Metrics")
 	fmt.Fprintln(w, "─────────────────────────────────────────────────────────────")
-	fmt.Fprintf(w, "Workspace Entities:\t%d symbols\n", entityCount)
+	fmt.Fprintf(w, "Tenant Entities:\t%d symbols\n", entityCount)
 	fmt.Fprintf(w, "Verified Semantic Claims:\t%d claims\n", claimsCount)
 	fmt.Fprintf(w, "Cross-Repo Edges:\t%d inter-module routes\n", crossRepoCount)
 	fmt.Fprintf(w, "Committed Decisions:\t%d records\n", decisionsCount)
