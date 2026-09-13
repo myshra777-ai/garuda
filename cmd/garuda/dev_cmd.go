@@ -23,6 +23,7 @@ import (
 	"github.com/myshra777-ai/garuda/internal/engine"
 	"github.com/myshra777-ai/garuda/internal/runtime"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/telemetry"
 	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/myshra777-ai/garuda/internal/topology"
 	"github.com/spf13/cobra"
@@ -196,6 +197,14 @@ var devCmd = &cobra.Command{
 				}
 			}
 		}()
+
+		// ─────────────────────────────────────────────────────────────
+		// Background Aggregate Refresher
+		// Computes telemetry_aggregates for today and yesterday on
+		// startup, then on a 15-minute ticker. Read by the admin
+		// dashboard. See internal/telemetry/refresh.go.
+		// ─────────────────────────────────────────────────────────────
+		telemetry.StartAggregateRefresher(ctx, pgStore)
 
 		// ─────────────────────────────────────────────────────────────
 		// Start HTTP API

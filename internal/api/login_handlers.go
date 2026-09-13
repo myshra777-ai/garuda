@@ -89,6 +89,16 @@ func (s *Server) HandleLoginPOST(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("login succeeded", "email", user.Email, "role", user.Role)
 
+	// last_login_at drives the active_users aggregate. Written here
+	// rather than in SignIn so a failed signin does not count as
+	// activity. Best-effort: a failed write does not fail the login.
+	if pgStore, ok := s.store.(*store.PostgresStore); ok && pgStore != nil {
+		if _, err := pgStore.Pool().Exec(r.Context(),
+			`UPDATE users SET last_login_at = NOW() WHERE id = $1`, user.ID); err != nil {
+			slog.Warn("login: last_login_at update failed", "user_id", user.ID, "error", err)
+		}
+	}
+
 	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
 		next = "/dashboard"
 	}
