@@ -9,92 +9,89 @@
 </p>
 
 <p align="center">
-  <em>Evidence-backed software intelligence with a cryptographic trust layer.</em>
+  <em>One verified model of your software. Cryptographically anchored. Shared by engineers and their AI agents.</em>
 </p>
 
 <p align="center">
   <a href="https://github.com/myshra777-ai/garuda/releases"><img src="https://img.shields.io/badge/version-v0.1.x-blue.svg?style=flat-square" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-green.svg?style=flat-square" alt="License"></a>
-  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.25-00ADD8.svg?style=flat-square" alt="Go Version"></a>
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.26-00ADD8.svg?style=flat-square" alt="Go Version"></a>
   <a href="internal/merkle/"><img src="https://img.shields.io/badge/trust_layer-RFC_6962-blueviolet.svg?style=flat-square" alt="Merkle"></a>
   <a href="docs/adr/0002-merkle-integrity-layer.md"><img src="https://img.shields.io/badge/ADR--0002-complete-brightgreen.svg?style=flat-square" alt="ADR-0002"></a>
 </p>
 
-<p align="center">
-  Garuda gives teams a shared, evidence-backed understanding of their software systems — with every governance decision anchored to a cryptographic ledger any third party can independently verify.
-</p>
-
 ---
 
-## What Garuda Is
+## What makes Garuda different
 
-Modern software organizations run on distributed knowledge. Architecture decisions live in pull requests, interfaces live in source code, runtime behavior lives in telemetry, and the reasoning behind all of it lives in people's heads.
+Every software intelligence tool today can produce a graph. None of them can prove the graph is right.
 
-Garuda brings these layers into one structured, verifiable model. It connects source code, runtime observations, and governance decisions — and it anchors each decision to a cryptographic log that a third party can independently confirm.
+Garuda treats every architectural decision, every policy evaluation, and every verification state as a cryptographically anchored fact. A decision is hashed into an RFC 6962 Merkle tree using a canonical, language-independent byte encoding. An auditor — with the source of the Merkle package and no access to Garuda's database, servers, or keys — can recompute the hash and confirm the decision existed at a specific block height.
+
+That is the moat. Everything else in this README describes capabilities that other tools also provide. The trust layer is what none of them do.
 
 ```mermaid
 flowchart LR
-    SOURCE["Source Code"] --> ANALYZE["Analyze"]
-    RUNTIME["Runtime"] --> VERIFY["Verify"]
-    ANALYZE --> SEMANTIC["Semantic Model"]
-    SEMANTIC --> CLAIMS["Claims and Evidence"]
-    CLAIMS --> VERIFY
-    VERIFY --> POLICY["Policy Engine"]
-    POLICY --> MERKLE["Merkle Trust Layer"]
-    MERKLE --> AUDIT["Independent Auditors"]
-    MERKLE --> AGENTS["AI Agents"]
-    MERKLE --> CI["CI and Governance"]
+    DECISION["Architectural Decision"] --> HASH["Canonical Hash"]
+    EVIDENCE["Evidence File & Line"] --> HASH
+    POLICY["Policy Evaluation"] --> HASH
+    HASH --> TREE["RFC 6962 Merkle Tree"]
+    TREE --> ROOT["Epoch Root"]
+    ROOT --> PROOF["Inclusion Proof"]
+    PROOF --> AUDITOR["Independent Auditor"]
+    ROOT --> AGENT["AI Agent"]
+    ROOT --> CI["CI / Governance"]
 ```
 
-Garuda does three things:
+Three properties fall out of this design, and no competitor ships all three:
 
-1. **Analyze.** Extract entities and relationships from source code into a structured semantic model. Every relationship links back to the evidence that justifies it.
-2. **Verify.** Correlate static analysis with runtime observations. Distinguish what is supported by evidence from what remains unverified.
-3. **Govern.** Evaluate declarative policies against the semantic model and anchor every decision — allow, warn, review, or block — to a cryptographic ledger.
+**Verification is a state, not a score.** Every claim in the graph is `SUPPORTED`, `UNVERIFIED`, or `CONTRADICTED`. A number like "87% confidence" tells you nothing. A state tells you what to do next.
 
-Garuda is not another text search engine, another generic dependency graph, another documentation generator, or an LLM that guesses how a repository works.
+**Evidence is a first-class citizen.** Every relationship carries the source file and line that justifies it, plus a classification of how it was derived — compiler type information, import resolution, exact AST structure, or heuristic. Nothing is asserted without a traceable origin.
 
----
-
-## Capabilities
-
-### Semantic Analysis
-
-Garuda analyzes Go, Python, and TypeScript source code into one unified semantic graph. Language is a property of the entity, not the workspace — the pipeline is shared across all supported languages.
-
-| Language | Extraction |
-| :--- | :--- |
-| Go | Compiler-backed. Packages, structs, interfaces, functions, methods, fields, imports, calls, implements, embeds. |
-| Python | Structural. Classes, base classes, methods, functions, and imports. |
-| TypeScript | tree-sitter based. Classes, interfaces, functions, methods, decorators, extends, implements, and imports. |
-
-### Cryptographic Trust Layer
-
-Every governance decision — from a policy evaluation or an architectural choice — is anchored to a versioned Merkle log. Decisions are cryptographically committed and independently verifiable.
-
-### Policy Engine
-
-Declarative YAML policies evaluated against the semantic graph. Each evaluation produces one of four outcomes — allow, warn, review, or block — anchored to the same ledger as the evidence it cited.
-
-### Evidence Ledger
-
-Every relationship in the semantic graph carries the source file and line that justifies it. Nothing is asserted without a traceable origin.
-
-### Integration Surface
-
-Garuda exposes its state through a CLI, an HTTP API, a dashboard, an interactive graph visualizer, a Model Context Protocol server, and an IDE extension.
+**Governance decisions live in the same ledger as the evidence they cited.** When a policy blocks a change, the block is anchored to the exact block that referenced the entities and claims involved. An auditor can walk the chain.
 
 ---
 
-## How Verification Works
+## The problem
 
-Garuda distinguishes three verification states for every claim in the graph.
+Software teams lose time to three related failures.
+
+**Onboarding is slow because structure is invisible.** A new engineer joins a repository with 500 files. Nothing tells them which service calls which, which package is safe to change, or which function has 400 callers. They read code for weeks before they can make a first commit.
+
+**AI agents see files, not systems.** A developer asks Cursor to refactor a helper. The agent has the file open, sees the function signature, and proposes a change. It does not see the eleven other services that call the function across module boundaries. The change compiles. A week later, a downstream service starts returning 500s. The agent did nothing wrong — it was given a file and asked a filesystem question.
+
+**Decisions evaporate.** Why is this service using PostgreSQL and not Redis? Was that a deliberate choice last year, or an accident from a refactor nobody reviewed? The answer lives in an archived Slack thread, or in a person who left. There is no shared record.
+
+These are not tooling problems. They are the same problem: **no single, verified model of what the software actually is.**
+
+---
+
+## What changes for you
+
+| Outcome | What changes | Mechanism |
+|---|---|---|
+| **Save time** | Onboard a new engineer in days, not weeks | `garuda graph` opens the entire workspace in the browser, drillable from repository to package to symbol to caller |
+| **Save time** | Debug faster with an accurate caller/callee map | The graph is compiler-built, not regex-matched. `garuda impact <symbol>` reports the actual blast radius |
+| **Save effort** | Refactor shared helpers without breaking downstream services | Every edge is backed by evidence; the affected callers are named, not guessed |
+| **Save effort** | AI agents stop re-exploring the codebase from scratch | The MCP server answers "what calls this" in one query instead of a five-file read |
+| **Save money** | Cut AI agent token spend by grounding in a real graph | Prompts shrink from whole-repository context to targeted structural queries |
+| **Save money** | Catch architectural drift before it merges | Policies run in CI. Violations are anchored to the Merkle ledger before the PR merges |
+| **Save money** | Compress incident response | Blast-radius analysis on the affected symbol returns in sub-second time |
+| **Reduce hallucination** | AI agents stop inventing functions, callers, and signatures | The agent queries a verified model instead of guessing from a file |
+| **Audit trail** | Every governance decision is independently verifiable | The Merkle inclusion proof is a pure function of `leaf`, `proof`, and `root` |
+
+---
+
+## How verification works
+
+Garuda distinguishes three states for every claim in the graph.
 
 | State | Meaning |
 | :--- | :--- |
-| Supported | Static declarations and runtime telemetry agree. |
-| Unverified | Static structure exists but lacks runtime evidence. Does not imply dead or broken code. |
-| Contradicted | Observed runtime behavior explicitly violates a recorded architectural policy or static expectation. |
+| **Supported** | Static declarations and runtime telemetry agree. |
+| **Unverified** | Static structure exists but lacks runtime evidence. Does not imply dead or broken code. |
+| **Contradicted** | Observed runtime behavior explicitly violates a recorded architectural policy or static expectation. |
 
 ```mermaid
 flowchart TD
@@ -109,11 +106,11 @@ flowchart TD
     CONTRADICTED --> QUARANTINE["Quarantine"]
 ```
 
-> Absence of evidence is not evidence of absence. Static structure and runtime behavior answer different questions.
+> Absence of evidence is not evidence of absence. Static structure and runtime behavior answer different questions. A path that has not been observed stays `UNVERIFIED`; it is never silently promoted to "dead" or "broken."
 
 ---
 
-## The Trust Layer
+## The trust layer, in detail
 
 The trust layer lives in [`internal/merkle/`](internal/merkle/) and is specified in full in [ADR-0002](docs/adr/0002-merkle-integrity-layer.md).
 
@@ -127,76 +124,72 @@ flowchart TD
     PROOF --> VERIFY["Independent Verification"]
 ```
 
-### Canonical Encoding
+**Canonical encoding.** Every hash input is produced by a versioned byte encoder that emits a length-prefixed, field-ordered sequence. There is no dependency on language-native serializers, so two independent implementations in different languages produce byte-identical output for the same input. Golden vectors are frozen in [`testdata/vectors_v1.json`](internal/merkle/testdata/vectors_v1.json) and covered by tests. Any change to the encoding requires a version bump and a new design record.
 
-Every hash input is produced by a versioned byte encoder that emits a length-prefixed, field-ordered sequence. There is no dependency on language-native serializers, so two independent implementations in different languages produce byte-identical output for the same input.
-
-Golden vectors for the encoder are frozen in [`testdata/vectors_v1.json`](internal/merkle/testdata/vectors_v1.json) and covered by tests. Any change requires a version bump and a new design record.
-
-### Merkle Tree
-
-The tree is RFC 6962 compliant with explicit domain separation:
+**RFC 6962 tree with domain separation.**
 
 ```text
 leaf_hash     = SHA256(0x00 || leaf_data)
 internal_hash = SHA256(0x01 || left || right)
 ```
 
-Domain separation prevents second-preimage attacks. Odd-node handling uses promotion, closing a known Merkle tree collision vector.
+The `0x00` and `0x01` prefixes prevent a second-preimage attack where a leaf's bytes could equal an internal node's bytes. Odd-node handling uses promotion, closing CVE-2012-2459.
 
-### Inclusion Proofs
-
-An inclusion proof is a list of position-and-hash nodes. Verification is a pure function:
+**Inclusion proofs are pure functions.**
 
 ```go
 func VerifyInclusion(leafData []byte, proof []ProofNode, root []byte) bool
 ```
 
-It takes three inputs, touches no storage, and performs O(log n) hashing operations. For a tree of 100,000 leaves, a proof is approximately 17 nodes.
+Three inputs. No storage access. No Garuda code in the call path. O(log n) hashing operations. For a tree of 100,000 leaves, a proof is approximately 17 nodes.
 
-### Versioning
-
-Two Merkle schemes coexist for backward compatibility:
-
-| Version | Scheme | Verification |
-| :--- | :--- | :--- |
-| 0 | Linear hash chain | Legacy path |
-| 1 | RFC 6962 tree with canonical leaves | `VerifyInclusion` |
-
-Every record carries `verification_version`, so verification selects the correct path automatically.
-
-### Independent Verification
-
-When a decision is anchored, the response includes the canonical leaf hash, the epoch root, the block height, and an inclusion proof. A third party with the source of the Merkle package — but no access to Garuda's infrastructure — can recompute the leaf, verify the proof, and confirm the epoch root. No trust in Garuda's database or processes is required.
+**Independent verification.** When a decision is anchored, the response includes the canonical leaf hash, the epoch root, the block height, and an inclusion proof. A third party with the source of the Merkle package — but no access to Garuda's infrastructure — can recompute the leaf, verify the proof, and confirm the epoch root. No trust in Garuda's database or processes is required.
 
 ---
 
-## The Analyzer
+## Garuda also carries these capabilities
 
-The Go analyzer produces a typed semantic snapshot from a Go module or workspace.
+The trust layer is the moat. Everything in this section is table stakes for a modern software intelligence platform — and Garuda carries it too.
 
-### Relationship Types
+### Semantic analysis across languages
 
-| Relationship | Source Signal | Resolution |
+Go, Python, and TypeScript are extracted into one unified semantic graph. Language is a property of each entity, not a property of the workspace, so the pipeline is shared across all three.
+
+| Language | Extraction | Status |
 | :--- | :--- | :--- |
-| Imports | Import specs | Import resolution |
-| Calls | Type-checked selector expressions | Compiler type information |
-| Defines | Named type method sets | Exact AST structure |
-| Embeds | Struct field inspection | Exact AST structure |
-| Implements | Interface satisfaction | Compiler type information |
-| References | Function signature parameters and results | Compiler type information |
+| **Go** | Compiler-backed: packages, structs, interfaces, functions, methods, fields, imports, calls, implements, embeds | Stable |
+| **Python** | Structural: classes, base classes, methods, functions, imports | Beta |
+| **TypeScript** | tree-sitter: classes, interfaces, functions, methods, decorators, extends, implements, imports | Beta |
 
-Every relationship carries a confidence score, a resolution status, the method used to derive it, an epistemic classification, and the source file and line that justifies it.
+Rust, Java, and Elixir analyzers are in development, targeting the same pipeline.
 
-### Validation
+### Semantic graph exploration
 
-The analyzer is validated against a test corpus covering interfaces, generics, embedding, type aliases, polymorphism, and cross-module resolution. Precision and recall are measured for entities and relationships separately.
+Interactive dashboard with repository, package, entity, and neighborhood views. Force-directed topology with community filtering. Every node drillable to its evidence.
 
----
+### Impact analysis and blast radius
 
-## The Policy Engine
+`garuda impact <symbol>` reports direct callers, transitive callers, and cross-repository edges. Sub-second response on workspaces with tens of thousands of edges.
 
-Policies are declarative YAML. A pure-function evaluator checks each policy against the semantic graph and produces one of four decisions.
+### Global search
+
+Fuzzy search across every symbol, package, file, and repository in the workspace.
+
+### CLI and HTTP APIs
+
+Every capability is exposed through both surfaces. Scripting and CI integration are first-class, not afterthoughts.
+
+### IDE and agent integration
+
+Garuda is a native Model Context Protocol server. Cursor, Claude Desktop, and any MCP-compatible client can query the semantic graph directly. AI coding agents stop reconstructing the repository from raw text and start querying a verified model.
+
+### CI / CD governance
+
+`garuda ci` and `garuda judge` evaluate proposed changes against a baseline, run the policy engine, and report contract breakage before merge.
+
+### Policy engine
+
+Declarative YAML policies evaluated against the semantic graph.
 
 ```mermaid
 flowchart TD
@@ -209,7 +202,9 @@ flowchart TD
     PROOF --> VERIFY["Independent Verify"]
 ```
 
-### Example Policy
+Five predicates — `entity_exists`, `claim_exists`, `contradiction_exists`, `verification_missing`, `language_matches`. Four decision outcomes — `ALLOW`, `WARN`, `REVIEW`, `BLOCK`. Every evaluation is anchored to the same ledger as the evidence it cited.
+
+**Example policy:**
 
 ```yaml
 id: payment-no-direct-db
@@ -230,14 +225,6 @@ then:
   decision: BLOCK
   reason: "Direct database/sql import from payment code violates hexagonal boundary."
 ```
-
-### Supported Predicates
-
-- `entity_exists` — matching entities exist
-- `claim_exists` — matching claims exist
-- `contradiction_exists` — a contradicted verification exists
-- `verification_missing` — an entity has no runtime verification
-- `language_matches` — the scope contains entities of a given language
 
 ---
 
@@ -277,15 +264,30 @@ flowchart TB
 
 Every layer stores only what it can justify.
 
-- Unknown stays unknown. Unverified is a first-class state, not a fallback.
+- Unknown stays unknown. `UNVERIFIED` is a first-class state, not a fallback.
 - Observations are not decisions. The two are type-distinct at the schema level.
 - Analysis runs preserve the last known-good state. A new run never destroys an old one until the new one commits.
 
 ---
 
-## Quick Start
+## Relationship types
 
-### Build
+Every relationship in the graph carries a confidence score, a resolution status, the method used to derive it, an epistemic classification, and the source file and line that justifies it.
+
+| Relationship | Source Signal | Resolution |
+| :--- | :--- | :--- |
+| Imports | Import specs | Import resolution |
+| Calls | Type-checked selector expressions | Compiler type information |
+| Defines | Named type method sets | Exact AST structure |
+| Embeds | Struct field inspection | Exact AST structure |
+| Implements | Interface satisfaction | Compiler type information |
+| References | Function signature parameters and results | Compiler type information |
+
+---
+
+## Quick start
+
+### Build from source
 
 ```bash
 git clone https://github.com/myshra777-ai/garuda.git
@@ -293,32 +295,42 @@ cd garuda
 go build -o bin/garuda ./cmd/garuda
 ```
 
-Go 1.25 or later. CGO is required for the tree-sitter TypeScript parser.
+Requires **Go 1.26** or later. CGO is required for the tree-sitter TypeScript parser.
 
-### Apply Migrations
+### One-click stack
+
+```bash
+docker compose -f deploy/compose/docker-compose.prod.yml up -d
+```
+
+Brings up Postgres, the API, the worker, and the telemetry collector.
+
+### Manual setup
 
 ```bash
 export DATABASE_URL="postgres://user:pass@localhost:5432/garuda?sslmode=disable"
-psql "$DATABASE_URL" -f migrations/063_claims_resolution.sql
+
+# Apply every migration in order.
+for f in migrations/[0-9]*.sql; do
+  psql "$DATABASE_URL" -f "$f"
+done
 ```
 
-Apply all migrations in order.
-
-### Analyze a Repository
+### Analyze a repository
 
 ```bash
 ./bin/garuda analyze /path/to/repo --save --workspace my-workspace
 ```
 
-Language is detected automatically from project markers.
+Language is detected automatically from project markers (`go.mod`, `pyproject.toml`, `tsconfig.json`).
 
-### Evaluate Policies
+### Evaluate policies
 
 ```bash
 ./bin/garuda policy evaluate ./policies --workspace my-workspace
 ```
 
-### Verify a Decision
+### Verify a decision
 
 ```bash
 ./bin/garuda policy verify <evaluation-id>
@@ -326,17 +338,17 @@ Language is detected automatically from project markers.
 
 Re-derives the inclusion proof and confirms the decision was committed at a specific block height.
 
-### Start the Daemon
+### Start the daemon
 
 ```bash
 ./bin/garuda dev
 ```
 
-The daemon serves the API on `http://localhost:8080` and exposes the graph visualizer at `/graph`.
+Serves the API on `http://localhost:8080` and exposes the graph visualizer at `/graph`.
 
 ---
 
-## CLI Reference
+## CLI reference
 
 | Command | Purpose |
 | :--- | :--- |
@@ -360,7 +372,7 @@ The daemon serves the API on `http://localhost:8080` and exposes the graph visua
 
 ---
 
-## Design Principles
+## Design principles
 
 1. **Evidence before confidence.** Every material assertion links to evidence.
 2. **Unknown stays unknown.** Unverified is a state, not a failure mode.
@@ -372,6 +384,35 @@ The daemon serves the API on `http://localhost:8080` and exposes the graph visua
 8. **Correctness before scale.** Validated semantics come before expanding language and deployment coverage.
 
 The full set of invariants is documented in [ADR-0002](docs/adr/0002-merkle-integrity-layer.md) and encoded in every source file header.
+
+---
+
+## What is available today, and what is launching
+
+### Available now
+
+- **Go analyzer.** Compiler-backed, validated against a controlled test corpus.
+- **Python and TypeScript analyzers.** Structural extraction feeding the same semantic pipeline.
+- **Merkle v1 trust layer.** RFC 6962, canonical encoding, golden vectors, independent verification.
+- **Policy engine.** Five predicates, four decision outcomes, anchored evaluations.
+- **Semantic graph explorer.** Interactive dashboard with repository, package, entity, and neighborhood views.
+- **MCP server for AI agents.** Query the semantic graph over stdio from Cursor, Claude Desktop, or any MCP-compatible client.
+- **CLI and HTTP APIs** for every capability.
+- **CI/CD integration** via `garuda ci` and `garuda judge`.
+
+### In beta with design partners
+
+- **Multi-tenant identity.** Enterprise SSO, tenant association, workspace membership, and per-workspace access control. Design partners are running early builds today.
+- **Runtime verification at scale.** Coverage semantics, cross-service correlation, and a broadened contradiction test suite.
+- **Multi-repository benchmarks.** Quality gates for workspaces of 10, 25, and 100+ repositories.
+
+### Launching soon
+
+- **Rust, Java, and Elixir analyzers** on the same pipeline. No schema changes required to add them.
+- **Extended MCP tool surface** for deeper agent workflows.
+- **Broader evidence exploration** in the dashboard.
+
+The roadmap is tracked in [`docs/ROADMAP.md`](docs/ROADMAP.md) and `docs/ROADMAP_INTERNAL.md`.
 
 ---
 
@@ -413,7 +454,7 @@ Cryptographic mechanisms provide tamper-evident state and verification. They do 
 
 ---
 
-## Repository Structure
+## Repository structure
 
 ```text
 garuda/
