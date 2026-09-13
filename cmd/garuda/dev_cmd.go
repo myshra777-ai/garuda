@@ -126,6 +126,7 @@ var devCmd = &cobra.Command{
 		mux.HandleFunc("/admin", server.RequireSession(server.HandleAdminDashboard))
 		mux.HandleFunc("/api/v1/dashboard/search", server.RequireSession(server.HandleDashboardSearch))
 		mux.HandleFunc("/api/v1/events", server.RequireSession(server.HandleLiveEvents))
+		mux.HandleFunc("/api/v1/workspaces", server.RequireSession(server.HandleListWorkspaces))
 		mux.HandleFunc("/api/v1/dashboard/policies", server.RequireSession(server.HandleDashboardPolicies))
 		mux.HandleFunc("/api/v1/dashboard/policies/verify", server.RequireSession(server.HandleDashboardPolicyVerify))
 		mux.HandleFunc("/api/v1/runtime/coverage", server.RequireSession(server.HandleGetRuntimeCoverage))

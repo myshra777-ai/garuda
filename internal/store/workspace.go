@@ -121,6 +121,43 @@ func (s *PostgresStore) ListWorkspaces(ctx context.Context, tenantIDStr string) 
 	return workspaces, nil
 }
 
+// UserWorkspace is a workspace the session user is a member of, with
+// the role they hold in it. Used by the workspace picker on the
+// dashboard sidebar.
+type UserWorkspace struct {
+	ID   uuid.UUID
+	Name string
+	Role string
+}
+
+// ListUserWorkspaces returns every workspace the given user is a
+// member of, ordered by name. The join on workspace_members is what
+// enforces the isolation: a user who is not a member of a workspace
+// does not see it in this list, and cannot select it.
+func (s *PostgresStore) ListUserWorkspaces(ctx context.Context, userID uuid.UUID) ([]UserWorkspace, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT w.id, w.name, wm.role
+		  FROM workspaces w
+		  JOIN workspace_members wm ON wm.workspace_id = w.id
+		 WHERE wm.user_id = $1
+		 ORDER BY w.name ASC
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list user workspaces: %w", err)
+	}
+	defer rows.Close()
+
+	var out []UserWorkspace
+	for rows.Next() {
+		var uw UserWorkspace
+		if err := rows.Scan(&uw.ID, &uw.Name, &uw.Role); err != nil {
+			continue
+		}
+		out = append(out, uw)
+	}
+	return out, rows.Err()
+}
+
 // AddRepository adds a repository to a workspace.
 func (s *PostgresStore) AddRepository(
 	ctx context.Context,

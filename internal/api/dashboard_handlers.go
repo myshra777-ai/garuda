@@ -484,10 +484,26 @@ button { cursor: pointer; }
 .nav-icon { width: 18px; text-align: center; color: var(--muted); }
 .nav-item.active .nav-icon { color: var(--brand); }
 .sidebar-footer { padding: 15px; border-top: 1px solid var(--border); }
-.workspace-mini { padding: 12px; background: #080c16; border: 1px solid var(--border); border-radius: 9px; cursor: pointer; transition: 0.2s; }
+.workspace-mini { padding: 12px; background: #080c16; border: 1px solid var(--border); border-radius: 9px; transition: 0.2s; }
 .workspace-mini:hover { border-color: var(--brand); box-shadow: 0 0 14px rgba(56,189,248,0.25); }
 .workspace-mini-name { color: white; font-weight: 700; margin-bottom: 4px; }
 .workspace-mini-meta { color: var(--muted); font-size: 11px; }
+.workspace-picker {
+    width: 100%;
+    margin-top: 8px;
+    height: 32px;
+    background: #050811;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0 8px;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    transition: 0.15s;
+}
+.workspace-picker:hover { border-color: var(--brand); }
+.workspace-picker:focus { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(56,189,248,0.25); }
 .trust-mini { margin-top: 6px; color: var(--green); font-size: 11px; font-weight: 600; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
@@ -742,9 +758,10 @@ button { cursor: pointer; }
         </div>
 
         <div class="sidebar-footer">
-            <div class="workspace-mini" onclick="promptWorkspaceSwitch()">
+            <div class="workspace-mini">
                 <div class="workspace-mini-name" id="sidebar-workspace">{{ .WorkspaceName }}</div>
                 <div class="workspace-mini-meta" id="sidebar-meta">Loading workspace...</div>
+                <select id="workspace-picker" class="workspace-picker" onchange="switchWorkspace(this.value)" aria-label="Switch workspace"></select>
                 <div class="trust-mini">✓ Transactionally verified</div>
             </div>
         </div>
@@ -1231,13 +1248,49 @@ function getCommunityColor(node) {
     return communityPalette[Math.abs(hash) % communityPalette.length];
 }
 
-function promptWorkspaceSwitch() {
-    var ws = prompt("Enter workspace name to switch context:", WORKSPACE);
-    if (ws && ws.trim() !== "" && ws !== WORKSPACE) {
-        var params = new URLSearchParams(window.location.search);
-        params.set("workspace", ws.trim());
-        window.location.search = params.toString();
+// loadWorkspacePicker fetches the list of workspaces the current
+// session user is a member of and populates the sidebar select.
+// The list is scoped to membership by the server; the client does
+// not filter.
+async function loadWorkspacePicker() {
+    try {
+        var res = await fetch("/api/v1/workspaces", {
+            headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) {
+            console.error("workspace picker: HTTP " + res.status);
+            return;
+        }
+        var list = await res.json();
+        var sel = document.getElementById("workspace-picker");
+        if (!sel) return;
+        sel.innerHTML = "";
+        if (!list || list.length === 0) {
+            var opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "No workspaces";
+            opt.disabled = true;
+            opt.selected = true;
+            sel.appendChild(opt);
+            return;
+        }
+        list.forEach(function(w) {
+            var opt = document.createElement("option");
+            opt.value = w.name;
+            opt.textContent = w.name + " (" + w.role + ")";
+            if (w.name === WORKSPACE) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    } catch (err) {
+        console.error("workspace picker load failed:", err);
     }
+}
+
+function switchWorkspace(name) {
+    if (!name || name === WORKSPACE) return;
+    var params = new URLSearchParams(window.location.search);
+    params.set("workspace", name);
+    window.location.search = params.toString();
 }
 
 function toggleFullscreen() {
@@ -2402,6 +2455,7 @@ async function loadAll() {
 }
 
 setupSearch();
+loadWorkspacePicker();
 loadAll();
 
 window.addEventListener("resize", function() {
