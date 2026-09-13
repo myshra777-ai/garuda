@@ -1,3 +1,39 @@
+### Repository URL resolution in `garuda analyze`
+
+`garuda analyze <path>` determines the repository URL in this order:
+
+1. `--repo <url>` flag, if supplied. This wins unconditionally.
+2. `git -C <path> remote get-url origin`, if the path is inside a
+   git working tree with an `origin` remote.
+3. `file://<absolute-path>`, if neither of the above resolves.
+
+The flag is the correct input for CI, demos, and any analysis of a
+subdirectory that belongs to a larger repository. Without it, every
+subdirectory of the same working tree resolves to the same URL —
+which collapses what the caller intended to be N repositories into
+one, and defeats cross-repository analysis.
+
+Example — analyze two fixture modules as separate repositories so
+that cross-repo edges can be detected:
+
+    ./bin/garuda analyze ./fixtures/module_auth \
+      --save --workspace demo --repo file:///tmp/fixture-auth
+
+    ./bin/garuda analyze ./fixtures/module_gateway \
+      --save --workspace demo --repo file:///tmp/fixture-gateway
+
+Without the two `--repo` flags, both modules resolve to the same
+`repositories` row and no cross-repo edge can be produced.
+
+A related consequence: `git remote get-url origin` returns different
+strings for SSH and HTTPS clones of the same repository. Two
+developers on different clone configurations will create two rows
+in `repositories` for the same logical repository. The
+`UNIQUE (workspace_id, url)` constraint prevents within-workspace
+duplication of a given URL, but does not normalize SSH vs HTTPS.
+Prefer `--repo` in any context where reproducibility matters.
+
+
 # 🧠 Garuda Capabilities & AST Verification Matrix
 
 > Auto-generated on `2026-09-07 02:41:51 UTC`. Grounded in AST snapshot and benchmark gates.
