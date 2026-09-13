@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // bootstrapAdminEmail is the fixed email of the automatically created
@@ -170,6 +171,33 @@ func (s *Server) BootstrapAdminIfEmpty(ctx context.Context) error {
 	}
 	if err := pgStore.CreateUser(ctx, user); err != nil {
 		return fmt.Errorf("bootstrap: create user: %w", err)
+	}
+
+	// The bootstrap admin is not created through /signup, so it does
+	// not get the two membership rows that the signup flow creates.
+	// Without these rows, the Session C middleware refuses every
+	// workspace-scoped request for this user with a 404 — including
+	// the workspaces the founder was already using before Session A.
+	//
+	// Owner of the canonical tenant, and owner of every workspace in
+	// it. ON CONFLICT DO NOTHING so a re-run against an existing
+	// database is a no-op.
+	if _, err := pgStore.Pool().Exec(ctx, `
+		INSERT INTO tenant_members (user_id, tenant_id, role, created_at)
+		VALUES ($1, $2, 'owner', NOW())
+		ON CONFLICT (user_id, tenant_id) DO NOTHING
+	`, user.ID, tenant.CanonicalID); err != nil {
+		return fmt.Errorf("bootstrap: insert tenant_members: %w", err)
+	}
+
+	if _, err := pgStore.Pool().Exec(ctx, `
+		INSERT INTO workspace_members (user_id, workspace_id, role, created_at)
+		SELECT $1, w.id, 'owner', NOW()
+		  FROM workspaces w
+		 WHERE w.tenant_id = $2
+		ON CONFLICT (user_id, workspace_id) DO NOTHING
+	`, user.ID, tenant.CanonicalID); err != nil {
+		return fmt.Errorf("bootstrap: insert workspace_members: %w", err)
 	}
 
 	// Print to stderr, not to structured logs, so that operators see

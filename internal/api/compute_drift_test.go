@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // TestComputeDrift_SurvivesWorkspaceRename proves that the drift panel
@@ -28,7 +29,7 @@ func TestComputeDrift_SurvivesWorkspaceRename(t *testing.T) {
 	pgStore := getTestPostgresStore(t)
 	ctx := context.Background()
 
-	tenantID := dashboardTenantUUID
+	tenantID := tenant.CanonicalID
 	wsName := "drift-rename-test-" + uuid.New().String()[:8]
 
 	t.Cleanup(func() {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 // TraceSpanPayload defines the minimal OTel span format Garuda needs.
@@ -57,7 +58,10 @@ func (s *Server) HandleIngestTraces(w http.ResponseWriter, r *http.Request) {
 		// is always tenant-scoped. The previous code queried by name
 		// alone with no tenant filter, and dropped the span silently
 		// when the name did not resolve.
-		wsID, err := store.ResolveWorkspaceID(ctx, pgStore.Pool(), getDashboardTenant(), span.Workspace)
+		// TODO(session-E): agent ingestion, not session-scoped. Uses
+		// the canonical tenant until agent authentication carries a
+		// tenant claim.
+		wsID, err := store.ResolveWorkspaceID(ctx, pgStore.Pool(), tenant.CanonicalID, span.Workspace)
 		if err != nil {
 			continue
 		}

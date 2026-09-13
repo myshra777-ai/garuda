@@ -263,11 +263,6 @@ const dashboardTenantID = tenant.CanonicalIDStr
 
 // Parse the tenant UUID once at package load. Any malformed constant
 // panics at process start, not on every request.
-var dashboardTenantUUID = uuid.MustParse(dashboardTenantID)
-
-func getDashboardTenant() uuid.UUID {
-	return dashboardTenantUUID
-}
 
 func normalizeLimit(value string, fallback, maximum int) int {
 	n, err := strconv.Atoi(value)
@@ -295,59 +290,6 @@ func writeJSONError(w http.ResponseWriter, status int, msg string, extra map[str
 		body[k] = v
 	}
 	_ = json.NewEncoder(w).Encode(body)
-}
-
-// resolveWorkspaceID returns the workspace UUID and canonical name for
-// the requested workspace. If name is empty, returns the most recently
-// updated workspace. If name is non-empty and not found, returns an
-// error — the caller MUST respond 404, not fall back silently. Silent
-// fallback previously served workspace B's data under workspace A's
-// label, which is a cross-tenant leak.
-func resolveWorkspaceID(ctx context.Context, pgStore *store.PostgresStore, name string) (uuid.UUID, string, error) {
-	var id uuid.UUID
-	var resolvedName string
-	var err error
-
-	// Both branches are scoped to the dashboard tenant. The name-only
-	// lookup that preceded this fix could return a workspace belonging
-	// to a different tenant if the same name existed under more than one
-	// tenant — which UNIQUE (tenant_id, name) permits. Before migration
-	// 073 there were sixteen workspaces named 'workspace-core', each
-	// under its own tenant; a caller asking for that name would have
-	// received one of them nondeterministically.
-	//
-	// ORDER BY clauses make the choice deterministic when more than one
-	// row matches. Under the current constraint the result set is a
-	// singleton, so the ordering is defense in depth: a future migration
-	// that weakens the constraint, or a batch operation that produces
-	// identical timestamps, would otherwise silently change which row is
-	// returned. The id tiebreaker is stable because id is the primary
-	// key.
-	if name == "" {
-		err = pgStore.Pool().QueryRow(ctx,
-			`SELECT id, name FROM workspaces
-			  WHERE tenant_id = $1
-			  ORDER BY updated_at DESC, created_at DESC, id DESC
-			  LIMIT 1`,
-			dashboardTenantUUID,
-		).Scan(&id, &resolvedName)
-		if err != nil {
-			return uuid.Nil, "", fmt.Errorf("no workspaces exist for tenant %s", dashboardTenantUUID)
-		}
-		return id, resolvedName, nil
-	}
-
-	err = pgStore.Pool().QueryRow(ctx,
-		`SELECT id, name FROM workspaces
-		  WHERE tenant_id = $1 AND name = $2
-		  ORDER BY created_at ASC, id ASC
-		  LIMIT 1`,
-		dashboardTenantUUID, name,
-	).Scan(&id, &resolvedName)
-	if err != nil {
-		return uuid.Nil, name, fmt.Errorf("workspace not found")
-	}
-	return id, resolvedName, nil
 }
 
 // proofIsInternallyValid checks that a stored Merkle proof is well-formed
@@ -2534,17 +2476,15 @@ func (s *Server) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, resolvedName, err := resolveWorkspaceID(ctx, pgStore, wsName)
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
 	if err != nil {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusNotFound)
-		_ = parsedNotFoundTmpl.Execute(w, map[string]string{"Workspace": wsName})
+		writeWorkspaceNotFound(w, r, wsName)
 		return
 	}
 
 	data := DashboardData{
-		TenantID:      dashboardTenantID,
-		WorkspaceName: resolvedName,
+		TenantID:      scope.TenantID.String(),
+		WorkspaceName: scope.WorkspaceName,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = parsedProdDashboardTmpl.Execute(w, data)
@@ -2836,7 +2776,6 @@ func computeDrift(ctx context.Context, pgStore *store.PostgresStore, workspaceID
 func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	applySecurityHeaders(w)
 	ctx := r.Context()
-	tenantID := getDashboardTenant()
 
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
@@ -2844,13 +2783,14 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
-	workspaceID, resolvedName, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
+		writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
 		return
 	}
-	workspaceName = resolvedName
+	workspaceID := scope.WorkspaceID
+	workspaceName := scope.WorkspaceName
+	tenantID := scope.TenantID
 
 	repoList := make([]string, 0)
 	repoRows, err := pgStore.Pool().Query(ctx, `SELECT name FROM repositories WHERE workspace_id = $1 ORDER BY name`, workspaceID)
@@ -2958,6 +2898,13 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	//     → (sum, rows_with_non_null, rows_in_window)
 	// IsMeasured is set when the query succeeds; HasData is true only
 	// when at least one row had a non-NULL value for the column.
+	//
+	// These queries are workspace-agnostic on purpose. telemetry_events
+	// is keyed by instance_hash and session_id, not by tenant or
+	// workspace. Until the aggregates table (Session D) is introduced,
+	// the values reflect every telemetry event on this deployment.
+	// When a deployment hosts more than one tenant, this read path
+	// must move to telemetry_aggregates, which is scoped per tenant.
 	var tokensSavedMetric MeasuredMetric
 	{
 		var sum int64
@@ -2968,8 +2915,7 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 				COUNT(tokens_saved),
 				COUNT(*)
 			FROM telemetry_events
-			WHERE tenant_id = $1
-		`, tenantID).Scan(&sum, &nonNull, &total)
+		`).Scan(&sum, &nonNull, &total)
 		if err != nil {
 			tokensSavedMetric = MeasuredMetric{
 				IsMeasured: false,
@@ -2998,8 +2944,7 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 				COUNT(cost_saved_usd),
 				COUNT(*)
 			FROM telemetry_events
-			WHERE tenant_id = $1
-		`, tenantID).Scan(&sum, &nonNull, &total)
+		`).Scan(&sum, &nonNull, &total)
 		if err != nil {
 			costSavedMetric = MeasuredMetric{
 				IsMeasured: false,
@@ -3028,9 +2973,8 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 				COUNT(cold_start_latency_ms),
 				COUNT(*)
 			FROM telemetry_events
-			WHERE tenant_id = $1
-			  AND created_at > NOW() - INTERVAL '7 days'
-		`, tenantID).Scan(&avg, &nonNull, &total)
+			WHERE created_at > NOW() - INTERVAL '7 days'
+		`).Scan(&avg, &nonNull, &total)
 		if err != nil {
 			coldStartMetric = MeasuredMetric{
 				IsMeasured: false,
@@ -3059,9 +3003,8 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 				COUNT(active_agents),
 				COUNT(*)
 			FROM telemetry_events
-			WHERE tenant_id = $1
-			  AND created_at > NOW() - INTERVAL '24 hours'
-		`, tenantID).Scan(&peak, &nonNull, &total)
+			WHERE created_at > NOW() - INTERVAL '24 hours'
+		`).Scan(&peak, &nonNull, &total)
 		if err != nil {
 			activeAgentsMetric = MeasuredMetric{
 				IsMeasured: false,
@@ -3223,12 +3166,12 @@ func (s *Server) HandleDashboardSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
-	workspaceID, _, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
+		writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
 		return
 	}
+	workspaceID := scope.WorkspaceID
 
 	limit := normalizeLimit(r.URL.Query().Get("limit"), 50, 100)
 
@@ -3274,12 +3217,13 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
-	workspaceID, _, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
+		writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
 		return
 	}
+	workspaceID := scope.WorkspaceID
+	workspaceName := scope.WorkspaceName
 
 	level := r.URL.Query().Get("level")
 	if level == "" {
@@ -3690,22 +3634,24 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request) {
 	applySecurityHeaders(w)
 	ctx := r.Context()
-	tenantID := getDashboardTenant()
+
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "store unavailable", nil)
 		return
 	}
 
-	workspaceName := strings.TrimSpace(r.URL.Query().Get("workspace"))
-	workspaceID, resolvedName, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
+		writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
 		return
 	}
+	tenantID := scope.TenantID
+	workspaceID := scope.WorkspaceID
+	workspaceName := scope.WorkspaceName
 
 	resp := PolicyEnforcementResponse{
-		Workspace:         resolvedName,
+		Workspace:         workspaceName,
 		LatestEvaluations: []PolicyEvaluationDTO{},
 		FinalDecision:     "ALLOW",
 	}
@@ -3821,11 +3767,12 @@ func (s *Server) HandleDashboardPolicyVerify(w http.ResponseWriter, r *http.Requ
 		writeJSONError(w, http.StatusBadRequest, "workspace parameter required", nil)
 		return
 	}
-	workspaceID, _, err := resolveWorkspaceID(ctx, pgStore, workspaceName)
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "workspace not found", map[string]any{"requested": workspaceName})
+		writeWorkspaceNotFound(w, r, workspaceName)
 		return
 	}
+	workspaceID := scope.WorkspaceID
 
 	evalIDStr := r.URL.Query().Get("id")
 	evalID, err := uuid.Parse(evalIDStr)

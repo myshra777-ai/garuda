@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/runtime"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 type IngestTelemetrySpanDTO struct {
@@ -38,14 +39,22 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// TODO(session-E): this handler is invoked by external agents, not
+	// browsers, and has no session to derive a tenant from. Until
+	// agent authentication carries a tenant claim, this uses the
+	// canonical tenant. The runtime coverage handler above is
+	// session-scoped and does not have this limitation.
 	workspaceName := r.URL.Query().Get("workspace")
+	if workspaceName == "" {
+		workspaceName = "default"
+	}
 
 	// Resolve via the tenant-scoped helper. Empty name selects the
 	// most recently updated workspace for the tenant. The previous
 	// code fell back to `SELECT id FROM workspaces LIMIT 1` with no
 	// tenant filter, which could return a workspace owned by another
 	// tenant.
-	workspaceID, err := store.ResolveWorkspaceID(ctx, pgStore.Pool(), getDashboardTenant(), workspaceName)
+	workspaceID, err := store.ResolveWorkspaceID(ctx, pgStore.Pool(), tenant.CanonicalID, workspaceName)
 	if err != nil {
 		http.Error(w, "no workspaces exist for tenant", http.StatusNotFound)
 		return
@@ -59,7 +68,7 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 
 	correlator := runtime.NewEntityCorrelator(pgStore.Pool())
 	ingestedCount := 0
-	tenantID := getDashboardTenant()
+	tenantID := tenant.CanonicalID
 
 	for _, span := range req.Spans {
 		if span.Attributes == nil {
@@ -86,12 +95,12 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 
 		var insertedID uuid.UUID
 		err = pgStore.Pool().QueryRow(ctx, `
-			INSERT INTO runtime_observations (
-				workspace_id, trace_id, span_id, service_name, operation, 
-				entity_id, duration_ms, status_code, attributes, started_at
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
-			RETURNING id
-		`, workspaceID, obs.TraceID, obs.SpanID, obs.ServiceName, obs.Operation,
+            INSERT INTO runtime_observations (
+                workspace_id, trace_id, span_id, service_name, operation, 
+                entity_id, duration_ms, status_code, attributes, started_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+            RETURNING id
+        `, workspaceID, obs.TraceID, obs.SpanID, obs.ServiceName, obs.Operation,
 			entityID, obs.DurationMs, obs.StatusCode, string(attrJSON), obs.StartedAt).Scan(&insertedID)
 
 		if err == nil {
@@ -99,14 +108,14 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 
 			if rawTarget != "" && entityID != nil {
 				_, _ = pgStore.Pool().Exec(ctx, `
-					INSERT INTO runtime_edges (
-						id, workspace_id, source_entity_id, raw_target, invocation_count, last_seen_at
-					) VALUES ($1, $2, $3, $4, 1, NOW())
-					ON CONFLICT (workspace_id, source_entity_id, raw_target)
-					DO UPDATE SET 
-						invocation_count = runtime_edges.invocation_count + 1,
-						last_seen_at = NOW()
-				`, uuid.New(), workspaceID, *entityID, rawTarget)
+                    INSERT INTO runtime_edges (
+                        id, workspace_id, source_entity_id, raw_target, invocation_count, last_seen_at
+                    ) VALUES ($1, $2, $3, $4, 1, NOW())
+                    ON CONFLICT (workspace_id, source_entity_id, raw_target)
+                    DO UPDATE SET 
+                        invocation_count = runtime_edges.invocation_count + 1,
+                        last_seen_at = NOW()
+                `, uuid.New(), workspaceID, *entityID, rawTarget)
 
 				if strings.Contains(rawTarget, "unapproved") || strings.Contains(rawTarget, "exfiltration") || strings.Contains(rawTarget, "bypass") {
 					evidencePayload, _ := json.Marshal(map[string]interface{}{
@@ -116,17 +125,17 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 					})
 
 					_, _ = pgStore.Pool().Exec(ctx, `
-						INSERT INTO claim_verifications (
-							id, workspace_id, tenant_id, source_entity_id, status, reason, 
-							static_edge_exists, runtime_observed_count, evidence_payload, last_evaluated_at
-						) VALUES ($1, $2, $3, $4, 'CONTRADICTED', 'POLICY_VIOLATION_DETECTED', FALSE, 1, $5::jsonb, NOW())
-						ON CONFLICT (workspace_id, tenant_id, source_entity_id, COALESCE(target_entity_id, '00000000-0000-0000-0000-000000000000'::uuid))
-						DO UPDATE SET 
-							status = 'CONTRADICTED',
-							runtime_observed_count = claim_verifications.runtime_observed_count + 1,
-							evidence_payload = $5::jsonb,
-							last_evaluated_at = NOW()
-					`, uuid.New(), workspaceID, tenantID, *entityID, evidencePayload)
+                        INSERT INTO claim_verifications (
+                            id, workspace_id, tenant_id, source_entity_id, status, reason, 
+                            static_edge_exists, runtime_observed_count, evidence_payload, last_evaluated_at
+                        ) VALUES ($1, $2, $3, $4, 'CONTRADICTED', 'POLICY_VIOLATION_DETECTED', FALSE, 1, $5::jsonb, NOW())
+                        ON CONFLICT (workspace_id, tenant_id, source_entity_id, COALESCE(target_entity_id, '00000000-0000-0000-0000-000000000000'::uuid))
+                        DO UPDATE SET 
+                            status = 'CONTRADICTED',
+                            runtime_observed_count = claim_verifications.runtime_observed_count + 1,
+                            evidence_payload = $5::jsonb,
+                            last_evaluated_at = NOW()
+                    `, uuid.New(), workspaceID, tenantID, *entityID, evidencePayload)
 				}
 			}
 		}
@@ -148,20 +157,14 @@ func (s *Server) HandleGetRuntimeCoverage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	workspaceName := r.URL.Query().Get("workspace")
-
-	// Resolve via the tenant-scoped helper. Empty name selects the
-	// most recently updated workspace for the tenant. The previous
-	// code fell back to `SELECT id FROM workspaces LIMIT 1` with no
-	// tenant filter, which could return a workspace owned by another
-	// tenant.
-	workspaceID, err := store.ResolveWorkspaceID(ctx, pgStore.Pool(), getDashboardTenant(), workspaceName)
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
 	if err != nil {
-		http.Error(w, "no workspaces exist for tenant", http.StatusNotFound)
+		writeWorkspaceNotFound(w, r, r.URL.Query().Get("workspace"))
 		return
 	}
+	workspaceID := scope.WorkspaceID
 
-	tenantID := getDashboardTenant()
+	tenantID := scope.TenantID
 	verifier := runtime.NewVerificationEngine(pgStore.Pool())
 	_, _ = verifier.RecomputeWorkspaceVerification(ctx, workspaceID, tenantID)
 
@@ -205,7 +208,7 @@ func (s *Server) HandleGetMerkleState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tenantIDStr := r.URL.Query().Get("tenant_id")
-	tenantID := getDashboardTenant()
+	tenantID := tenant.CanonicalID
 	if tenantIDStr != "" {
 		if parsed, err := uuid.Parse(tenantIDStr); err == nil {
 			tenantID = parsed
