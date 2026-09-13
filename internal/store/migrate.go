@@ -6,6 +6,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -14,6 +15,40 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// splitGooseUp returns the forward-migration section of a file
+// written for the goose migration tool.
+//
+// Files written for goose have the shape:
+//
+//	-- +goose Up
+//	CREATE TABLE ...
+//
+//	-- +goose Down
+//	DROP TABLE ...
+//
+// The Down section is a rollback script. Executing it during the
+// forward pass would immediately undo what Up just did. That is what
+// happened to migrations/003_create_users_table.sql: the runner
+// passed the entire file to tx.Exec, Postgres executed CREATE TABLE
+// followed by DROP TABLE, the table was gone, and the migration was
+// still recorded as applied. The next migration that referenced
+// users failed with SQLSTATE 42P01.
+//
+// The split is on the exact marker line. If the marker is absent,
+// the whole file is returned unchanged so migrations that do not
+// use goose markers still work.
+//
+// Migrations that contain a Down section should also have it
+// removed at the file level — this helper is defense in depth, not
+// an excuse to keep rollback scripts in the forward-only path.
+func splitGooseUp(content []byte) []byte {
+	const marker = "-- +goose Down"
+	if idx := bytes.Index(content, []byte(marker)); idx >= 0 {
+		return content[:idx]
+	}
+	return content
+}
 
 // Migrate runs all SQL migration files in the migrations directory in sorted order.
 // Each migration file is executed inside an atomic transaction.
@@ -69,7 +104,7 @@ func Migrate(connString string, migrationsDir string) error {
 			return fmt.Errorf("failed to begin transaction for %s: %w", name, err)
 		}
 
-		if _, err := tx.Exec(ctx, string(content)); err != nil {
+		if _, err := tx.Exec(ctx, string(splitGooseUp(content))); err != nil {
 			_ = tx.Rollback(ctx)
 			return fmt.Errorf("failed to execute migration %s: %w", name, err)
 		}
