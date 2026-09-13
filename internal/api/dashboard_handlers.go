@@ -815,21 +815,11 @@ button { cursor: pointer; }
                     </div>
                 </div>
 
-                <div class="kpi-grid" style="grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 20px;">
-                    <div class="kpi-card" style="border-left: 4px solid var(--green);">
-                        <div class="kpi-label" style="color:var(--green);">Financial ROI (Saved)</div>
-                        <div class="kpi-value" id="stat-cost-saved">$—</div>
-                        <div class="kpi-foot"><span id="stat-tokens-saved">—</span> context tokens (not yet measured)</div>
-                    </div>
+                <div class="kpi-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 20px;">
                     <div class="kpi-card" style="border-left: 4px solid var(--brand);">
                         <div class="kpi-label" style="color:var(--brand);">Active Policies</div>
                         <div class="kpi-value" id="stat-active-policies">—</div>
                         <div class="kpi-foot">Enforcement rules loaded</div>
-                    </div>
-                    <div class="kpi-card" style="border-left: 4px solid var(--amber);">
-                        <div class="kpi-label" style="color:var(--amber);">Agent Peak (24h)</div>
-                        <div class="kpi-value" id="stat-active-agents">—</div>
-                        <div class="kpi-foot">Peak in last 24h (not yet measured)</div>
                     </div>
                     <div class="kpi-card" style="border-left: 4px solid var(--red);">
                         <div class="kpi-label" style="color:var(--red);">Drift Prevented</div>
@@ -1515,15 +1505,10 @@ function renderStats() {
     setText("workspace-breadcrumb", s.workspace || WORKSPACE);
     setText("repo-list-ws", s.workspace || WORKSPACE);
 
-    renderMeasuredMetric("stat-cost-saved", s.cost_saved_usd_metric, function(m) {
-        return "$" + Number(m.value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    });
-    renderMeasuredMetric("stat-tokens-saved", s.tokens_saved_metric, function(m) {
-        return formatNumber(m.value);
-    });
-    renderMeasuredMetric("stat-active-agents", s.active_agents_metric, function(m) {
-        return formatNumber(m.value);
-    });
+    // The deployment-wide metrics (tokens saved, cost saved, agent
+    // peak) were removed from this dashboard. They belong on the
+    // operator view at /admin, where the schema can support them
+    // without leaking one tenant's numbers to another.
     setText("stat-drift-count", formatNumber(s.quarantined_count));
 
     renderLanguages(s.languages_breakdown || []);
@@ -2890,14 +2875,15 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		totalClaims = staticClaims
 	}
 
-	// Class B runtime metrics. Each query returns value + row count so
-	// the caller can distinguish "measured zero" from "not measured."
-	//
-	// The pattern for each:
-	//   SELECT COALESCE(SUM(col), 0), COUNT(col), COUNT(*)
-	//     → (sum, rows_with_non_null, rows_in_window)
-	// IsMeasured is set when the query succeeds; HasData is true only
-	// when at least one row had a non-NULL value for the column.
+	// Class B runtime metrics. These are deployment-wide telemetry
+	// figures computed from telemetry_events, which is keyed by
+	// instance_hash and session_id and has no tenant or workspace
+	// column. A per-workspace value cannot be derived from it, and
+	// showing the deployment-wide number on a workspace dashboard
+	// would be read as this workspace's contribution. The four
+	// metrics are therefore reported as not-measured on this path,
+	// with the reason pointing to the operator view at /admin, which
+	// is where the deployment-wide totals belong.
 	//
 	// These queries are workspace-agnostic on purpose. telemetry_events
 	// is keyed by instance_hash and session_id, not by tenant or
@@ -2905,122 +2891,33 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	// the values reflect every telemetry event on this deployment.
 	// When a deployment hosts more than one tenant, this read path
 	// must move to telemetry_aggregates, which is scoped per tenant.
-	var tokensSavedMetric MeasuredMetric
-	{
-		var sum int64
-		var nonNull, total int64
-		err := pgStore.Pool().QueryRow(ctx, `
-			SELECT
-				COALESCE(SUM(tokens_saved), 0),
-				COUNT(tokens_saved),
-				COUNT(*)
-			FROM telemetry_events
-		`).Scan(&sum, &nonNull, &total)
-		if err != nil {
-			tokensSavedMetric = MeasuredMetric{
-				IsMeasured: false,
-				Reason:     "query failed: " + err.Error(),
-			}
-		} else {
-			tokensSavedMetric = MeasuredMetric{
-				Value:      float64(sum),
-				IsMeasured: true,
-				HasData:    nonNull > 0,
-				RowCount:   total,
-			}
-			if nonNull == 0 {
-				tokensSavedMetric.Reason = "no telemetry events carry a tokens_saved value"
-			}
-		}
+	// Deployment-wide metric, not per-workspace. telemetry_events is
+	// keyed by instance_hash and session_id only; there is no tenant
+	// or workspace column. Showing the deployment-wide number here
+	// would be read as this workspace's contribution, which it is
+	// not. The operator view at /admin is where this figure belongs.
+	var tokensSavedMetric = MeasuredMetric{
+		IsMeasured: false,
+		HasData:    false,
+		Reason:     "deployment-wide metric; see /admin",
 	}
 
-	var costSavedMetric MeasuredMetric
-	{
-		var sum float64
-		var nonNull, total int64
-		err := pgStore.Pool().QueryRow(ctx, `
-			SELECT
-				COALESCE(SUM(cost_saved_usd), 0),
-				COUNT(cost_saved_usd),
-				COUNT(*)
-			FROM telemetry_events
-		`).Scan(&sum, &nonNull, &total)
-		if err != nil {
-			costSavedMetric = MeasuredMetric{
-				IsMeasured: false,
-				Reason:     "query failed: " + err.Error(),
-			}
-		} else {
-			costSavedMetric = MeasuredMetric{
-				Value:      sum,
-				IsMeasured: true,
-				HasData:    nonNull > 0,
-				RowCount:   total,
-			}
-			if nonNull == 0 {
-				costSavedMetric.Reason = "no telemetry events carry a cost_saved_usd value"
-			}
-		}
+	var costSavedMetric = MeasuredMetric{
+		IsMeasured: false,
+		HasData:    false,
+		Reason:     "deployment-wide metric; see /admin",
 	}
 
-	var coldStartMetric MeasuredMetric
-	{
-		var avg float64
-		var nonNull, total int64
-		err := pgStore.Pool().QueryRow(ctx, `
-			SELECT
-				COALESCE(AVG(cold_start_latency_ms), 0),
-				COUNT(cold_start_latency_ms),
-				COUNT(*)
-			FROM telemetry_events
-			WHERE created_at > NOW() - INTERVAL '7 days'
-		`).Scan(&avg, &nonNull, &total)
-		if err != nil {
-			coldStartMetric = MeasuredMetric{
-				IsMeasured: false,
-				Reason:     "query failed: " + err.Error(),
-			}
-		} else {
-			coldStartMetric = MeasuredMetric{
-				Value:      avg,
-				IsMeasured: true,
-				HasData:    nonNull > 0,
-				RowCount:   total,
-			}
-			if nonNull == 0 {
-				coldStartMetric.Reason = "no telemetry events carry a cold_start_latency_ms value in the last 7 days"
-			}
-		}
+	var coldStartMetric = MeasuredMetric{
+		IsMeasured: false,
+		HasData:    false,
+		Reason:     "deployment-wide metric; see /admin",
 	}
 
-	var activeAgentsMetric MeasuredMetric
-	{
-		var peak int
-		var nonNull, total int64
-		err := pgStore.Pool().QueryRow(ctx, `
-			SELECT
-				COALESCE(MAX(active_agents), 0)::int,
-				COUNT(active_agents),
-				COUNT(*)
-			FROM telemetry_events
-			WHERE created_at > NOW() - INTERVAL '24 hours'
-		`).Scan(&peak, &nonNull, &total)
-		if err != nil {
-			activeAgentsMetric = MeasuredMetric{
-				IsMeasured: false,
-				Reason:     "query failed: " + err.Error(),
-			}
-		} else {
-			activeAgentsMetric = MeasuredMetric{
-				Value:      float64(peak),
-				IsMeasured: true,
-				HasData:    nonNull > 0,
-				RowCount:   total,
-			}
-			if nonNull == 0 {
-				activeAgentsMetric.Reason = "no telemetry events carry an active_agents value in the last 24 hours"
-			}
-		}
+	var activeAgentsMetric = MeasuredMetric{
+		IsMeasured: false,
+		HasData:    false,
+		Reason:     "deployment-wide metric; see /admin",
 	}
 
 	hubRows, err := pgStore.Pool().Query(ctx, `
