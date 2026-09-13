@@ -137,3 +137,4 @@ node_modules/
 # They are maintained locally and deliberately not published.
 docs/ROADMAP.md
 docs/roadmaps/
+docs/multi-tenant-roadmap.md
