@@ -107,6 +107,16 @@ var devCmd = &cobra.Command{
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			}
 		})
+		mux.HandleFunc("/signup", func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				server.HandleSignupGET(w, r)
+			case http.MethodPost:
+				server.HandleSignupPOST(w, r)
+			default:
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
+		})
 		mux.HandleFunc("/logout", server.HandleLogout)
 
 		// Session-protected dashboard routes

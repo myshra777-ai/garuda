@@ -144,6 +144,8 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	}).Methods(http.MethodGet)
 	r.HandleFunc("/login", s.HandleLoginGET).Methods(http.MethodGet)
 	r.HandleFunc("/login", s.HandleLoginPOST).Methods(http.MethodPost)
+	r.HandleFunc("/signup", s.HandleSignupGET).Methods(http.MethodGet)
+	r.HandleFunc("/signup", s.HandleSignupPOST).Methods(http.MethodPost)
 	r.HandleFunc("/logout", s.HandleLogout).Methods(http.MethodPost)
 
 	// =========================================================================
