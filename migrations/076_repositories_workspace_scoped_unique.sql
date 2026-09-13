@@ -68,9 +68,13 @@ BEGIN
   END IF;
 END $$;
 
--- Drop the old tenant-only constraint.
+-- Drop the old tenant-only constraint if present.
 ALTER TABLE repositories
   DROP CONSTRAINT IF EXISTS repositories_tenant_name_uniq;
+
+-- Drop the target constraint if present to guarantee idempotent re-runs.
+ALTER TABLE repositories
+  DROP CONSTRAINT IF EXISTS repositories_tenant_workspace_name_uniq;
 
 -- Add the workspace-scoped constraint. The name follows the pattern
 -- of repositories_tenant_name_uniq so grep across migrations finds
