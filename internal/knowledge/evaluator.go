@@ -69,9 +69,10 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID, workspaceID
 		var subjectID uuid.UUID
 		err := e.pool.QueryRow(ctx, `
 			SELECT id FROM entities 
-			WHERE tenant_id = $1 AND (name = $2 OR name LIKE '%.' || $2)
+			WHERE tenant_id = $1 AND workspace_id = $2
+			  AND (name = $3 OR name LIKE '%.' || $3)
 			LIMIT 1
-		`, tenantID, c.Subject).Scan(&subjectID)
+		`, tenantID, workspaceID, c.Subject).Scan(&subjectID)
 
 		if err != nil {
 			status = StatusUnverified
@@ -85,9 +86,10 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID, workspaceID
 		var objectID uuid.UUID
 		err = e.pool.QueryRow(ctx, `
 			SELECT id FROM entities 
-			WHERE tenant_id = $1 AND (name = $2 OR name LIKE '%.' || $2)
+			WHERE tenant_id = $1 AND workspace_id = $2
+			  AND (name = $3 OR name LIKE '%.' || $3)
 			LIMIT 1
-		`, tenantID, c.Object).Scan(&objectID)
+		`, tenantID, workspaceID, c.Object).Scan(&objectID)
 
 		if err != nil && c.Predicate != PredicateIdempotent {
 			status = StatusUnverified
@@ -164,7 +166,7 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID, workspaceID
 		}
 	}
 
-	_ = e.pool.QueryRow(ctx, `SELECT COUNT(*) FROM entities WHERE tenant_id = $1 AND is_exported = true`, tenantID).Scan(&stats.TotalEntities)
+	_ = e.pool.QueryRow(ctx, `SELECT COUNT(*) FROM entities WHERE tenant_id = $1 AND workspace_id = $2 AND is_exported = true`, tenantID, workspaceID).Scan(&stats.TotalEntities)
 	stats.UndocumentedCode = len(undocumented)
 
 	return stats, undocumented, nil
