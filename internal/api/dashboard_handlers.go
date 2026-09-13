@@ -237,10 +237,12 @@ type GraphEdgeDTO struct {
 }
 
 type GraphResponseDTO struct {
-	Level string         `json:"level"`
-	Focus string         `json:"focus"`
-	Nodes []GraphNodeDTO `json:"nodes"`
-	Edges []GraphEdgeDTO `json:"edges"`
+	Level      string         `json:"level"`
+	Focus      string         `json:"focus"`
+	Nodes      []GraphNodeDTO `json:"nodes"`
+	Edges      []GraphEdgeDTO `json:"edges"`
+	Truncated  bool           `json:"truncated,omitempty"`
+	TotalNodes int            `json:"total_nodes,omitempty"`
 }
 
 type EntityRecord struct {
@@ -1130,7 +1132,7 @@ button { cursor: pointer; }
                         <button class="graph-button" id="btn-mode-package" onclick="setArchitectureMode('package')">All Packages</button>
                         <button class="graph-button" id="btn-mode-full" onclick="setArchitectureMode('full')">Full Knowledge Graph</button>
                         <button class="graph-button" onclick="goUpArchitecture()">← Up Level</button>
-                        <button class="graph-button" onclick="loadArchitecture(state.currentLevel, state.currentFocus)">Refresh</button>
+                        <button class="graph-button" onclick="state.graphCache = {}; loadArchitecture(state.currentLevel, state.currentFocus)">Refresh</button>
                     </div>
                 </div>
 
@@ -1277,7 +1279,8 @@ var state = {
     graphSimulation: null,
     searchTimer: null,
     activeCommunities: new Set(),
-    hoveredNodeId: null
+    hoveredNodeId: null,
+    graphCache: {},
 };
 
 var communityPalette = [
@@ -1810,6 +1813,18 @@ async function loadArchitecture(level, focus) {
     state.currentFocus = focus || "";
     updateArchitectureHeader();
 
+    // Cache the graph JSON by (level, focus). Navigating away and back
+    // reuses the response instead of paying the fetch cost again. The
+    // Refresh button clears state.graphCache before calling this, so
+    // explicit refresh still hits the server.
+    var cacheKey = state.currentLevel + ":" + state.currentFocus;
+    if (state.graphCache[cacheKey]) {
+        state.graphData = state.graphCache[cacheKey];
+        buildCommunitiesList(state.graphData);
+        renderGraph(state.graphData);
+        return;
+    }
+
     var url = "/api/v1/graph?workspace=" + encodeURIComponent(WORKSPACE) +
         "&level=" + encodeURIComponent(state.currentLevel);
     if (state.currentFocus) {
@@ -1820,6 +1835,7 @@ async function loadArchitecture(level, focus) {
         var res = await fetch(url);
         if (!res.ok) throw new Error("Graph request failed");
         var data = await res.json();
+        state.graphCache[cacheKey] = data;
         state.graphData = data;
         buildCommunitiesList(data);
         renderGraph(data);
@@ -1947,6 +1963,16 @@ function applyCommunityFilter() {
 }
 
 function renderGraph(data) {
+    // Stop any running simulation before creating a new one. The
+    // previous render's simulation keeps ticking on D3's timer,
+    // computing positions for node objects the SVG no longer holds.
+    // Each navigation from and back to the graph leaves one more
+    // simulation alive; memory and CPU grow with each round trip.
+    if (state.graphSimulation) {
+        state.graphSimulation.stop();
+        state.graphSimulation = null;
+    }
+
     var svg = d3.select("#graph");
     svg.selectAll("*").remove();
 
@@ -2024,10 +2050,11 @@ function renderGraph(data) {
         return a.id === b.id || linkedByIndex[a.id + "," + b.id];
     }
 
-    var linkDist = state.currentLevel === "full" ? 65 : (state.currentLevel === "repository" ? 140 : 90);
+    var linkDist = state.currentLevel === "full" ? 90 : (state.currentLevel === "repository" ? 140 : 90);
     var chargeForce = state.currentLevel === "full" ? -260 : (state.currentLevel === "repository" ? -750 : -420);
 
     var simulation = d3.forceSimulation(nodes)
+        .alphaDecay(0.08)
         .force("link", d3.forceLink(validEdges).id(function(d) { return d.id; }).distance(linkDist).strength(0.35))
         .force("charge", d3.forceManyBody().strength(chargeForce))
         .force("center", d3.forceCenter(width / 2, height / 2))
@@ -2138,7 +2165,19 @@ function renderGraph(data) {
         }
     });
 
+    var tickCount = 0;
     simulation.on("tick", function() {
+        // Stop the simulation once the layout has settled. alphaDecay
+        // 0.08 reaches alpha < 0.05 in roughly 40 ticks at this node
+        // count. The 400-tick ceiling is a safety net for pathological
+        // graphs. Without either condition, D3's default alphaMin lets
+        // the simulation run for thousands of ticks, producing minutes
+        // of visible drift.
+        tickCount++;
+        if (tickCount > 400 || simulation.alpha() < 0.05) {
+            simulation.stop();
+        }
+
         link.attr("d", function(d) {
             var dx = d.target.x - d.source.x;
             var dy = d.target.y - d.source.y;
@@ -2222,8 +2261,18 @@ function openNodeDrawer(node) {
     if (node.kind === "package" || state.currentLevel === "package") {
         html += '<button class="detail-action" onclick="closeDrawer(); state.currentLevel=\'entity\'; state.currentFocus=\'' + escapeJS(node.id) + '\'; loadArchitecture(\'entity\', \'' + escapeJS(node.id) + '\');">Explore symbols →</button>';
     }
-    if (state.currentLevel === "entity" || (node.kind !== "repository" && node.kind !== "package")) {
-        html += '<button class="detail-action" onclick="closeDrawer(); state.currentLevel=\'entity\'; state.currentFocus=\'' + escapeJS(node.id) + '\'; loadArchitecture(\'entity\', \'' + escapeJS(node.id) + '\');">Explore local neighborhood →</button>';
+       if (state.currentLevel === "entity" || (node.kind !== "repository" && node.kind !== "package")) {
+        // The entity level filters by package, not by entity ID. Passing
+        // node.id here sent a UUID to a query that filters on
+        // e.Package = focus, which matched zero rows and returned an
+        // empty graph. node.package is the field the entity level
+        // expects.
+        //
+        // The cache is cleared before navigating so a stale entry for
+        // the same (level, focus) key does not return the previous
+        // render's nodes.
+        var focusPkg = node.package || node.Package || "";
+        html += '<button class="detail-action" onclick="closeDrawer(); state.graphCache = {}; state.currentLevel=\'entity\'; state.currentFocus=\'' + escapeJS(focusPkg) + '\'; showView(\'architecture\');">Explore local neighborhood →</button>';
     }
     html += '</div>';
 
@@ -2355,7 +2404,7 @@ function openSearchResult(item) {
     html += '</div>';
 
     html += '<div class="detail-section"><div class="detail-section-title">Actions</div>';
-    html += '<button class="detail-action" onclick="closeDrawer(); state.currentLevel=\'entity\'; state.currentFocus=\'' + escapeJS(item.package || item.id) + '\'; loadArchitecture(\'entity\', \'' + escapeJS(item.package || item.id) + '\');">Explore local neighborhood →</button>';
+    html += '<button class="detail-action" onclick="closeDrawer(); state.graphCache = {}; state.currentLevel=\'entity\'; state.currentFocus=\'' + escapeJS(item.package || item.id) + '\'; showView(\'architecture\');">Explore local neighborhood →</button>';
     html += '</div>';
 
     body.innerHTML = html;
@@ -3239,19 +3288,22 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	focus := strings.TrimSpace(r.URL.Query().Get("focus"))
 
 	entityMap := make(map[string]EntityRecord)
-	// Exclude external dependency stubs (kind='external'). They represent
-	// unresolved references to symbols outside the workspace, not part
-	// of the source architecture.
+	// External dependency stubs (kind='external') ARE loaded here.
+	// They are the endpoints of every cross-repo and library
+	// dependency edge. Filtering them out of entityMap caused every
+	// claim whose source or target resolved to a stub to be dropped
+	// silently — the graph rendered nodes without edges. The
+	// node-building blocks below decide what to render; the entity
+	// level filters zero-degree entities when no focus is set.
 	const maxGraphEntities = 50000
 	eRows, err := pgStore.Pool().Query(ctx, `
-		SELECT e.id::text, e.name, e.kind, e.package, e.file_path, e.is_exported,
-		       COALESCE(r.name, 'unknown')
-		FROM entities e
-		LEFT JOIN repositories r ON r.id = e.repository_id
-		WHERE e.workspace_id = $1
-		  AND e.kind != 'external'
-		LIMIT $2
-	`, workspaceID, maxGraphEntities)
+        SELECT e.id::text, e.name, e.kind, e.package, e.file_path, e.is_exported,
+               COALESCE(r.name, 'unknown')
+        FROM entities e
+        LEFT JOIN repositories r ON r.id = e.repository_id
+        WHERE e.workspace_id = $1
+        LIMIT $2
+    `, workspaceID, maxGraphEntities)
 	if err == nil {
 		defer eRows.Close()
 		for eRows.Next() {
@@ -3269,11 +3321,11 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	var claims []rawClaim
 	const maxGraphClaims = 200000
 	cRows, err := pgStore.Pool().Query(ctx, `
-		SELECT from_entity_id::text, to_entity_id::text
-		FROM claims
-		WHERE workspace_id = $1
-		LIMIT $2
-	`, workspaceID, maxGraphClaims)
+        SELECT from_entity_id::text, to_entity_id::text
+        FROM claims
+        WHERE workspace_id = $1
+        LIMIT $2
+    `, workspaceID, maxGraphClaims)
 	if err == nil {
 		defer cRows.Close()
 		for cRows.Next() {
@@ -3293,16 +3345,41 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	var contras []rawContra
 	cvRows, err := pgStore.Pool().Query(ctx, `
-		SELECT source_entity_id::text, COALESCE(evidence_payload->>'raw_target', 'unapproved-endpoint'), runtime_observed_count
-		FROM claim_verifications
-		WHERE workspace_id = $1 AND status = 'CONTRADICTED'
-	`, workspaceID)
+        SELECT source_entity_id::text, COALESCE(evidence_payload->>'raw_target', 'unapproved-endpoint'), runtime_observed_count
+        FROM claim_verifications
+        WHERE workspace_id = $1 AND status = 'CONTRADICTED'
+    `, workspaceID)
 	if err == nil {
 		defer cvRows.Close()
 		for cvRows.Next() {
 			var cv rawContra
 			if err := cvRows.Scan(&cv.src, &cv.rawTarget, &cv.count); err == nil {
 				contras = append(contras, cv)
+			}
+		}
+	}
+
+	// Cross-repo edges detected by package/import analysis.
+	// Grouped in SQL to aggregate link density per pair.
+	type rawCrossRepo struct {
+		fromRepo, toRepo string
+		count            int
+	}
+	var crossRepoPairs []rawCrossRepo
+	crRows, err := pgStore.Pool().Query(ctx, `
+        SELECT r1.name AS from_repo, r2.name AS to_repo, COUNT(*)::int AS weight
+        FROM cross_repo_edges cre
+        JOIN repositories r1 ON r1.id = cre.from_repo_id
+        JOIN repositories r2 ON r2.id = cre.to_repo_id
+        WHERE cre.workspace_id = $1
+        GROUP BY r1.name, r2.name
+    `, workspaceID)
+	if err == nil {
+		defer crRows.Close()
+		for crRows.Next() {
+			var p rawCrossRepo
+			if err := crRows.Scan(&p.fromRepo, &p.toRepo, &p.count); err == nil {
+				crossRepoPairs = append(crossRepoPairs, p)
 			}
 		}
 	}
@@ -3377,6 +3454,53 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Merge cross_repo_edges and ensure endpoints exist in nodesMap
+		for _, p := range crossRepoPairs {
+			if p.fromRepo == "" || p.toRepo == "" || p.fromRepo == p.toRepo || p.fromRepo == "stdlib" || p.toRepo == "stdlib" {
+				continue
+			}
+
+			if _, exists := nodesMap[p.fromRepo]; !exists {
+				nodesMap[p.fromRepo] = GraphNodeDTO{
+					ID:       p.fromRepo,
+					Label:    p.fromRepo,
+					Kind:     "repository",
+					Repo:     p.fromRepo,
+					Status:   "SUPPORTED",
+					Exported: true,
+					Count:    1,
+				}
+			}
+			if _, exists := nodesMap[p.toRepo]; !exists {
+				nodesMap[p.toRepo] = GraphNodeDTO{
+					ID:       p.toRepo,
+					Label:    p.toRepo,
+					Kind:     "repository",
+					Repo:     p.toRepo,
+					Status:   "SUPPORTED",
+					Exported: true,
+					Count:    1,
+				}
+			}
+
+			edgeKey := p.fromRepo + "->" + p.toRepo
+			edge := edgesMap[edgeKey]
+			if edge.Source == "" {
+				edge = GraphEdgeDTO{
+					ID:         edgeKey,
+					Source:     p.fromRepo,
+					Target:     p.toRepo,
+					Type:       "CROSS_REPO_BRIDGE",
+					Status:     "SUPPORTED",
+					Label:      "depends on",
+					Count:      0,
+					Confidence: 1.0,
+				}
+			}
+			edge.Count += p.count
+			edgesMap[edgeKey] = edge
+		}
+
 		for _, cv := range contras {
 			src := entityMap[cv.src]
 			if src.Repo != "" && src.Repo != "stdlib" {
@@ -3448,9 +3572,38 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else if level == "entity" {
+		// Compute degree — how many claims each entity participates in
+		// as source or target. The no-focus view ("Top architectural
+		// symbols") uses this to select the top N by connectivity.
+		// Without it, the cap falls through to alphabetical order and
+		// keeps 200 unconnected stubs (../../vendor/...), producing a
+		// scattered cloud with no visible edges.
+		degree := make(map[string]int)
+		for _, c := range claims {
+			degree[c.from]++
+			degree[c.to]++
+		}
+
 		for _, e := range entityMap {
-			if focus == "" || e.Package == focus {
-				nodesMap[e.ID] = GraphNodeDTO{ID: e.ID, Label: e.Name, Kind: e.Kind, Repo: e.Repo, Package: e.Package, Exported: e.Exported, Status: "SUPPORTED"}
+			if focus != "" && e.Package != focus {
+				continue
+			}
+			// No focus = "top architectural symbols." An entity with
+			// zero claims is not architectural; it is a standalone
+			// type, an external stub, or an unused symbol. Filter it
+			// out so the cap keeps real neighborhood hubs.
+			if focus == "" && degree[e.ID] == 0 {
+				continue
+			}
+			nodesMap[e.ID] = GraphNodeDTO{
+				ID:       e.ID,
+				Label:    e.Name,
+				Kind:     e.Kind,
+				Repo:     e.Repo,
+				Package:  e.Package,
+				Exported: e.Exported,
+				Status:   "SUPPORTED",
+				Count:    degree[e.ID],
 			}
 		}
 		for _, c := range claims {
@@ -3458,10 +3611,18 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			tgt := entityMap[c.to]
 			if focus == "" || src.Package == focus || tgt.Package == focus {
 				if _, exists := nodesMap[src.ID]; !exists {
-					nodesMap[src.ID] = GraphNodeDTO{ID: src.ID, Label: src.Name, Kind: src.Kind, Package: src.Package, Repo: src.Repo, Status: "SUPPORTED"}
+					nodesMap[src.ID] = GraphNodeDTO{
+						ID: src.ID, Label: src.Name, Kind: src.Kind,
+						Package: src.Package, Repo: src.Repo,
+						Status: "SUPPORTED", Count: degree[src.ID],
+					}
 				}
 				if _, exists := nodesMap[tgt.ID]; !exists {
-					nodesMap[tgt.ID] = GraphNodeDTO{ID: tgt.ID, Label: tgt.Name, Kind: tgt.Kind, Package: tgt.Package, Repo: tgt.Repo, Status: "SUPPORTED"}
+					nodesMap[tgt.ID] = GraphNodeDTO{
+						ID: tgt.ID, Label: tgt.Name, Kind: tgt.Kind,
+						Package: tgt.Package, Repo: tgt.Repo,
+						Status: "SUPPORTED", Count: degree[tgt.ID],
+					}
 				}
 				edgeKey := src.ID + "->" + tgt.ID
 				edge := edgesMap[edgeKey]
@@ -3474,17 +3635,55 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var nodes []GraphNodeDTO
+	// Cap the number of nodes returned per level. At 1,567 packages the
+	// browser cannot render a useful graph — the layout becomes a
+	// hairball and the simulation never settles. Sorting by Count and
+	// keeping the top N preserves the highest-centrality nodes, which
+	// is what the user is actually looking for. The response is marked
+	// truncated so the UI can say "showing 200 of 1,567."
+	const maxNodesPerGraph = 200
+
+	var allNodes []GraphNodeDTO
 	for _, n := range nodesMap {
-		nodes = append(nodes, n)
+		allNodes = append(allNodes, n)
+	}
+	totalNodes := len(allNodes)
+
+	truncated := false
+	if len(allNodes) > maxNodesPerGraph {
+		sort.Slice(allNodes, func(i, j int) bool {
+			if allNodes[i].Count != allNodes[j].Count {
+				return allNodes[i].Count > allNodes[j].Count
+			}
+			return allNodes[i].Label < allNodes[j].Label
+		})
+		allNodes = allNodes[:maxNodesPerGraph]
+		truncated = true
+	}
+
+	// Drop edges whose source or target was cut. Otherwise the graph
+	// renders edges that point at nodes the client never received, and
+	// the layout produces visible fragments.
+	kept := make(map[string]bool, len(allNodes))
+	for _, n := range allNodes {
+		kept[n.ID] = true
 	}
 	var edges []GraphEdgeDTO
 	for _, e := range edgesMap {
-		edges = append(edges, e)
+		if kept[e.Source] && kept[e.Target] {
+			edges = append(edges, e)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(GraphResponseDTO{Level: level, Focus: focus, Nodes: nodes, Edges: edges})
+	_ = json.NewEncoder(w).Encode(GraphResponseDTO{
+		Level:      level,
+		Focus:      focus,
+		Nodes:      allNodes,
+		Edges:      edges,
+		Truncated:  truncated,
+		TotalNodes: totalNodes,
+	})
 }
 
 // HandleDashboardPolicies — returns policy enforcement state for the workspace.
