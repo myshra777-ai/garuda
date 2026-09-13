@@ -23,8 +23,19 @@ const (
 	MetricTokensSaved         = "tokens_saved"          // global
 	MetricCostSavedUSDCents   = "cost_saved_usd_cents"  // global
 	MetricAgentsActive        = "agents_active"         // global
+	MetricActiveUsersGlobal   = "active_users_global"   // global — distinct users with a login that day
 	MetricWorkspacesCreated   = "workspaces_created"    // per-tenant
 	MetricActiveUsers         = "active_users"          // per-tenant
+
+	// Current-snapshot metrics. These are written with today's
+	// bucket_date on every refresh and overwritten each cycle. They
+	// are what the admin dashboard shows as "total users" and "total
+	// workspaces" without reading a table that carries user content.
+	// Yesterday's snapshot is frozen: it records what the total was
+	// when the last refresh of that day ran.
+	MetricUsersTotalCurrent      = "users_total_current"
+	MetricTenantsTotalCurrent    = "tenants_total_current"
+	MetricWorkspacesTotalCurrent = "workspaces_total_current"
 )
 
 // RefreshAggregates computes every metric for the given date and
@@ -80,7 +91,67 @@ func (s *PostgresStore) RefreshAggregates(ctx context.Context, date time.Time) e
 			  WHERE created_at >= $1 AND created_at < $2
 			    AND agent_runtime IS NOT NULL`,
 		},
+
+		{
+			MetricSignups,
+			`SELECT COUNT(*)::bigint FROM users
+			  WHERE created_at >= $1 AND created_at < $2`,
+		},
+		{
+			MetricTenantsCreated,
+			`SELECT COUNT(*)::bigint FROM tenants
+			  WHERE created_at >= $1 AND created_at < $2`,
+		},
+		{
+			MetricTelemetryEventCount,
+			`SELECT COUNT(*)::bigint FROM telemetry_events
+			  WHERE created_at >= $1 AND created_at < $2`,
+		},
+		{
+			MetricTokensSaved,
+			`SELECT COALESCE(SUM(tokens_saved), 0)::bigint FROM telemetry_events
+			  WHERE created_at >= $1 AND created_at < $2`,
+		},
+		{
+			MetricCostSavedUSDCents,
+			`SELECT COALESCE(ROUND(SUM(cost_saved_usd) * 100), 0)::bigint FROM telemetry_events
+			  WHERE created_at >= $1 AND created_at < $2`,
+		},
+		{
+			MetricAgentsActive,
+			`SELECT COUNT(DISTINCT agent_runtime)::bigint FROM telemetry_events
+			  WHERE created_at >= $1 AND created_at < $2
+			    AND agent_runtime IS NOT NULL`,
+		},
+		{
+			MetricActiveUsersGlobal,
+			`SELECT COUNT(*)::bigint FROM users
+			  WHERE last_login_at >= $1 AND last_login_at < $2`,
+		},
 	}
+
+	// Current-snapshot metrics. Same bucket_date (today) on every
+	// refresh; each write overwrites the previous value for that
+	// date. Yesterday's row is not touched, so it holds what the
+	// total was at the last refresh of that day.
+	snapshots := []struct {
+		metric string
+		query  string
+	}{
+		{MetricUsersTotalCurrent, `SELECT COUNT(*)::bigint FROM users`},
+		{MetricTenantsTotalCurrent, `SELECT COUNT(*)::bigint FROM tenants`},
+		{MetricWorkspacesTotalCurrent, `SELECT COUNT(*)::bigint FROM workspaces`},
+	}
+	for _, snap := range snapshots {
+		var v int64
+		if err := s.pool.QueryRow(ctx, snap.query).Scan(&v); err != nil {
+			return fmt.Errorf("snapshot %s: %w", snap.metric, err)
+		}
+		if err := s.upsertAggregate(ctx, dayStart, nil, snap.metric, v); err != nil {
+			return err
+		}
+	}
+
 	for _, g := range globals {
 		var v int64
 		if err := s.pool.QueryRow(ctx, g.query, dayStart, dayEnd).Scan(&v); err != nil {

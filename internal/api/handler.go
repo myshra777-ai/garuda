@@ -169,6 +169,7 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	sess.HandleFunc("/api/v1/graph", s.HandleGraph).Methods(http.MethodGet)
 	sess.HandleFunc("/api/v1/events", s.HandleLiveEvents).Methods(http.MethodGet)
 	sess.HandleFunc("/system/discover", s.HandleSystemDiscover).Methods(http.MethodGet)
+	sess.HandleFunc("/admin", s.HandleAdminDashboard).Methods(http.MethodGet)
 	// =========================================================================
 	// JWT-PROTECTED API SUBROUTER (CLI / MCP tokens)
 	//

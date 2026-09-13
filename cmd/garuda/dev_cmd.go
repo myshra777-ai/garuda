@@ -123,6 +123,7 @@ var devCmd = &cobra.Command{
 		// Session-protected dashboard routes
 		mux.HandleFunc("/dashboard", server.RequireSession(server.HandleDashboard))
 		mux.HandleFunc("/api/v1/dashboard/stats", server.RequireSession(server.HandleDashboardStats))
+		mux.HandleFunc("/admin", server.RequireSession(server.HandleAdminDashboard))
 		mux.HandleFunc("/api/v1/dashboard/search", server.RequireSession(server.HandleDashboardSearch))
 		mux.HandleFunc("/api/v1/events", server.RequireSession(server.HandleLiveEvents))
 		mux.HandleFunc("/api/v1/dashboard/policies", server.RequireSession(server.HandleDashboardPolicies))
