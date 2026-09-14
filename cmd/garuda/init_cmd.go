@@ -57,10 +57,30 @@ var initCmd = &cobra.Command{
 		}
 		fmt.Printf("  ✓ Workspace initialized (%s)\n", workspaceName)
 
-		// 3. Resolve Current Binary Location
-		execPath, err := os.Executable()
+		// 3. Resolve the MCP server binary path.
+		//
+		// The MCP server is a separate binary, bin/garuda-mcp. The
+		// previous code pointed clients at bin/garuda with args
+		// ["mcp"] or ["mcp", "serve"], invoking a CLI subcommand that
+		// implemented only a partial MCP surface (no initialize) and
+		// has now been removed. Every client config must point at the
+		// real server.
+		//
+		// os.Executable() returns the running binary's absolute path
+		// via /proc/self/exe on Linux. The MCP binary is a sibling of
+		// the running binary inside the same bin/ directory.
+		selfPath, err := os.Executable()
 		if err != nil {
-			execPath, _ = filepath.Abs("bin/garuda")
+			// Fallback: locate relative to the current working
+			// directory. Only correct when the user runs init from the
+			// repository root.
+			wd, _ := os.Getwd()
+			selfPath = filepath.Join(wd, "bin", "garuda")
+		}
+		mcpPath := filepath.Join(filepath.Dir(selfPath), "garuda-mcp")
+		if _, statErr := os.Stat(mcpPath); statErr != nil {
+			fmt.Printf("  ⚠️  bin/garuda-mcp not found at %s; MCP clients will not launch.\n", mcpPath)
+			fmt.Printf("      Run 'go build -o bin/garuda-mcp ./cmd/garuda-mcp' and re-run 'garuda init'.\n")
 		}
 
 		// 4. Auto-Configure Cursor MCP (.cursor/mcp.json)
@@ -71,8 +91,7 @@ var initCmd = &cobra.Command{
 		cursorConfig := map[string]interface{}{
 			"mcpServers": map[string]interface{}{
 				"garuda": map[string]interface{}{
-					"command": execPath,
-					"args":    []string{"mcp"},
+					"command": mcpPath,
 					"env": map[string]string{
 						"DATABASE_URL": dbURL,
 					},
@@ -102,8 +121,7 @@ var initCmd = &cobra.Command{
 			servers = make(map[string]interface{})
 		}
 		servers["garuda"] = map[string]interface{}{
-			"command": execPath,
-			"args":    []string{"mcp"},
+			"command": mcpPath,
 			"env": map[string]string{
 				"DATABASE_URL": dbURL,
 			},
@@ -124,7 +142,7 @@ var initCmd = &cobra.Command{
 		fmt.Println("🎉 Garuda is fully initialized and ready to use in < 30 seconds!")
 		fmt.Println("==================================================================")
 		fmt.Println("Next steps:")
-		fmt.Println("  • Run MCP server:       garuda mcp")
+		fmt.Println("  • MCP server binary:    bin/garuda-mcp")
 		fmt.Println("  • Run Grounding Bench:  garuda bench")
 		fmt.Println("  • Launch Unified API:   garuda dev")
 		fmt.Println("==================================================================")
