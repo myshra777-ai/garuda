@@ -402,7 +402,7 @@ The full set of invariants is documented in [ADR-0002](docs/adr/0002-merkle-inte
 
 ### In beta with design partners
 
-- **Multi-tenant identity.** Enterprise SSO, tenant association, workspace membership, and per-workspace access control. Design partners are running early builds today.
+- **Multi-tenant identity. Workspace membership and per-workspace access control. Design partners are running early builds today. Enterprise SSO is on the roadmap.
 - **Runtime verification at scale.** Coverage semantics, cross-service correlation, and a broadened contradiction test suite.
 - **Multi-repository benchmarks.** Quality gates for workspaces of 10, 25, and 100+ repositories.
 
@@ -420,7 +420,7 @@ The roadmap is tracked in [`docs/ROADMAP.md`](docs/ROADMAP.md) and `docs/ROADMAP
 
 Garuda's Go analyzer is compiler-backed and validated against a controlled test corpus. The Python and TypeScript analyzers provide structural extraction across the same semantic pipeline.
 
-Runtime verification correlates static analysis with OpenTelemetry spans. Unobserved runtime paths remain in the unverified state and are never interpreted as dead or incorrect.
+Runtime verification correlates static analysis with OpenTelemetry spans. The correlation path is implemented and exercised against synthetic spans in tests. Production correlation is in beta with design partners. Unobserved runtime paths remain in the unverified state and are never interpreted as dead or incorrect.
 
 Merkle roots are anchored in the local persistence layer. Independent verification requires only the source of the Merkle package, not an external timestamp authority or a public ledger.
 
