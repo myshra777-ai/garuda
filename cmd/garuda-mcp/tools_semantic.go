@@ -19,17 +19,15 @@ import (
 // Read-only. Uses the same store API the dashboard's semantic panels
 // use. Does not modify the graph.
 func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, error) {
-	tenantID, workspace, err := s.resolveTenantAndWorkspace(args)
+	// resolveTenantAndWorkspace already resolves the workspace name (or
+	// the empty-string default) to a UUID via store.ResolveWorkspaceID.
+	// The second lookup that used to be here treated that UUID as a
+	// workspace name and always failed with "not found". Removed.
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-
-	var workspaceID uuid.UUID
-	if err := s.store.Pool().QueryRow(context.Background(), `
-		SELECT id FROM workspaces WHERE name = $1 LIMIT 1
-	`, workspace).Scan(&workspaceID); err != nil {
-		return nil, fmt.Errorf("workspace %q not found: %w", workspace, err)
-	}
+	workspaceName, _ := args["workspace"].(string)
 
 	pkgFilter, _ := args["package"].(string)
 	kindFilter, _ := args["kind"].(string)
@@ -86,12 +84,13 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 	}
 
 	return map[string]interface{}{
-		"tenant_id":  tenantID.String(),
-		"workspace":  workspace,
-		"filters":    map[string]any{"package": pkgFilter, "kind": kindFilter},
-		"count":      len(entities),
-		"entities":   entities,
-		"limit_used": limit,
+		"tenant_id":      tenantID.String(),
+		"workspace_id":   workspaceID.String(),
+		"workspace_name": workspaceName,
+		"filters":        map[string]any{"package": pkgFilter, "kind": kindFilter},
+		"count":          len(entities),
+		"entities":       entities,
+		"limit_used":     limit,
 	}, nil
 }
 
@@ -100,10 +99,14 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 //
 // Read-only. Uses GetEntityRelationships, which reads from claims.
 func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, error) {
-	tenantID, workspace, err := s.resolveTenantAndWorkspace(args)
+	// Same fix as handleEntities. resolveTenantAndWorkspace already
+	// returns the resolved workspace UUID; the redundant lookup treated
+	// it as a name and always failed.
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
+	workspaceName, _ := args["workspace"].(string)
 
 	entityIDStr, _ := args["entity_id"].(string)
 	if entityIDStr == "" {
@@ -111,13 +114,6 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 	}
 	if _, err := uuid.Parse(entityIDStr); err != nil {
 		return nil, fmt.Errorf("invalid entity_id %q: %w", entityIDStr, err)
-	}
-
-	var workspaceID uuid.UUID
-	if err := s.store.Pool().QueryRow(context.Background(), `
-		SELECT id FROM workspaces WHERE name = $1 LIMIT 1
-	`, workspace).Scan(&workspaceID); err != nil {
-		return nil, fmt.Errorf("workspace %q not found: %w", workspace, err)
 	}
 
 	// Verify the entity exists and fetch its basic fields.
@@ -140,7 +136,7 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 		&entity.File, &entity.LineStart, &entity.Exported,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("entity %q not found in workspace %q", entityIDStr, workspace)
+		return nil, fmt.Errorf("entity %q not found in workspace %q", entityIDStr, workspaceName)
 	}
 
 	incoming, outgoing, err := s.store.GetEntityRelationships(
@@ -158,9 +154,6 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 		Line int    `json:"line,omitempty"`
 	}
 
-	toRows := func(rels interface{ Len() int }) []relRow { return nil }
-	_ = toRows // placeholder to keep imports clean; real conversion below
-
 	convert := func(rs []analyzer.Relationship) []relRow {
 		out := make([]relRow, 0, len(rs))
 		for _, r := range rs {
@@ -177,7 +170,8 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 
 	return map[string]interface{}{
 		"tenant_id":      tenantID.String(),
-		"workspace":      workspace,
+		"workspace_id":   workspaceID.String(),
+		"workspace_name": workspaceName,
 		"entity":         entity,
 		"incoming_count": len(incoming),
 		"outgoing_count": len(outgoing),

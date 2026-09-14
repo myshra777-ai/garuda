@@ -22,6 +22,7 @@ import (
 	"github.com/myshra777-ai/garuda/internal/budget"
 	"github.com/myshra777-ai/garuda/internal/engine"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -214,7 +215,7 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 		JSONRPC: "2.0",
 		ID:      req.ID,
 		Result: map[string]interface{}{
-			"protocolVersion": "0.1.0",
+			"protocolVersion": "2025-06-18",
 			"capabilities": map[string]interface{}{
 				"tools": map[string]interface{}{},
 			},
@@ -546,7 +547,7 @@ func (s *MCPServer) processProposeDecisionLogic(args map[string]interface{}) (in
 	tenantID, _ := s.resolveTenant(args)
 
 	if tenantID == uuid.Nil {
-		tenantID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("default-tenant"))
+		tenantID = tenant.CanonicalID
 	}
 
 	now := time.Now().UTC()
@@ -711,7 +712,13 @@ func (s *MCPServer) resolveTenant(args map[string]interface{}) (uuid.UUID, error
 	if tenantStr, ok := args["tenant_id"].(string); ok && tenantStr != "" {
 		return uuid.Parse(tenantStr)
 	}
-	return uuid.NewSHA1(uuid.NameSpaceOID, []byte("default-tenant")), nil
+	// Fall back to the canonical tenant, matching every other CLI and
+	// HTTP path. The previous implementation returned a synthetic
+	// UUID derived from the literal "default-tenant"; that UUID matches
+	// no row in any table, so tenant-scoped queries produced empty
+	// results with no error. Same class of silent miss as the six CLI
+	// sites fixed in 13018d1.
+	return tenant.CanonicalID, nil
 }
 
 func (s *MCPServer) errorResponse(id interface{}, code int, message string) MCPResponse {
