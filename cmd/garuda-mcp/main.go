@@ -54,9 +54,19 @@ type MCPServer struct {
 }
 
 func main() {
-	// All logging goes to stderr. stdout is the JSON-RPC channel and
-	// must contain nothing but line-delimited MCP messages.
-	slog.Info("Garuda MCP Server starting")
+	// stdout is the JSON-RPC channel and must contain nothing but
+	// line-delimited MCP messages.
+	//
+	// stderr is also constrained in the MCP transport: some clients
+	// (notably Cursor 3.17.x via its "Shared MCP process") treat every
+	// line from the child process as an MCP frame, regardless of which
+	// stream it arrived on. A startup banner or an INFO log on stderr
+	// is therefore parsed as protocol and rejected. The MCP process
+	// runs silent by default; set GARUDA_MCP_DEBUG=1 to keep stderr
+	// for interactive debugging.
+	if os.Getenv("GARUDA_MCP_DEBUG") == "" {
+		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}
 
 	enc := json.NewEncoder(os.Stdout)
 
@@ -158,6 +168,21 @@ func main() {
 		}
 
 		requestCount++
+
+		// JSON-RPC 2.0: a message with no "id" is a notification and
+		// MUST NOT receive a response. The MCP spec uses notifications
+		// for lifecycle events such as notifications/initialized, which
+		// every client sends after initialize completes. Responding to
+		// one produces a frame with "id": null, which Cursor's MCP SDK
+		// rejects against its strict zod union and tears the transport
+		// down.
+		//
+		// Notifications are silently dropped. This is the same class of
+		// fix every MCP server that has hit this bug applies.
+		if req.ID == nil {
+			continue
+		}
+
 		resp := server.handleRequest(req)
 
 		if err := enc.Encode(resp); err != nil {
