@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
 	"github.com/myshra777-ai/garuda/internal/store"
-	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +33,7 @@ var graphExportCmd = &cobra.Command{
 		}
 		defer pool.Close()
 
-		tenantID := tenant.CanonicalID
+		tenantID := getTenantID()
 
 		workspaceID, err := store.ResolveWorkspaceID(ctx, pool, tenantID, "")
 		if err != nil {

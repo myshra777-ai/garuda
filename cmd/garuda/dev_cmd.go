@@ -24,7 +24,6 @@ import (
 	"github.com/myshra777-ai/garuda/internal/runtime"
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/telemetry"
-	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/myshra777-ai/garuda/internal/topology"
 	"github.com/spf13/cobra"
 )
@@ -168,7 +167,7 @@ var devCmd = &cobra.Command{
 		go func() {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
-			tenantID := tenant.CanonicalID
+			tenantID := getTenantID()
 			verifier := runtime.NewVerificationEngine(pool)
 
 			for {

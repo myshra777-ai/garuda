@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/benchmark"
-	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +33,7 @@ var benchCmd = &cobra.Command{
 		}
 		defer pool.Close()
 
-		tenantID := tenant.CanonicalID
+		tenantID := getTenantID()
 		var workspaceID uuid.UUID
 		var workspaceName string
 
