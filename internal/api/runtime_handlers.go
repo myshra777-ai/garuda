@@ -7,6 +7,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -18,13 +19,14 @@ import (
 )
 
 type IngestTelemetrySpanDTO struct {
-	TraceID     string                 `json:"trace_id"`
-	SpanID      string                 `json:"span_id"`
-	ServiceName string                 `json:"service_name"`
-	Operation   string                 `json:"operation"`
-	DurationMS  float64                `json:"duration_ms"`
-	StatusCode  string                 `json:"status_code"`
-	Attributes  map[string]interface{} `json:"attributes"`
+	TraceID       string                 `json:"trace_id"`
+	SpanID        string                 `json:"span_id"`
+	ServiceName   string                 `json:"service_name"`
+	TargetService string                 `json:"target_service"`
+	Operation     string                 `json:"operation"`
+	DurationMS    float64                `json:"duration_ms"`
+	StatusCode    string                 `json:"status_code"`
+	Attributes    map[string]interface{} `json:"attributes"`
 }
 
 type IngestTelemetryRequestDTO struct {
@@ -90,22 +92,31 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 			StartedAt:   time.Now().UTC(),
 		}
 
-		corrResult := correlator.Correlate(ctx, workspaceID, tenantID, &obs)
+		corrResult := correlator.Correlate(ctx, tenantID, workspaceID, &obs)
 		entityID := corrResult.EntityID
 
 		var insertedID uuid.UUID
 		err = pgStore.Pool().QueryRow(ctx, `
             INSERT INTO runtime_observations (
-                workspace_id, trace_id, span_id, service_name, operation, 
+                workspace_id, tenant_id, trace_id, span_id,
+                source_service, target_service, service_name, operation,
                 entity_id, duration_ms, status_code, attributes, started_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13)
             RETURNING id
-        `, workspaceID, obs.TraceID, obs.SpanID, obs.ServiceName, obs.Operation,
-			entityID, obs.DurationMs, obs.StatusCode, string(attrJSON), obs.StartedAt).Scan(&insertedID)
+        `, workspaceID, tenantID, obs.TraceID, obs.SpanID,
+			obs.ServiceName, span.TargetService, obs.ServiceName, obs.Operation,
+			entityID, int(obs.DurationMs), obs.StatusCode, string(attrJSON), obs.StartedAt).Scan(&insertedID)
 
-		if err == nil {
-			ingestedCount++
+		if err != nil {
+			slog.Error("runtime_observations insert failed",
+				"trace_id", span.TraceID,
+				"span_id", span.SpanID,
+				"error", err)
+			continue
+		}
+		ingestedCount++
 
+		{
 			if rawTarget != "" && entityID != nil {
 				_, _ = pgStore.Pool().Exec(ctx, `
                     INSERT INTO runtime_edges (
@@ -142,9 +153,19 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	if ingestedCount == 0 && len(req.Spans) > 0 {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"ingested": 0,
+			"received": len(req.Spans),
+			"status":   "rejected",
+		})
+		return
+	}
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"ingested": ingestedCount,
+		"received": len(req.Spans),
 		"status":   "accepted",
 	})
 }
@@ -166,7 +187,7 @@ func (s *Server) HandleGetRuntimeCoverage(w http.ResponseWriter, r *http.Request
 
 	tenantID := scope.TenantID
 	verifier := runtime.NewVerificationEngine(pgStore.Pool())
-	_, _ = verifier.RecomputeWorkspaceVerification(ctx, workspaceID, tenantID)
+	_, _ = verifier.RecomputeWorkspaceVerification(ctx, tenantID, workspaceID)
 
 	var totalStatic, observedEntities, supportedCount, unverifiedCount, contradictedCount int
 	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1`, workspaceID).Scan(&totalStatic)

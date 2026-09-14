@@ -192,7 +192,7 @@ var devCmd = &cobra.Command{
 					rows.Close()
 
 					for _, wsID := range workspaceIDs {
-						_, _ = verifier.RecomputeWorkspaceVerification(ctx, wsID, tenantID)
+						_, _ = verifier.RecomputeWorkspaceVerification(ctx, tenantID, wsID)
 					}
 					_, _ = pgStore.CreateUnifiedMerkleSnapshot(ctx, tenantID)
 				}
