@@ -74,16 +74,22 @@ func NewJWTConfig(issuer, audience string, expiry time.Duration) (*JWTConfig, er
 		return nil, fmt.Errorf("failed to generate Ed25519 key pair: %w", err)
 	}
 
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "═══════════════════════════════════════════════════════════════")
-	fmt.Fprintln(os.Stderr, "  GARUDA DEVELOPMENT JWT KEY PAIR GENERATED")
-	fmt.Fprintln(os.Stderr, "  Tokens issued by this process are valid only for this process.")
-	fmt.Fprintln(os.Stderr, "  Copy the two values below into .env to persist across restarts:")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  JWT_PRIVATE_KEY_HEX="+hex.EncodeToString(priv))
-	fmt.Fprintln(os.Stderr, "  JWT_PUBLIC_KEY_HEX="+hex.EncodeToString(pub))
-	fmt.Fprintln(os.Stderr, "═══════════════════════════════════════════════════════════════")
-	fmt.Fprintln(os.Stderr, "")
+	// The banner is written to stderr. That is correct for every
+	// command except the MCP server, where some clients treat every
+	// line from the child as protocol. GARUDA_MCP_DEBUG=1 restores
+	// the banner for interactive MCP debugging; unset, it is silent.
+	if os.Getenv("GARUDA_MCP_DEBUG") != "" || os.Getenv("GARUDA_MCP_QUIET") == "" {
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "═══════════════════════════════════════════════════════════════")
+		fmt.Fprintln(os.Stderr, "  GARUDA DEVELOPMENT JWT KEY PAIR GENERATED")
+		fmt.Fprintln(os.Stderr, "  Tokens issued by this process are valid only for this process.")
+		fmt.Fprintln(os.Stderr, "  Copy the two values below into .env to persist across restarts:")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "  JWT_PRIVATE_KEY_HEX="+hex.EncodeToString(priv))
+		fmt.Fprintln(os.Stderr, "  JWT_PUBLIC_KEY_HEX="+hex.EncodeToString(pub))
+		fmt.Fprintln(os.Stderr, "═══════════════════════════════════════════════════════════════")
+		fmt.Fprintln(os.Stderr, "")
+	}
 
 	return &JWTConfig{
 		privateKey: priv,
