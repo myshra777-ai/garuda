@@ -1,15 +1,7 @@
-# Garuda CLI API Reference
+# Garuda CLI API Documentation
 
-Welcome to the Garuda CLI API documentation.
-
-## Overview
-
-Garuda CLI provides command-line utilities for managing and interacting with Garuda services.
+Welcome to the Garuda CLI API documentation. 
 
 ## Commands
 
-*No commands are currently listed or available in this release context.*
-
----
-
-*Note: As new stable or planned commands are introduced, they will be documented here with usage examples, flags, and expected outputs.*
+*No commands are currently available or defined in the specification context.*
