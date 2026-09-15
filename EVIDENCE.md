@@ -61,24 +61,77 @@ The single cross-repository edge reflects a real property of this workspace: the
 
 ---
 
-## 1. Controlled Runtime Verification Results
+## 1. Runtime Verification — Path Verified, Detection Rate Not Yet Measured
 
+The runtime ingest → correlate → verify pipeline was verified
+end-to-end on 2026-09-14 against `go-validation-10`.
+
+What was tested:
+
+| Step | Result |
+| :--- | :--- |
+| Span posted to `POST /api/v1/telemetry/spans` | 202, `{"ingested":1,"received":1,"status":"accepted"}` |
+| Row written to `runtime_observations` | 1 row, with `source_service`, `target_service`, `entity_id` populated |
+| Correlator matched the operation name to a real entity | `Reset` → `google.golang.org/grpc/test/codec_perf.Reset` |
+| Verifier correlated the observed entity to its outgoing claims | 176 claims flipped from `UNVERIFIED` to `SUPPORTED` |
+| Daemon log warnings or errors | none |
+
+The 176 SUPPORTED claims equal the exact outgoing CALLS count on
+the correlated entity. That is the mechanism working as designed:
+an observation flows in, an entity is matched, the entity's static
+claims are checked against the observation, and the matching ones
+flip state.
+
+What is not measured here: the rate at which a runtime observation
+that contradicts the static model produces a `CONTRADICTED` claim.
+That detection path exists (`internal/runtime/verifier.go`,
+`RecomputeWorkspaceVerification`, the CONTRADICTED branch), but no
+test corpus has been constructed that injects a known
+contradiction and asserts it is detected. The number in earlier
+drafts of this document — 10 of 10 — is not reproducible against
+the current database and is not claimed here.
+
+Reproduction:
+
+```bash
+export DATABASE_URL="postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+export GARUDA_MCP_QUIET=1
+
+# Start the daemon.
+./bin/garuda dev > /tmp/garuda-verify.log 2>&1 &
+sleep 4
+
+# Post one span targeting a known entity.
+curl -sS -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"spans":[{"trace_id":"verify-001","span_id":"verify-001",
+       "service_name":"demo","target_service":"demo",
+       "operation":"Reset","duration_ms":12.5,"status_code":"OK",
+       "attributes":{
+         "code.function":"google.golang.org/grpc/test/codec_perf.(*Request).Reset",
+         "code.namespace":"google.golang.org/grpc/test/codec_perf"
+       }}]}' \
+  "http://localhost:8080/api/v1/telemetry/spans?workspace=go-validation-10"
+
+sleep 14
+
+# The observation landed and was correlated.
+psql "$DATABASE_URL" -c "SELECT entity_id FROM runtime_observations WHERE trace_id='verify-001';"
+
+# The verifier flipped the correlated claims.
+psql "$DATABASE_URL" -c "
+  SELECT status, COUNT(*)::int FROM claim_verifications
+   WHERE status = 'SUPPORTED' GROUP BY status;"
 ```
-CONTROLLED RUNTIME DRIFT DETECTION
-┌────────────────────────────────────────────────────────┐
-│ Injected Observations:        10                       │
-│ Successfully Ingested:        10                       │
-│ Contradictions Detected:      10                       │
-│ Missed / Unquarantined:        0                       │
-│ Observed Detection Rate:    100%                       │
-└────────────────────────────────────────────────────────┘
-```
 
-Method: runtime deviations were injected against a controlled workspace, targeting unapproved ports and unauthorized driver access. Each injection was a discrete observation posted to the telemetry ingestion endpoint. The verification engine correlated each observation against the static model and produced a contradiction in every case.
+Expected: one row with a non-null `entity_id`, and a non-zero
+count of SUPPORTED claims.
 
-Scope: this measures the correlation path — whether a runtime observation that conflicts with the static model is detected. It does not measure the rate at which real production systems produce such deviations, nor does it claim to detect every class of runtime drift that a real system might exhibit.
-
----
+A corpus that exercises the `CONTRADICTED` path — one that injects
+an observation with an unapproved target and asserts the verifier
+quarantines it — is queued and not yet built. When it exists, the
+detection-rate claim returns to this document with a link to the
+script that produces it.
 
 ## 2. Telemetry Pipeline Characteristics
 
