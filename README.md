@@ -122,7 +122,9 @@ This means fewer hallucinated function names, fewer made-up callers, fewer "I th
 
 Your documentation says a feature exists. Your code no longer does. Garuda can tell you that, and show you exactly where the mismatch is.
 
-It works the other way too — if you have important code that nobody wrote down anywhere, Garuda will surface it as a knowledge gap.
+The check runs in both directions. A claim extracted from a document is verified against the code graph — if the code contains the relationship the document describes, the claim is **Supported**; if it does not, the claim stays **Unverified** with the exact reason, or flips to **Contradicted** when a runtime observation disagrees.
+
+The other direction works too: Garuda tells you when the code contains an exported entity that no document mentions. Neither direction matters more than the other. Both are facts about the gap between intent and implementation.
 
 ### Catch policy violations before they merge
 
@@ -150,7 +152,7 @@ When Garuda makes a governance decision — allowing a change, blocking a change
 
 ---
 
-## How the verification works (in plain English)
+## How the verification works
 
 For every claim about your software, Garuda keeps track of one of three states.
 
@@ -176,7 +178,15 @@ Every decision Garuda makes is written into a tamper-proof log. Anyone — inclu
 
 Think of it like a notarized ledger. Not because we expect people to lie, but because when decisions matter, "trust us" is a weaker guarantee than "verify us."
 
-You can verify any recorded decision with a single command, without needing access to our systems, our database, or our keys.
+You can verify any recorded decision with a single command:
+
+```bash
+garuda policy verify <decision-id>
+```
+
+You don't need access to our systems, our database, or our keys. The proof is a pure function of three values, and the verifier is in the open source.
+
+The invariants Garuda is built on are public. [`docs/invariants.md`](docs/invariants.md) lists the rules the truth substrate must never violate. If a future version breaks one, the version is wrong — not the invariant.
 
 This is the piece none of the other tools have. A code graph is easy to build. A code graph you can *prove* is a different thing entirely.
 
@@ -254,7 +264,7 @@ To keep the story honest, here's what Garuda isn't:
 - **Not a magic fix for AI errors.** Garuda dramatically reduces the opportunity for AI agents to work from wrong assumptions. It doesn't make any model incapable of being wrong.
 - **Not a documentation authoring tool.** Write your docs where you already write them. Garuda reads them and connects them to your code.
 - **Not a decision-maker.** You define the rules. Garuda checks whether your software still follows them.
-- **Not a complete call graph for every language.** Go call edges are resolved through the compiler, but a single-language repository analyzed in isolation will have sparse call edges at the leaf — many functions have exactly one caller, and 90% have four or fewer. This is a property of the code, not a limitation of the analysis. `garuda impact` reports what the graph contains, and the graph is honest about what it does not contain. Structural edges — inheritance, implementation, imports — are dense and reliable; call edges are denser in workspaces with more repositories that consume each other.
+- **Not a complete call graph for every language.** Go call edges are resolved through the compiler and attributed to the real caller, not to the package the caller lives in. A single-language repository analyzed in isolation will still have sparse call edges at the leaf — many functions have exactly one caller, and 90% have four or fewer. This is a property of the code, not a limitation of the analysis. Structural edges — inheritance, implementation, imports — are dense and reliable; call edges are denser in workspaces with more repositories that consume each other. Claim density falls off outside Go: in the reference workspace, Go produced roughly 3.8 claims per entity, TypeScript 0.17, Python 0.06. `garuda impact` reports what the graph contains, and the graph is honest about what it does not contain.
 
 ---
 
@@ -275,29 +285,17 @@ To keep the story honest, here's what Garuda isn't:
 - **CLI and HTTP APIs.** Everything Garuda can do is scriptable and automatable.
 - **CI/CD integration.** Run Garuda's checks as part of your existing build pipeline.
 
-### Measured today
-
-The figures below are from a workspace with nine repositories (Go, Python, and TypeScript) analyzed end to end. They are reproducible: run `garuda analyze` on the same commits and you will see the same counts.
-
-| Metric | Count |
-| :--- | :--- |
-| Repositories analyzed | 9 |
-| Entities extracted | 14,333 |
-| Claims recorded | 37,511 |
-| Languages covered | Go (Tier 5), Python (Tier 2), TypeScript (Tier 2) |
-| Cross-repository edges | 1 |
-
-Go is at **Tier 5** — compiler-resolved. Python and TypeScript are at **Tier 2** — imports resolved, calls heuristic. The distinction is honest: a claim about a Python function call is a weaker claim than a claim about a Go function call, and Garuda says so.
+Everything in this list is exercised end to end. The specific numbers and the queries that reproduce them live in [`EVIDENCE.md`](EVIDENCE.md).
 
 ### In beta with design partners
 
-- **Team accounts and access controls.** Running today in early partner environments. Enterprise single-sign-on on the way.
+- **Team accounts and access controls.** Implemented. Early partner onboarding opens once the trust-floor audit completes.
 - **Runtime verification at scale.** Connecting live production telemetry to your Garuda workspace.
 - **Multi-repository benchmarks.** Formal quality gates for workspaces of 10, 25, and 100+ repositories.
 
 ### Launching soon
 
-- **More languages.** Rust, Java, and Elixir on the same pipeline. No changes to how you use Garuda — new languages just show up.
+- **More languages.** New languages on the same pipeline. No changes to how you use Garuda — new languages just show up.
 - **More agent tools.** Deeper integrations for AI agents that need to understand impact and coverage, not just structure.
 - **Deeper dashboard exploration.** Richer views of evidence, drift, and system health.
 
@@ -419,7 +417,7 @@ The vision is a world where software doesn't quietly lose the context behind why
 | [`EVIDENCE.md`](EVIDENCE.md) | Validation results and methodology |
 | [`docs/adr/`](docs/adr/) | Architecture decision records |
 | [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) | What documents Garuda reads, and how to format them |
-| [`docs/invariants.md`](docs/invariants.md) | The twelve code-level invariants Garuda is built on |
+| [`docs/invariants.md`](docs/invariants.md) | The invariant contract Garuda's truth substrate is built on |
 | [`SECURITY.md`](SECURITY.md) | Security model and how to report issues |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute |
 
