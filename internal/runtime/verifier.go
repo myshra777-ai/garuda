@@ -116,35 +116,60 @@ func (e *VerificationEngine) RecomputeWorkspaceVerification(ctx context.Context,
 		return nil, fmt.Errorf("failed to record contradicted claims: %w", err)
 	}
 
-	// 2. Also register into contradictions quarantine table for dashboard alerts
+	// 2. Register runtime contradictions in the quarantine table.
+	//
+	// The contradictions table holds two kinds of rows discriminated
+	// by the `kind` column (migration 084). This statement writes the
+	// runtime_vs_static kind: an observed runtime target that matches
+	// a contradiction marker and has no equivalent in the static
+	// architecture. The decision_vs_decision kind is written by a
+	// separate path.
+	//
+	// The NOT EXISTS guard matches on (kind, workspace_id, raw_target)
+	// exactly. The previous guard used ILIKE '%' || re.raw_target || '%',
+	// which would have matched a substring. Not a correctness bug today
+	// because the table is empty, but a correctness bug the moment two
+	// raw_targets share a prefix.
+	//
+	// The error is no longer discarded. An INSERT failure here means the
+	// quarantine row did not land; the caller must know.
+	markerClause := ContradictionMarkerClause("re.raw_target")
 	_, err = e.pool.Exec(ctx, `
 		INSERT INTO contradictions (
-			id, tenant_id, workspace_id, status, severity,
-			observation_summary, evidence_file, evidence_line, created_at, updated_at
+			id, tenant_id, workspace_id, kind,
+			source_entity_id, target_entity_id, raw_target,
+			observation_summary, evidence_file, evidence_line,
+			severity, quarantined, resolved, created_at, updated_at
 		)
-		SELECT 
+		SELECT
 			gen_random_uuid(),
 			re.tenant_id,
 			re.workspace_id,
-			'QUARANTINED',
-			'HIGH',
+			'runtime_vs_static',
+			re.source_entity_id,
+			COALESCE(re.target_entity_id, md5(re.raw_target)::uuid),
+			re.raw_target,
 			'Runtime deviation: unauthorized call to ' || re.raw_target,
 			COALESCE(e.file_path, 'runtime_execution'),
 			COALESCE(e.line_start, 0),
+			'HIGH',
+			TRUE,
+			FALSE,
 			NOW(),
 			NOW()
 		FROM runtime_edges re
 		JOIN entities e ON e.id = re.source_entity_id
-		WHERE re.workspace_id = $1 
-		  AND (re.raw_target ILIKE '%unapproved%' OR re.raw_target ILIKE '%driver%')
+		WHERE re.workspace_id = $1
+		  AND `+markerClause+`
 		  AND NOT EXISTS (
-			  SELECT 1 FROM contradictions c 
-			  WHERE c.workspace_id = re.workspace_id 
-			    AND c.observation_summary ILIKE '%' || re.raw_target || '%'
+			  SELECT 1 FROM contradictions c
+			  WHERE c.kind = 'runtime_vs_static'
+			    AND c.workspace_id = re.workspace_id
+			    AND c.raw_target = re.raw_target
 		  );
 	`, workspaceID)
 	if err != nil {
-		// Log warning but continue
+		return nil, fmt.Errorf("failed to record quarantined contradictions: %w", err)
 	}
 
 	// 3. Mark static claims with valid observed executions as SUPPORTED (only if source is not contradicted)
