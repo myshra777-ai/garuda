@@ -92,8 +92,22 @@ func (g *GraphService) BuildUnifiedGraph(ctx context.Context, tenantID, workspac
 	}
 
 	// 3. Fetch AST Relationships (Calls, etc.)
+	//
+	// Reads from claims, not from relationships. The relationships
+	// table has never been written to; the analyzer persists edges
+	// into claims where claim_type carries the edge kind. Every
+	// other reader in the codebase already queries claims.
+	//
+	// Edges with a NULL to_entity_id are excluded. Those are
+	// unresolved references to symbols outside the workspace; the
+	// graph service surfaces them as separate nodes elsewhere.
 	relRows, err := g.pool.Query(ctx, `
-		SELECT source_id, target_id, kind FROM relationships WHERE tenant_id = $1 AND workspace_id = $2
+		SELECT from_entity_id, to_entity_id, claim_type
+		  FROM claims
+		 WHERE tenant_id = $1
+		   AND workspace_id = $2
+		   AND from_entity_id IS NOT NULL
+		   AND to_entity_id IS NOT NULL
 	`, tenantID, workspaceID)
 	if err == nil {
 		defer relRows.Close()

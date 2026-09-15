@@ -101,13 +101,22 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID, workspaceID
 
 		// Evaluate Structural AST Relationships
 		if c.Predicate == PredicateCalls {
+			// The relationships table has never been written to. The
+			// analyzer persists every edge into claims instead, where
+			// claim_type carries the edge kind. Verified 2026-09-15:
+			// relationships has 0 rows and no writer in the codebase;
+			// claims has 11,469 CALLS edges in this workspace. Every
+			// other reader in the codebase already queries claims.
 			var exists bool
 			_ = e.pool.QueryRow(ctx, `
 				SELECT EXISTS(
-					SELECT 1 FROM relationships 
-					WHERE source_id = $1 AND target_id = $2 AND kind = 'calls'
+					SELECT 1 FROM claims
+					 WHERE workspace_id = $1
+					   AND from_entity_id = $2
+					   AND to_entity_id = $3
+					   AND claim_type = 'CALLS'
 				)
-			`, subjectID, objectID).Scan(&exists)
+			`, workspaceID, subjectID, objectID).Scan(&exists)
 
 			if c.Modality == ModalityMust {
 				if exists {
