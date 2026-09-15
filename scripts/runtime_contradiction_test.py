@@ -88,7 +88,7 @@ def psql(query):
 def pick_candidates(n):
     """Return n (id, name) pairs whose names are unique in the workspace."""
     query = f"""
-        SELECT id::text || '|' || name
+        SELECT (array_agg(id::text))[1] || '|' || name
           FROM entities
          WHERE workspace_id = (SELECT id FROM workspaces WHERE name = '{WORKSPACE}')
            AND kind IN ('function', 'method')
@@ -96,19 +96,15 @@ def pick_candidates(n):
            AND name NOT LIKE '%(%'
            AND name NOT LIKE '%.%'
            AND LENGTH(name) BETWEEN 3 AND 30
-         GROUP BY id, name
+         GROUP BY name
          HAVING COUNT(*) = 1
          ORDER BY random()
          LIMIT {n}
     """
     rows = psql(query).splitlines()
     if len(rows) < n:
-        raise SystemExit(
-            f"workspace {WORKSPACE} has only {len(rows)} usable candidates, "
-            f"need {n}. Try a larger workspace or lower CONTRADICTION_CORPUS_SIZE."
-        )
+        raise SystemExit(...)
     return [row.split("|", 1) for row in rows]
-
 
 def post_span(span_id, entity_name):
     payload = {
@@ -217,7 +213,7 @@ def clear_residue():
     for label, (count_q, _) in tables.items():
         print(f"    {label:<22} = {psql(count_q)}")
 
-        
+
 def main():
     print(f"Corpus size: {CORPUS_SIZE}")
     print(f"Workspace:   {WORKSPACE}")

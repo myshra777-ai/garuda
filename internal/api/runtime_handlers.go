@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +16,64 @@ import (
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/tenant"
 )
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Runtime coverage: state-aware response fields
+// ─────────────────────────────────────────────────────────────────────────────
+
+// coverageField is one value in the runtime coverage summary. A field
+// whose query failed carries state "unavailable" and a null value;
+// the client must render it as unknown, not as zero.
+//
+// This mirrors the three-state claim model from the README:
+//
+//	observed            — the value is a fact
+//	unavailable         — the query failed; the value is unknown
+//	unavailable_derived — depends on an unavailable upstream field
+//
+// A zero value and an unknown value are different facts. A workspace
+// with zero SUPPORTED claims and a workspace whose SUPPORTED count
+// query failed are not the same workspace. Reporting both as 0 is the
+// same class of lie the claim_verifications table refuses to make.
+type coverageField struct {
+	State  string `json:"state"`
+	Value  *int64 `json:"value,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
+func observed(v int64) coverageField {
+	return coverageField{State: "observed", Value: &v}
+}
+
+func unavailable(reason string) coverageField {
+	return coverageField{State: "unavailable", Reason: reason}
+}
+
+func unavailableDerived(reason string) coverageField {
+	return coverageField{State: "unavailable_derived", Reason: reason}
+}
+
+// RuntimeCoverageResponse is the state-aware response shape for
+// HandleGetRuntimeCoverage. It supersedes runtime.RuntimeCoverageSummary
+// for this endpoint, which could only express ints and therefore could
+// not distinguish "zero" from "unknown".
+//
+// CoveragePercent is expressed in basis points (100 = 1%). A value of
+// 5000 means 50.00%. This keeps the state-aware field shape uniform
+// across every field in the response.
+type RuntimeCoverageResponse struct {
+	TotalStatic       coverageField `json:"total_static"`
+	ObservedEntities  coverageField `json:"observed_entities"`
+	SupportedCount    coverageField `json:"supported_count"`
+	UnverifiedCount   coverageField `json:"unverified_count"`
+	ContradictedCount coverageField `json:"contradicted_count"`
+	TotalClaims       coverageField `json:"total_claims"`
+	CoveragePercent   coverageField `json:"coverage_percent"`
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Runtime span ingestion
+// ─────────────────────────────────────────────────────────────────────────────
 
 type IngestTelemetrySpanDTO struct {
 	TraceID       string                 `json:"trace_id"`
@@ -127,7 +184,7 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
                     raw_target, invocation_count, last_seen_at
                 ) VALUES ($1, $2, $3, $4, $5, 1, NOW())
                 ON CONFLICT (workspace_id, tenant_id, source_entity_id, raw_target)
-                DO UPDATE SET 
+                DO UPDATE SET
                     invocation_count = runtime_edges.invocation_count + 1,
                     last_seen_at = NOW()
             `, uuid.New(), workspaceID, tenantID, *entityID, rawTarget)
@@ -138,7 +195,8 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 					"error", err)
 			}
 
-			if strings.Contains(rawTarget, "unapproved") || strings.Contains(rawTarget, "exfiltration") || strings.Contains(rawTarget, "bypass") {
+			if runtime.ContainsContradictionMarker(rawTarget) {
+
 				evidencePayload, _ := json.Marshal(map[string]interface{}{
 					"raw_target":    rawTarget,
 					"last_trace_id": span.TraceID,
@@ -159,7 +217,7 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
                         $6::jsonb, NOW()
                     )
                     ON CONFLICT (workspace_id, tenant_id, source_entity_id, target_entity_id)
-                    DO UPDATE SET 
+                    DO UPDATE SET
                         status = 'CONTRADICTED',
                         runtime_observed_count = claim_verifications.runtime_observed_count + 1,
                         evidence_payload = $6::jsonb,
@@ -193,6 +251,10 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 	})
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Runtime coverage
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (s *Server) HandleGetRuntimeCoverage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	pgStore, ok := s.store.(*store.PostgresStore)
@@ -207,41 +269,95 @@ func (s *Server) HandleGetRuntimeCoverage(w http.ResponseWriter, r *http.Request
 		return
 	}
 	workspaceID := scope.WorkspaceID
-
 	tenantID := scope.TenantID
+
 	verifier := runtime.NewVerificationEngine(pgStore.Pool())
 	_, _ = verifier.RecomputeWorkspaceVerification(ctx, tenantID, workspaceID)
 
-	var totalStatic, observedEntities, supportedCount, unverifiedCount, contradictedCount int
-	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1`, workspaceID).Scan(&totalStatic)
-	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(DISTINCT entity_id)::int FROM runtime_observations WHERE workspace_id = $1 AND entity_id IS NOT NULL`, workspaceID).Scan(&observedEntities)
-	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM claim_verifications WHERE workspace_id = $1 AND status = 'SUPPORTED'`, workspaceID).Scan(&supportedCount)
-	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM claim_verifications WHERE workspace_id = $1 AND status = 'UNVERIFIED'`, workspaceID).Scan(&unverifiedCount)
-	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM claim_verifications WHERE workspace_id = $1 AND status = 'CONTRADICTED'`, workspaceID).Scan(&contradictedCount)
-
-	var totalClaims int
-	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM claims WHERE workspace_id = $1`, workspaceID).Scan(&totalClaims)
-	if unverifiedCount == 0 && totalClaims > 0 {
-		unverifiedCount = totalClaims - supportedCount
+	// Each field is queried and its state recorded independently. A
+	// failed query yields state "unavailable"; a downstream field that
+	// depends on an unavailable value yields "unavailable_derived".
+	// Neither is reported as zero. Absence of evidence is not evidence
+	// of absence.
+	queryInt := func(sql string) (int64, error) {
+		var v int64
+		err := pgStore.Pool().QueryRow(ctx, sql, workspaceID).Scan(&v)
+		return v, err
 	}
 
-	var coveragePercent float64
-	if totalStatic > 0 {
-		coveragePercent = (float64(observedEntities) / float64(totalStatic)) * 100.0
+	var totalStatic, observedEntities, supportedCount, unverifiedCount, contradictedCount, totalClaims coverageField
+
+	if v, err := queryInt(`SELECT COUNT(*)::bigint FROM entities WHERE workspace_id = $1`); err == nil {
+		totalStatic = observed(v)
+	} else {
+		slog.Error("coverage: entities count failed", "error", err, "workspace_id", workspaceID)
+		totalStatic = unavailable("entities count query failed")
 	}
 
-	summary := runtime.RuntimeCoverageSummary{
-		TotalStaticEntities: int64(totalStatic),
-		ObservedEntities:    int64(observedEntities),
-		CoveragePercent:     coveragePercent,
-		SupportedCount:      int64(supportedCount),
-		UnverifiedCount:     int64(unverifiedCount),
-		ContradictedCount:   int64(contradictedCount),
+	if v, err := queryInt(`SELECT COUNT(DISTINCT entity_id)::bigint FROM runtime_observations WHERE workspace_id = $1 AND entity_id IS NOT NULL`); err == nil {
+		observedEntities = observed(v)
+	} else {
+		slog.Error("coverage: observed entities count failed", "error", err, "workspace_id", workspaceID)
+		observedEntities = unavailable("runtime_observations count query failed")
+	}
+
+	if v, err := queryInt(`SELECT COUNT(*)::bigint FROM claim_verifications WHERE workspace_id = $1 AND status = 'SUPPORTED'`); err == nil {
+		supportedCount = observed(v)
+	} else {
+		slog.Error("coverage: supported count failed", "error", err, "workspace_id", workspaceID)
+		supportedCount = unavailable("claim_verifications SUPPORTED count query failed")
+	}
+
+	if v, err := queryInt(`SELECT COUNT(*)::bigint FROM claim_verifications WHERE workspace_id = $1 AND status = 'UNVERIFIED'`); err == nil {
+		unverifiedCount = observed(v)
+	} else {
+		slog.Error("coverage: unverified count failed", "error", err, "workspace_id", workspaceID)
+		unverifiedCount = unavailable("claim_verifications UNVERIFIED count query failed")
+	}
+
+	if v, err := queryInt(`SELECT COUNT(*)::bigint FROM claim_verifications WHERE workspace_id = $1 AND status = 'CONTRADICTED'`); err == nil {
+		contradictedCount = observed(v)
+	} else {
+		slog.Error("coverage: contradicted count failed", "error", err, "workspace_id", workspaceID)
+		contradictedCount = unavailable("claim_verifications CONTRADICTED count query failed")
+	}
+
+	if v, err := queryInt(`SELECT COUNT(*)::bigint FROM claims WHERE workspace_id = $1`); err == nil {
+		totalClaims = observed(v)
+	} else {
+		slog.Error("coverage: claims count failed", "error", err, "workspace_id", workspaceID)
+		totalClaims = unavailable("claims count query failed")
+	}
+
+	// coverage_percent is derived. If either input is unavailable, the
+	// percentage is unavailable_derived, not zero. The value is
+	// expressed in basis points (100 = 1%) so it fits the same int64
+	// shape as every other field.
+	var coveragePercent coverageField
+	if totalStatic.State == "observed" && observedEntities.State == "observed" && *totalStatic.Value > 0 {
+		pct := (*observedEntities.Value * 10000) / *totalStatic.Value
+		coveragePercent = observed(pct)
+	} else {
+		coveragePercent = unavailableDerived("total_static or observed_entities unavailable")
+	}
+
+	resp := RuntimeCoverageResponse{
+		TotalStatic:       totalStatic,
+		ObservedEntities:  observedEntities,
+		SupportedCount:    supportedCount,
+		UnverifiedCount:   unverifiedCount,
+		ContradictedCount: contradictedCount,
+		TotalClaims:       totalClaims,
+		CoveragePercent:   coveragePercent,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(summary)
+	_ = json.NewEncoder(w).Encode(resp)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Merkle state
+// ─────────────────────────────────────────────────────────────────────────────
 
 func (s *Server) HandleGetMerkleState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
