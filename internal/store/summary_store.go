@@ -63,17 +63,38 @@ type SymbolSummaryDetail struct {
 }
 
 // ResolveWorkspaceTarget resolves workspace by name or falls back to the first available workspace.
-func (s *PostgresStore) ResolveWorkspaceTarget(ctx context.Context, name string) (uuid.UUID, string, error) {
+// ResolveWorkspaceTarget resolves a workspace by name within the given
+// tenant, or falls back to the most recently updated workspace for
+// that tenant.
+//
+// The tenant_id filter is required on both queries. Without it the
+// named lookup could match a workspace in a different tenant that
+// happened to share a name, and the fallback returned whichever
+// workspace was first in the table across the entire deployment.
+//
+// Same class of bug fixed in resolveWorkspaceID at the api layer
+// (9ecf281) and in the tenant package.
+func (s *PostgresStore) ResolveWorkspaceTarget(ctx context.Context, tenantID uuid.UUID, name string) (uuid.UUID, string, error) {
 	var wsID uuid.UUID
-	err := s.pool.QueryRow(ctx, "SELECT id FROM workspaces WHERE name = $1 LIMIT 1", name).Scan(&wsID)
+	err := s.pool.QueryRow(ctx, `
+		SELECT id FROM workspaces
+		 WHERE tenant_id = $1 AND name = $2
+		 ORDER BY created_at ASC, id ASC
+		 LIMIT 1
+	`, tenantID, name).Scan(&wsID)
 	if err == nil {
 		return wsID, name, nil
 	}
 
 	var fallbackName string
-	err = s.pool.QueryRow(ctx, "SELECT id, name FROM workspaces LIMIT 1").Scan(&wsID, &fallbackName)
+	err = s.pool.QueryRow(ctx, `
+		SELECT id, name FROM workspaces
+		 WHERE tenant_id = $1
+		 ORDER BY updated_at DESC, created_at DESC, id DESC
+		 LIMIT 1
+	`, tenantID).Scan(&wsID, &fallbackName)
 	if err != nil {
-		return uuid.Nil, "", fmt.Errorf("no workspaces found: %w", err)
+		return uuid.Nil, "", fmt.Errorf("no workspaces found for tenant %s: %w", tenantID, err)
 	}
 	return wsID, fallbackName, nil
 }

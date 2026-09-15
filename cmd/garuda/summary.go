@@ -111,7 +111,7 @@ var summaryCmd = &cobra.Command{
 
 		workspaceName := getWorkspaceName()
 
-		workspaceID, resolvedName, err := st.ResolveWorkspaceTarget(ctx, workspaceName)
+		workspaceID, resolvedName, err := st.ResolveWorkspaceTarget(ctx, tenantID, workspaceName)
 		if err != nil {
 			return err
 		}
