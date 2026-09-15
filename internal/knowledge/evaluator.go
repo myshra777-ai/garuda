@@ -148,7 +148,17 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID, workspaceID
 		e.updateClaim(ctx, c.ID, &subjectID, status, reason)
 	}
 
-	// Evaluate CODE -> DOC drift
+	// Evaluate CODE -> DOC drift.
+	//
+	// The entities filter is workspace-scoped. Without e.workspace_id = $2
+	// the query returns entities from every workspace the tenant owns.
+	// Verified 2026-09-15: running `garuda docs verify` on
+	// go-validation-10 listed chi entities whose file paths live under
+	// /home/rohit/garuda-validation/. The chi repository is bound to the
+	// garuda-validation workspace, not to go-validation-10. The JOIN's
+	// dc.workspace_id = $2 filter did not help because the outer query
+	// already included entities from other workspaces. This violates
+	// invariant I-11 (tenant/workspace scope applied before traversal).
 	codeRows, err := e.pool.Query(ctx, `
 		SELECT e.name, e.kind, e.file_path
 		FROM entities e
@@ -157,6 +167,7 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID, workspaceID
 		  AND dc.tenant_id = e.tenant_id
 		  AND dc.workspace_id = $2
 		WHERE e.tenant_id = $1 
+		  AND e.workspace_id = $2
 		  AND e.is_exported = true
 		  AND e.kind IN ('function', 'method', 'struct')
 		  AND dc.id IS NULL
