@@ -761,6 +761,7 @@ func (s *MCPServer) handleDetectContradictions(args map[string]interface{}) (int
 
 	contradictions, err := s.store.ListContradictions(context.Background(), tenantID, false)
 	if err != nil {
+		commitBudget()
 		return nil, fmt.Errorf("failed to query contradictions: %w", err)
 	}
 
