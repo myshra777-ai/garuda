@@ -397,27 +397,54 @@ func extractWorkspaceRelationships(fset *token.FileSet, pkgPath string, files []
 	}
 
 	// ─── 2. CALLS edges ───
+	//
+	// From is the caller's qualified name, in the exact format the
+	// store's entityIDMap contains. For a method the key is
+	// pkgPath + "." + receiverType + "." + methodName, where
+	// receiverType is the string the entity extractor stored (with
+	// the leading * for pointer receivers). For a function it is
+	// pkgPath + "." + funcName.
+	//
+	// The previous block emitted From: pkgPath, which matched none of
+	// the nine lookup permutations the store builds. Every CALLS edge
+	// was classified as external because of that single line.
 	for _, file := range files {
+		var currentCaller string
+
 		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-				if obj, exists := info.Uses[sel.Sel]; exists && obj != nil {
-					if obj.Pkg() != nil {
-						rels = append(rels, Relationship{
-							From:             pkgPath,
-							To:               fmt.Sprintf("%s.%s", obj.Pkg().Path(), obj.Name()),
-							Type:             string(RelCalls),
-							Confidence:       1.0,
-							ResolutionStatus: "RESOLVED",
-							ResolutionMethod: "GO_TYPES",
-							EpistemicClass:   "OBSERVATION",
-							Evidence:         evidenceAt(fset, call.Pos(), call.End()),
-						})
-					}
+			switch node := n.(type) {
+			case *ast.FuncDecl:
+				if node.Recv != nil && len(node.Recv.List) > 0 {
+					recv := types.ExprString(node.Recv.List[0].Type)
+					currentCaller = fmt.Sprintf("%s.%s.%s", pkgPath, recv, node.Name.Name)
+				} else {
+					currentCaller = fmt.Sprintf("%s.%s", pkgPath, node.Name.Name)
 				}
+				return true
+
+			case *ast.CallExpr:
+				if currentCaller == "" {
+					return true
+				}
+				sel, ok := node.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				obj, exists := info.Uses[sel.Sel]
+				if !exists || obj == nil || obj.Pkg() == nil {
+					return true
+				}
+				rels = append(rels, Relationship{
+					From:             currentCaller,
+					To:               fmt.Sprintf("%s.%s", obj.Pkg().Path(), obj.Name()),
+					Type:             string(RelCalls),
+					Confidence:       1.0,
+					ResolutionStatus: "RESOLVED",
+					ResolutionMethod: "GO_TYPES",
+					EpistemicClass:   "OBSERVATION",
+					Evidence:         evidenceAt(fset, node.Pos(), node.End()),
+				})
+				return true
 			}
 			return true
 		})
