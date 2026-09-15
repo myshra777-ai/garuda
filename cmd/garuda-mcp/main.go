@@ -407,6 +407,69 @@ func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 				"required": []string{"entity_id"},
 			},
 		},
+		// ── Graph structure tools (Phase 1) ──
+		{
+			"name":        "garuda.subclasses",
+			"description": "List entities that inherit from or embed the subject. Uses INHERITS and EMBEDS claims. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+					"entity_id": map[string]interface{}{"type": "string", "description": "Subject entity UUID"},
+					"name":      map[string]interface{}{"type": "string", "description": "Subject entity name (alternative to entity_id)"},
+					"language":  map[string]interface{}{"type": "string", "description": "Optional language filter (go, python, typescript)"},
+					"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
+				},
+			},
+		},
+		{
+			"name":        "garuda.implementers",
+			"description": "List entities that implement the subject interface. Uses IMPLEMENTS claims. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+					"entity_id": map[string]interface{}{"type": "string", "description": "Subject interface UUID"},
+					"name":      map[string]interface{}{"type": "string", "description": "Subject interface name (alternative to entity_id)"},
+					"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
+				},
+			},
+		},
+		{
+			"name":        "garuda.neighbors",
+			"description": "List every entity connected to the subject in one hop, both directions. Resolves names, packages, kinds in one query. External stubs excluded by default. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id":        map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace":        map[string]interface{}{"type": "string", "description": "Workspace name"},
+					"entity_id":        map[string]interface{}{"type": "string", "description": "Subject entity UUID"},
+					"edge_kinds":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Optional filter, e.g. [\"CALLS\",\"IMPORTS\"]"},
+					"include_external": map[string]interface{}{"type": "boolean", "description": "Include external stubs (default false)"},
+					"limit":            map[string]interface{}{"type": "number", "description": "Max rows, default 100, cap 500"},
+				},
+				"required": []string{"entity_id"},
+			},
+		},
+		{
+			"name":        "garuda.find_entity",
+			"description": "Find entities by name pattern, kind, package, or file path. Results ranked by inbound edge count so the most-connected matches appear first. Read-only.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id":          map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace":          map[string]interface{}{"type": "string", "description": "Workspace name"},
+					"name_pattern":       map[string]interface{}{"type": "string", "description": "Regex against entity name"},
+					"kind":               map[string]interface{}{"type": "string", "description": "Entity kind (struct, interface, function, method, class, package)"},
+					"package":            map[string]interface{}{"type": "string", "description": "Package name substring"},
+					"file_path_contains": map[string]interface{}{"type": "string", "description": "File path substring"},
+					"exported_only":      map[string]interface{}{"type": "boolean", "description": "Only exported entities (default false)"},
+					"limit":              map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
+				},
+			},
+		},
 	}
 
 	return MCPResponse{
@@ -496,6 +559,14 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleEntities(args)
 	case "garuda.inspect":
 		result, err = s.handleInspect(args)
+	case "garuda.subclasses":
+		result, err = s.handleSubclasses(args)
+	case "garuda.implementers":
+		result, err = s.handleImplementers(args)
+	case "garuda.neighbors":
+		result, err = s.handleNeighbors(args)
+	case "garuda.find_entity":
+		result, err = s.handleFindEntity(args)
 
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
