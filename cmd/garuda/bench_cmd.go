@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/benchmark"
+	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -34,13 +34,29 @@ var benchCmd = &cobra.Command{
 		defer pool.Close()
 
 		tenantID := getTenantID()
-		var workspaceID uuid.UUID
-		var workspaceName string
+		workspaceName := getWorkspaceName()
 
-		// Resolve the most recently updated workspace dynamically
-		err = pool.QueryRow(ctx, `SELECT id, name FROM workspaces ORDER BY updated_at DESC LIMIT 1`).Scan(&workspaceID, &workspaceName)
+		// Resolve via the same tenant-scoped helper the rest of the CLI
+		// uses. The previous query was `SELECT id, name FROM workspaces
+		// ORDER BY updated_at DESC LIMIT 1` with no filter at all: it
+		// returned the most recently updated workspace in the entire
+		// deployment, regardless of tenant, regardless of the caller's
+		// GARUDA_WORKSPACE. The resolved workspace and the resolved
+		// tenant could then belong to different tenants, and the runner
+		// downstream was given that inconsistent pair.
+		//
+		// Verified 2026-09-15: with GARUDA_WORKSPACE=go-validation-10 and
+		// the canonical tenant active, the command resolved to
+		// 08545e15-... (name "default", tenant e2f82aa6-...), a workspace
+		// in a different tenant entirely.
+		workspaceID, err := store.ResolveWorkspaceID(ctx, pool, tenantID, workspaceName)
 		if err != nil {
-			return fmt.Errorf("no workspace found. Please run 'garuda init' or 'garuda workspace create' first")
+			return fmt.Errorf("resolve workspace %q for tenant %s: %w", workspaceName, tenantID, err)
+		}
+		var resolvedName string
+		_ = pool.QueryRow(ctx, `SELECT name FROM workspaces WHERE id = $1`, workspaceID).Scan(&resolvedName)
+		if resolvedName != "" {
+			workspaceName = resolvedName
 		}
 
 		fmt.Println("🦅 Running GAP-20 Epistemic Grounding Benchmark Suite...")
