@@ -116,37 +116,60 @@ func (s *Server) HandleIngestRuntimeSpans(w http.ResponseWriter, r *http.Request
 		}
 		ingestedCount++
 
-		{
-			if rawTarget != "" && entityID != nil {
-				_, _ = pgStore.Pool().Exec(ctx, `
-                    INSERT INTO runtime_edges (
-                        id, workspace_id, source_entity_id, raw_target, invocation_count, last_seen_at
-                    ) VALUES ($1, $2, $3, $4, 1, NOW())
-                    ON CONFLICT (workspace_id, source_entity_id, raw_target)
+		if rawTarget != "" && entityID != nil {
+			// The unique constraint is unq_runtime_edge over four
+			// columns: (workspace_id, tenant_id, source_entity_id,
+			// raw_target). The ON CONFLICT target must name the
+			// same four columns.
+			_, err = pgStore.Pool().Exec(ctx, `
+                INSERT INTO runtime_edges (
+                    id, workspace_id, tenant_id, source_entity_id,
+                    raw_target, invocation_count, last_seen_at
+                ) VALUES ($1, $2, $3, $4, $5, 1, NOW())
+                ON CONFLICT (workspace_id, tenant_id, source_entity_id, raw_target)
+                DO UPDATE SET 
+                    invocation_count = runtime_edges.invocation_count + 1,
+                    last_seen_at = NOW()
+            `, uuid.New(), workspaceID, tenantID, *entityID, rawTarget)
+			if err != nil {
+				slog.Error("runtime_edges insert failed",
+					"trace_id", span.TraceID,
+					"raw_target", rawTarget,
+					"error", err)
+			}
+
+			if strings.Contains(rawTarget, "unapproved") || strings.Contains(rawTarget, "exfiltration") || strings.Contains(rawTarget, "bypass") {
+				evidencePayload, _ := json.Marshal(map[string]interface{}{
+					"raw_target":    rawTarget,
+					"last_trace_id": span.TraceID,
+					"service":       span.ServiceName,
+				})
+
+				// The unique constraint is unq_claim_verification
+				// over four columns: (workspace_id, tenant_id,
+				// source_entity_id, target_entity_id).
+				_, err = pgStore.Pool().Exec(ctx, `
+                    INSERT INTO claim_verifications (
+                        id, workspace_id, tenant_id, source_entity_id, target_entity_id,
+                        status, reason, static_edge_exists, runtime_observed_count,
+                        evidence_payload, last_evaluated_at
+                    ) VALUES (
+                        $1, $2, $3, $4, md5($5)::uuid,
+                        'CONTRADICTED', 'POLICY_VIOLATION_DETECTED', FALSE, 1,
+                        $6::jsonb, NOW()
+                    )
+                    ON CONFLICT (workspace_id, tenant_id, source_entity_id, target_entity_id)
                     DO UPDATE SET 
-                        invocation_count = runtime_edges.invocation_count + 1,
-                        last_seen_at = NOW()
-                `, uuid.New(), workspaceID, *entityID, rawTarget)
-
-				if strings.Contains(rawTarget, "unapproved") || strings.Contains(rawTarget, "exfiltration") || strings.Contains(rawTarget, "bypass") {
-					evidencePayload, _ := json.Marshal(map[string]interface{}{
-						"raw_target":    rawTarget,
-						"last_trace_id": span.TraceID,
-						"service":       span.ServiceName,
-					})
-
-					_, _ = pgStore.Pool().Exec(ctx, `
-                        INSERT INTO claim_verifications (
-                            id, workspace_id, tenant_id, source_entity_id, status, reason, 
-                            static_edge_exists, runtime_observed_count, evidence_payload, last_evaluated_at
-                        ) VALUES ($1, $2, $3, $4, 'CONTRADICTED', 'POLICY_VIOLATION_DETECTED', FALSE, 1, $5::jsonb, NOW())
-                        ON CONFLICT (workspace_id, tenant_id, source_entity_id, COALESCE(target_entity_id, '00000000-0000-0000-0000-000000000000'::uuid))
-                        DO UPDATE SET 
-                            status = 'CONTRADICTED',
-                            runtime_observed_count = claim_verifications.runtime_observed_count + 1,
-                            evidence_payload = $5::jsonb,
-                            last_evaluated_at = NOW()
-                    `, uuid.New(), workspaceID, tenantID, *entityID, evidencePayload)
+                        status = 'CONTRADICTED',
+                        runtime_observed_count = claim_verifications.runtime_observed_count + 1,
+                        evidence_payload = $6::jsonb,
+                        last_evaluated_at = NOW()
+                `, uuid.New(), workspaceID, tenantID, *entityID, rawTarget, evidencePayload)
+				if err != nil {
+					slog.Error("claim_verifications insert failed",
+						"trace_id", span.TraceID,
+						"raw_target", rawTarget,
+						"error", err)
 				}
 			}
 		}
