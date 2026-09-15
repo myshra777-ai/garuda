@@ -54,6 +54,12 @@ type MCPServer struct {
 }
 
 func main() {
+	// Suppress the JWT banner and any other informational output.
+	// stderr is transport in the MCP protocol; some clients treat
+	// every line from the child process as an MCP frame regardless
+	// of which stream it arrived on. Set the flag before any
+	// package that might write to stderr.
+	_ = os.Setenv("GARUDA_MCP_QUIET", "1")
 	// stdout is the JSON-RPC channel and must contain nothing but
 	// line-delimited MCP messages.
 	//
