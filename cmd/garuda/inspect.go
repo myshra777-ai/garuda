@@ -57,21 +57,46 @@ func init() {
 	rootCmd.AddCommand(entitiesCmd)
 }
 
-func handleInspect(entityName string) {
+// resolveWorkspace opens a store connection and resolves the active workspace
+// for the current tenant. It returns the store, workspace ID, and a cleanup
+// function. Every handler that needs workspace scope should go through this
+// so tenant/workspace resolution stays consistent across commands.
+func resolveWorkspace(ctx context.Context) (*store.PostgresStore, uuid.UUID, func(), error) {
 	dbURL := getDBURL()
 	tenantID := getTenantID()
-	ctx := context.Background()
+	workspaceName := getWorkspaceName()
 
 	st, err := store.NewPostgresStore(dbURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Failed to connect to DB: %v\n", err)
+		return nil, uuid.Nil, nil, fmt.Errorf("connect to DB: %w", err)
+	}
+
+	cleanup := func() { st.Close() }
+
+	workspaceID, err := store.ResolveWorkspaceID(ctx, st.Pool(), tenantID, workspaceName)
+	if err != nil {
+		cleanup()
+		return nil, uuid.Nil, nil, fmt.Errorf("workspace %q not found: %w", workspaceName, err)
+	}
+
+	return st, workspaceID, cleanup, nil
+}
+
+func handleInspect(entityName string) {
+	ctx := context.Background()
+
+	st, workspaceID, cleanup, err := resolveWorkspace(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 		os.Exit(1)
 	}
-	defer st.Close()
+	defer cleanup()
 
-	insp, err := st.InspectEntityDetails(ctx, tenantID, entityName)
+	tenantID := getTenantID()
+
+	insp, err := st.InspectEntityDetails(ctx, tenantID, workspaceID, entityName)
 	if err != nil {
-		fmt.Printf("❌ Entity '%s' not found.\n", entityName)
+		fmt.Printf("❌ Entity '%s' not found in workspace '%s'.\n", entityName, getWorkspaceName())
 		os.Exit(1)
 	}
 
@@ -115,28 +140,20 @@ func handleInspect(entityName string) {
 }
 
 func handleListEntities() {
-	dbURL := getDBURL()
-	tenantID := getTenantID()
-	tenantStr := getTenantIDString()
 	ctx := context.Background()
-
-	st, err := store.NewPostgresStore(dbURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Failed to connect: %v\n", err)
-		os.Exit(1)
-	}
-	defer st.Close()
-
 	workspaceName := getWorkspaceName()
 
-	ws, err := st.GetWorkspaceByName(ctx, tenantStr, workspaceName)
+	st, workspaceID, cleanup, err := resolveWorkspace(ctx)
 	if err != nil {
 		fmt.Printf("❌ Workspace '%s' not found.\n", workspaceName)
 		fmt.Println("   Create one with: garuda workspace create " + workspaceName)
 		os.Exit(1)
 	}
+	defer cleanup()
 
-	entities, err := st.ListWorkspaceEntities(ctx, tenantID, ws.ID)
+	tenantID := getTenantID()
+
+	entities, err := st.ListWorkspaceEntities(ctx, tenantID, workspaceID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to list entities: %v\n", err)
 		os.Exit(1)
@@ -158,27 +175,20 @@ func handleListEntities() {
 }
 
 func handleGraph(workspaceName string) {
-	dbURL := getDBURL()
-	tenantUUID := getTenantID()
-	tenantStr := getTenantIDString()
 	ctx := context.Background()
 
-	st, err := store.NewPostgresStore(dbURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Failed to connect to database: %v\n", err)
-		os.Exit(1)
-	}
-	defer st.Close()
-
-	ws, err := st.GetWorkspaceByName(ctx, tenantStr, workspaceName)
+	st, workspaceID, cleanup, err := resolveWorkspace(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Workspace '%s' not found in database\n", workspaceName)
 		os.Exit(1)
 	}
+	defer cleanup()
+
+	tenantID := getTenantID()
 
 	var repoFilterID *uuid.UUID
 	if graphRepoFlag != "" {
-		repo, err := st.FindRepositoryByFilter(ctx, ws.ID, graphRepoFlag)
+		repo, err := st.FindRepositoryByFilter(ctx, workspaceID, graphRepoFlag)
 		if err == nil && repo != nil {
 			repoFilterID = &repo.ID
 		} else {
@@ -186,7 +196,7 @@ func handleGraph(workspaceName string) {
 		}
 	}
 
-	rawNodes, rawEdges, err := st.GetWorkspaceGraphElements(ctx, tenantUUID, ws.ID, repoFilterID)
+	rawNodes, rawEdges, err := st.GetWorkspaceGraphElements(ctx, tenantID, workspaceID, repoFilterID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Failed to query graph elements: %v\n", err)
 		os.Exit(1)

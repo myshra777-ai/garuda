@@ -52,16 +52,16 @@ type GraphClaimEdge struct {
 }
 
 // InspectEntityDetails retrieves full entity metadata and its incoming/outgoing claims.
-func (s *PostgresStore) InspectEntityDetails(ctx context.Context, tenantID uuid.UUID, entityName string) (*EntityInspection, error) {
+func (s *PostgresStore) InspectEntityDetails(ctx context.Context, tenantID, workspaceID uuid.UUID, entityName string) (*EntityInspection, error) {
 	var insp EntityInspection
 	var fieldsJSON, methodsJSON []byte
 
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, name, kind, package, file_path, fields, methods, signature, is_exported
 		FROM entities
-		WHERE tenant_id = $1 AND name = $2
+		WHERE tenant_id = $1 AND workspace_id = $2 AND name = $3
 		LIMIT 1
-	`, tenantID, entityName).Scan(
+	`, tenantID, workspaceID, entityName).Scan(
 		&insp.ID, &insp.Name, &insp.Kind, &insp.Package,
 		&insp.FilePath, &fieldsJSON, &methodsJSON, &insp.Signature, &insp.IsExported,
 	)
@@ -78,8 +78,8 @@ func (s *PostgresStore) InspectEntityDetails(ctx context.Context, tenantID uuid.
 
 	rowsOut, err := s.pool.Query(ctx, `
 		SELECT claim_type, to_entity_id FROM claims
-		WHERE tenant_id = $1 AND from_entity_id = $2
-	`, tenantID, insp.ID)
+		WHERE tenant_id = $1 AND workspace_id = $2 AND from_entity_id = $3
+	`, tenantID, workspaceID, insp.ID)
 	if err == nil {
 		defer rowsOut.Close()
 		for rowsOut.Next() {
@@ -92,8 +92,8 @@ func (s *PostgresStore) InspectEntityDetails(ctx context.Context, tenantID uuid.
 
 	rowsIn, err := s.pool.Query(ctx, `
 		SELECT claim_type, from_entity_id FROM claims
-		WHERE tenant_id = $1 AND to_entity_id = $2
-	`, tenantID, insp.ID)
+		WHERE tenant_id = $1 AND workspace_id = $2 AND to_entity_id = $3
+	`, tenantID, workspaceID, insp.ID)
 	if err == nil {
 		defer rowsIn.Close()
 		for rowsIn.Next() {
