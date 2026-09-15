@@ -79,6 +79,7 @@ func runDocsIngest(cmd *cobra.Command, args []string) error {
 
 	totalExtracted := 0
 	totalFiles := 0
+	emptyFiles := 0
 	skippedFiles := 0
 
 	for _, file := range files {
@@ -91,16 +92,37 @@ func runDocsIngest(cmd *cobra.Command, args []string) error {
 		if count > 0 {
 			totalFiles++
 			totalExtracted += count
+		} else {
+			emptyFiles++
+			fmt.Printf("· %s (no normative lines matched)\n", file)
 		}
 	}
 
 	fmt.Println()
 	fmt.Println("═══════════════════════════════════════════════════════════")
 	fmt.Printf("🎉 Ingestion complete\n")
+	fmt.Printf("   Files discovered:  %d\n", len(files))
 	fmt.Printf("   Files processed:   %d\n", totalFiles)
+	fmt.Printf("   Files empty:       %d\n", emptyFiles)
 	fmt.Printf("   Files skipped:     %d\n", skippedFiles)
 	fmt.Printf("   Claims extracted:  %d\n", totalExtracted)
 	fmt.Println("═══════════════════════════════════════════════════════════")
+
+	fmt.Println()
+	fmt.Println("⚠️  Extraction is structural, not semantic.")
+	fmt.Println()
+	fmt.Println("   Garuda extracts claims from bullet lines that use a modal")
+	fmt.Println("   verb (MUST, SHOULD, MUST NOT). Statements in prose, tables,")
+	fmt.Println("   or code blocks are not captured. A document that produces")
+	fmt.Println("   zero claims does not contain zero requirements — it uses a")
+	fmt.Println("   format the parser does not read.")
+	fmt.Println()
+	fmt.Println("   Only CALLS predicates are verified against the code graph.")
+	fmt.Println("   Other predicates remain UNVERIFIED by design. Verified")
+	fmt.Println("   answers can still be wrong: the graph reflects what the")
+	fmt.Println("   analyzer saw, not what production does.")
+	fmt.Println()
+	fmt.Println("   Format reference: docs/DOCUMENT_FORMATS.md")
 
 	return nil
 }

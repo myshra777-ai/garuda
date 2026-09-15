@@ -148,7 +148,6 @@ func ParseADR(filePath string, tenantID uuid.UUID, workspace string) ([]knowledg
 		// -------------------------------------------------------------
 		// Scenario C: Natural language normative statement
 		// Example: "The HTTP server MUST use the chi router."
-		// (This was the missing case — the function existed but was never called)
 		// -------------------------------------------------------------
 		if len(symbols) == 0 {
 			subj, pred, obj := extractNaturalLanguageClaim(content, modality)
@@ -279,12 +278,39 @@ func extractNaturalLanguageClaim(line string, modality knowledge.Modality) (stri
 	// Strip trailing colon (section-like prefixes)
 	subject = strings.TrimSuffix(subject, ":")
 	subject = strings.TrimSpace(subject)
-	if subject == "" {
+	if subject == "" || !isValidSubject(subject) {
 		return "", "", ""
 	}
 
 	// Rest = everything after the modal
 	rest := strings.TrimSpace(line[modalIdx+len(matchedModal):])
+	// Copula pattern: "X MUST be a Y", "X MUST be an Y", "X MUST be the Y".
+	// These are type assertions, not subject-verb-object statements.
+	// Detected before prefix stripping, because the generic "be " strip
+	// eats the article and produces a one-letter predicate.
+	lowerRest := strings.ToLower(rest)
+	var afterArticle string
+	switch {
+	case strings.HasPrefix(lowerRest, "be an "):
+		afterArticle = rest[6:]
+	case strings.HasPrefix(lowerRest, "be a "):
+		afterArticle = rest[5:]
+	case strings.HasPrefix(lowerRest, "be the "):
+		afterArticle = rest[7:]
+	}
+	if afterArticle != "" {
+		// The object is the first word after the article. "X MUST be a
+		// class in pkg" yields object "class"; the qualifier "in pkg" is
+		// document context, not the claim's object.
+		words := strings.Fields(afterArticle)
+		if len(words) >= 1 {
+			obj := strings.Trim(words[0], ".,;:")
+			if obj != "" && len(obj) >= 2 && !isStopword(obj) {
+				return subject, knowledge.Predicate("is_a"), obj
+			}
+		}
+		// Copula matched but yielded no usable object. Fall through.
+	}
 	// Remove common leading verbs of obligation
 	for _, prefix := range []string{"be ", "have ", "not ", "always ", "never "} {
 		if strings.HasPrefix(strings.ToLower(rest), prefix) {
@@ -311,14 +337,51 @@ func extractNaturalLanguageClaim(line string, modality knowledge.Modality) (stri
 	object = strings.TrimSuffix(object, ";")
 	object = strings.TrimSpace(object)
 
-	if object == "" {
+	if object == "" || len(object) < 2 || isStopword(object) {
 		return "", "", ""
 	}
 
 	return subject, predicate, object
 }
 
-// / ParseADRPublic wraps ParseADR for use with normalized content.
+// isValidSubject rejects strings that are clauses, not noun phrases.
+//
+// A subject that contains a comma, semicolon, or colon is prose, not
+// an entity name. "investor, or security reviewer able to independently
+// verify that" is a sentence fragment, not an entity. The verifier can
+// never match it, so the parser should not produce the claim.
+//
+// The list of rejected sentence starters covers "This", "That", "It",
+// and similar deictic pronouns that never correspond to a code entity.
+func isValidSubject(s string) bool {
+	if s == "" {
+		return false
+	}
+	if strings.ContainsAny(s, ",;:") {
+		return false
+	}
+	words := strings.Fields(strings.ToLower(s))
+	if len(words) == 0 || len(words) > 6 {
+		return false
+	}
+	switch words[0] {
+	case "this", "that", "these", "those", "it", "they", "we", "there":
+		return false
+	}
+	return true
+}
+
+// isStopword reports whether a single-word object carries no semantic
+// content. An object of "a" or "the" is always a parse failure.
+func isStopword(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "a", "an", "the", "it", "this", "that", "and", "or", "but", "so", "if", "as":
+		return true
+	}
+	return false
+}
+
+// ParseADRPublic wraps ParseADR for use with normalized content.
 // It reads from contentPath but stores sourcePath as the claim's origin.
 func ParseADRPublic(contentPath, sourcePath string, tenantID uuid.UUID, workspace string) ([]knowledge.ClaimIR, error) {
 	claims, err := ParseADR(contentPath, tenantID, workspace)
