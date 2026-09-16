@@ -134,38 +134,69 @@ func handleVerify() {
 	ctx := context.Background()
 	tid := getTenantID()
 
-	chain, err := st.GetRevisionChain(ctx, tid)
+	// The Merkle revision chain is per-decision. Fetch every decision
+	// that has at least one revision and verify each chain
+	// independently.
+	decisionIDs, err := st.ListDecisionsWithRevisions(ctx, tid)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Query failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	var count int
-	var prevHash []byte
-	chainValid := true
+	if len(decisionIDs) == 0 {
+		fmt.Println("ℹ️ No revisions in ledger.")
+		return
+	}
 
-	for _, entry := range chain {
-		count++
-		if prevHash != nil {
+	totalRevisions := 0
+	brokenDecisions := 0
+
+	for _, decisionID := range decisionIDs {
+		chain, err := st.GetRevisionChain(ctx, tid, decisionID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Failed to fetch chain for %s: %v\n", decisionID, err)
+			brokenDecisions++
+			continue
+		}
+
+		var prevHash []byte
+		chainValid := true
+
+		for i, entry := range chain {
+			totalRevisions++
+			// Revision 1's predecessor is the genesis root; its
+			// previous_revision_hash is the zero hash, which is
+			// expected. Every subsequent revision must point at its
+			// predecessor.
+			if i == 0 {
+				prevHash = entry.DecisionHash
+				continue
+			}
 			if string(entry.PreviousRevisionHash) != string(prevHash) {
-				fmt.Printf("❌ Chain broken at revision %s\n", entry.ID)
+				fmt.Printf("❌ Chain broken at revision %s (decision %s, revision #%d)\n",
+					entry.ID, decisionID, i+1)
 				fmt.Printf("   Expected prev: %x\n", prevHash)
 				fmt.Printf("   Actual prev:   %x\n", entry.PreviousRevisionHash)
 				chainValid = false
+				brokenDecisions++
 				break
 			}
+			prevHash = entry.DecisionHash
 		}
-		prevHash = entry.DecisionHash
+
+		if chainValid {
+			fmt.Printf("✅ Decision %s: %d revision(s) verified.\n", decisionID, len(chain))
+		}
 	}
 
-	if chainValid && count > 0 {
-		fmt.Printf("✅ Hash chain intact: %d revision(s) verified.\n", count)
-		fmt.Printf("   Latest content hash: %x\n", prevHash)
-	} else if count == 0 {
-		fmt.Println("ℹ️ No revisions in ledger.")
-	} else {
+	fmt.Println()
+	if brokenDecisions > 0 {
+		fmt.Printf("❌ %d decision chain(s) broken out of %d. %d revision(s) examined.\n",
+			brokenDecisions, len(decisionIDs), totalRevisions)
 		os.Exit(1)
 	}
+	fmt.Printf("✅ All %d decision chain(s) intact. %d revision(s) verified.\n",
+		len(decisionIDs), totalRevisions)
 }
 
 func statusText(valid bool) string {

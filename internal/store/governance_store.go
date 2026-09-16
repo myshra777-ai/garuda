@@ -36,14 +36,26 @@ type DecisionExplanation struct {
 	MerkleRoot           []byte
 }
 
-// GetRevisionChain retrieves all decision revisions for chain verification.
-func (s *PostgresStore) GetRevisionChain(ctx context.Context, tenantID uuid.UUID) ([]RevisionChainEntry, error) {
+// GetRevisionChain retrieves the revision chain for one decision.
+//
+// The chain is per-decision: revision N's previous_revision_hash
+// equals revision N-1's decision_hash, and revision 1's
+// previous_revision_hash is the zero hash (its predecessor is
+// genesis). The previous version of this function took only tenantID
+// and returned every revision for the tenant in a flat list ordered
+// by created_at. The verify command walked that flat list assuming a
+// single chain; the first time a decision boundary was crossed it
+// reported a false break.
+//
+// The chain returned is ordered by revision_number ASC so the caller
+// can compare each entry to its predecessor without re-sorting.
+func (s *PostgresStore) GetRevisionChain(ctx context.Context, tenantID, decisionID uuid.UUID) ([]RevisionChainEntry, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, decision_hash, previous_revision_hash
 		FROM decision_revisions
-		WHERE tenant_id = $1
-		ORDER BY created_at ASC
-	`, tenantID)
+		WHERE tenant_id = $1 AND decision_id = $2
+		ORDER BY revision_number ASC
+	`, tenantID, decisionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query revision chain: %w", err)
 	}
@@ -58,6 +70,32 @@ func (s *PostgresStore) GetRevisionChain(ctx context.Context, tenantID uuid.UUID
 		chain = append(chain, entry)
 	}
 	return chain, rows.Err()
+}
+
+// ListDecisionsWithRevisions returns every decision ID in a tenant
+// that has at least one revision. Used by the verify command to
+// iterate over every decision chain.
+func (s *PostgresStore) ListDecisionsWithRevisions(ctx context.Context, tenantID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT decision_id
+		  FROM decision_revisions
+		 WHERE tenant_id = $1
+		 ORDER BY decision_id
+	`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("list decisions with revisions: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan decision id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // GetDecisionExplanation retrieves the full decision, latest revision, and merkle root.
