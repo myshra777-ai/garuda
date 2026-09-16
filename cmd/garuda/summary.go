@@ -54,6 +54,7 @@ type WorkspaceScaleDTO struct {
 type LedgerTrustDTO struct {
 	Status           string `json:"status"`
 	LatestMerkleRoot string `json:"latest_merkle_root"`
+	BlockHeight      int64  `json:"block_height"`
 }
 
 type ExportedSymbolDTO struct {
@@ -162,7 +163,13 @@ func printWorkspaceSummary(ctx context.Context, st *store.PostgresStore, tenantI
 		})
 	}
 
-	latestMerkle := st.GetLatestMerkleRoot(ctx)
+	merkleRoot, merkleErr := st.GetMerkleRoot(ctx, tenantID)
+	latestMerkle := "<pending>"
+	var latestBlockHeight int64 = 0
+	if merkleErr == nil && merkleRoot != nil {
+		latestMerkle = merkleRoot.RootHash
+		latestBlockHeight = merkleRoot.BlockHeight
+	}
 
 	dto := WorkspaceSummaryDTO{
 		Workspace: wsName,
@@ -176,6 +183,7 @@ func printWorkspaceSummary(ctx context.Context, st *store.PostgresStore, tenantI
 		LedgerTrust: LedgerTrustDTO{
 			Status:           "VERIFIED",
 			LatestMerkleRoot: latestMerkle,
+			BlockHeight:      latestBlockHeight,
 		},
 	}
 
@@ -213,7 +221,7 @@ func printWorkspaceSummary(ctx context.Context, st *store.PostgresStore, tenantI
 	if len(merkleShort) > 16 {
 		merkleShort = merkleShort[:16] + "..."
 	}
-	fmt.Printf("   • Status: VERIFIED ✓ (Merkle Root: %s)\n", merkleShort)
+	fmt.Printf("   • Status: VERIFIED ✓ (Block #%d, Merkle Root: %s)\n", latestBlockHeight, merkleShort)
 	fmt.Println(strings.Repeat("━", 65))
 	return nil
 }

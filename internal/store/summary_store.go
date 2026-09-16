@@ -177,21 +177,6 @@ func (s *PostgresStore) GetCrossRepoBridges(ctx context.Context, workspaceID uui
 	return bridges, nil
 }
 
-// GetLatestMerkleRoot retrieves the most recent Merkle root across decision revisions.
-func (s *PostgresStore) GetLatestMerkleRoot(ctx context.Context) string {
-	var root string
-	_ = s.pool.QueryRow(ctx, `
-		SELECT COALESCE(merkle_root, '<pending>')
-		FROM decision_revisions
-		GROUP BY merkle_root, created_at
-		ORDER BY created_at DESC LIMIT 1
-	`).Scan(&root)
-	if root == "" {
-		return "<pending>"
-	}
-	return root
-}
-
 // GetRepoMetrics returns entity and distinct package counts for a repo.
 func (s *PostgresStore) GetRepoMetrics(ctx context.Context, repoID uuid.UUID) (RepoSummaryMetrics, error) {
 	var m RepoSummaryMetrics
