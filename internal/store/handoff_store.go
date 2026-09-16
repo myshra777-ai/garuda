@@ -7,8 +7,6 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -80,23 +78,17 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 	}
 
 	// 4. Mark source agent as transitioning (prevents concurrent handoffs)
-	if err := s.updateAgentStatus(ctx, tx, req.SourceAgentID, "transitioning"); err != nil {
+	if err := s.updateAgentStatus(ctx, tx, req.SourceAgentID, req.TenantID, "transitioning"); err != nil {
 		return nil, err
 	}
 
-	// 5. Serialize checkpoint data with CAS deduplication
+	// 5. Serialize checkpoint data
 	checkpointDataJSON, err := json.Marshal(req.CheckpointData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal checkpoint data: %w", err)
 	}
-	stateHash := computeStateHash(req.TenantID, req.SourceAgentID, checkpointDataJSON)
 
-	// 6. Deduplicate checkpoint using evidence_blocks (CAS)
-	if err := s.storeCheckpointInCAS(ctx, tx, stateHash, checkpointDataJSON); err != nil {
-		return nil, err
-	}
-
-	// 7. Create checkpoint record
+	// 6. Create checkpoint record
 	checkpointID := uuid.New()
 	checkpointQuery := `
 		INSERT INTO agent_checkpoints (id, tenant_id, task_id, agent_id, checkpoint_data, status, created_at, updated_at)
@@ -109,7 +101,7 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 		return nil, fmt.Errorf("failed to create checkpoint: %w", err)
 	}
 
-	// 8. Create handoff record (status = 'in_progress')
+	// 7. Create handoff record (status = 'in_progress')
 	handoffID := uuid.New()
 	handoffQuery := `
 		INSERT INTO handoffs (id, tenant_id, task_id, source_agent_id, target_agent_id, checkpoint_id, reason, status, created_at)
@@ -122,7 +114,7 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 		return nil, fmt.Errorf("failed to create handoff record: %w", err)
 	}
 
-	// 9. Update task ownership to target agent
+	// 8. Update task ownership to target agent
 	taskUpdateQuery := `
 		UPDATE tasks
 		SET owner_agent_id = $1, updated_at = NOW(), version = version + 1
@@ -132,7 +124,7 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 		return nil, fmt.Errorf("failed to update task ownership: %w", err)
 	}
 
-	// 10. Add lineage edge (handoff type)
+	// 9. Add lineage edge (handoff type)
 	edgeQuery := `
 		INSERT INTO lineage_edges (id, tenant_id, source_task_id, target_task_id, edge_type, handoff_id, created_at)
 		VALUES ($1, $2, $3, $4, 'handoff', $5, NOW())
@@ -144,22 +136,22 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 		return nil, fmt.Errorf("failed to create lineage edge: %w", err)
 	}
 
-	// 11. Update source agent status to 'paused'
-	if err := s.updateAgentStatus(ctx, tx, req.SourceAgentID, "paused"); err != nil {
+	// 10. Update source agent status to 'paused'
+	if err := s.updateAgentStatus(ctx, tx, req.SourceAgentID, req.TenantID, "paused"); err != nil {
 		return nil, err
 	}
 
-	// 12. Update target agent status to 'working'
-	if err := s.updateAgentStatus(ctx, tx, req.TargetAgentID, "working"); err != nil {
+	// 11. Update target agent status to 'working'
+	if err := s.updateAgentStatus(ctx, tx, req.TargetAgentID, req.TenantID, "working"); err != nil {
 		return nil, err
 	}
 
-	// 13. Mark handoff as completed
+	// 12. Mark handoff as completed
 	completeQuery := `
 		UPDATE handoffs SET status = 'completed', completed_at = NOW()
-		WHERE id = $1
+		WHERE id = $1 AND tenant_id = $2
 	`
-	if _, err := tx.Exec(ctx, completeQuery, handoffID); err != nil {
+	if _, err := tx.Exec(ctx, completeQuery, handoffID, req.TenantID); err != nil {
 		return nil, fmt.Errorf("failed to complete handoff: %w", err)
 	}
 
@@ -225,7 +217,7 @@ func (s *PostgresStore) ResumeAgent(ctx context.Context, tenantID, agentID, chec
 	}
 
 	// 5. Update agent status to 'working'
-	if err := s.updateAgentStatus(ctx, tx, agentID, "working"); err != nil {
+	if err := s.updateAgentStatus(ctx, tx, agentID, tenantID, "working"); err != nil {
 		return nil, err
 	}
 
@@ -341,31 +333,13 @@ func (s *PostgresStore) lockTask(ctx context.Context, tx pgx.Tx, taskID, tenantI
 	return &t, err
 }
 
-func (s *PostgresStore) updateAgentStatus(ctx context.Context, tx pgx.Tx, agentID uuid.UUID, status string) error {
+func (s *PostgresStore) updateAgentStatus(ctx context.Context, tx pgx.Tx, agentID, tenantID uuid.UUID, status string) error {
 	query := `
 		UPDATE agents SET status = $1, updated_at = NOW()
-		WHERE id = $2
+		WHERE id = $2 AND tenant_id = $3
 	`
-	_, err := tx.Exec(ctx, query, status, agentID)
+	_, err := tx.Exec(ctx, query, status, agentID, tenantID)
 	return err
-}
-
-func (s *PostgresStore) storeCheckpointInCAS(ctx context.Context, tx pgx.Tx, stateHash string, data []byte) error {
-	query := `
-		INSERT INTO evidence_blocks (block_hash, content, ref_count, created_at)
-		VALUES ($1, $2, 1, NOW())
-		ON CONFLICT (block_hash) DO UPDATE SET ref_count = evidence_blocks.ref_count + 1
-	`
-	_, err := tx.Exec(ctx, query, stateHash, data)
-	return err
-}
-
-func computeStateHash(tenantID, agentID uuid.UUID, data []byte) string {
-	h := sha256.New()
-	h.Write([]byte(tenantID.String()))
-	h.Write([]byte(agentID.String()))
-	h.Write(data)
-	return hex.EncodeToString(h.Sum(nil))
 }
 
 // ListHandoffsByScope returns handoffs linked to tasks in a given scope.
