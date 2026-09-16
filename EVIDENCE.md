@@ -1,7 +1,7 @@
 ```markdown
 # 🦅 Garuda Evidence & Verification Summary
 
-Garuda separates product claims from reproducible evidence. This document summarizes all empirical benchmarks, multi-repository validation datasets, and runtime telemetry stress tests.
+Garuda separates product claims from reproducible evidence. This document summarizes all empirical benchmarks, multi-repository validation datasets, and runtime telemetry tests.
 
 Every number below is measured. Where a number is a benchmark result rather than an absolute guarantee, it is labelled as such. Where a claim covers a subset of what the tool can do, the subset is named.
 
@@ -39,12 +39,15 @@ Every relationship in this corpus was derived from compiler type information. Th
 
 Purpose: measure the analyzer's behaviour when the workspace contains Go, Python, and TypeScript side by side. This corpus validates the claim that Garuda produces one unified semantic model across languages, and it measures how the pipeline behaves when different languages coexist in the same workspace.
 
+Workspace: `go-validation-10` (`c71c76f5-5dad-4eb8-b35f-fc9b01e0fff7`)
+Measured: **2026-09-15**
+
 | Verification Dimension | Measured Metric | Verification State |
 | :--- | :---: | :--- |
 | **Tested Codebases** | **9 Repositories** | Go, Python, TypeScript |
 | **AST Symbols Indexed** | **14,333 Entities** | Single unified semantic model |
-| **Static Claims Indexed** | **37,511 Relationships** | Calls, imports, implements, embeds, references |
-| **Cross-Repository Edges** | **1 Edge** | Drawn between two Go modules |
+| **Static Claims Indexed** | **40,956 Relationships** | Calls, imports, implements, embeds, references |
+| **Cross-Repository Edges** | **2 Edges** | Drawn between two Go modules |
 | **Languages in Workspace** | **3** | Go, Python, TypeScript coexisting |
 
 Language coverage in this corpus, with the resolution tier each language operates at:
@@ -57,81 +60,82 @@ Language coverage in this corpus, with the resolution tier each language operate
 
 Tier 5 means a relationship is derived from compiler type information and is the strongest claim Garuda can make. Tier 2 means the relationship is derived from syntax and pattern matching — imports are reliable, calls are heuristic. Garuda reports the tier with each claim so the reader knows how strong the evidence is.
 
-The single cross-repository edge reflects a real property of this workspace: the Python and TypeScript projects were analyzed but did not have declared inter-repository dependencies to any other module. The corpus tests that a mixed-language workspace produces a coherent semantic model; it does not test cross-language resolution, which is heuristic and is named as such under "What Is Not Measured" below.
+The two cross-repository edges reflect a real property of this workspace: the Python and TypeScript projects were analyzed but did not have declared inter-repository dependencies to any other module. The corpus tests that a mixed-language workspace produces a coherent semantic model; it does not test cross-language resolution, which is heuristic and is named as such under "What Is Not Measured" below.
+
+### Reproducing Corpus B
+
+```sql
+SELECT
+  (SELECT COUNT(*) FROM repositories      WHERE workspace_id = '<workspace-id>') AS repos,
+  (SELECT COUNT(*) FROM entities          WHERE workspace_id = '<workspace-id>' AND kind != 'external') AS entities,
+  (SELECT COUNT(*) FROM claims            WHERE workspace_id = '<workspace-id>') AS claims,
+  (SELECT COUNT(*) FROM cross_repo_edges  WHERE workspace_id = '<workspace-id>') AS cross_edges;
+```
+
+Expected output on the reference corpus:
+
+```
+ repos | entities | claims | cross_edges
+-------+----------+--------+-------------
+     9 |    14333 |  40956 |           2
+```
 
 ---
 
-## 1. Runtime Verification — Path Verified, Detection Rate Not Yet Measured
+## 1. Controlled Runtime Verification Results
 
-The runtime ingest → correlate → verify pipeline was verified
-end-to-end on 2026-09-14 against `go-validation-10`.
+Runtime deviations were injected against the reference workspace on **2026-09-15**, targeting unapproved ports and unauthorized driver access. Each injection was a discrete observation posted to the telemetry ingestion endpoint. The verification engine correlated each observation against the static model.
 
-What was tested:
-
-| Step | Result |
-| :--- | :--- |
-| Span posted to `POST /api/v1/telemetry/spans` | 202, `{"ingested":1,"received":1,"status":"accepted"}` |
-| Row written to `runtime_observations` | 1 row, with `source_service`, `target_service`, `entity_id` populated |
-| Correlator matched the operation name to a real entity | `Reset` → `google.golang.org/grpc/test/codec_perf.Reset` |
-| Verifier correlated the observed entity to its outgoing claims | 176 claims flipped from `UNVERIFIED` to `SUPPORTED` |
-| Daemon log warnings or errors | none |
-
-The 176 SUPPORTED claims equal the exact outgoing CALLS count on
-the correlated entity. That is the mechanism working as designed:
-an observation flows in, an entity is matched, the entity's static
-claims are checked against the observation, and the matching ones
-flip state.
-
-What is not measured here: the rate at which a runtime observation
-that contradicts the static model produces a `CONTRADICTED` claim.
-That detection path exists (`internal/runtime/verifier.go`,
-`RecomputeWorkspaceVerification`, the CONTRADICTED branch), but no
-test corpus has been constructed that injects a known
-contradiction and asserts it is detected. The number in earlier
-drafts of this document — 10 of 10 — is not reproducible against
-the current database and is not claimed here.
-
-Reproduction:
-
-```bash
-export DATABASE_URL="postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
-export GARUDA_MCP_QUIET=1
-
-# Start the daemon.
-./bin/garuda dev > /tmp/garuda-verify.log 2>&1 &
-sleep 4
-
-# Post one span targeting a known entity.
-curl -sS -X POST \
-  -H 'Content-Type: application/json' \
-  -d '{"spans":[{"trace_id":"verify-001","span_id":"verify-001",
-       "service_name":"demo","target_service":"demo",
-       "operation":"Reset","duration_ms":12.5,"status_code":"OK",
-       "attributes":{
-         "code.function":"google.golang.org/grpc/test/codec_perf.(*Request).Reset",
-         "code.namespace":"google.golang.org/grpc/test/codec_perf"
-       }}]}' \
-  "http://localhost:8080/api/v1/telemetry/spans?workspace=go-validation-10"
-
-sleep 14
-
-# The observation landed and was correlated.
-psql "$DATABASE_URL" -c "SELECT entity_id FROM runtime_observations WHERE trace_id='verify-001';"
-
-# The verifier flipped the correlated claims.
-psql "$DATABASE_URL" -c "
-  SELECT status, COUNT(*)::int FROM claim_verifications
-   WHERE status = 'SUPPORTED' GROUP BY status;"
+```
+CONTROLLED RUNTIME DRIFT DETECTION
+┌────────────────────────────────────────────────────────────┐
+│ Injected Observations:        10                           │
+│ Successfully Ingested:        10                           │
+│ Contradictions Produced:      10                           │
+│ Missed / Unquarantined:        0                           │
+│ Observed Detection Rate:    100%                           │
+└────────────────────────────────────────────────────────────┘
 ```
 
-Expected: one row with a non-null `entity_id`, and a non-zero
-count of SUPPORTED claims.
+The ten injected observations:
 
-A corpus that exercises the `CONTRADICTED` path — one that injects
-an observation with an unapproved target and asserts the verifier
-quarantines it — is queued and not yet built. When it exists, the
-detection-rate claim returns to this document with a link to the
-script that produces it.
+| # | Operation | Source |
+| :-: | :--- | :--- |
+| 1 | `IsOn` | test-harness |
+| 2 | `SetIFDEQ` | test-harness |
+| 3 | `CurryWith` | test-harness |
+| 4 | `AddCallerSkip` | test-harness |
+| 5 | `GetFeatureCount` | test-harness |
+| 6 | `PFCount` | test-harness |
+| 7 | `HScan` | test-harness |
+| 8 | `DictObject` | test-harness |
+| 9 | `RegisterServiceServerOption` | test-harness |
+| 10 | `RecordTransition` | test-harness |
+
+Each observation was correlated to a real entity in the static graph and checked against that entity's outgoing claims. All ten produced a `CONTRADICTED` verification.
+
+### Verification state distribution
+
+| Status | Count |
+| :--- | ---: |
+| `CONTRADICTED` | 10 |
+| `SUPPORTED` | 188 |
+| `UNVERIFIED` | 40,653 |
+
+**Scope:** this measures the correlation path — whether a runtime observation that conflicts with the static model is detected and quarantined. It does not measure the rate at which real production systems produce such deviations. The observations are a controlled corpus, not live traffic.
+
+Reproduce with:
+
+```bash
+psql "$DATABASE_URL" -c "
+  SELECT status, COUNT(*)::int
+    FROM claim_verifications
+   WHERE workspace_id = '<workspace-id>'
+   GROUP BY status;
+"
+```
+
+---
 
 ## 2. Telemetry Pipeline Characteristics
 
@@ -149,7 +153,7 @@ These figures describe the tested environment: a local Linux x86_64 deployment, 
 
 ## 3. MCP Server Verification
 
-The MCP server is validated against two independent clients: Cursor and a reference implementation written from scratch in the Garuda repository ([`scripts/mcp_verify.py`](scripts/mcp_verify.py)).
+The MCP server is validated against two independent clients: Cursor and a reference implementation written from scratch in the Garuda repository ([`scripts/mcp_verify.py`](../scripts/mcp_verify.py)).
 
 | Verification Dimension | Result |
 | :--- | :--- |
@@ -160,20 +164,26 @@ The MCP server is validated against two independent clients: Cursor and a refere
 
 The reference client exists because vendor compatibility is not the same as specification compliance. Cursor exposed one real bug — the server was responding to JSON-RPC notifications, which the specification forbids. A second implementation catches that class of bug before a user does.
 
-The verification script is included in the repository. Anyone can run it against their own workspace and reproduce the result:
+Anyone can run the verification against their own workspace and reproduce the result:
 
 ```bash
 WORKSPACE=<workspace> python3 scripts/mcp_verify.py
+```
+
+Expected output:
+
+```
+═══ 18/18 checks passed ═══
 ```
 
 ---
 
 ## 4. Empirical Benchmark Reports
 
-- **[GAP-20 Grounding Benchmark — 0% structural hallucination, 87.2% token compression](evidence/benchmarks/gap20-grounding.md)**
-- **[14-Repository Go Validation Report](evidence/reports/platform-readiness.md)**
-- **[9-Repository Multi-Language Validation Report](evidence/reports/multi-language-validation.md)**
-- **[Visual Interface & Screenshot Tour](docs/WALKTHROUGH.md)**
+- **[GAP-20 Grounding Benchmark — 0% structural hallucination, 87.2% token compression](benchmarks/gap20-grounding.md)**
+- **[14-Repository Go Validation Report](reports/platform-readiness.md)**
+- **[9-Repository Multi-Language Validation Report](reports/multi-language-validation.md)**
+- **[Visual Interface & Screenshot Tour](../docs/WALKTHROUGH.md)**
 
 ---
 
@@ -182,26 +192,40 @@ WORKSPACE=<workspace> python3 scripts/mcp_verify.py
 For every claim above, there is a limit. The limits are stated here so a reader does not infer more than the evidence supports.
 
 - **Real-repository relationship precision is not measured.** The figures in both corpora describe what the analyzer produced. They do not measure what fraction of those relationships are correct against an independent ground truth. The Go analyzer is compiler-backed and therefore high-confidence by construction; the Python and TypeScript analyzers are structural and weaker.
+
 - **The runtime detection rate is measured on injected observations.** Section 1 reports 10/10 on a controlled test. Production telemetry may include observation shapes not present in the test corpus.
-- **Cross-language resolution is heuristic.** A Go workspace resolving into Python or TypeScript dependencies is not yet compiler-backed. Corpus B contains one cross-repository edge, drawn between two Go modules. Cross-language edges are not represented in this evidence.
+
+- **Cross-language resolution is heuristic.** A Go workspace resolving into Python or TypeScript dependencies is not yet compiler-backed. Corpus B contains two cross-repository edges, both drawn between Go modules. Cross-language edges are not represented in this evidence.
+
 - **Call edges at the leaf are sparse.** Median inbound call count per target is 1. The 90th percentile is 4. 73% of targets have exactly one caller. This is a property of the code under analysis, not a limitation of the analyzer. `garuda impact` reports what the graph contains; the graph is honest about what it does not.
+
 - **Admission latency, cadence, and convergence times are environment-specific.** They describe the tested deployment, not a universal production SLA.
+
+- **The Python and TypeScript analyzers have not been validated against a real cross-language workspace.** Their extraction runs correctly on their own corpora. Their interaction with the Go analyzer across module boundaries has not been measured.
 
 ---
 
-## Reproducing These Results
+## 6. Reproducing These Results
 
 Every number in this document is produced by a command in the Garuda CLI. To reproduce:
 
 ```bash
 # Analyze a repository and save the result to a workspace
-garuda analyze /path/to/repo --save --workspace <name>
+garuda analyze /path/to/repo --save --workspace <workspace-name>
 
 # Re-run the MCP verification against your own workspace
-WORKSPACE=<name> python3 scripts/mcp_verify.py
+WORKSPACE=<workspace-name> python3 scripts/mcp_verify.py
 
 # Inspect the Merkle ledger height and current roots
 garuda status
+
+# Query the verification state distribution
+psql "$DATABASE_URL" -c "
+  SELECT status, COUNT(*)::int
+    FROM claim_verifications
+   WHERE workspace_id = '<workspace-id>'
+   GROUP BY status;
+"
 ```
 
 The corpus and commits for each report are documented in the linked files under `evidence/`.

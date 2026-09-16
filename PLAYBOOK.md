@@ -1,592 +1,490 @@
----
-
-# PLAYBOOK.md
-
 ```markdown
 # Garuda Playbook
 
-**Installation · Commands · Workflows · Telemetry · MCP · IDE**
+**Installation · Setup · Everyday workflows · Agent integration · Reference**
 
-This playbook covers everything you need to get Garuda running, from one‑line install to advanced semantic and runtime workflows.
+This playbook covers the practical steps for running Garuda on a real codebase. It assumes you have read the README and want to know what to actually type.
+
+Everything here is executed against the current release. If a command behaves differently than described, that is a bug — file an issue.
 
 ---
 
-## Table of Contents
+## Table of contents
 
-1. [Installation](#installation)
-2. [Initialization](#initialization)
-3. [Workspace Management](#workspace-management)
-4. [Repository Management](#repository-management)
-5. [Semantic Analysis](#semantic-analysis)
-6. [Graph & Visualization](#graph--visualization)
-7. [Impact Analysis](#impact-analysis)
-8. [Semantic Diff & Change Evaluation](#semantic-diff--change-evaluation)
-9. [Decisions, Policies, and Lineage](#decisions-policies-and-lineage)
-10. [Runtime Telemetry Ingestion](#runtime-telemetry-ingestion)
-11. [Runtime Verification & Contradictions](#runtime-verification--contradictions)
-12. [MCP Server for AI Agents](#mcp-server-for-ai-agents)
-13. [IDE Integration](#ide-integration)
-14. [Benchmarking & CI](#benchmarking--ci)
-15. [Troubleshooting](#troubleshooting)
-16. [Complete CLI Reference](#complete-cli-reference)
+1. [What Garuda is for](#what-garuda-is-for)
+2. [Before you start](#before-you-start)
+3. [Installation](#installation)
+4. [Your first workspace](#your-first-workspace)
+5. [Analyzing code](#analyzing-code)
+6. [Connecting an AI agent](#connecting-an-ai-agent)
+7. [Working with policies](#working-with-policies)
+8. [Ingesting documentation](#ingesting-documentation)
+9. [Verifying what you've built](#verifying-what-youve-built)
+10. [The MCP server in detail](#the-mcp-server-in-detail)
+11. [Running in CI](#running-in-ci)
+12. [Troubleshooting](#troubleshooting)
+13. [Command reference](#command-reference)
+
+---
+
+## What Garuda is for
+
+Garuda builds a verified model of your software and gives it to every developer and every AI agent working on it. The model lives in a PostgreSQL database, is shared across every client, and answers questions about your code from compiler type information rather than from pattern matching.
+
+The two things people use it for, most often:
+
+1. **Telling an AI agent what actually exists in your code.** Instead of the agent opening files and guessing, it asks Garuda and gets a compiler-backed answer.
+2. **Checking that a change is allowed.** A policy declares what your organization requires. Garuda evaluates every candidate change against it and returns a decision — allow, warn, review, or block — anchored to a cryptographic ledger.
+
+Everything else is machinery that makes those two things reliable.
+
+---
+
+## Before you start
+
+You need three things:
+
+- **A PostgreSQL database.** Version 14 or later. Local, Docker, or hosted — any Postgres works.
+- **A Go module to analyze.** The Go analyzer is compiler-backed and validated. Python and TypeScript analyzers work but are structural, not compiler-backed.
+- **A shell, a text editor, and about twenty minutes.**
+
+You do not need:
+
+- A cloud account
+- An API key
+- A license
+
+Everything is local. The Merkle trust layer runs in-process. No data leaves your machine unless you configure it to.
 
 ---
 
 ## Installation
 
-### One‑Line Install (Linux/macOS)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | sh
-```
-
-This compiles the `garuda` binary and places it in `~/bin/garuda` (or `/usr/local/bin` if you have write permissions).
-
-### Manual Build
+### Build from source
 
 ```bash
 git clone https://github.com/myshra777-ai/garuda.git
 cd garuda
-go build -o garuda ./cmd/garuda
-sudo mv garuda /usr/local/bin/
+go build -o bin/garuda ./cmd/garuda
+go build -o bin/garuda-mcp ./cmd/garuda-mcp
 ```
 
-### Verify Installation
+Requires Go 1.26 or later. The TypeScript analyzer uses tree-sitter and requires CGO — set `CGO_ENABLED=1` and have a C compiler on your `PATH`. If you skip the `garuda-mcp` binary, you can still use the CLI but AI agents will not be able to connect.
+
+### Set up the database
+
+If you do not have Postgres running locally, the quickest path is Docker:
 
 ```bash
-garuda --version
+docker run -d \
+  --name garuda-pg \
+  -e POSTGRES_USER=garuda \
+  -e POSTGRES_PASSWORD=garuda \
+  -e POSTGRES_DB=garuda \
+  -p 5432:5432 \
+  postgres:16
 ```
+
+Then export the connection string in every shell where you use Garuda:
+
+```bash
+export DATABASE_URL="postgres://garuda:garuda@localhost:5432/garuda?sslmode=disable"
+```
+
+Add that line to your `~/.bashrc` or `~/.zshrc` so you do not have to type it every time.
+
+### Apply migrations
+
+```bash
+for f in migrations/[0-9]*.sql; do
+  psql "$DATABASE_URL" -f "$f"
+done
+```
+
+Migrations are idempotent. Running them twice is safe. If you are upgrading from an older release, run all migrations in order — the migration files themselves contain the upgrade logic.
+
+### Verify the install
+
+```bash
+./bin/garuda --version
+./bin/garuda status
+```
+
+`garuda status` reports whether it can reach the database and what state the ledger is in.
 
 ---
 
-## Initialization
+## Your first workspace
 
-Before using Garuda, you need a PostgreSQL database and a workspace.
+A **workspace** is a logical group of repositories. Most teams use one workspace per product, domain, or team. You will create one, name it, and point your analysis at it.
 
-### 1. Start PostgreSQL (using Docker)
-
-```bash
-garuda up
-```
-
-This starts a local PostgreSQL container with the default credentials.
-
-### 2. Initialize Garuda
+### Create a workspace
 
 ```bash
-garuda init
+export GARUDA_WORKSPACE=my-first-workspace
+./bin/garuda workspace create my-first-workspace
 ```
 
-This command:
-- Connects to PostgreSQL (uses `DATABASE_URL` env or default)
-- Runs all required migrations
-- Creates a default workspace named `uuid-ws`
-- Generates MCP configuration files for Cursor and Claude Desktop (if detected)
-- Performs an initial semantic scan of the current directory (if it contains a Go module)
+`GARUDA_WORKSPACE` tells Garuda which workspace every subsequent command should target. If you do not set it, most commands fall back to the most recently updated workspace, which is rarely what you want. Set it.
 
-**Environment Variables**
-
-| Variable         | Default                                      | Description                           |
-| ---------------- | -------------------------------------------- | ------------------------------------- |
-| `DATABASE_URL`   | `postgres://postgres:postgres@localhost:5432/garuda?sslmode=disable` | PostgreSQL connection string |
-| `GARUDA_TENANT`  | `00000000-0000-0000-0000-000000000001`      | Default tenant UUID                   |
-
-### 3. Start the Unified Daemon
+### Confirm it exists
 
 ```bash
-garuda dev
+./bin/garuda workspace list
 ```
 
-This runs the HTTP API, OpenTelemetry ingestion endpoint, background Merkle verification worker, and D3.js graph visualizer on `http://localhost:8080`.
+You should see `my-first-workspace` in the list with a UUID. That UUID is what other tools — dashboards, MCP clients, CI runners — will use to refer to this workspace.
 
 ---
 
-## Workspace Management
+## Analyzing code
 
-Garuda organises repositories into **workspaces** – logical groups (e.g., a product, team, or domain).
-
-### List Workspaces
+### Analyze a single repository
 
 ```bash
-garuda workspace list
+./bin/garuda analyze /path/to/repo --save
 ```
 
-### Create a Workspace
+`--save` is important. Without it, Garuda analyzes the code but does not persist the result. With it, entities, relationships, and evidence are written to the database and become visible to every client.
+
+Language is detected automatically. A Go module is detected by `go.mod`. Python by `pyproject.toml` or `setup.py`. TypeScript by `tsconfig.json` or `package.json`.
+
+### Analyze multiple repositories
+
+Run `garuda analyze --save` once per repository, all in the same workspace:
 
 ```bash
-garuda workspace create my-team
+./bin/garuda analyze ~/code/service-a --save
+./bin/garuda analyze ~/code/service-b --save
+./bin/garuda analyze ~/code/shared-lib --save
 ```
 
-### Switch Active Workspace
+Cross-repository edges are computed automatically during the second and subsequent analyses, whenever an import path in one repository resolves to an entity in another.
 
-Most commands accept `--workspace` or `-w`:
+### What the analyzer produces
+
+For every file it reads, the analyzer extracts:
+
+- **Entities.** Structs, interfaces, functions, methods, fields, packages.
+- **Relationships.** Calls, imports, implements, embeds, references.
+- **Evidence.** For every relationship, the source file and line that justifies it.
+
+Every relationship is typed. A call is not the same as an import. An embed is not the same as a reference. This matters when you ask a policy question later — the policy can target a specific relationship type.
+
+### Check what was saved
 
 ```bash
-garuda analyze . --workspace my-team
+./bin/garuda summary
 ```
 
-If omitted, the default workspace (`uuid-ws`) is used.
-
-### Delete a Workspace
-
-```bash
-garuda workspace delete my-team
-```
+The summary reports repository count, entity count, and relationship count for the workspace. On the reference corpus — nine repositories across Go, Python, and TypeScript — the summary reports 9 repositories, 14,333 entities, and 40,956 relationships. Yours will differ; the important thing is that the numbers are non-zero and grow when you add repositories.
 
 ---
 
-## Repository Management
+## Connecting an AI agent
 
-Add repositories to a workspace so Garuda can build a multi‑repository graph.
+This is what most people install Garuda for. It takes about five minutes.
 
-### Add a Repository
-
-```bash
-garuda repo add https://github.com/org/repo.git --workspace my-team
-```
-
-This registers the repository metadata but does not analyse it immediately.
-
-### List Repositories
+### Step 1 — confirm the MCP binary works
 
 ```bash
-garuda repo list --workspace my-team
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | ./bin/garuda-mcp
 ```
 
-### Enable / Disable a Repository
+You should see a single line of JSON with `"protocolVersion":"2025-06-18"` and a `"serverInfo"` block. If you see an error about `DATABASE_URL`, the environment variable is not set in this shell.
 
-```bash
-garuda repo enable repo-id
-garuda repo disable repo-id
-```
+### Step 2 — point Cursor at it
 
-Disabled repositories are excluded from analysis and graph.
-
-### Remove a Repository
-
-```bash
-garuda repo remove repo-id
-```
-
----
-
-## Semantic Analysis
-
-The core command to extract AST entities, relationships, and evidence.
-
-### Analyse the Current Directory
-
-```bash
-garuda analyze .
-```
-
-This will:
-- Parse all Go packages
-- Extract entities (structs, interfaces, functions, methods)
-- Build relationships (`CALLS`, `IMPORTS`, `IMPLEMENTS`, etc.)
-- Attach source evidence (file, line, commit SHA)
-- Persist the snapshot to the database (if `--save` is used)
-
-### Save to Ledger (Cryptographic Persistence)
-
-```bash
-garuda analyze . --save
-```
-
-Without `--save`, the analysis is only printed to stdout (or saved as JSON with `-o`).
-
-### Output to JSON
-
-```bash
-garuda analyze . -o snapshot.json
-```
-
-### Analyse Multiple Repositories
-
-First, add them to the workspace, then use `workspace sync` to analyse all enabled repositories:
-
-```bash
-garuda workspace sync my-team
-```
-
-This clones/pulls each repo, runs `garuda analyze` on each, and updates the repository status.
-
----
-
-## Graph & Visualization
-
-Garuda generates interactive D3.js HTML graphs from the semantic workspace.
-
-### Generate Graph for a Workspace
-
-```bash
-garuda graph my-team
-```
-
-This produces an HTML file (e.g., `graph-my-team.html`) that you can open in a browser.
-
-### Open the Web Dashboard
-
-```bash
-garuda dashboard
-```
-
-The dashboard provides:
-- Workspace overview (repos, packages, entities, relationships)
-- Global search
-- Top architectural hubs
-- Cross‑repo bridges
-- Runtime contradiction list
-- Recent evidence feed
-- Merkle ledger status
-
-### Access the Live Graph (via API)
-
-```bash
-curl http://localhost:8080/api/v1/graph?workspace=my-team | jq .
-```
-
----
-
-## Impact Analysis
-
-Understand what a change to an entity would affect.
-
-### Impact of a Symbol
-
-```bash
-garuda impact PostgresStore
-```
-
-This returns:
-- Upstream callers (who calls this entity)
-- Downstream dependencies (what this entity calls)
-- Cross‑repository consumers
-
-### Impact Diff (Between Snapshots)
-
-```bash
-garuda impact-diff snapshot1.json snapshot2.json
-```
-
-Shows which entities changed, added, or removed, and their blast radius.
-
----
-
-## Semantic Diff & Change Evaluation
-
-### Compare Two Snapshots
-
-```bash
-garuda diff before.json after.json
-```
-
-Outputs a semantic diff, including:
-- Added/removed entities
-- Changed signatures
-- Changed relationships
-
-### Evaluate a Change (Operational Impact)
-
-```bash
-garuda evaluate snapshot.json
-```
-
-Provides a high‑level summary of what a proposed change would affect.
-
-### Governance Judgement
-
-```bash
-garuda judge baseline.json proposed.json
-```
-
-Compares two snapshots and produces a governance decision (PASS, FAIL, REVIEW) based on policies and contradictions.
-
----
-
-## Decisions, Policies, and Lineage
-
-Garuda tracks architectural decisions and policies as first‑class objects.
-
-### Propose a Decision
-
-```bash
-garuda propose "Use PostgreSQL for all production databases"
-```
-
-### Remember a Policy
-
-```bash
-garuda remember "PaymentService must use StripeGateway"
-```
-
-### Supersede a Policy
-
-```bash
-garuda supersede policy-id
-```
-
-### Explain a Decision
-
-```bash
-garuda explain decision-id
-```
-
-Shows the decision text, author, timestamp, and supporting evidence.
-
-### Justify a Relationship
-
-```bash
-garuda justify EntityA EntityB
-```
-
-Explains why Garuda believes there is a relationship between the two entities, with evidence citations.
-
-### Query Lineage
-
-```bash
-garuda lineage task-id
-```
-
-Shows the decision lineage that led to a particular state.
-
-### Generate a Plan
-
-```bash
-garuda plan "Migrate payments to new service"
-```
-
-Produces a structured plan based on the current semantic graph and decisions.
-
----
-
-## Runtime Telemetry Ingestion
-
-Garuda accepts OpenTelemetry traces over HTTP to build a runtime execution graph.
-
-### OpenTelemetry Collector Configuration
-
-To send spans from your applications, configure the OpenTelemetry Collector with the Garuda exporter.
-
-Example `otel-collector-config.yaml`:
-
-```yaml
-receivers:
-  otlp:
-    protocols:
-      grpc:
-        endpoint: 0.0.0.0:4317
-      http:
-        endpoint: 0.0.0.0:4318
-
-exporters:
-  garuda:
-    endpoint: http://garuda:8080/api/v1/telemetry/spans?workspace=my-team
-    batch_size: 100
-    timeout: 5s
-
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      exporters: [garuda]
-```
-
-### Manual Span Ingestion (curl)
-
-```bash
-curl -X POST "http://localhost:8080/api/v1/telemetry/spans?workspace=my-team" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "spans": [
-      {
-        "trace_id": "abc123...",
-        "span_id": "def456...",
-        "service_name": "payment-api",
-        "operation": "ProcessRefund",
-        "duration_ms": 12.5,
-        "status_code": "OK",
-        "attributes": {
-          "code.namespace": "github.com/org/payment",
-          "code.function": "ProcessRefund",
-          "rpc.target_endpoint": "stripe-gateway"
-        }
-      }
-    ]
-  }'
-```
-
-The endpoint returns HTTP `202 Accepted` immediately; processing is asynchronous.
-
-### View Runtime Observations
-
-```bash
-curl http://localhost:8080/api/v1/runtime/observations?workspace=my-team | jq .
-```
-
----
-
-## Runtime Verification & Contradictions
-
-Garuda correlates runtime spans with static claims to produce a tri‑state verification.
-
-### Verification States
-
-- **SUPPORTED** – Static claim and runtime observation agree.
-- **UNVERIFIED** – Static claim exists but no runtime observation has been seen.
-- **CONTRADICTED** – Runtime observation disagrees with the static claim (e.g., calls an unapproved endpoint).
-
-### View Verification Summary
-
-```bash
-garuda status --workspace my-team
-```
-
-### List Contradictions
-
-```bash
-garuda contradictions --workspace my-team
-```
-
-### Get Runtime Coverage
-
-```bash
-curl http://localhost:8080/api/v1/runtime/coverage?workspace=my-team | jq .
-```
-
-Returns:
-- `total_static_entities`
-- `observed_entities`
-- `coverage_percent`
-- `supported_count`, `unverified_count`, `contradicted_count`
-
-### Force Re‑verification
-
-The background worker runs every 10 seconds by default. To trigger manually:
-
-```bash
-garuda verify --workspace my-team
-```
-
----
-
-## MCP Server for AI Agents
-
-Garuda exposes a JSON‑RPC 2.0 Model Context Protocol (MCP) server over standard I/O.
-
-### Start the MCP Server
-
-```bash
-garuda mcp
-```
-
-This runs the server in stdio mode, ready to accept requests from Cursor, Claude Desktop, or custom agents.
-
-### Available MCP Tools
-
-| Tool Name | Input | Description |
-|-----------|-------|-------------|
-| `get_runtime_state` | (none) | Returns block height, epoch timestamps, root hashes, verification counts |
-| `get_contradictions` | `limit` (int) | Lists quarantined runtime violations |
-| `get_verified_context` | `symbol` (str), `depth` (int) | Returns verified AST subgraph around a symbol |
-| `get_blast_radius` | `symbol` (str), `max_depth` (int) | Maps upstream callers and downstream dependencies |
-
-### Example MCP Request (Claude Desktop)
-
-Add this to `~/.config/Claude/claude_desktop_config.json`:
+Open Cursor's settings, find the MCP configuration, and add:
 
 ```json
 {
   "mcpServers": {
     "garuda": {
-      "command": "/usr/local/bin/garuda",
-      "args": ["mcp"],
+      "command": "/absolute/path/to/bin/garuda-mcp",
       "env": {
-        "DATABASE_URL": "postgres://...",
-        "GARUDA_TENANT": "00000000-0000-0000-0000-000000000001"
+        "DATABASE_URL": "postgres://garuda:garuda@localhost:5432/garuda?sslmode=disable",
+        "GARUDA_WORKSPACE": "my-first-workspace"
       }
     }
   }
 }
 ```
 
-### Example MCP Request (curl via stdio)
+The path must be absolute. Cursor does not expand `~` and does not use your shell's `PATH`.
+
+### Step 3 — point Claude Desktop at it
+
+Claude Desktop uses the same configuration format. The file is at:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Restart Claude Desktop after editing the file.
+
+### Step 4 — verify the connection
 
 ```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_contradictions","arguments":{"limit":5}}}' | garuda mcp
+WORKSPACE=my-first-workspace python3 scripts/mcp_verify.py
 ```
+
+Expected output:
+
+```
+═══ 18/18 checks passed ═══
+```
+
+If any check fails, the script prints which one. The most common failure is a wrong binary path. The second most common is a stale `DATABASE_URL`.
+
+### Step 5 — use it
+
+Once connected, ask your agent a question about your code:
+
+> *What calls `HandleCharge` in the payments service?*
+
+If Garuda is connected, the agent will call `garuda.neighbors` or `garuda.find_entity` and get a real answer. If it is not connected, the agent will open files and guess. You can tell the difference immediately — the Garuda answer will name specific entities with specific packages, and the guess will be hedged.
 
 ---
 
-## IDE Integration
+## Working with policies
 
-Garuda provides a VS Code / Cursor extension that surfaces real‑time semantic and runtime intelligence.
+Policies are how you tell Garuda what your organization requires. They are YAML files checked into your repository, evaluated against your workspace.
 
-### Extension Features
+### Write a policy
 
-- **Inline Squiggles** – `ARCH_DRIFT_001` markers on unauthorised runtime calls.
-- **Blast Radius Hover** – Shows callers and dependencies on symbol hover.
-- **Sidebar Tree** – Ledger state and contradiction list.
-- **Status Bar** – Real‑time block height and violation count.
-
-### Installation
-
-1. Open VS Code or Cursor.
-2. Go to Extensions → Search for "Garuda".
-3. Install the extension.
-
-Or manually:
-
-```bash
-cd vscode-extension
-npm install
-npm run compile
-```
-
-Then copy the extension folder to `~/.vscode/extensions/`.
-
-### Configuration
-
-The extension automatically connects to the local Garuda daemon (`localhost:8080`). If the daemon is running elsewhere, set:
-
-```json
-"garuda.apiUrl": "http://garuda.internal:8080"
-```
-
----
-
-## Benchmarking & CI
-
-### Run the Grounding Benchmark
-
-```bash
-garuda bench
-```
-
-This executes the GAP‑20 benchmark suite, comparing an unassisted LLM against a Garuda‑grounded agent. Outputs precision, recall, hallucination rate, and token savings.
-
-### CI Mode
-
-```bash
-garuda ci
-```
-
-Analyses the current repository, compares it against a baseline snapshot, and returns a non‑zero exit code if architectural violations or contradictions are found.
-
-### GitHub Action Example
+Create a directory called `policies/` at the root of your repo. Add a file called `payment-no-direct-db.yaml`:
 
 ```yaml
-name: Garuda CI
-on: [pull_request]
-jobs:
-  garuda:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Garuda CI
-        run: |
-          garuda ci --baseline baseline.json --workspace my-team
+id: payment-no-direct-db
+version: v1
+title: "Payment code must not import database/sql directly"
+priority: 200
+language: go
+authority: "team-platform@company.com"
+scope:
+  domain: payments
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*Payment.*"
+      to_name_pattern: ".*sql.*"
+then:
+  decision: BLOCK
+  reason: "Direct database/sql import from payment code violates hexagonal boundary."
 ```
+
+The `when` block is a list of predicates. A policy fires when every predicate in the list is true. The `then` block says what to do when it fires.
+
+Five predicates are available:
+
+- `entity_exists` — matching entities exist in the workspace
+- `claim_exists` — matching relationships exist in the workspace
+- `contradiction_exists` — a `CONTRADICTED` verification exists
+- `verification_missing` — an entity has no runtime verification
+- `language_matches` — the scope contains entities of a given language
+
+Four outcomes are available: `ALLOW`, `WARN`, `REVIEW`, `BLOCK`.
+
+### Validate without evaluating
+
+```bash
+./bin/garuda policy validate ./policies
+```
+
+This parses every policy in the directory and reports syntax errors without touching the database. Run it before every commit that changes a policy.
+
+### Evaluate
+
+```bash
+./bin/garuda policy evaluate ./policies
+```
+
+Garuda evaluates each policy against the current workspace. Every evaluation produces one of the four outcomes and is anchored to the Merkle ledger.
+
+### Show an evaluation
+
+```bash
+./bin/garuda policy show <evaluation-id>
+```
+
+The output includes the policy that fired, the entities and claims that matched, the matched predicates, and the Merkle block height at which the evaluation was committed.
+
+### Verify an evaluation
+
+```bash
+./bin/garuda policy verify <evaluation-id>
+```
+
+This re-derives the Merkle inclusion proof from the stored proof and the current epoch root. Anyone with the source of the Merkle package can run this independently — the verification does not require trust in Garuda's database, servers, or keys.
+
+If the proof verifies, the output says so and prints the block height. If it does not, the output says which part of the proof failed. A tampered evaluation will fail to verify.
+
+---
+
+## Ingesting documentation
+
+Garuda can extract claims from your documentation and match them against the code. This is how intent gets connected to implementation.
+
+### What the parser reads
+
+The parser reads Markdown, ADR, and plain-text files. It extracts claims from lines that meet two conditions:
+
+1. The line uses a modal verb — `MUST`, `SHOULD`, `MUST NOT`, `SHALL`.
+2. The line lives inside a section whose heading suggests normative content — a heading containing words like "decision", "requirement", "constraint", "policy", "specification".
+
+Lines that do not meet both conditions are ignored. Prose sentences, tables, and code blocks are not parsed.
+
+This is deliberate. A parser that tries to extract every possible requirement from free-form prose will produce false positives, and false positives in a trust system are worse than false negatives. The format contract is documented in full in [`docs/DOCUMENT_FORMATS.md`](../docs/DOCUMENT_FORMATS.md).
+
+### Ingest a directory
+
+```bash
+./bin/garuda docs ingest ./docs
+```
+
+The command reports how many files it discovered, how many it processed, how many were empty (no matching lines), and how many claims it extracted. The counts add up: `discovered = processed + empty + skipped`.
+
+### Ingest from a workspace config
+
+If you want to ingest documentation from multiple directories, create `.garuda/workspace.yaml`:
+
+```yaml
+workspace: my-first-workspace
+tenant_id: 00000000-0000-0000-0000-000000000001
+documents:
+  - path: ./docs
+  - path: ../shared-docs
+  - path: /absolute/path/to/adr
+```
+
+Then:
+
+```bash
+./bin/garuda docs sync
+```
+
+### Verify claims against code
+
+```bash
+./bin/garuda docs verify
+```
+
+This correlates every ingested claim against the semantic graph. A claim that matches an entity or relationship in the code becomes `SUPPORTED`. A claim that does not match stays `UNVERIFIED` with the reason. A claim that contradicts runtime behavior becomes `CONTRADICTED`.
+
+Only `CALLS` predicates are verified against the graph. Other predicates remain `UNVERIFIED` by design — the current verification engine only knows how to check call edges.
+
+---
+
+## Verifying what you've built
+
+### Check the ledger
+
+```bash
+./bin/garuda status
+```
+
+Reports the current Merkle block height, the current root hash, and the verification state distribution across the workspace.
+
+### Inspect a single entity
+
+```bash
+./bin/garuda inspect <entity-name>
+```
+
+Reports the entity's package, kind, outgoing relationships, and incoming relationships. If the entity was matched by any documentation claims, those are listed too.
+
+### Check the impact of a change
+
+```bash
+./bin/garuda impact <entity-name>
+```
+
+Reports every caller of the entity, transitively — the full blast radius. On a workspace with tens of thousands of edges, the response comes back in under a second.
+
+One caveat, and it is important: call edges are sparse at the leaf. Many functions have exactly one caller, and 90% have four or fewer. This is a property of the code, not a limitation of the analyzer. What you get from `garuda impact` is the truth about what the graph contains, including the truth that the graph does not contain everything.
+
+### Compare two snapshots
+
+```bash
+./bin/garuda diff before.json after.json
+```
+
+Semantic diff, not text diff. Reports which entities were added, removed, or changed, and which relationships changed. Requires both snapshots to have been produced by `garuda analyze`.
+
+---
+
+## The MCP server in detail
+
+The MCP server is the primary integration point for AI agents. It exposes sixteen tools over stdio, using line-delimited JSON-RPC 2.0.
+
+### The sixteen tools
+
+| Tool | What it answers |
+| :--- | :--- |
+| `garuda.entities` | List semantic entities in the workspace, filterable by package and kind |
+| `garuda.inspect` | Inspect one entity with its incoming and outgoing relationships |
+| `garuda.neighbors` | Every entity connected to the subject in one hop, both directions |
+| `garuda.subclasses` | Who inherits from or embeds the subject |
+| `garuda.implementers` | Who implements the subject interface |
+| `garuda.find_entity` | Find entities by name pattern, kind, package, or file path |
+| `garuda.policy.list` | List policies registered for the tenant |
+| `garuda.policy.evaluate` | Dry-run the policy engine and return the decisions it would make |
+| `garuda.governance.status` | Aggregate governance state: active policies, documentation health, contradiction count |
+| `garuda.check_drift` | Documentation-to-code drift report |
+| `garuda.query_claims` | Query document claims matching a subject |
+| `garuda.query` | Query the Garuda knowledge graph with natural language |
+| `garuda.get_lineage` | Get the full lineage of a decision |
+| `garuda.get_impact` | Find what breaks if a decision is changed |
+| `garuda.detect_contradictions` | Detect unresolved contradictions in the tenant knowledge graph |
+| `garuda.propose_decision` | Propose a new decision (creates a draft) |
+
+Read-only tools — everything except `garuda.propose_decision` — do not modify the workspace. `garuda.propose_decision` writes a draft decision, and budget-checks before it does.
+
+### Verifying spec compliance
+
+The repository includes a reference MCP client at [`scripts/mcp_verify.py`](../scripts/mcp_verify.py). It runs 18 checks against any MCP server that speaks line-delimited JSON-RPC 2.0 over stdio. Run it:
+
+```bash
+WORKSPACE=my-first-workspace python3 scripts/mcp_verify.py
+```
+
+If you are building your own MCP server, run it against yours. It takes about ten seconds and has caught real bugs — including one in Garuda itself, where the server was responding to JSON-RPC notifications that the spec forbids a response to.
+
+---
+
+## Running in CI
+
+Garuda integrates into CI in two modes: as a gate that blocks PRs, and as a reporting step that annotates them.
+
+### Block PRs that violate policy
+
+```bash
+./bin/garuda policy evaluate ./policies --fail-on BLOCK
+```
+
+`--fail-on` accepts `BLOCK`, `REVIEW`, `WARN`, or `ALLOW`. The command exits non-zero if any evaluation produces a decision at that level or higher. Wire this into your CI pipeline and any change that would violate a policy stops before merge.
+
+### Annotate PRs with impact
+
+```bash
+./bin/garuda impact <changed-symbol> --format github
+```
+
+The `--format github` flag produces output in the annotation format that GitHub Actions understands. Every caller of the changed symbol becomes a check annotation on the PR.
+
+### Semantic diff between commits
+
+```bash
+git stash
+./bin/garuda analyze . --save -o /tmp/before.json
+git stash pop
+./bin/garuda analyze . --save -o /tmp/after.json
+./bin/garuda diff /tmp/before.json /tmp/after.json
+```
+
+The diff output names every entity and relationship that changed, in structured JSON. What you do with it depends on your pipeline — comment on the PR, fail the build, or write it to an artifact.
 
 ---
 
@@ -594,497 +492,122 @@ jobs:
 
 ### `garuda dev` fails with "bind: address already in use"
 
-The daemon is already running. Stop it first:
+Something is already listening on port 8080. Either stop it, or run Garuda on a different port:
 
 ```bash
-pkill -f "garuda dev"
+./bin/garuda dev --port 8081
 ```
 
-Or use a different port:
+The port flag is honored by every command that starts a server.
 
-```bash
-garuda dev --port 8081
+### `garuda analyze` finds zero entities
+
+Three possibilities, in order of likelihood:
+
+1. You are not in a Go module directory. Check for `go.mod` in the current directory or any parent.
+2. The module has a build error. Run `go build ./...` and fix any compile errors first — the analyzer uses the same type resolution the compiler does and will fail on the same code.
+3. The module has no exported entities. Garuda indexes exported and referenced symbols; a package that contains only unexported helpers will produce few entities.
+
+### The MCP server connects but tools return empty results
+
+The most common cause is a workspace mismatch. Check that:
+
+- `GARUDA_WORKSPACE` in the MCP configuration matches the workspace you actually analyzed.
+- The `DATABASE_URL` in the MCP configuration matches the one you used for `garuda analyze`.
+
+Run `psql "$DATABASE_URL" -c "SELECT id, name FROM workspaces;"` to see which workspaces exist, and compare the ID against what the MCP server is resolving.
+
+### `garuda policy verify` reports a proof failure
+
+A proof failure means one of three things:
+
+1. The database row was manually edited after the proof was written. This is the failure case the ledger is designed to detect.
+2. The tenant's root hash has been reset — usually by dropping and recreating the workspace.
+3. The proof format has changed between the version that wrote it and the version that is reading it. Check `verification_version` on the row; the current format is version 1.
+
+If none of those apply and the proof still fails, file an issue with the evaluation ID and the block height.
+
+### The daemon runs but the dashboard is empty
+
+Check that `garuda analyze --save` actually wrote to the database. `garuda summary` should report non-zero counts. If it reports zero, the analysis either did not run with `--save` or was pointed at a different workspace.
+
+---
+
+## Command reference
+
+Every command Garuda ships. Run `garuda <command> --help` for the full flag list.
+
+### Analysis
+
+| Command | Purpose |
+| :--- | :--- |
+| `garuda analyze <path>` | Analyze a repository |
+| `garuda diff <before> <after>` | Semantic diff between two snapshots |
+| `garuda inspect <entity>` | Inspect one entity with its relationships |
+| `garuda entities` | List entities in the workspace |
+| `garuda impact <entity>` | Blast-radius analysis for a symbol |
+| `garuda summary` | Workspace architectural summary |
+
+### Workspaces and repositories
+
+| Command | Purpose |
+| :--- | :--- |
+| `garuda workspace create <name>` | Create a workspace |
+| `garuda workspace list` | List workspaces |
+| `garuda workspace delete <name>` | Delete a workspace |
+| `garuda repo add <url>` | Register a repository |
+| `garuda repo list` | List repositories |
+| `garuda repo enable <id>` | Enable a disabled repository |
+| `garuda repo disable <id>` | Disable a repository |
+| `garuda repo remove <id>` | Remove a repository |
+
+### Policies
+
+| Command | Purpose |
+| :--- | :--- |
+| `garuda policy list` | List active policies |
+| `garuda policy validate <dir>` | Parse and validate policy YAML |
+| `garuda policy evaluate <dir>` | Run policies and anchor decisions |
+| `garuda policy show <id>` | Show one evaluation with evidence and Merkle proof |
+| `garuda policy verify <id>` | Re-derive the Merkle inclusion proof |
+
+### Documentation
+
+| Command | Purpose |
+| :--- | :--- |
+| `garuda docs ingest <path>` | Extract claims from documents |
+| `garuda docs sync` | Ingest all sources declared in `.garuda/workspace.yaml` |
+| `garuda docs status` | Show freshness of configured document sources |
+| `garuda docs verify` | Correlate claims against AST entities and detect drift |
+
+### Servers and integrations
+
+| Command | Purpose |
+| :--- | :--- |
+| `garuda dev` | Start the unified daemon (API, worker, dashboard) |
+| `garuda mcp` | Print the path to the MCP server binary |
+| `garuda dashboard` | Open the web dashboard |
+
+### Verification
+
+| Command | Purpose |
+| :--- | :--- |
+| `garuda status` | Inspect Merkle root and daemon status |
+| `garuda verify` | Verify ledger integrity |
+| `garuda bench` | Run the GAP-20 grounding benchmark |
+| `garuda ci` | Run in CI mode with baseline comparison |
+| `garuda judge <baseline> <proposed>` | Governance judgement between snapshots |
+
+---
+
+## Getting help
+
+- **Issues and bug reports:** [GitHub Issues](https://github.com/myshra777-ai/garuda/issues)
+- **Design discussions:** [GitHub Discussions](https://github.com/myshra777-ai/garuda/discussions)
+- **Architecture decisions:** [`docs/adr/`](../docs/adr/)
+- **Evidence and benchmarks:** [`EVIDENCE.md`](../EVIDENCE.md)
 ```
-
-### Database connection errors
-
-Verify `DATABASE_URL` is set correctly and PostgreSQL is running:
-
-```bash
-psql $DATABASE_URL -c "SELECT 1"
-```
-
-### No entities found after `garuda analyze`
-
-Ensure you are in a Go module directory (contains `go.mod`). If not, run:
-
-```bash
-go mod init example.com/mymodule
-```
-
-### Runtime contradictions not appearing
-
-Check that:
-- The workspace is correct.
-- Telemetry spans have been ingested (check `runtime_observations` table).
-- The static claim exists (e.g., `garuda inspect` the source entity).
-
-### MCP tools not visible in Claude
-
-Restart Claude Desktop after updating `claude_desktop_config.json`. Check logs at `~/Library/Logs/Claude/mcp.log` (macOS) or `~/.config/Claude/logs/`.
-
----
-
-## Complete CLI Reference
-
-For a full list of all commands and flags:
-
-```bash
-garuda --help
-garuda [command] --help
-```
-
-**Key Commands Summary**
-
-| Command | Description |
-|---------|-------------|
-| `analyze` | Analyse a Go codebase |
-| `bench` | Run the GAP‑20 grounding benchmark |
-| `ci` | Run in CI mode |
-| `contradictions` | List quarantined runtime contradictions |
-| `dashboard` | Open the web dashboard |
-| `dev` | Start the unified daemon |
-| `diff` | Compare two snapshots |
-| `entities` | List semantic entities |
-| `evaluate` | Evaluate a change |
-| `explain` | Explain a decision or claim |
-| `graph` | Generate an interactive HTML graph |
-| `impact` | Analyse blast radius |
-| `impact-diff` | Compare impact between snapshots |
-| `init` | Initialise Garuda |
-| `inspect` | Inspect a semantic entity |
-| `judge` | Governance judgement |
-| `justify` | Justify a relationship |
-| `lineage` | Query decision lineage |
-| `mcp` | Run the MCP server |
-| `plan` | Generate a structured plan |
-| `ponytail` | Detect dead code and duplication |
-| `propose` | Propose a decision |
-| `remember` | Remember a policy |
-| `repo` | Manage repositories |
-| `self-describe` | Generate a product description |
-| `status` | Inspect Merkle state |
-| `summary` | Architectural summary |
-| `supersede` | Supersede a policy |
-| `up` | Start the stack (Postgres) |
-| `verify` | Verify ledger integrity |
-| `workspace` | Manage workspaces |
-
----
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/myshra777-ai/garuda/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/myshra777-ai/garuda/discussions)
-- **Documentation**: [docs/](docs/)
-
----
-
-*Last updated: August 2026*
-```
-
----
-
-# EVIDENCE.md
-
-```markdown
-# Garuda Evidence Center
-
-**Validation Results · Benchmarks · Screenshots · Methodology**
-
-This document contains the complete, detailed evidence for Garuda's claims. All metrics, test runs, and screenshots are included so that anyone can independently verify the results.
-
----
-
-## Table of Contents
-
-1. [Executive Summary](#executive-summary)
-2. [Semantic Analysis Validation](#semantic-analysis-validation)
-3. [Multi‑Repository Validation](#multi‑repository-validation)
-4. [Runtime Contradiction Testing](#runtime-contradiction-testing)
-5. [Performance & Scale Benchmarks](#performance--scale-benchmarks)
-6. [GAP‑20 Grounding Benchmark](#gap‑20-grounding-benchmark)
-7. [Cryptographic Ledger Verification](#cryptographic-ledger-verification)
-8. [Telemetry Ingestion Tests](#telemetry-ingestion-tests)
-9. [IDE Integration Tests](#ide-integration-tests)
-10. [Methodology](#methodology)
-11. [Screenshots](#screenshots)
-
----
-
-## Executive Summary
-
-Garuda has been validated against a progressively growing corpus of heterogeneous Go repositories. The latest validation (August 2026) shows:
-
-| Metric | Value |
-|--------|-------|
-| Repositories | 14 |
-| Packages | 143 |
-| Semantic Entities | 3,675 |
-| Relationships | 5,679 |
-| Cross‑repository Bridges | 55 |
-| Controlled Runtime Contradictions Injected | 10 |
-| Contradictions Detected | 10/10 |
-| Merkle Block Height | 898+ |
-| Dual‑Root Hash Status | Verified |
-
-All static extraction, cross‑repo resolution, and runtime contradiction detection are fully deterministic and evidence‑backed.
-
----
-
-## Semantic Analysis Validation
-
-### Methodology
-
-We selected 14 popular Go repositories (Gin, Chi, Prometheus, Zap, Cobra, WebSocket, SecureCookie, etc.) and ran `garuda analyze` on each. The output was compared against manual ground truth (generated via `go/types` introspection) for:
-
-- Entity extraction (structs, interfaces, functions, methods)
-- Relationship extraction (`CALLS`, `IMPORTS`, `IMPLEMENTS`, `EMBEDS`)
-- Source evidence accuracy (file, line, commit SHA)
-
-### Results
-
-| Metric | Value |
-|--------|-------|
-| Entity Precision | 100% |
-| Entity Recall | 99.8% |
-| Relationship Precision | 99.9% |
-| Relationship Recall | 99.2% |
-| Evidence Accuracy | 100% |
-
-**False positives:** Zero false entities found. One relationship (import of a generated file) was incorrectly flagged but later corrected.
-
-**Missed entities:** A single unexported test helper was omitted (intended behaviour – only exported and referenced entities are indexed).
-
-### Detailed Breakdown
-
-| Repository | Entities | Relationships | Analysis Time (s) |
-|------------|---------:|--------------:|------------------:|
-| garuda core | 1,568 | 2,442 | 2.4 |
-| gin | 412 | 713 | 0.9 |
-| chi | 287 | 491 | 0.7 |
-| prometheus | 821 | 1,403 | 1.8 |
-| zap | 256 | 423 | 0.6 |
-| cobra | 183 | 301 | 0.4 |
-| websocket | 148 | 259 | 0.3 |
-| Others (7) | 0 | 0 | – |
-| **Total** | **3,675** | **5,679** | – |
-
----
-
-## Multi‑Repository Validation
-
-### Workspace Setup
-
-All 14 repositories were added to a single workspace (`uuid-ws`). Cross‑repository relationships were resolved based on import paths and type identity.
-
-### Cross‑Repository Bridges Found
-
-| Source Repo | Target Repo | Relationship Type | Count |
-|-------------|-------------|-------------------|------:|
-| garuda | gin | IMPORTS | 3 |
-| garuda | chi | IMPORTS | 2 |
-| garuda | zap | IMPORTS | 5 |
-| gin | securecookie | IMPORTS | 1 |
-| chi | websocket | IMPORTS | 1 |
-| prometheus | garuda | IMPORTS | 8 |
-| ... | ... | ... | ... |
-| **Total unique bridges** | | | **55** |
-
-### Entity Resolution Across Repos
-
-The same semantic entity (e.g., `http.Handler`) that appears in multiple repositories is correctly resolved to a single canonical entity ID (UUIDv5) across workspace boundaries. This is critical for accurate cross‑repo impact analysis.
-
----
-
-## Runtime Contradiction Testing
-
-### Purpose
-
-To validate that Garuda can detect when observed runtime behaviour deviates from the static architectural graph.
-
-### Test Design
-
-We injected **10 controlled runtime observations** into the telemetry ingestion endpoint. Each observation targeted a known static claim but used an unauthorised target endpoint (e.g., unapproved database, unapproved API).
-
-### Injected Contradictions
-
-| # | Source Entity | Expected (Static) | Observed (Runtime) | Status |
-|---|---------------|-------------------|---------------------|--------|
-| 1 | HandleDashboardStats | PostgresStore.Pool | unapproved.database.driver:5432 | CONTRADICTED |
-| 2 | HandleDashboardStats | PostgresStore.Pool | unapproved.database.driver:5432 | CONTRADICTED |
-| 3 | ProcessPayment | StripeClient | unapproved.stripe.payment.driver:443 | CONTRADICTED |
-| 4 | MustRegister | prometheus.Registerer | unapproved.metrics.exfiltration:9090 | CONTRADICTED |
-| 5 | Engine.Run | net.Listener | unapproved.redis.cache.bypass:6379 | CONTRADICTED |
-| 6 | ServeHTTP | http.Server | unapproved.telemetry.sink:4317 | CONTRADICTED |
-| 7 | GetLatestMerkleSnapshot | Pool.QueryRow | unapproved.raw.socket.bypass:9000 | CONTRADICTED |
-| 8 | Correlate | EntityResolver | unapproved.s3.exfiltration.driver:443 | CONTRADICTED |
-| 9 | NewServer | ServerConfig | unapproved.legacy.mysql.driver:3306 | CONTRADICTED |
-| 10 | HandleDashboardStats | PostgresStore.Pool | unapproved.database.driver:5432 | CONTRADICTED |
-
-### Detection Results
-
-| Metric | Result |
-|--------|--------|
-| Injected Observations | 10 |
-| Contradictions Detected | 10 |
-| False Positives | 0 |
-| False Negatives | 0 |
-| Detection Latency (p95) | ~2 minutes (from ingestion to dashboard update) |
-
-**All 10 contradictions were correctly quarantined** and appeared in the dashboard’s “Needs Attention” list and the `claim_verifications` table with status `CONTRADICTED`.
-
-### Screenshot
-
-![Runtime Contradiction Dashboard](assets/screenshots/dashboard-14repo-contradictions.png)
-
----
-
-## Performance & Scale Benchmarks
-
-### Analysis Performance
-
-Measurements on a 4‑core / 16GB VM with PostgreSQL 15 (local).
-
-| Repositories | Packages | Entities | Analysis Time | Query (impact) p95 | Graph Serialization |
-|--------------|---------:|---------:|--------------:|-------------------:|---------------------:|
-| 1 | 15 | 500 | 0.8s | 12ms | 8ms |
-| 7 | 87 | 1,568 | 3.2s | 24ms | 11ms |
-| 14 | 143 | 3,675 | 6.1s | 33ms | 24ms |
-
-### Telemetry Ingestion
-
-| Metric | Value |
-|--------|-------|
-| Ingestion Latency (p95) | 1.84 ms |
-| Throughput (spans/sec) | ~5,000 (single instance) |
-| Batch Size | 100 spans |
-| Storage per Span | ~480 bytes |
-
-### Verifier Worker
-
-| Metric | Value |
-|--------|-------|
-| Recompute Time (2,442 claims) | 23‑33 ms |
-| Recompute Time (5,679 claims) | 58‑72 ms |
-| Worker Interval | 10 seconds |
-
----
-
-## GAP‑20 Grounding Benchmark
-
-### Objective
-
-To quantify the reduction in token usage and hallucination when an AI agent uses Garuda’s MCP‑grounded context versus raw repository exploration.
-
-### Setup
-
-- **Task Set**: 50 engineering questions (e.g., "Which functions call the PostgresStore?", "What is the impact of changing the PaymentService interface?")
-- **Model**: Claude 3.5 Sonnet (temperature=0)
-- **Baseline (Naive)**: Agent given access to the raw Git repository (file search + read)
-- **Garuda‑Grounded**: Agent given MCP tools (`get_entity`, `get_callers`, `get_callees`, `get_impact`, `get_evidence`)
-
-### Results
-
-| Metric | Naive | Garuda‑Grounded | Improvement |
-|--------|------:|----------------:|------------:|
-| Average Symbol Precision | 40.0% | 100.0% | +150% |
-| Upstream Caller Recall | 20.0% | 100.0% | +80% |
-| Downstream Dep Recall | 33.0% | 100.0% | +67% |
-| Hallucination / Error Rate | 66.7% | 0.0% | -66.7% |
-| Violation Quarantine Rate | 0.0% | 100.0% | +100% |
-| Input Tokens per Task (avg) | 4,850 | 620 | -87.2% |
-| Agent Steps per Task (avg) | 18 | 4 | -78% |
-
-### Interpretation
-
-- **Zero Hallucination** – Garuda‑grounded agent never invented non‑existent functions or relationships.
-- **Context Compression** – By replacing raw file dumps with precise AST subgraphs, token usage dropped by 87%.
-- **Quarantine Enforcement** – The agent avoided generating code that would create runtime contradictions because it could query `get_contradictions` and `get_blast_radius`.
-
----
-
-## Cryptographic Ledger Verification
-
-Garuda maintains a dual‑root Merkle ledger (static + runtime roots). We verified the chain integrity by replaying all blocks from genesis to current height.
-
-### Ledger State (as of August 2026)
-
-| Field | Value |
-|-------|-------|
-| Block Height | 898 |
-| Static Root Hash | `d42d0d4525de...` |
-| Runtime Root Hash | `a32a1c6f89f3...` |
-| Verified Claims | 0 (runtime verification in early testing) |
-| Contradicted Claims | 5 (quarantined) |
-| Unverified Claims | 2,441 |
-
-### Integrity Verification
-
-```bash
-garuda verify --workspace uuid-ws
-```
-
-Output:
-```
-Verifying ledger...
-Block 0 genesis: OK
-Block 1: OK
-...
-Block 898: OK
-All blocks verified. Chain integrity confirmed.
-```
-
-### Snapshot Example (Block #55)
-
-```json
-{
-  "id": "80f9bc82-8a5b-4acd-93ce-724342cc7c46",
-  "tenant_id": "00000000-0000-0000-0000-000000000001",
-  "block_height": 55,
-  "snapshot_hash": "3da4bb0e2195e66069ca5f5db8e8f0cce9f40b88d8863b3fe13a9e0ddc40b16a",
-  "static_root_hash": "d1af7d650d4e15942af569fd2325358df616b6407c62a1ccb73a63b45d8c997a",
-  "runtime_root_hash": "eb29e52bd1905783357f03a3e571dba3d28dc9b31e9446ed1a51674ced4d62a1",
-  "runtime_leaf_count": 2446,
-  "verified_claims_count": 0,
-  "contradicted_claims_count": 5,
-  "epoch_timestamp": 1787469493,
-  "created_at": "2026-08-23T12:48:13.113313+05:30"
-}
-```
-
----
-
-## Telemetry Ingestion Tests
-
-We validated the OpenTelemetry ingestion pipeline with both synthetic and real spans.
-
-### Test Matrix
-
-| Test ID | Scenario | Input | Expected | Result |
-|---------|----------|-------|----------|--------|
-| TC‑01 | Single span ingestion | POST /api/v1/telemetry/spans | HTTP 202, stored | ✅ PASS |
-| TC‑02 | Batch of 100 spans | 100 spans in one batch | All ingested | ✅ PASS |
-| TC‑03 | Entity correlation | Span with code.namespace + function | Matches UUID | ✅ PASS |
-| TC‑04 | Malformed span | Missing required fields | HTTP 400 | ✅ PASS |
-| TC‑05 | Concurrent ingestion | 10 concurrent clients | All accepted | ✅ PASS |
-
-### Sample Ingested Span
-
-```json
-{
-  "trace_id": "8a7c2e10f9b34da6a3ce929d0e0e9999",
-  "span_id": "00f067aa0ba90999",
-  "service_name": "garuda-api",
-  "operation": "HandleDashboardStats",
-  "duration_ms": 12.8,
-  "status_code": "OK",
-  "attributes": {
-    "code.namespace": "github.com/myshra777-ai/garuda/internal/api",
-    "code.function": "HandleDashboardStats"
-  },
-  "workspace_id": "532a8e33-975d-48a3-8f88-221cef52fec4",
-  "entity_id": "576ee52e-c90d-5b53-af16-9e75139c7cf9",
-  "created_at": "2026-08-22T19:52:41Z"
-}
-```
-
----
-
-## IDE Integration Tests
-
-The VS Code / Cursor extension was tested on macOS and Linux.
-
-### Features Validated
-
-| Feature | Test | Result |
-|---------|------|--------|
-| Inline squiggles | Open file with contradiction | Red underline appears on line | ✅ |
-| Hover tooltip | Hover over `HandleDashboardStats` | Shows callers, deps, impact | ✅ |
-| Sidebar tree | Ledger block height, contradictions list | Updates in real‑time | ✅ |
-| Status bar | Shows "Garuda: #898 (10 Violations)" | Updates every 10 sec | ✅ |
-| Command palette | "Garuda: Open Graph" | Opens D3 visualizer | ✅ |
-
----
-
-## Methodology
-
-### Test Environment
-
-- **OS**: Ubuntu 22.04 LTS (kernel 5.15)
-- **CPU**: Intel Xeon E5‑2686 v4 (4 vCPUs)
-- **RAM**: 16 GB
-- **Database**: PostgreSQL 15.4 (local)
-- **Go version**: 1.23
-- **Network**: Localhost (no external internet)
-
-### Repeatability
-
-All tests can be reproduced by:
-
-```bash
-# Clone the repository
-git clone https://github.com/myshra777-ai/garuda
-cd garuda
-
-# Start the stack
-garuda up
-
-# Run the benchmark suite
-garuda bench --full
-
-# Generate this evidence report
-garuda self-describe --format evidence > EVIDENCE.md
-```
-
-### Limitations
-
-- All runtime tests used controlled, manually injected spans; real‑world production telemetry may vary.
-- Performance benchmarks were run on a single VM; scale beyond 14 repositories is extrapolated but not fully tested.
-- The GAP‑20 benchmark is representative of common engineering questions but not exhaustive.
-
----
-
-## Screenshots
-
-All screenshots are located in the `assets/screenshots/` directory.
-
-| Image | Description |
-|-------|-------------|
-| `garuda_minimal_logo.png` | Project logo |
-| `Dashboard_overview_workspace_active14repo_and_10_contradictions.png` | Main dashboard showing 14 repos and 10 contradictions |
-| `global_search.png` | Global search over semantic entities |
-| `repository-topology.png` | Repository topology view |
-| `top_level_repo_architecture.png` | Architecture explorer |
-| `cross-repo-graph.png` | Cross‑repository graph |
-| `dashboard-14repo-contradictions.png` | Contradiction list in dashboard |
-| `evidence-cryptographic-trust.png` | Cryptographic ledger status |
-| `top-level-repo-graph.png` | IDE graph view (top‑level) |
-| `ide-graph-view.png` | IDE graph view (detailed) |
-| `ide-contradictions.png` | IDE contradiction view |
-
----
-
-## Continuous Validation
-
-Garuda runs a continuous validation pipeline that exercises these tests on every commit. The latest results are always available at:
-
-[GitHub Actions](https://github.com/myshra777-ai/garuda/actions)
-
----
-
-*Last updated: August 2026*
-```
+````
 
 ---
 
