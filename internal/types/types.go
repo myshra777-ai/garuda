@@ -181,11 +181,6 @@ type DecisionStore interface {
 	GetDecisionsActiveAt(ctx context.Context, tenantID uuid.UUID, at time.Time, scope Scope, statuses []DecisionStatus) ([]*Decision, error)
 	GetDecisionHistory(ctx context.Context, tenantID, decisionID uuid.UUID) ([]*Decision, error)
 
-	// Audit Trail Capabilities
-	LogAuditEvent(ctx context.Context, tenantID uuid.UUID, eventType string, eventID uuid.UUID, actor string, payload interface{}) (*AuditEvent, error)
-	VerifyAuditEvent(ctx context.Context, tenantID uuid.UUID, eventID uuid.UUID) (*AuditVerification, error)
-	ListAuditEvents(ctx context.Context, tenantID uuid.UUID, since time.Time) ([]AuditEvent, error)
-
 	// Plan assembling
 	GetPlan(ctx context.Context, tenantID uuid.UUID, req *PlanRequest) (*PlanResult, error)
 

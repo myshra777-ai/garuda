@@ -188,8 +188,7 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/agents/resume", s.HandleResume).Methods(http.MethodPost)
 	api.HandleFunc("/tasks/{task_id}/lineage", s.HandleGetLineage).Methods(http.MethodGet)
 	api.HandleFunc("/router/evaluate", s.HandleEvaluateRoute).Methods(http.MethodPost, http.MethodOptions)
-	api.HandleFunc("/audit/export", s.HandleExportAuditLogs).Methods(http.MethodGet)
-	api.HandleFunc("/audit/verify/{id}", s.HandleVerifyAuditLog).Methods(http.MethodGet)
+
 	api.Handle("/telemetry/stream", s.sseBroker).Methods(http.MethodGet)
 	api.HandleFunc("/telemetry/spans", s.HandleIngestTraces).Methods(http.MethodPost)
 	api.HandleFunc("/runtime/coverage", s.HandleGetRuntimeCoverage).Methods(http.MethodGet)
@@ -258,33 +257,6 @@ func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
 		"tenant_id": tenantID.String(),
 		"actor":     actor,
 	})
-}
-
-// HandleVerifyAuditLog verifies a given audit event ID against the active Merkle root.
-func (s *Server) HandleVerifyAuditLog(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	eventIDStr := vars["id"]
-	eventID, err := uuid.Parse(eventIDStr)
-	if err != nil {
-		s.RespondWithError(w, http.StatusBadRequest, "invalid audit event id format", "")
-		return
-	}
-
-	tenantID, err := resolveTenantID(r, uuid.Nil)
-	if err != nil {
-		s.RespondWithError(w, http.StatusUnauthorized, "tenant_id is required", "")
-		return
-	}
-
-	verification, err := s.store.VerifyAuditEvent(r.Context(), tenantID, eventID)
-	if err != nil {
-		s.RespondWithError(w, http.StatusNotFound, err.Error(), "")
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(verification)
 }
 
 func readRateLimitPerMinute() int {

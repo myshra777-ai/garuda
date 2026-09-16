@@ -51,10 +51,7 @@ func (s *Server) HandleSystemDiscover(w http.ResponseWriter, r *http.Request) {
 		{
 			"name":        "Audit",
 			"description": "Cryptographic audit and Merkle proof verification.",
-			"endpoints": []string{
-				"GET /audit/verify",
-				"GET /audit/export",
-			},
+			"endpoints":   []string{},
 		},
 		{
 			"name":        "Budget",
@@ -154,7 +151,6 @@ func (s *Server) HandleSystemBootstrap(w http.ResponseWriter, r *http.Request) {
 			"agent_handoff":    "POST /agents/handoff",
 			"agent_resume":     "POST /agents/resume",
 			"lineage_dag":      "GET /decisions/{id}/lineage",
-			"audit_verify":     "GET /audit/verify",
 		},
 		"mcp_tools": mcpTools,
 		"budget":    budget,
