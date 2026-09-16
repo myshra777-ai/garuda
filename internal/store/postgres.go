@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
@@ -62,42 +61,6 @@ func (s *PostgresStore) IngestEvidence(ctx context.Context, tenantID uuid.UUID, 
 			return fmt.Errorf("failed to ingest evidence %x: %w", e.Hash, err)
 		}
 	}
-	return tx.Commit(ctx)
-}
-
-// IngestBlocks performs a content-addressable upsert for agent evidence blocks.
-func (s *PostgresStore) IngestBlocks(ctx context.Context, blocks []types.Block) error {
-	if len(blocks) == 0 {
-		return nil
-	}
-
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction for blocks: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	query := `
-        INSERT INTO blocks (hash, content, ref_count, created_at)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (hash) DO UPDATE 
-        SET ref_count = blocks.ref_count + EXCLUDED.ref_count;
-    `
-
-	batch := &pgx.Batch{}
-	for _, b := range blocks {
-		batch.Queue(query, b.Hash[:], b.Content, b.RefCount)
-	}
-
-	br := tx.SendBatch(ctx, batch)
-	defer br.Close()
-
-	for i := 0; i < len(blocks); i++ {
-		if _, err := br.Exec(); err != nil {
-			return fmt.Errorf("failed executing block ingestion batch at index %d: %w", i, err)
-		}
-	}
-
 	return tx.Commit(ctx)
 }
 
