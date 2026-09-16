@@ -25,10 +25,20 @@ import (
 
 // GetMerkleRoot retrieves current root hash state or initializes a genesis root if missing.
 func (s *PostgresStore) GetMerkleRoot(ctx context.Context, tenantID uuid.UUID) (*types.MerkleRoot, error) {
+	// root_hash is stored as a 64-character hex string (text), enforced
+	// by the merkle_roots_root_hash_format CHECK constraint. It is not
+	// bytea. The previous query called encode(root_hash, 'hex'), which
+	// requires a bytea argument and fails at parse time with SQLSTATE
+	// 42883 on every call. The error was returned to the caller, which
+	// treated it as "no Merkle root yet" and displayed a fallback.
+	//
+	// Verified 2026-09-16: the canonical tenant's row is present with
+	// block_height = 34 and a valid 64-char hex root, but the query
+	// returned SQLSTATE 42883.
 	query := `
 		SELECT 
 			tenant_id, 
-			encode(root_hash, 'hex') AS root_hash, 
+			root_hash, 
 			block_height, 
 			created_at, 
 			updated_at
