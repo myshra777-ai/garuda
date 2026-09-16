@@ -157,19 +157,18 @@ func (s *PostgresStore) ListDecisions(ctx context.Context, tenantID uuid.UUID, s
 		statusStrs[i] = string(st)
 	}
 
+	if tenantID == uuid.Nil {
+		return nil, fmt.Errorf("ListDecisions: tenantID is required")
+	}
+
 	query := `
         SELECT id, tenant_id, title, statement, status, domain, system, team, env,
                owner, confidence, fingerprint, parent_id, temporal_metadata,
                created_at, updated_at, approved_at
         FROM decisions
-        WHERE `
-	args := []any{}
-	paramIndex := 1
-	if tenantID != uuid.Nil {
-		query += fmt.Sprintf(`tenant_id = $%d AND `, paramIndex)
-		args = append(args, tenantID)
-		paramIndex++
-	}
+        WHERE tenant_id = $1 `
+	args := []any{tenantID}
+	paramIndex := 2
 	query += fmt.Sprintf(`($%d = '' OR domain = $%d)`, paramIndex, paramIndex)
 	args = append(args, scope.Domain)
 	paramIndex++
