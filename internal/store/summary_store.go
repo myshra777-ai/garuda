@@ -154,16 +154,26 @@ func (s *PostgresStore) GetTopArchitecturalHubs(ctx context.Context, workspaceID
 
 // GetCrossRepoBridges returns cross-repository calls in a workspace.
 func (s *PostgresStore) GetCrossRepoBridges(ctx context.Context, workspaceID uuid.UUID, limit int) ([]CrossRepoBridge, error) {
+	// cross_repo_edges is the authoritative table for cross-repository
+	// bridges. The analyzer writes to it in detectCrossRepoImports and
+	// the dashboard reads it in HandleDashboardStats. The previous
+	// query derived bridges by joining claims to entities to
+	// repositories and filtering on r1.id != r2.id. That query
+	// produced zero rows on workspaces where the bridge rows exist,
+	// because the claims join does not surface the same tuples the
+	// analyzer wrote. Same class of defect as GetLatestMerkleRoot
+	// reading decision_revisions.merkle_root instead of merkle_roots.
 	rows, err := s.pool.Query(ctx, `
-		SELECT DISTINCT r1.module_path, r2.module_path, count(*) 
-		FROM claims c
-		JOIN entities e1 ON c.from_entity_id = e1.id
-		JOIN entities e2 ON c.to_entity_id = e2.id
-		JOIN repositories r1 ON e1.repository_id = r1.id
-		JOIN repositories r2 ON e2.repository_id = r2.id
-		WHERE c.workspace_id = $1 AND r1.id != r2.id
-		GROUP BY r1.module_path, r2.module_path
-		LIMIT $2;
+		SELECT COALESCE(r1.module_path, r1.name, 'unknown') AS from_module,
+		       COALESCE(r2.module_path, r2.name, 'unknown') AS to_module,
+		       COUNT(*)::int AS call_count
+		  FROM cross_repo_edges cre
+		  JOIN repositories r1 ON r1.id = cre.from_repo_id
+		  JOIN repositories r2 ON r2.id = cre.to_repo_id
+		 WHERE cre.workspace_id = $1
+		 GROUP BY r1.module_path, r1.name, r2.module_path, r2.name
+		 ORDER BY call_count DESC
+		 LIMIT $2;
 	`, workspaceID, limit)
 	if err != nil {
 		return nil, err
@@ -450,6 +460,13 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 		return nil, err
 	}
 
+	// Cross-repo bridges: distinct (from_repo, to_repo) pairs in the
+	// workspace. GetCrossRepoBridges returns one entry per pair. The
+	// limit is high enough not to truncate a realistic workspace;
+	// a dedicated COUNT(DISTINCT) method would remove the limit
+	// entirely, tracked as a follow-up.
+	bridges, _ := s.GetCrossRepoBridges(ctx, workspaceID, 1000)
+
 	hubsData, err := s.GetTopArchitecturalHubs(ctx, workspaceID, 5)
 	if err != nil {
 		return nil, err
@@ -491,9 +508,10 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 		AgentID:     agentID,
 		Trust:       trust,
 		Scale: BriefingScaleDTO{
-			Repositories: counts.Repositories,
-			Entities:     counts.Entities,
-			Claims:       counts.Claims,
+			Repositories:     counts.Repositories,
+			Entities:         counts.Entities,
+			Claims:           counts.Claims,
+			CrossRepoBridges: len(bridges),
 		},
 		Hubs: hubs,
 		Policies: BriefingPolicyDTO{
