@@ -198,7 +198,10 @@ func (e *Engine) upsertPolicy(
 		LIMIT 1
 	`, tenantID, "POLICY:"+p.ID).Scan(&id)
 	if err == nil {
-		// Update existing
+		// Update existing. Scoped by tenant_id: the id was obtained
+		// from the tenant-scoped SELECT above, so the update cannot
+		// cross tenants in practice. The explicit filter keeps the
+		// invariant in the query rather than relying on the caller.
 		_, err = e.pool.Exec(ctx, `
 			UPDATE policies
 			SET scope_domain = $2,
@@ -206,8 +209,8 @@ func (e *Engine) upsertPolicy(
 			    actor = $4,
 			    metadata = $5,
 			    updated_at = NOW()
-			WHERE id = $1
-		`, id, p.Scope.Domain, p.Scope.System, p.Authority, policyMetadataJSON(p))
+			WHERE id = $1 AND tenant_id = $6
+		`, id, p.Scope.Domain, p.Scope.System, p.Authority, policyMetadataJSON(p), tenantID)
 		return id, err
 	}
 
