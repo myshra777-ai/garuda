@@ -180,58 +180,98 @@ func (e *Engine) upsertPolicy(
 	hashes map[string]string,
 ) (uuid.UUID, error) {
 
-	// Look up source path and hash (if any) from the hashes map
-	var sourcePath, sourceHash string
-	for path, h := range hashes {
-		if h == hashPolicyYAML(p) {
-			sourcePath = path
-			sourceHash = h
-			break
+	statement := "POLICY:" + p.ID
+	metadataJSON := policyMetadataJSON(p)
+
+	// 1. If a policy with a different external_id but the same title
+	//    and scope exists and is active, mark it superseded before
+	//    this one is written. Identity across renames is the title
+	//    plus the scope, not the external_id.
+	//
+	//    The supersede is a single UPDATE that sets status and
+	//    superseded_by. superseded_by is set after the new row is
+	//    inserted (step 3), because it references the new id.
+	var previousID *uuid.UUID
+	{
+		var prev uuid.UUID
+		err := e.pool.QueryRow(ctx, `
+			SELECT id FROM policies
+			 WHERE tenant_id = $1
+			   AND scope_domain = $2
+			   AND scope_system = $3
+			   AND metadata->>'title' = $4
+			   AND statement <> $5
+			   AND status = 'active'
+			 ORDER BY created_at DESC
+			 LIMIT 1
+		`, tenantID, p.Scope.Domain, p.Scope.System, p.Title, statement).Scan(&prev)
+		if err == nil {
+			previousID = &prev
 		}
 	}
 
-	// Find existing policy by tenant + external id
+	// 2. Upsert by (tenant_id, statement). ON CONFLICT requires the
+	//    unique constraint added in migration 087.
 	var id uuid.UUID
 	err := e.pool.QueryRow(ctx, `
-		SELECT id FROM policies
-		WHERE tenant_id = $1 AND statement = $2
-		LIMIT 1
-	`, tenantID, "POLICY:"+p.ID).Scan(&id)
-	if err == nil {
-		// Update existing. Scoped by tenant_id: the id was obtained
-		// from the tenant-scoped SELECT above, so the update cannot
-		// cross tenants in practice. The explicit filter keeps the
-		// invariant in the query rather than relying on the caller.
-		_, err = e.pool.Exec(ctx, `
-			UPDATE policies
-			SET scope_domain = $2,
-			    scope_system = $3,
-			    actor = $4,
-			    metadata = $5,
-			    updated_at = NOW()
-			WHERE id = $1 AND tenant_id = $6
-		`, id, p.Scope.Domain, p.Scope.System, p.Authority, policyMetadataJSON(p), tenantID)
-		return id, err
-	}
-
-	// Insert new
-	err = e.pool.QueryRow(ctx, `
 		INSERT INTO policies (
 			tenant_id, statement, scope_domain, scope_system,
-			actor, status, metadata, created_at, updated_at
+			actor, status, metadata, source_path, source_hash,
+			created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, 'active', $6, NOW(), NOW()
-		) RETURNING id
-	`, tenantID,
-		"POLICY:"+p.ID,
-		p.Scope.Domain,
-		p.Scope.System,
-		p.Authority,
-		policyMetadataJSON(p),
+			$1, $2, $3, $4, $5, 'active', $6, $7, $8, NOW(), NOW()
+		)
+		ON CONFLICT (tenant_id, statement) DO UPDATE SET
+			scope_domain = EXCLUDED.scope_domain,
+			scope_system = EXCLUDED.scope_system,
+			actor        = EXCLUDED.actor,
+			metadata     = EXCLUDED.metadata,
+			source_path  = EXCLUDED.source_path,
+			source_hash  = EXCLUDED.source_hash,
+			updated_at   = NOW()
+		RETURNING id
+	`, tenantID, statement,
+		p.Scope.Domain, p.Scope.System,
+		p.Authority, metadataJSON,
+		sourcePathFor(p, hashes), sourceHashFor(p, hashes),
 	).Scan(&id)
-	_ = sourcePath
-	_ = sourceHash
-	return id, err
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("upsert policy %s: %w", p.ID, err)
+	}
+
+	// 3. Retire the previous policy, if any, and link it to the new one.
+	if previousID != nil && *previousID != id {
+		_, _ = e.pool.Exec(ctx, `
+			UPDATE policies
+			   SET status = 'superseded',
+			       superseded_by = $1,
+			       updated_at = NOW()
+			 WHERE id = $2 AND tenant_id = $3
+		`, id, *previousID, tenantID)
+	}
+
+	return id, nil
+}
+
+// sourcePathFor returns the source path for a policy, or "" if the
+// hash map has no matching entry.
+func sourcePathFor(p *Policy, hashes map[string]string) string {
+	h := hashPolicyYAML(p)
+	if h == "" {
+		return ""
+	}
+	for path, hash := range hashes {
+		if hash == h {
+			return path
+		}
+	}
+	return ""
+}
+
+// sourceHashFor returns the hash for a policy, or "" if the hash
+// map has no matching entry.
+func sourceHashFor(p *Policy, hashes map[string]string) string {
+	return hashPolicyYAML(p)
 }
 
 func (e *Engine) persistEvaluation(ctx context.Context, ev *Evaluation, proof []byte) error {
