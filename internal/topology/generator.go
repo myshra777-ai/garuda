@@ -76,7 +76,7 @@ func (g *Generator) Recommend(ctx context.Context, tenantID uuid.UUID, goal, sco
 			TopologyID:   topology.ID,
 			SequenceNo:   i + 1,
 			Title:        title,
-			Description:  desc,
+			Description:  types.StrPtr(desc),
 			RequiredRole: role,
 			Scope:        scopeDomain + ":" + scopeSystem,
 			Status:       types.TaskPending,
@@ -156,7 +156,7 @@ func generateTasks(goal, scopeDomain, scopeSystem string, roles []types.AgentRol
 		}
 		tasks = append(tasks, &types.Task{
 			Title:        title,
-			Description:  desc,
+			Description:  types.StrPtr(desc),
 			RequiredRole: role,
 			Scope:        scopeDomain + ":" + scopeSystem,
 		})

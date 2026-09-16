@@ -224,7 +224,7 @@ type Task struct {
 	Name         string                 `json:"name,omitempty"`
 	Type         string                 `json:"type,omitempty"`
 	Title        string                 `json:"title,omitempty"`
-	Description  string                 `json:"description,omitempty"`
+	Description  *string                `json:"description,omitempty"`
 	Status       TaskStatus             `json:"status"` // pending, in_progress, paused, completed, abandoned
 	Priority     int                    `json:"priority,omitempty"`
 	OwnerAgentID *uuid.UUID             `json:"owner_agent_id,omitempty"`
@@ -370,3 +370,7 @@ type SubmitDecisionResult struct {
 	ContentHash    []byte    `json:"content_hash"`
 	MerkleRoot     []byte    `json:"merkle_root"`
 }
+
+// StrPtr returns a pointer to its argument. Used for nullable string
+// columns where the schema allows NULL and the Go type is *string.
+func StrPtr(s string) *string { return &s }
