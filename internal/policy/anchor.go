@@ -100,8 +100,8 @@ func (a *Anchor) VerifyEvaluation(ctx context.Context, ev *Evaluation) (bool, er
 
 	var storedProof []byte
 	err := a.pool.QueryRow(ctx, `
-		SELECT merkle_proof FROM policy_evaluations WHERE id = $1
-	`, ev.ID).Scan(&storedProof)
+		SELECT merkle_proof FROM policy_evaluations WHERE id = $1 AND tenant_id = $2
+	`, ev.ID, ev.TenantID).Scan(&storedProof)
 	if err != nil {
 		return false, fmt.Errorf("fetch proof: %w", err)
 	}

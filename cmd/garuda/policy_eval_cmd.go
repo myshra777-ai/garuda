@@ -400,7 +400,7 @@ var policyVerifyCmd = &cobra.Command{
 			return fmt.Errorf("invalid evaluation id: %w", err)
 		}
 
-		ev, err := loadEvaluation(context.Background(), pool, evalID)
+		ev, err := loadEvaluation(context.Background(), pool, getTenantID(), evalID)
 		if err != nil {
 			return err
 		}
@@ -446,7 +446,7 @@ func shortUUID(id uuid.UUID) string {
 	return s
 }
 
-func loadEvaluation(ctx context.Context, pool *pgxpool.Pool, evalID uuid.UUID) (*policy.Evaluation, error) {
+func loadEvaluation(ctx context.Context, pool *pgxpool.Pool, tenantID, evalID uuid.UUID) (*policy.Evaluation, error) {
 	var ev policy.Evaluation
 	var evidenceJSON []byte
 	var decision, reason string
@@ -455,8 +455,8 @@ func loadEvaluation(ctx context.Context, pool *pgxpool.Pool, evalID uuid.UUID) (
 		       decision, reason, evidence, evaluated_at,
 		       merkle_block_height, merkle_proof,
 		       subject_kind, subject_id, actor
-		FROM policy_evaluations WHERE id = $1
-	`, evalID).Scan(
+		FROM policy_evaluations WHERE id = $1 AND tenant_id = $2
+	`, evalID, tenantID).Scan(
 		&ev.ID, &ev.TenantID, &ev.WorkspaceID, &ev.PolicyID, &ev.PolicyVersion,
 		&decision, &reason, &evidenceJSON, &ev.EvaluatedAt,
 		&ev.MerkleBlockHeight, &ev.MerkleProof,
