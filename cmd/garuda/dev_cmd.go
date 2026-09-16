@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/api"
 	"github.com/myshra777-ai/garuda/internal/auth"
@@ -80,64 +81,32 @@ var devCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		mux := http.NewServeMux()
+		// The dev daemon uses the same route table as the production
+		// API server. Before this change, dev_cmd.go carried its own
+		// manually-curated route list, which had drifted from
+		// handler.go's RegisterRoutes. The agent orchestration routes
+		// (checkpoint, handoff, resume, lineage) existed in production
+		// and returned 404 in dev. Any future route added to
+		// RegisterRoutes is now available in dev without a second edit.
+		//
+		// Rate limiting is applied once, by RegisterRoutes
+		// (r.Use(s.RateLimitMiddleware) at the top of that function).
+		// The outer wrapper that used to apply it is removed to avoid
+		// double-wrapping.
+		//
+		// The dev-only graph overrides are registered after
+		// RegisterRoutes. Gorilla/mux matches the most recently
+		// registered route for a given path, so these replace the
+		// production handlers for /graph and /api/v1/graph.
+		router := mux.NewRouter()
+		server.RegisterRoutes(router)
 
-		// ─────────────────────────────────────────────────────────────
-		// Core health + telemetry routes
-		// ─────────────────────────────────────────────────────────────
-		mux.HandleFunc("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"healthy","service":"garuda-unified"}`))
-		})
-		mux.HandleFunc("/api/v1/telemetry/spans", server.HandleIngestRuntimeSpans)
+		router.HandleFunc("/graph", server.RequireSession(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(visualizerHTML))
+		})).Methods(http.MethodGet)
 
-		// ─────────────────────────────────────────────────────────────
-		// Dashboard routes — MUST be registered at the top level.
-		// Previously these were nested inside /api/v1/graph and only
-		// registered after that endpoint was hit once. That caused 404s.
-		// ─────────────────────────────────────────────────────────────
-		// Public authentication routes
-		mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-			switch r.Method {
-			case http.MethodGet:
-				server.HandleLoginGET(w, r)
-			case http.MethodPost:
-				server.HandleLoginPOST(w, r)
-			default:
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			}
-		})
-		mux.HandleFunc("/signup", func(w http.ResponseWriter, r *http.Request) {
-			switch r.Method {
-			case http.MethodGet:
-				server.HandleSignupGET(w, r)
-			case http.MethodPost:
-				server.HandleSignupPOST(w, r)
-			default:
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			}
-		})
-		mux.HandleFunc("/logout", server.HandleLogout)
-
-		// Session-protected dashboard routes
-		mux.HandleFunc("/dashboard", server.RequireSession(server.HandleDashboard))
-		mux.HandleFunc("/api/v1/dashboard/stats", server.RequireSession(server.HandleDashboardStats))
-		mux.HandleFunc("/admin", server.RequireSession(server.HandleAdminDashboard))
-		mux.HandleFunc("/api/v1/dashboard/search", server.RequireSession(server.HandleDashboardSearch))
-		mux.HandleFunc("/api/v1/events", server.RequireSession(server.HandleLiveEvents))
-		mux.HandleFunc("/api/v1/workspaces", server.RequireSession(server.HandleListWorkspaces))
-		mux.HandleFunc("/api/v1/dashboard/policies", server.RequireSession(server.HandleDashboardPolicies))
-		mux.HandleFunc("/api/v1/dashboard/policies/verify", server.RequireSession(server.HandleDashboardPolicyVerify))
-		mux.HandleFunc("/api/v1/runtime/coverage", server.RequireSession(server.HandleGetRuntimeCoverage))
-		mux.HandleFunc("/api/v1/merkle/state", server.RequireSession(server.HandleGetMerkleState))
-
-		// ─────────────────────────────────────────────────────────────
-		// Graph routes
-		//   /graph        → standalone D3 visualizer (lightweight, for iframe/embed)
-		//   /api/v1/graph → full GraphResponseDTO (level/focus/nodes/edges)
-		//                   with an HTML fallback when Accept: text/html
-		// ─────────────────────────────────────────────────────────────
-		graphHandler := func(w http.ResponseWriter, r *http.Request) {
+		router.HandleFunc("/api/v1/graph", server.RequireSession(func(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(r.Header.Get("Accept"), "text/html") &&
 				!strings.Contains(r.URL.Query().Get("format"), "json") {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -145,18 +114,12 @@ var devCmd = &cobra.Command{
 				return
 			}
 			server.HandleGraph(w, r)
-		}
-		mux.HandleFunc("/api/v1/graph", server.RequireSession(graphHandler))
-
-		mux.HandleFunc("/graph", server.RequireSession(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte(visualizerHTML))
-		}))
+		})).Methods(http.MethodGet)
 
 		bindAddr := getBindAddr()
 		httpServer := &http.Server{
 			Addr:    bindAddr,
-			Handler: server.RateLimitMiddleware(mux),
+			Handler: router,
 		}
 		slog.Info("binding HTTP server", "addr", bindAddr)
 
