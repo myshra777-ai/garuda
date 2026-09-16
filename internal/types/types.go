@@ -196,7 +196,7 @@ type DecisionStore interface {
 	SavePolicy(ctx context.Context, p *Policy) error
 	GetActivePolicies(ctx context.Context, tenantID uuid.UUID, scopeDomain, scopeSystem string) ([]*Policy, error)
 	GetActivePoliciesByScope(ctx context.Context, tenantID uuid.UUID, scope Scope) ([]*Policy, error)
-	SupersedePolicy(ctx context.Context, oldID, newID uuid.UUID) error
+	SupersedePolicy(ctx context.Context, tenantID, oldID, newID uuid.UUID) error
 	LogPolicyViolation(ctx context.Context, v *PolicyViolation) error
 }
 

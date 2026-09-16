@@ -147,7 +147,7 @@ func (f *fakeDecisionStore) SavePolicy(ctx context.Context, p *types.Policy) err
 	return nil
 }
 
-func (f *fakeDecisionStore) SupersedePolicy(ctx context.Context, oldID, newID uuid.UUID) error {
+func (f *fakeDecisionStore) SupersedePolicy(ctx context.Context, tenantID, oldID, newID uuid.UUID) error {
 	return nil
 }
 

@@ -158,7 +158,7 @@ func (s *Server) HandleSupersedePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Mark old as superseded
-	if err := s.store.SupersedePolicy(r.Context(), policyID, newPolicy.ID); err != nil {
+	if err := s.store.SupersedePolicy(r.Context(), tenantID, policyID, newPolicy.ID); err != nil {
 		s.RespondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

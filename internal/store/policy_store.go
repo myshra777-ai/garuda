@@ -104,13 +104,20 @@ func (s *PostgresStore) GetActivePoliciesByScope(ctx context.Context, tenantID u
 }
 
 // SupersedePolicy marks a policy as superseded and creates a new one.
-func (s *PostgresStore) SupersedePolicy(ctx context.Context, oldID, newID uuid.UUID) error {
+// SupersedePolicy marks a policy as superseded and records the policy
+// that replaced it.
+//
+// The UPDATE is scoped by tenant_id. Both oldID and newID must belong
+// to the same tenant. The previous version filtered by id only, so a
+// caller could pass two UUIDs from different tenants and the update
+// would cross the tenant boundary silently.
+func (s *PostgresStore) SupersedePolicy(ctx context.Context, tenantID, oldID, newID uuid.UUID) error {
 	query := `
 		UPDATE policies
 		SET status = 'superseded', superseded_by = $1, updated_at = NOW()
-		WHERE id = $2
+		WHERE id = $2 AND tenant_id = $3
 	`
-	_, err := s.pool.Exec(ctx, query, newID, oldID)
+	_, err := s.pool.Exec(ctx, query, newID, oldID, tenantID)
 	return err
 }
 
