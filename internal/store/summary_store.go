@@ -7,10 +7,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type WorkspaceCounts struct {
@@ -267,4 +270,261 @@ func (s *PostgresStore) GetSymbolSummaryDetail(ctx context.Context, workspaceID 
 	_ = s.pool.QueryRow(ctx, `SELECT count(*) FROM claims WHERE workspace_id = $1 AND from_entity_id = $2`, workspaceID, det.ID).Scan(&det.OutboundCount)
 
 	return &det, nil
+}
+
+// BriefingDTO is the session-start summary for an MCP agent.
+//
+// Seven sections are always returned:
+//
+//	workspace   — which workspace the briefing describes
+//	trust       — the tenant's Merkle state (root, block height, verification status)
+//	scale       — repositories, entities, claims
+//	hubs        — top entities by inbound edge count
+//	policies    — active policy count and titles
+//	attention   — open runtime contradictions and undocumented code
+//	new_since   — diff against the caller's last briefing
+//
+// session_id and agent_id are returned for correlation. They are not
+// keys; the watermark is keyed on agent_id only.
+type BriefingDTO struct {
+	Workspace   string               `json:"workspace"`
+	WorkspaceID uuid.UUID            `json:"workspace_id"`
+	SessionID   string               `json:"session_id"`
+	AgentID     string               `json:"agent_id"`
+	Trust       BriefingTrustDTO     `json:"trust"`
+	Scale       BriefingScaleDTO     `json:"scale"`
+	Hubs        []BriefingHubDTO     `json:"hubs"`
+	Policies    BriefingPolicyDTO    `json:"policies"`
+	Attention   BriefingAttentionDTO `json:"attention"`
+	NewSince    BriefingDiffDTO      `json:"new_since"`
+}
+
+type BriefingTrustDTO struct {
+	MerkleRoot  string `json:"merkle_root"`
+	BlockHeight int64  `json:"block_height"`
+	Status      string `json:"status"`
+}
+
+type BriefingScaleDTO struct {
+	Repositories     int `json:"repositories"`
+	Entities         int `json:"entities"`
+	Claims           int `json:"claims"`
+	CrossRepoBridges int `json:"cross_repo_bridges"`
+}
+
+type BriefingHubDTO struct {
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Package string `json:"package"`
+	Callers int    `json:"inbound_edges"`
+}
+
+type BriefingPolicyDTO struct {
+	ActiveCount int      `json:"active_count"`
+	Titles      []string `json:"titles,omitempty"`
+}
+
+type BriefingAttentionDTO struct {
+	OpenContradictions   int `json:"open_contradictions"`
+	UndocumentedEntities int `json:"undocumented_entities"`
+	DriftFindings        int `json:"drift_findings"`
+}
+
+type BriefingDiffDTO struct {
+	ClaimsAdded        int  `json:"claims_added"`
+	VerificationsSince int  `json:"verifications_since"`
+	PoliciesChanged    int  `json:"policies_changed"`
+	HasPriorBriefing   bool `json:"has_prior_briefing"`
+}
+
+// CountActivePolicies returns the number of active policies for a
+// tenant and the titles of up to five of them.
+func (s *PostgresStore) CountActivePolicies(ctx context.Context, tenantID uuid.UUID) (int, []string, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)::int FROM policies
+		 WHERE tenant_id = $1 AND status = 'active'
+	`, tenantID).Scan(&count)
+	if err != nil {
+		return 0, nil, fmt.Errorf("count active policies: %w", err)
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT COALESCE(metadata->>'title', statement, 'unnamed policy') AS title
+		  FROM policies
+		 WHERE tenant_id = $1 AND status = 'active'
+		 ORDER BY created_at DESC
+		 LIMIT 5
+	`, tenantID)
+	if err != nil {
+		return count, nil, fmt.Errorf("policy titles: %w", err)
+	}
+	defer rows.Close()
+
+	var titles []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err == nil {
+			titles = append(titles, t)
+		}
+	}
+	return count, titles, rows.Err()
+}
+
+// CountOpenContradictions returns the number of runtime contradictions
+// for a workspace. Reads claim_verifications, the same table the
+// dashboard's "Needs Attention" panel reads.
+func (s *PostgresStore) CountOpenContradictions(ctx context.Context, workspaceID uuid.UUID) (int, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(COUNT(*)::int, 0)
+		  FROM claim_verifications
+		 WHERE workspace_id = $1 AND status = 'CONTRADICTED'
+	`, workspaceID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count open contradictions: %w", err)
+	}
+	return count, nil
+}
+
+// GetOrCreateWatermark returns the last briefing timestamp for an
+// agent in a workspace. If no watermark exists, it writes one and
+// returns a zero time.
+func (s *PostgresStore) GetOrCreateWatermark(ctx context.Context, tenantID, workspaceID uuid.UUID, agentID string) (time.Time, int64, bool, error) {
+	var lastBriefedAt time.Time
+	var lastHeight int64
+	err := s.pool.QueryRow(ctx, `
+		SELECT last_briefed_at, last_merkle_height
+		  FROM mcp_agent_watermarks
+		 WHERE tenant_id = $1 AND workspace_id = $2 AND agent_id = $3
+	`, tenantID, workspaceID, agentID).Scan(&lastBriefedAt, &lastHeight)
+	if err == nil {
+		return lastBriefedAt, lastHeight, true, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, 0, false, fmt.Errorf("read watermark: %w", err)
+	}
+
+	// No prior watermark. Write a zero-height row so the next call
+	// has a starting point.
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO mcp_agent_watermarks (tenant_id, workspace_id, agent_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (tenant_id, workspace_id, agent_id) DO NOTHING
+	`, tenantID, workspaceID, agentID)
+	if err != nil {
+		return time.Time{}, 0, false, fmt.Errorf("write initial watermark: %w", err)
+	}
+	return time.Time{}, 0, false, nil
+}
+
+// UpdateWatermark records the moment of the current briefing.
+func (s *PostgresStore) UpdateWatermark(ctx context.Context, tenantID, workspaceID uuid.UUID, agentID string, height int64) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO mcp_agent_watermarks (tenant_id, workspace_id, agent_id, last_briefed_at, last_merkle_height)
+		VALUES ($1, $2, $3, NOW(), $4)
+		ON CONFLICT (tenant_id, workspace_id, agent_id) DO UPDATE
+		SET last_briefed_at = NOW(),
+		    last_merkle_height = EXCLUDED.last_merkle_height
+	`, tenantID, workspaceID, agentID, height)
+	if err != nil {
+		return fmt.Errorf("update watermark: %w", err)
+	}
+	return nil
+}
+
+// GetBriefing composes the seven-section briefing for an MCP agent.
+//
+// The watermark is read first. If a prior briefing exists, the diff
+// is computed against it. Otherwise HasPriorBriefing is false and the
+// diff counts are zero. After composition, the watermark is updated
+// to the current moment and block height.
+func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID uuid.UUID, workspaceName, agentID, sessionID string) (*BriefingDTO, error) {
+	lastBriefedAt, _, hasPrior, err := s.GetOrCreateWatermark(ctx, tenantID, workspaceID, agentID)
+	if err != nil {
+		return nil, err
+	}
+
+	counts, err := s.GetWorkspaceCounts(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	hubsData, err := s.GetTopArchitecturalHubs(ctx, workspaceID, 5)
+	if err != nil {
+		return nil, err
+	}
+	hubs := make([]BriefingHubDTO, 0, len(hubsData))
+	for _, h := range hubsData {
+		hubs = append(hubs, BriefingHubDTO{
+			Name:    h.Name,
+			Kind:    h.Kind,
+			Package: h.Package,
+			Callers: h.Callers,
+		})
+	}
+
+	merkleRoot, merkleErr := s.GetMerkleRoot(ctx, tenantID)
+	trust := BriefingTrustDTO{Status: "GENESIS"}
+	var blockHeight int64
+	if merkleErr == nil && merkleRoot != nil {
+		trust.MerkleRoot = merkleRoot.RootHash
+		trust.BlockHeight = merkleRoot.BlockHeight
+		trust.Status = "VERIFIED"
+		blockHeight = merkleRoot.BlockHeight
+	}
+
+	policyCount, policyTitles, err := s.CountActivePolicies(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	contradictions, err := s.CountOpenContradictions(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	briefing := &BriefingDTO{
+		Workspace:   workspaceName,
+		WorkspaceID: workspaceID,
+		SessionID:   sessionID,
+		AgentID:     agentID,
+		Trust:       trust,
+		Scale: BriefingScaleDTO{
+			Repositories: counts.Repositories,
+			Entities:     counts.Entities,
+			Claims:       counts.Claims,
+		},
+		Hubs: hubs,
+		Policies: BriefingPolicyDTO{
+			ActiveCount: policyCount,
+			Titles:      policyTitles,
+		},
+		Attention: BriefingAttentionDTO{
+			OpenContradictions: contradictions,
+		},
+		NewSince: BriefingDiffDTO{
+			HasPriorBriefing: hasPrior,
+		},
+	}
+
+	if hasPrior {
+		var claimsAdded, verificationsSince int
+		_ = s.pool.QueryRow(ctx, `
+			SELECT COUNT(*)::int FROM claims
+			 WHERE workspace_id = $1 AND created_at > $2
+		`, workspaceID, lastBriefedAt).Scan(&claimsAdded)
+		_ = s.pool.QueryRow(ctx, `
+			SELECT COUNT(*)::int FROM claim_verifications
+			 WHERE workspace_id = $1 AND last_evaluated_at > $2
+		`, workspaceID, lastBriefedAt).Scan(&verificationsSince)
+		briefing.NewSince.ClaimsAdded = claimsAdded
+		briefing.NewSince.VerificationsSince = verificationsSince
+	}
+
+	if err := s.UpdateWatermark(ctx, tenantID, workspaceID, agentID, blockHeight); err != nil {
+		return nil, err
+	}
+
+	return briefing, nil
 }
