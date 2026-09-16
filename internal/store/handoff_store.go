@@ -123,30 +123,24 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 	if _, err := tx.Exec(ctx, taskUpdateQuery, req.TargetAgentID, req.TaskID, req.TenantID); err != nil {
 		return nil, fmt.Errorf("failed to update task ownership: %w", err)
 	}
-
-	// 9. Add lineage edge (handoff type)
-	edgeQuery := `
-		INSERT INTO lineage_edges (id, tenant_id, source_task_id, target_task_id, edge_type, handoff_id, created_at)
-		VALUES ($1, $2, $3, $4, 'handoff', $5, NOW())
-	`
-	edgeID := uuid.New()
-	if _, err := tx.Exec(ctx, edgeQuery,
-		edgeID, req.TenantID, req.TaskID, req.TaskID, handoffID,
-	); err != nil {
-		return nil, fmt.Errorf("failed to create lineage edge: %w", err)
-	}
-
-	// 10. Update source agent status to 'paused'
+	// A handoff transfers ownership of one task from one agent to
+	// another. It does not create a second task. The lineage_edges
+	// table records task-to-task relationships (source_task_id and
+	// target_task_id must differ — the no_self_loop constraint
+	// enforces this). A handoff has no second task to point at, so no
+	// lineage edge is written. The handoff is recorded in the handoffs
+	// table, which is the authoritative record of the transfer.
+	// 9. Update source agent status to 'paused'
 	if err := s.updateAgentStatus(ctx, tx, req.SourceAgentID, req.TenantID, "paused"); err != nil {
 		return nil, err
 	}
 
-	// 11. Update target agent status to 'working'
+	// 10. Update target agent status to 'working'
 	if err := s.updateAgentStatus(ctx, tx, req.TargetAgentID, req.TenantID, "working"); err != nil {
 		return nil, err
 	}
 
-	// 12. Mark handoff as completed
+	// 11. Mark handoff as completed
 	completeQuery := `
 		UPDATE handoffs SET status = 'completed', completed_at = NOW()
 		WHERE id = $1 AND tenant_id = $2
@@ -330,6 +324,8 @@ func (s *PostgresStore) lockTask(ctx context.Context, tx pgx.Tx, taskID, tenantI
 		&t.Priority, &t.OwnerAgentID, &t.ParentTaskID, &t.ScopeDomain,
 		&t.ScopeSystem, &t.Version, &t.CreatedAt, &t.UpdatedAt, &t.CompletedAt,
 	)
+	if err != nil {
+	}
 	return &t, err
 }
 
