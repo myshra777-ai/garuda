@@ -89,8 +89,10 @@ def main():
         tl = read_response(proc)
         results.append(expect(tl.get("id") == 2, "tools/list id == 2 (no notification response)"))
         tools = tl.get("result", {}).get("tools", [])
-        results.append(expect(len(tools) >= 16, f"tools/list >= 16 tools (got {len(tools)})"))
+        results.append(expect(len(tools) >= 17, f"tools/list >= 17 tools (got {len(tools)})"))
+
         names = {t["name"] for t in tools}
+        results.append(expect("garuda.briefing" in names, "tool garuda.briefing present"))
         for expected in (
             "garuda.entities", "garuda.neighbors", "garuda.find_entity",
             "garuda.subclasses", "garuda.implementers",

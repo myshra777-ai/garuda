@@ -179,3 +179,60 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 		"outgoing":       convert(outgoing),
 	}, nil
 }
+
+// handleBriefing returns a session-start briefing: what the workspace
+// contains, what changed since this agent's last session, what is
+// open, and what is proven.
+//
+// The briefing is the entry point for every MCP session. Every other
+// tool answers a specific question; briefing answers the prior
+// question: what should I be asking about?
+//
+// The seven sections are fixed: workspace, trust, scale, hubs,
+// policies, attention, new_since. Agents that need more call the
+// dedicated tools (garuda.policy.list, garuda.check_drift, etc.).
+//
+// Read-only. The only write is the watermark update, which records
+// the moment of this briefing so the next call can compute a diff.
+func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, error) {
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
+	if err != nil {
+		return nil, err
+	}
+	workspaceName, _ := args["workspace"].(string)
+	if workspaceName == "" {
+		// resolveTenantAndWorkspace resolved the workspace already.
+		// If the caller did not name it, use the resolved name.
+		var resolved string
+		_ = s.store.Pool().QueryRow(context.Background(),
+			`SELECT name FROM workspaces WHERE id = $1`, workspaceID).Scan(&resolved)
+		workspaceName = resolved
+	}
+
+	// Agent identity: caller-supplied, then handshake clientInfo,
+	// then "default". This is the watermark key.
+	agentID, _ := args["agent_id"].(string)
+	if agentID == "" {
+		agentID = s.clientName
+	}
+	if agentID == "" {
+		agentID = "default"
+	}
+
+	// Session identifier: for correlation only. Not used as a key.
+	sessionID := uuid.New().String()
+
+	briefing, err := s.store.GetBriefing(
+		context.Background(),
+		tenantID, workspaceID,
+		workspaceName, agentID, sessionID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build briefing: %w", err)
+	}
+
+	return map[string]interface{}{
+		"tenant_id": tenantID.String(),
+		"briefing":  briefing,
+	}, nil
+}

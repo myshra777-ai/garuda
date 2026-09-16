@@ -51,6 +51,11 @@ type MCPServer struct {
 	// instanceHash is a stable identifier for this deployment
 	// (hostname + cwd + salt). Used to correlate telemetry rows.
 	instanceHash string
+	// clientName is the clientInfo.name reported by the MCP client
+	// during the initialize handshake. Used by garuda.briefing to key
+	// the agent watermark so the same client resumes its own session
+	// across restarts. Empty until initialize completes.
+	clientName string
 }
 
 func main() {
@@ -242,6 +247,19 @@ func (s *MCPServer) handleRequest(req MCPRequest) MCPResponse {
 }
 
 func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
+	// Capture clientInfo.name from the handshake. MCP clients send
+	// params.clientInfo.name (e.g. "cursor", "claude-ai"). The briefing
+	// uses it to key the per-agent watermark so a client resumes its
+	// own session across restarts. If the field is absent, the
+	// briefing falls back to "default".
+	if req.Params != nil {
+		if ci, ok := req.Params["clientInfo"].(map[string]interface{}); ok {
+			if name, ok := ci["name"].(string); ok && name != "" {
+				s.clientName = name
+			}
+		}
+	}
+
 	return MCPResponse{
 		JSONRPC: "2.0",
 		ID:      req.ID,
@@ -264,6 +282,23 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 
 func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 	tools := []map[string]interface{}{
+		{
+			"name":        "garuda.briefing",
+			"description": "Session-start briefing: workspace state, trust anchor, scale, top hubs, active policies, open contradictions, and what changed since this agent's last briefing. Read-only. Call this first.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"workspace": map[string]interface{}{
+						"type":        "string",
+						"description": "Workspace name. Defaults to the server's active workspace.",
+					},
+					"agent_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Caller-supplied agent identifier. Defaults to the MCP client name from the handshake.",
+					},
+				},
+			},
+		},
 		{
 			"name":        "garuda.query",
 			"description": "Query the Garuda knowledge graph with natural language",
@@ -543,6 +578,8 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	switch toolName {
 	case "garuda.query":
 		result, err = s.handleQuery(args)
+	case "garuda.briefing":
+		result, err = s.handleBriefing(args)
 	case "garuda.get_lineage":
 		result, err = s.handleGetLineage(args)
 	case "garuda.detect_contradictions":
