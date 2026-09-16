@@ -348,6 +348,11 @@ func (e *Evaluator) evalVerificationMissing(
 	exported := paramBool(pred.Params, "exported")
 	limit := paramInt(pred.Params, "limit", 10)
 
+	// The NOT EXISTS subquery scopes by cv.workspace_id = e.workspace_id
+	// even though source_entity_id is a PK and correlation alone would
+	// be sufficient. This is defense-in-depth: it makes the workspace
+	// boundary explicit in the query, matching every other predicate
+	// in this file. I-11 audit, 2026-09-16.
 	q := `
 		SELECT e.id, e.name, e.kind, COALESCE(e.package, '')
 		FROM entities e
@@ -357,6 +362,7 @@ func (e *Evaluator) evalVerificationMissing(
 		  AND NOT EXISTS (
 			SELECT 1 FROM claim_verifications cv
 			WHERE cv.source_entity_id = e.id
+			  AND cv.workspace_id = e.workspace_id
 			  AND cv.status = 'SUPPORTED'
 		  )
 	`
