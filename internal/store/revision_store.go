@@ -267,16 +267,24 @@ func (s *PostgresStore) submitDecisionTx(
 		return nil, fmt.Errorf("failed to write audit event: %w", err)
 	}
 
-	// Reference-counted evidence store
+	// Reference-counted evidence store, scoped per tenant.
+	//
+	// The table has two unique constraints: block_hash alone, and
+	// (tenant_id, block_hash). The INSERT previously targeted the
+	// first and omitted tenant_id, so every evidence row was written
+	// with tenant_id = NULL, and identical content from two tenants
+	// collapsed into one row whose ref_count incremented across
+	// tenants. The composite constraint (uq_evidence_store_tenant_block_hash)
+	// exists to prevent exactly this. The INSERT now names it.
 	if len(req.Evidence) > 0 {
 		for _, ev := range req.Evidence {
 			hashBytes := ev.Hash[:]
 			_, err = tx.Exec(ctx, `
-				INSERT INTO evidence_store (block_hash, content, ref_count, created_at)
-				VALUES ($1, $2, 1, NOW())
-				ON CONFLICT (block_hash) DO UPDATE
+				INSERT INTO evidence_store (block_hash, content, ref_count, created_at, tenant_id)
+				VALUES ($1, $2, 1, NOW(), $3)
+				ON CONFLICT (tenant_id, block_hash) DO UPDATE
 				SET ref_count = evidence_store.ref_count + 1
-			`, hashBytes, ev.Content)
+			`, hashBytes, ev.Content, req.TenantID)
 			if err != nil {
 				return nil, fmt.Errorf("failed to insert evidence: %w", err)
 			}
