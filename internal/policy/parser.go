@@ -15,6 +15,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ParsedPolicy is the result of parsing one YAML file. The three
+// values travel together so callers cannot lose the association
+// between a policy and its source.
+type ParsedPolicy struct {
+	Policy     *Policy
+	SourcePath string
+	SourceHash string
+}
+
 // ParseFile loads a single .yaml or .yml policy file.
 func ParseFile(path string) (*Policy, string, error) {
 	data, err := os.ReadFile(path)
@@ -37,9 +46,8 @@ func ParseFile(path string) (*Policy, string, error) {
 
 // ParseDirectory walks a directory and loads every .yaml/.yml policy it finds.
 // Returns the policies and their source hashes keyed by absolute path.
-func ParseDirectory(root string) ([]*Policy, map[string]string, error) {
-	var policies []*Policy
-	hashes := make(map[string]string)
+func ParseDirectory(root string) ([]ParsedPolicy, error) {
+	var parsed []ParsedPolicy
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -60,12 +68,15 @@ func ParseDirectory(root string) ([]*Policy, map[string]string, error) {
 		if err != nil {
 			return nil // skip malformed policies; they're reported elsewhere
 		}
-		policies = append(policies, p)
-		hashes[path] = h
+		parsed = append(parsed, ParsedPolicy{
+			Policy:     p,
+			SourcePath: path,
+			SourceHash: h,
+		})
 		return nil
 	})
 
-	return policies, hashes, err
+	return parsed, err
 }
 
 func validate(p *Policy) error {

@@ -43,6 +43,9 @@ type RunResult struct {
 }
 
 // RunOptions tunes the behavior of one policy pass.
+//
+// The zero value is the "real" evaluation path: not a dry run, no
+// reconcile. Callers that want something else must say so explicitly.
 type RunOptions struct {
 	// DryRun, when true, evaluates policies and returns decisions
 	// without persisting policy rows, anchoring decisions to the
@@ -50,10 +53,8 @@ type RunOptions struct {
 	// that want to preview decisions (e.g. MCP tools) without leaving
 	// a trace in the audit log.
 	//
-	// Real evaluations must never use DryRun. The CLI always passes
-	// no options, so the zero value is false.
-	// The zero value is the "real" evaluation path: not a dry run, no
-	// reconcile. Callers that want something else must say so explicitly.
+	// Real evaluations must never use DryRun. Every CLI path leaves it
+	// false.
 	DryRun bool
 	// Reconcile, when true, marks every active policy for the tenant
 	// whose statement was not seen in this pass as superseded. The
@@ -65,21 +66,13 @@ type RunOptions struct {
 	Reconcile bool
 }
 
-// Run loads all policies under policyDir, evaluates them against the workspace,
-// persists the evaluations, and anchors them to the Merkle ledger.
-//
-// The final decision is the highest-severity decision across all evaluations.
-// BLOCK > REVIEW > WARN > ALLOW.
 // Run loads all policies under policyDir, evaluates them against the
 // workspace, persists the evaluations, and anchors them to the Merkle
 // ledger.
 //
-// The signature takes a single RunOptions by value, not a variadic
-// slice. A variadic parameter implied a caller could pass multiple
-// options; the implementation read only opts[0], so a second option
-// would have been silently ignored. The same class of defect as the
-// "two sources of truth" instances recorded in the tracker. One
-// parameter, one meaning.
+// The final decision is the highest-severity decision across all
+// evaluations: BLOCK > REVIEW > WARN > ALLOW.
+
 func (e *Engine) Run(
 	ctx context.Context,
 	tenantID, workspaceID uuid.UUID,
@@ -89,14 +82,14 @@ func (e *Engine) Run(
 ) (*RunResult, error) {
 	dryRun := opts.DryRun
 
-	policies, hashes, err := ParseDirectory(policyDir)
+	parsed, err := ParseDirectory(policyDir)
 	if err != nil {
 		return nil, fmt.Errorf("load policies: %w", err)
 	}
 
 	// Sort by priority descending (higher = evaluated first)
-	sort.SliceStable(policies, func(i, j int) bool {
-		return policies[i].Priority > policies[j].Priority
+	sort.SliceStable(parsed, func(i, j int) bool {
+		return parsed[i].Policy.Priority > parsed[j].Policy.Priority
 	})
 
 	result := &RunResult{
@@ -108,9 +101,10 @@ func (e *Engine) Run(
 	// every active policy for the tenant whose statement is not in
 	// this set is marked superseded — its YAML file is gone from the
 	// directory.
-	seenStatements := make(map[string]bool, len(policies))
+	seenStatements := make(map[string]bool, len(parsed))
 
-	for _, p := range policies {
+	for _, pp := range parsed {
+		p := pp.Policy
 		seenStatements["POLICY:"+p.ID] = true
 
 		// Skip expired policies
@@ -156,7 +150,7 @@ func (e *Engine) Run(
 		}
 
 		// Persist the policy row (idempotent upsert by policy_id)
-		policyUUID, err := e.upsertPolicy(ctx, tenantID, p, hashes)
+		policyUUID, err := e.upsertPolicy(ctx, tenantID, pp)
 		if err != nil {
 			slog.Error("failed to upsert policy", "policy_id", p.ID, "error", err)
 			continue
@@ -237,7 +231,7 @@ func (e *Engine) Run(
 
 	result.Summary = fmt.Sprintf(
 		"workspace=%s policies=%d evaluations=%d final=%s",
-		workspaceID, len(policies), len(result.Evaluations), result.FinalDecision,
+		workspaceID, len(parsed), len(result.Evaluations), result.FinalDecision,
 	)
 	return result, nil
 }
@@ -249,9 +243,9 @@ func (e *Engine) Run(
 func (e *Engine) upsertPolicy(
 	ctx context.Context,
 	tenantID uuid.UUID,
-	p *Policy,
-	hashes map[string]string,
+	pp ParsedPolicy,
 ) (uuid.UUID, error) {
+	p := pp.Policy
 
 	statement := "POLICY:" + p.ID
 	metadataJSON := policyMetadataJSON(p)
@@ -306,7 +300,7 @@ func (e *Engine) upsertPolicy(
 	`, tenantID, statement,
 		p.Scope.Domain, p.Scope.System,
 		p.Authority, metadataJSON,
-		sourcePathFor(p, hashes), sourceHashFor(p, hashes),
+		pp.SourcePath, pp.SourceHash,
 	).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("upsert policy %s: %w", p.ID, err)
@@ -324,27 +318,6 @@ func (e *Engine) upsertPolicy(
 	}
 
 	return id, nil
-}
-
-// sourcePathFor returns the source path for a policy, or "" if the
-// hash map has no matching entry.
-func sourcePathFor(p *Policy, hashes map[string]string) string {
-	h := hashPolicyYAML(p)
-	if h == "" {
-		return ""
-	}
-	for path, hash := range hashes {
-		if hash == h {
-			return path
-		}
-	}
-	return ""
-}
-
-// sourceHashFor returns the hash for a policy, or "" if the hash
-// map has no matching entry.
-func sourceHashFor(p *Policy, hashes map[string]string) string {
-	return hashPolicyYAML(p)
 }
 
 func (e *Engine) persistEvaluation(ctx context.Context, ev *Evaluation, proof []byte) error {
@@ -387,10 +360,4 @@ func policyMetadataJSON(p *Policy) []byte {
 		"then":        p.Then,
 	})
 	return b
-}
-
-func hashPolicyYAML(p *Policy) string {
-	// Placeholder — the parser computes the real hash. Kept here for
-	// symmetry with ParseDirectory so we can look it up if needed.
-	return ""
 }

@@ -109,26 +109,19 @@ var policyValidateCmd = &cobra.Command{
 			return fmt.Errorf("%s is not a directory", dir)
 		}
 
-		policies, hashes, err := policy.ParseDirectory(dir)
+		parsed, err := policy.ParseDirectory(dir)
 		if err != nil {
 			return fmt.Errorf("parse directory: %w", err)
 		}
 
-		if len(policies) == 0 {
+		if len(parsed) == 0 {
 			fmt.Println("⚠️  No .yaml or .yml policy files found.")
 			return nil
 		}
 
-		fmt.Printf("Validated %d policies under %s\n\n", len(policies), dir)
-		for _, p := range policies {
-			var sourcePath string
-			for path, h := range hashes {
-				if strings.Contains(path, p.ID) {
-					sourcePath = path
-					_ = h
-					break
-				}
-			}
+		fmt.Printf("Validated %d policies under %s\n\n", len(parsed), dir)
+		for _, pp := range parsed {
+			p := pp.Policy
 			fmt.Printf("✓ %s\n", p.ID)
 			fmt.Printf("    title:     %s\n", p.Title)
 			fmt.Printf("    version:   %s\n", p.Version)
@@ -140,8 +133,11 @@ var policyValidateCmd = &cobra.Command{
 			for i, pred := range p.When {
 				fmt.Printf("        [%d] %s\n", i+1, pred.Type)
 			}
-			if sourcePath != "" {
-				fmt.Printf("    source:    %s\n", sourcePath)
+			if pp.SourcePath != "" {
+				fmt.Printf("    source:    %s\n", pp.SourcePath)
+			}
+			if pp.SourceHash != "" {
+				fmt.Printf("    hash:      %s\n", pp.SourceHash)
 			}
 			fmt.Println()
 		}
