@@ -101,16 +101,16 @@ The ten injected observations:
 
 | # | Operation | Source |
 | :-: | :--- | :--- |
-| 1 | `IsOn` | test-harness |
-| 2 | `SetIFDEQ` | test-harness |
-| 3 | `CurryWith` | test-harness |
-| 4 | `AddCallerSkip` | test-harness |
-| 5 | `GetFeatureCount` | test-harness |
-| 6 | `PFCount` | test-harness |
-| 7 | `HScan` | test-harness |
-| 8 | `DictObject` | test-harness |
-| 9 | `RegisterServiceServerOption` | test-harness |
-| 10 | `RecordTransition` | test-harness |
+| 1 | `WithTransportCredentials` | test-harness |
+| 2 | `Channel` | test-harness |
+| 3 | `WithCodec` | test-harness |
+| 4 | `ApplyServerOptions` | test-harness |
+| 5 | `SetExtraHeader` | test-harness |
+| 6 | `test_default_bool` | test-harness |
+| 7 | `XRevRangeN` | test-harness |
+| 8 | `SetPickedCluster` | test-harness |
+| 9 | `StaticMethod` | test-harness |
+| 10 | `ApplyDefaultsWithPoolSize` | test-harness |
 
 Each observation was correlated to a real entity in the static graph and checked against that entity's outgoing claims. All ten produced a `CONTRADICTED` verification.
 
@@ -124,18 +124,50 @@ Each observation was correlated to a real entity in the static graph and checked
 
 **Scope:** this measures the correlation path — whether a runtime observation that conflicts with the static model is detected and quarantined. It does not measure the rate at which real production systems produce such deviations. The observations are a controlled corpus, not live traffic.
 
-Reproduce with:
+### Reproducing the detection rate
+
+`scripts/runtime_contradiction_test.py` produces the number above. It injects ten observations with a contradiction marker, posts them to the telemetry endpoint, waits one verifier tick, and counts rows that landed `CONTRADICTED` in `claim_verifications`.
 
 ```bash
-psql "$DATABASE_URL" -c "
-  SELECT status, COUNT(*)::int
-    FROM claim_verifications
-   WHERE workspace_id = '<workspace-id>'
-   GROUP BY status;
-"
+DATABASE_URL=... python3 scripts/runtime_contradiction_test.py
 ```
 
+Expected output:
+
+```
+═══ 10/10 contradicted ═══
+```
+
+The script cleans up its own residue on entry, so running it twice does not accumulate rows. It counts against the same `claim_verifications` table the dashboard's "Needs attention" panel reads from, so the number the script verifies is the number the UI shows.
+
+The `CONTRADICTED`-path test corpus was produced by injecting observations against unapproved targets into the reference workspace. Section 5 names the boundary on what this measures.
+
 ---
+
+### Reproducing the extraction → verification loop
+
+`scripts/doc_verify_test.py` produces the number above. It writes a
+synthetic ADR whose bullets name a real CALLS edge, a real entity with
+an invented object, and two fully invented names. It runs `garuda docs
+ingest`, runs `garuda docs verify`, and counts the claims by status.
+
+```bash
+DATABASE_URL=... python3 scripts/doc_verify_test.py
+
+Expected output:
+
+text
+═══ Status distribution ═══
+  SUPPORTED     1
+  UNVERIFIED    2
+  CONTRADICTED  0
+
+═══ PASS ═══
+
+The first bullet names a real edge in the workspace and flips to
+SUPPORTED. The second names a real entity but an invented object, and
+stays UNVERIFIED with the reason Target '<name>' not found in codebase AST. The third names nothing real and stays UNVERIFIED with
+the reason Subject '<name>' not found in codebase AST.
 
 ## 2. Telemetry Pipeline Characteristics
 
@@ -213,8 +245,18 @@ Every number in this document is produced by a command in the Garuda CLI. To rep
 # Analyze a repository and save the result to a workspace
 garuda analyze /path/to/repo --save --workspace <workspace-name>
 
+# Reproduce the CONTRADICTED-path detection rate
+DATABASE_URL=... python3 scripts/runtime_contradiction_test.py
+# Expected: ═══ 10/10 contradicted ═══
+
+```bash
+# Reproduce the extraction → verification loop
+DATABASE_URL=... python3 scripts/doc_verify_test.py
+# Expected: ═══ PASS ═══ (1 SUPPORTED, 2 UNVERIFIED)
+
 # Re-run the MCP verification against your own workspace
 WORKSPACE=<workspace-name> python3 scripts/mcp_verify.py
+# Expected: ═══ 18/18 checks passed ═══
 
 # Inspect the Merkle ledger height and current roots
 garuda status
