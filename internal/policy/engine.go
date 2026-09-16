@@ -41,11 +41,6 @@ type RunResult struct {
 	Summary       string        `json:"summary"`
 }
 
-// Run loads all policies under policyDir, evaluates them against the workspace,
-// persists the evaluations, and anchors them to the Merkle ledger.
-//
-// The final decision is the highest-severity decision across all evaluations.
-// BLOCK > REVIEW > WARN > ALLOW.
 // RunOptions tunes the behavior of one policy pass.
 type RunOptions struct {
 	// DryRun, when true, evaluates policies and returns decisions
@@ -59,6 +54,11 @@ type RunOptions struct {
 	DryRun bool
 }
 
+// Run loads all policies under policyDir, evaluates them against the workspace,
+// persists the evaluations, and anchors them to the Merkle ledger.
+//
+// The final decision is the highest-severity decision across all evaluations.
+// BLOCK > REVIEW > WARN > ALLOW.
 func (e *Engine) Run(
 	ctx context.Context,
 	tenantID, workspaceID uuid.UUID,
@@ -86,7 +86,15 @@ func (e *Engine) Run(
 		FinalDecision: DecisionAllow,
 	}
 
+	// Track which policy statements this pass saw. After the loop,
+	// every active policy for the tenant whose statement is not in
+	// this set is marked superseded — its YAML file is gone from the
+	// directory.
+	seenStatements := make(map[string]bool, len(policies))
+
 	for _, p := range policies {
+		seenStatements["POLICY:"+p.ID] = true
+
 		// Skip expired policies
 		if p.ExpiresAt != nil && time.Now().After(*p.ExpiresAt) {
 			slog.Debug("policy expired, skipping", "policy_id", p.ID)
@@ -159,6 +167,36 @@ func (e *Engine) Run(
 			result.FinalDecision = ev.Decision
 			id := ev.PolicyID
 			result.BlockedBy = &id
+		}
+	}
+
+	// Reconcile: any active policy for this tenant whose statement was
+	// not seen in this pass is orphaned. Its YAML file was removed
+	// from the directory, or its external_id was renamed without the
+	// rename guard firing. Mark it superseded so the DB matches the
+	// directory.
+	//
+	// The dry-run path does not reconcile: a dry run is a preview, not
+	// a state change.
+	if !dryRun {
+		seenList := make([]string, 0, len(seenStatements))
+		for s := range seenStatements {
+			seenList = append(seenList, s)
+		}
+
+		orphaned, err := e.pool.Exec(ctx, `
+			UPDATE policies
+			   SET status = 'superseded',
+			       updated_at = NOW()
+			 WHERE tenant_id = $1
+			   AND status = 'active'
+			   AND NOT (statement = ANY($2::text[]))
+		`, tenantID, seenList)
+		if err != nil {
+			slog.Error("policy reconcile failed", "error", err, "tenant_id", tenantID)
+		} else if n := orphaned.RowsAffected(); n > 0 {
+			slog.Info("policy reconcile: marked orphaned policies superseded",
+				"tenant_id", tenantID, "count", n)
 		}
 	}
 
