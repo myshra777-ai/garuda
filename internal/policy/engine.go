@@ -34,11 +34,12 @@ func NewEngine(pool *pgxpool.Pool) *Engine {
 
 // RunResult is the aggregate outcome of one policy pass.
 type RunResult struct {
-	WorkspaceID   uuid.UUID     `json:"workspace_id"`
-	Evaluations   []*Evaluation `json:"evaluations"`
-	FinalDecision Decision      `json:"final_decision"` // highest-severity across all
-	BlockedBy     *uuid.UUID    `json:"blocked_by,omitempty"`
-	Summary       string        `json:"summary"`
+	WorkspaceID    uuid.UUID     `json:"workspace_id"`
+	Evaluations    []*Evaluation `json:"evaluations"`
+	FinalDecision  Decision      `json:"final_decision"` // highest-severity across all
+	BlockedBy      *uuid.UUID    `json:"blocked_by,omitempty"`
+	Summary        string        `json:"summary"`
+	ReconcileCount int           `json:"reconcile_count"`
 }
 
 // RunOptions tunes the behavior of one policy pass.
@@ -51,6 +52,8 @@ type RunOptions struct {
 	//
 	// Real evaluations must never use DryRun. The CLI always passes
 	// no options, so the zero value is false.
+	// The zero value is the "real" evaluation path: not a dry run, no
+	// reconcile. Callers that want something else must say so explicitly.
 	DryRun bool
 	// Reconcile, when true, marks every active policy for the tenant
 	// whose statement was not seen in this pass as superseded. The
@@ -67,17 +70,24 @@ type RunOptions struct {
 //
 // The final decision is the highest-severity decision across all evaluations.
 // BLOCK > REVIEW > WARN > ALLOW.
+// Run loads all policies under policyDir, evaluates them against the
+// workspace, persists the evaluations, and anchors them to the Merkle
+// ledger.
+//
+// The signature takes a single RunOptions by value, not a variadic
+// slice. A variadic parameter implied a caller could pass multiple
+// options; the implementation read only opts[0], so a second option
+// would have been silently ignored. The same class of defect as the
+// "two sources of truth" instances recorded in the tracker. One
+// parameter, one meaning.
 func (e *Engine) Run(
 	ctx context.Context,
 	tenantID, workspaceID uuid.UUID,
 	policyDir string,
 	subjectKind, subjectID, actor string,
-	opts ...RunOptions,
+	opts RunOptions,
 ) (*RunResult, error) {
-	var dryRun bool
-	if len(opts) > 0 {
-		dryRun = opts[0].DryRun
-	}
+	dryRun := opts.DryRun
 
 	policies, hashes, err := ParseDirectory(policyDir)
 	if err != nil {
@@ -191,10 +201,7 @@ func (e *Engine) Run(
 	//
 	// The dry-run path never reconciles: a dry run is a preview, not
 	// a state change.
-	var reconcile bool
-	if len(opts) > 0 {
-		reconcile = opts[0].Reconcile
-	}
+	reconcile := opts.Reconcile
 	if !dryRun && reconcile {
 		seenList := make([]string, 0, len(seenStatements))
 		for s := range seenStatements {
@@ -211,9 +218,20 @@ func (e *Engine) Run(
 		`, tenantID, seenList)
 		if err != nil {
 			slog.Error("policy reconcile failed", "error", err, "tenant_id", tenantID)
-		} else if n := orphaned.RowsAffected(); n > 0 {
-			slog.Info("policy reconcile: marked orphaned policies superseded",
-				"tenant_id", tenantID, "count", n)
+		} else {
+			n := orphaned.RowsAffected()
+			result.ReconcileCount = int(n)
+			if n > 0 {
+				// Debug, not Info. This line would otherwise appear
+				// on stderr on every successful run that has an
+				// orphan, and a tool that writes to stderr on
+				// success is a tool whose success is
+				// indistinguishable from failure to some pipelines.
+				// The count is available in the RunResult and in the
+				// --json output. Set GARUDA_DEBUG=1 to see the line.
+				slog.Debug("policy reconcile: marked orphaned policies superseded",
+					"tenant_id", tenantID, "count", n)
+			}
 		}
 	}
 

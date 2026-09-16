@@ -466,7 +466,7 @@ func init() {
 	policyEvaluateCmd.Flags().BoolVar(&policyJSONFlag, "json", false, "Output JSON")
 	policyEvaluateCmd.Flags().BoolVar(&policyFailOnBlock, "fail-on-block", false, "Exit non-zero if any policy returns BLOCK")
 	policyEvaluateCmd.Flags().BoolVar(&policyReconcileFlag, "reconcile", false,
-		"Mark active policies not present in <dir> as superseded. Off by default; a test directory evaluated against a production workspace would otherwise supersede production policies.")
+		"Mark active policies not present in <dir> as superseded. Off by default; a test directory evaluated against a production workspace would otherwise supersede production policies. This flag only controls the policy-row reconcile step; evaluations and Merkle anchors are written on every run regardless.")
 
 	policyCmd.AddCommand(policyListCmd)
 	policyCmd.AddCommand(policyValidateCmd)
