@@ -89,6 +89,8 @@ var policyListCmd = &cobra.Command{
 	},
 }
 
+var policyReconcileFlag bool
+
 // ─────────────────────────────────────────────────────────────────────────────
 // policy validate <dir>
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,8 +203,8 @@ var policyEvaluateCmd = &cobra.Command{
 		engine := policy.NewEngine(pool)
 
 		start := time.Now()
-		result, err := engine.Run(ctx, tenantID, workspaceID, dir,
-			policySubjectKind, policySubjectID, actor)
+		result, err := engine.Run(ctx, tenantID, workspaceID, dir, policySubjectKind, policySubjectID, actor,
+			policy.RunOptions{Reconcile: policyReconcileFlag})
 		if err != nil {
 			return fmt.Errorf("engine run failed: %w", err)
 		}
@@ -463,6 +465,8 @@ func init() {
 	policyEvaluateCmd.Flags().StringVar(&policyActorFlag, "actor", "", "Actor (default: GARUDA_AGENT env)")
 	policyEvaluateCmd.Flags().BoolVar(&policyJSONFlag, "json", false, "Output JSON")
 	policyEvaluateCmd.Flags().BoolVar(&policyFailOnBlock, "fail-on-block", false, "Exit non-zero if any policy returns BLOCK")
+	policyEvaluateCmd.Flags().BoolVar(&policyReconcileFlag, "reconcile", false,
+		"Mark active policies not present in <dir> as superseded. Off by default; a test directory evaluated against a production workspace would otherwise supersede production policies.")
 
 	policyCmd.AddCommand(policyListCmd)
 	policyCmd.AddCommand(policyValidateCmd)

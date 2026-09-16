@@ -52,6 +52,14 @@ type RunOptions struct {
 	// Real evaluations must never use DryRun. The CLI always passes
 	// no options, so the zero value is false.
 	DryRun bool
+	// Reconcile, when true, marks every active policy for the tenant
+	// whose statement was not seen in this pass as superseded. The
+	// reconcile is destructive: a test directory evaluated against a
+	// workspace with other policies will supersede those policies.
+	//
+	// The default is false. Callers that want the reconcile must set
+	// it explicitly. The CLI exposes it as --reconcile.
+	Reconcile bool
 }
 
 // Run loads all policies under policyDir, evaluates them against the workspace,
@@ -176,9 +184,18 @@ func (e *Engine) Run(
 	// rename guard firing. Mark it superseded so the DB matches the
 	// directory.
 	//
-	// The dry-run path does not reconcile: a dry run is a preview, not
+	// The reconcile is destructive and is off by default. A caller
+	// that evaluates a test directory against a workspace with other
+	// active policies must not silently supersede those policies. The
+	// CLI exposes this as --reconcile; MCP tools do not set it.
+	//
+	// The dry-run path never reconciles: a dry run is a preview, not
 	// a state change.
-	if !dryRun {
+	var reconcile bool
+	if len(opts) > 0 {
+		reconcile = opts[0].Reconcile
+	}
+	if !dryRun && reconcile {
 		seenList := make([]string, 0, len(seenStatements))
 		for s := range seenStatements {
 			seenList = append(seenList, s)
