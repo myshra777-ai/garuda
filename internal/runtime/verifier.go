@@ -103,7 +103,7 @@ func (e *VerificationEngine) RecomputeWorkspaceVerification(ctx context.Context,
 			jsonb_build_object('raw_target', re.raw_target, 'last_trace_id', re.last_trace_id)
 		FROM runtime_edges re
 		WHERE re.workspace_id = $1 
-		  AND (re.raw_target ILIKE '%unapproved%' OR re.raw_target ILIKE '%driver%' OR re.raw_target ILIKE '%bypass%')
+		  AND `+ContradictionMarkerClause("re.raw_target")+`
 		ON CONFLICT (workspace_id, tenant_id, source_entity_id, target_entity_id)
 		DO UPDATE SET
 			status = 'CONTRADICTED',
@@ -197,7 +197,7 @@ func (e *VerificationEngine) RecomputeWorkspaceVerification(ctx context.Context,
 			  SELECT 1 FROM runtime_edges re 
 			  WHERE re.workspace_id = c.workspace_id 
 			    AND re.source_entity_id = c.from_entity_id 
-			    AND (re.raw_target ILIKE '%unapproved%' OR re.raw_target ILIKE '%driver%')
+			    AND `+ContradictionMarkerClause("re.raw_target")+`
 		  )
 		GROUP BY c.workspace_id, c.tenant_id, c.from_entity_id, c.to_entity_id
 		ON CONFLICT (workspace_id, tenant_id, source_entity_id, target_entity_id)
