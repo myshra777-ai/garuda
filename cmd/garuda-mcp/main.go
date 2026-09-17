@@ -422,6 +422,18 @@ func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 			},
 		},
 		{
+			"name":        "garuda.verify_policy_evaluation",
+			"description": "Verify the Merkle inclusion proof for a persisted policy evaluation. Returns valid=true if the proof recomputes to the anchored root. Read-only; no side effects.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id":     map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"evaluation_id": map[string]interface{}{"type": "string", "description": "Policy evaluation UUID returned by garuda policy evaluate --save"},
+				},
+				"required": []string{"evaluation_id"},
+			},
+		},
+		{
 			"name":        "garuda.entities",
 			"description": "List semantic entities in a workspace. Filterable by package and kind. Read-only.",
 			"inputSchema": map[string]interface{}{
@@ -598,6 +610,8 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleQueryClaims(args)
 	case "garuda.policy.evaluate":
 		result, err = s.handlePolicyEvaluate(args)
+	case "garuda.verify_policy_evaluation":
+		result, err = s.handleVerifyPolicyEvaluation(args)
 	case "garuda.entities":
 		result, err = s.handleEntities(args)
 	case "garuda.inspect":

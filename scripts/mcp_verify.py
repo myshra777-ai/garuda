@@ -89,10 +89,13 @@ def main():
         tl = read_response(proc)
         results.append(expect(tl.get("id") == 2, "tools/list id == 2 (no notification response)"))
         tools = tl.get("result", {}).get("tools", [])
-        results.append(expect(len(tools) >= 17, f"tools/list >= 17 tools (got {len(tools)})"))
+        results.append(expect(len(tools) >= 18, f"tools/list >= 18 tools (got {len(tools)})"))
 
         names = {t["name"] for t in tools}
         results.append(expect("garuda.briefing" in names, "tool garuda.briefing present"))
+        results.append(expect(
+            "garuda.verify_policy_evaluation" in names,
+            "tool garuda.verify_policy_evaluation present"))
         for expected in (
             "garuda.entities", "garuda.neighbors", "garuda.find_entity",
             "garuda.subclasses", "garuda.implementers",
@@ -156,6 +159,32 @@ def main():
         im = read_response(proc)
         imp = json.loads(im["result"]["content"][0]["text"])
         results.append(expect(imp["count"] >= 1, "implementers returned >= 1"))
+
+        # garuda.verify_policy_evaluation — a random UUID is not a valid
+        # evaluation for this tenant. The tool returns {valid: false,
+        # reason: ...}, not a transport error.
+        #
+        # Request id 7, not 6: id 6 is already the implementers call
+        # above. Reusing it would make the response indistinguishable
+        # from a duplicate and mask a transport-level bug.
+        send(proc, {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "garuda.verify_policy_evaluation",
+                "arguments": {"evaluation_id": "00000000-0000-0000-0000-000000000000"},
+            },
+        })
+        vpe = read_response(proc)
+        results.append(expect(vpe.get("id") == 7, "verify_policy_evaluation id == 7"))
+        vpep = json.loads(vpe["result"]["content"][0]["text"])
+        results.append(expect(
+            vpep.get("valid") is False,
+            "verify_policy_evaluation returns valid=false for unknown evaluation"))
+        results.append(expect(
+            "reason" in vpep,
+            "verify_policy_evaluation includes a reason"))
 
         proc.stdin.close()
         proc.wait(timeout=3)

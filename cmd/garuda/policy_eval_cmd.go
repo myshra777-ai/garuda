@@ -315,7 +315,7 @@ var policyShowCmd = &cobra.Command{
 			return fmt.Errorf("invalid evaluation id: %w", err)
 		}
 
-		ev, err := loadEvaluation(context.Background(), pool, getTenantID(), evalID)
+		ev, err := policy.LoadEvaluation(context.Background(), pool, getTenantID(), evalID)
 		if err != nil {
 			return fmt.Errorf("evaluation not found: %w", err)
 		}
@@ -387,7 +387,7 @@ var policyVerifyCmd = &cobra.Command{
 			return fmt.Errorf("invalid evaluation id: %w", err)
 		}
 
-		ev, err := loadEvaluation(context.Background(), pool, getTenantID(), evalID)
+		ev, err := policy.LoadEvaluation(context.Background(), pool, getTenantID(), evalID)
 		if err != nil {
 			return err
 		}
@@ -431,31 +431,6 @@ func shortUUID(id uuid.UUID) string {
 		return s[:8]
 	}
 	return s
-}
-
-func loadEvaluation(ctx context.Context, pool *pgxpool.Pool, tenantID, evalID uuid.UUID) (*policy.Evaluation, error) {
-	var ev policy.Evaluation
-	var evidenceJSON []byte
-	var decision, reason string
-	err := pool.QueryRow(ctx, `
-		SELECT id, tenant_id, workspace_id, policy_id, policy_version,
-		       decision, reason, evidence, evaluated_at,
-		       merkle_block_height, merkle_proof,
-		       subject_kind, subject_id, actor
-		FROM policy_evaluations WHERE id = $1 AND tenant_id = $2
-	`, evalID, tenantID).Scan(
-		&ev.ID, &ev.TenantID, &ev.WorkspaceID, &ev.PolicyID, &ev.PolicyVersion,
-		&decision, &reason, &evidenceJSON, &ev.EvaluatedAt,
-		&ev.MerkleBlockHeight, &ev.MerkleProof,
-		&ev.SubjectKind, &ev.SubjectID, &ev.Actor,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("evaluation not found: %w", err)
-	}
-	ev.Decision = policy.Decision(decision)
-	ev.Reason = reason
-	_ = json.Unmarshal(evidenceJSON, &ev.Evidence)
-	return &ev, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

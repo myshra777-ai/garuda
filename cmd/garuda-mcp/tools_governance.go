@@ -449,3 +449,59 @@ func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface
 			"' from the CLI to record and anchor these decisions.",
 	}, nil
 }
+
+// handleVerifyPolicyEvaluation recomputes a persisted evaluation's
+// Merkle inclusion proof and reports whether it verifies. Read-only.
+// The CLI equivalent is `garuda policy verify <id>`.
+//
+// Not-found and unverifiable are facts, not transport errors. An
+// agent asking about a nonexistent evaluation is asking a well-formed
+// question and receives a well-formed answer: {valid: false, reason}.
+// Errors are reserved for caller bugs (missing or malformed
+// arguments).
+func (s *MCPServer) handleVerifyPolicyEvaluation(args map[string]interface{}) (interface{}, error) {
+	tenantID, _, err := s.resolveTenantAndWorkspace(args)
+	if err != nil {
+		return nil, err
+	}
+
+	rawID, _ := args["evaluation_id"].(string)
+	if rawID == "" {
+		return nil, fmt.Errorf("evaluation_id is required")
+	}
+	evalID, err := uuid.Parse(rawID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid evaluation_id %q: %w", rawID, err)
+	}
+
+	ev, err := policy.LoadEvaluation(context.Background(), s.store.Pool(), tenantID, evalID)
+	if err != nil {
+		return map[string]interface{}{
+			"evaluation_id": evalID.String(),
+			"valid":         false,
+			"reason":        "evaluation not found for tenant",
+		}, nil
+	}
+
+	anchor := policy.NewAnchor(s.store.Pool())
+	valid, verifyErr := anchor.VerifyEvaluation(context.Background(), ev)
+
+	out := map[string]interface{}{
+		"evaluation_id": ev.ID.String(),
+		"policy_id":     ev.PolicyID.String(),
+		"decision":      string(ev.Decision),
+		"subject_kind":  ev.SubjectKind,
+		"subject_id":    ev.SubjectID,
+		"valid":         valid,
+	}
+	if ev.MerkleBlockHeight != nil {
+		out["block_height"] = *ev.MerkleBlockHeight
+	}
+	if verifyErr != nil {
+		out["valid"] = false
+		out["reason"] = verifyErr.Error()
+	} else if !valid {
+		out["reason"] = "Merkle inclusion proof did not verify"
+	}
+	return out, nil
+}
