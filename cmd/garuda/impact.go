@@ -77,7 +77,13 @@ func handleImpact() {
 		fmt.Fprintf(os.Stderr, "❌ Invalid workspace UUID: %v\n", err)
 		os.Exit(1)
 	}
-
+	// The target must be a UUID. Validate before doing any DB work so
+	// an invalid argument returns a clean error, not a panic deep in
+	// report printing.
+	if _, err := uuid.Parse(flagTargetID); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Invalid target UUID: %v\n", err)
+		os.Exit(1)
+	}
 	// Build impact index (lazy in-memory projection)
 	idx, err := st.BuildImpactIndex(ctx, workspaceID)
 	if err != nil {
@@ -141,7 +147,11 @@ func handleImpact() {
 func printImpactReport(result *impact.BlastRadiusResult) {
 	fmt.Printf("\n🔍 GARUDA IMPACT BLAST RADIUS REPORT\n")
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	fmt.Printf("Target:      %s\n", flagTargetID[:8]+"...")
+	target := result.TargetEntityID
+	if len(target) > 8 {
+		target = target[:8]
+	}
+	fmt.Printf("Target Entity: %s\n", target)
 	fmt.Printf("Workspace:   %s\n", flagWorkspaceID)
 	fmt.Printf("Total affected: %d\n", result.TotalAffected)
 
