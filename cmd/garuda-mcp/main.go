@@ -347,6 +347,21 @@ func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 			},
 		},
 		{
+			"name":        "garuda.blast_radius",
+			"description": "Compute the blast radius of a symbol change: which entities consume the target entity, directly or transitively, up to a depth. Read-only. Returns a critical-first list and per-severity counts.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id":      map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"workspace":      map[string]interface{}{"type": "string", "description": "Workspace name"},
+					"entity_id":      map[string]interface{}{"type": "string", "description": "Target entity UUID"},
+					"depth":          map[string]interface{}{"type": "integer", "description": "Max traversal depth. Default 3."},
+					"min_confidence": map[string]interface{}{"type": "number", "description": "Minimum edge confidence. Default 0.50."},
+				},
+				"required": []string{"entity_id"},
+			},
+		},
+		{
 			"name":        "garuda.propose_decision",
 			"description": "Propose a new decision (creates a draft)",
 			"inputSchema": map[string]interface{}{
@@ -598,6 +613,8 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleDetectContradictions(args)
 	case "garuda.get_impact":
 		result, err = s.handleGetImpact(args)
+	case "garuda.blast_radius":
+		result, err = s.handleBlastRadius(args)
 	case "garuda.propose_decision":
 		result, err = s.handleProposeDecision(args)
 	case "garuda.policy.list":

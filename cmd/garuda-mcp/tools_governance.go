@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/impact"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
 	"github.com/myshra777-ai/garuda/internal/policy"
 	"github.com/myshra777-ai/garuda/internal/store"
@@ -504,4 +505,82 @@ func (s *MCPServer) handleVerifyPolicyEvaluation(args map[string]interface{}) (i
 		out["reason"] = "Merkle inclusion proof did not verify"
 	}
 	return out, nil
+}
+
+// handleBlastRadius computes the blast radius of a symbol change: the
+// set of entities that consume the target entity, directly or
+// transitively, up to a configurable depth. Read-only. The CLI
+// equivalent is `garuda impact --workspace <uuid> --target <entity-id>`.
+//
+// Not-found is a fact, not a transport error. An agent asking about an
+// entity that does not exist in the workspace receives {target_found:
+// false, reason}, not an error. Errors are reserved for caller bugs.
+func (s *MCPServer) handleBlastRadius(args map[string]interface{}) (interface{}, error) {
+	_, workspaceID, err := s.resolveTenantAndWorkspace(args)
+	if err != nil {
+		return nil, err
+	}
+
+	entityID, _ := args["entity_id"].(string)
+	if entityID == "" {
+		return nil, fmt.Errorf("entity_id is required")
+	}
+
+	depth := 3
+	if v, ok := args["depth"].(float64); ok && v > 0 {
+		depth = int(v)
+	}
+	minConf := 0.50
+	if v, ok := args["min_confidence"].(float64); ok && v > 0 {
+		minConf = v
+	}
+
+	idx, err := s.store.BuildImpactIndex(context.Background(), workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("build impact index: %w", err)
+	}
+
+	if _, ok := idx.GetEntityMeta(entityID); !ok {
+		return map[string]interface{}{
+			"target_entity_id": entityID,
+			"target_found":     false,
+			"reason":           "entity not found in workspace",
+			"total_affected":   0,
+		}, nil
+	}
+
+	cfg := impact.BlastRadiusConfig{
+		MaxDepth:        depth,
+		MinConfidence:   minConf,
+		IncludeInferred: true,
+	}
+	result := impact.ComputeBlastRadius(idx, entityID, cfg)
+
+	// Flatten by_severity into a critical-first list. The agent gets
+	// both shapes: counts from by_severity for a quick read, full
+	// structs from impacted for the details.
+	all := make([]impact.ImpactedEntity, 0, result.TotalAffected)
+	for _, sev := range []impact.SeverityLevel{
+		impact.SeverityCritical,
+		impact.SeverityHigh,
+		impact.SeverityMedium,
+		impact.SeverityLow,
+	} {
+		list := result.BySeverity[sev]
+		impact.SortImpactedEntities(list)
+		all = append(all, list...)
+	}
+
+	return map[string]interface{}{
+		"target_entity_id": entityID,
+		"target_found":     true,
+		"total_affected":   result.TotalAffected,
+		"by_severity": map[string]int{
+			"CRITICAL": len(result.BySeverity[impact.SeverityCritical]),
+			"HIGH":     len(result.BySeverity[impact.SeverityHigh]),
+			"MEDIUM":   len(result.BySeverity[impact.SeverityMedium]),
+			"LOW":      len(result.BySeverity[impact.SeverityLow]),
+		},
+		"impacted": all,
+	}, nil
 }

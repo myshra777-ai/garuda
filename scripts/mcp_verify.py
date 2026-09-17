@@ -89,13 +89,16 @@ def main():
         tl = read_response(proc)
         results.append(expect(tl.get("id") == 2, "tools/list id == 2 (no notification response)"))
         tools = tl.get("result", {}).get("tools", [])
-        results.append(expect(len(tools) >= 18, f"tools/list >= 18 tools (got {len(tools)})"))
+        results.append(expect(len(tools) >= 19, f"tools/list >= 19 tools (got {len(tools)})"))
 
         names = {t["name"] for t in tools}
         results.append(expect("garuda.briefing" in names, "tool garuda.briefing present"))
         results.append(expect(
             "garuda.verify_policy_evaluation" in names,
             "tool garuda.verify_policy_evaluation present"))
+        results.append(expect(
+            "garuda.blast_radius" in names,
+            "tool garuda.blast_radius present"))
         for expected in (
             "garuda.entities", "garuda.neighbors", "garuda.find_entity",
             "garuda.subclasses", "garuda.implementers",
@@ -185,6 +188,29 @@ def main():
         results.append(expect(
             "reason" in vpep,
             "verify_policy_evaluation includes a reason"))
+
+        # garuda.blast_radius — SQLModel has 171 inbound edges (proven
+        # above). Blast radius must find at least one affected entity
+        # and every impacted entity must carry a severity.
+        send(proc, {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {
+                "name": "garuda.blast_radius",
+                "arguments": {"workspace": WORKSPACE, "entity_id": entity_id, "depth": 2},
+            },
+        })
+        br = read_response(proc)
+        results.append(expect(br.get("id") == 8, "blast_radius id == 8"))
+        brp = json.loads(br["result"]["content"][0]["text"])
+        results.append(expect(brp.get("target_found") is True, "blast_radius target_found == true"))
+        results.append(expect(
+            brp.get("total_affected", 0) >= 1,
+            "blast_radius found >= 1 affected entity"))
+        results.append(expect(
+            all("severity" in e for e in brp.get("impacted", [])),
+            "every impacted entity carries a severity"))
 
         proc.stdin.close()
         proc.wait(timeout=3)
