@@ -9,14 +9,21 @@
 </p>
 
 <p align="center">
-  <em>A shared understanding of your software — for the humans and AI agents building it together.</em>
+  <em>A verified state plane for the AI agents changing your software.</em>
 </p>
 
 <p align="center">
   <a href="https://github.com/myshra777-ai/garuda/releases"><img src="https://img.shields.io/badge/version-v0.1.x-blue.svg?style=flat-square" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-green.svg?style=flat-square" alt="License"></a>
   <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.26-00ADD8.svg?style=flat-square" alt="Go Version"></a>
-  <a href="scripts/mcp_verify.py"><img src="https://img.shields.io/badge/MCP-16%20tools%2C%2018%2F18%20verified-success.svg?style=flat-square" alt="MCP Verified"></a>
+  <a href="scripts/mcp_verify.py"><img src="https://img.shields.io/badge/MCP-21%20tools%2C%2036%2F36%20verified-success.svg?style=flat-square" alt="MCP Verified"></a>
+</p>
+
+<p align="center">
+  <a href="#getting-started">Get started</a> ·
+  <a href="PLAYBOOK.md">Read the playbook</a> ·
+  <a href="EVIDENCE.md">Review the evidence</a> ·
+  <a href="https://github.com/myshra777-ai/garuda/issues">Report an issue</a>
 </p>
 
 ---
@@ -27,45 +34,55 @@ AI can now write, change, test, and fix software faster than any team can review
 
 That speed is real. It's also creating a new kind of problem that nobody has a good name for yet.
 
-A team writes down what they want to build. A month later, the software has moved somewhere else. Not dramatically — not with a big rewrite — but a little at a time, change by change. Documentation says one thing, the code does another, and the running system does a third. Nobody notices until something breaks in production.
+A team writes down what it wants to build. A month later, the software has moved somewhere else. Not dramatically — not with a big rewrite — but a little at a time, change by change. Documentation says one thing, the code does another, and the running system does a third. Nobody notices until something breaks in production.
 
 This happens with human developers too, but slowly. With AI agents, it happens fast enough that teams can lose track of their own software within weeks.
 
 > **AI Development Drift is the growing gap between what an organization intended, what got built, and what the system actually does.**
 
-It is not a bug in any single AI model. It's the natural result of asking fast-moving agents to reason about a system they can only partially see, across sessions they can't remember, against intentions that keep changing.
+It is not a bug in any single AI model. It is the natural result of asking fast-moving agents to reason about a system they can only partially see, across sessions they cannot remember, against intentions that keep changing.
 
 ---
 
 ## What Garuda does about it
 
-Garuda gives everyone working on your software — people and AI agents — **one shared, verified understanding of what the software actually is.**
+Garuda is the layer your AI agents call before they change code. It answers three questions with compiler-backed evidence instead of a guess from the file that happens to be open:
 
-It connects the four things that normally live apart:
+- **What exists?** Every entity, relationship, and dependency in the workspace, resolved from compiler type information for Go and structural analysis for Python and TypeScript.
+- **What are the rules?** Policies the organization has committed to, evaluated against the current state of the code.
+- **What would break?** The transitive blast radius of a change, computed from the call and inheritance graph.
 
-- What your organization **says** it wants (docs, plans, policies, requirements)
-- What was **actually built** (your code)
-- What the system **actually does** (runtime behavior)
-- What **evidence** supports each of those claims
+The same model is shared by every developer, every AI agent, and every session. Nothing is cached in one agent's context window. Nothing is re-derived from a fresh reading of the files. When a rule changes on Wednesday, the answer on Thursday reflects it — for every agent querying Garuda, in every client.
 
-And it continuously checks whether they still agree.
+The four things Garuda connects:
 
 ```mermaid
 flowchart TD
-    INTENT["What you intend"] --> GARUDA["Garuda"]
-    CODE["What you built"] --> GARUDA
-    RUNTIME["What it actually does"] --> GARUDA
-    GARUDA --> CHECK["Continuous check"]
-    CHECK --> ALIGNED["Aligned"]
-    CHECK --> DRIFT["Drifting"]
-    CHECK --> UNKNOWN["Not enough evidence yet"]
-    ALIGNED --> ACTION["Humans and AI act"]
-    DRIFT --> ACTION
-    UNKNOWN --> ACTION
-    ACTION --> GARUDA
+    INTENT["Intent: docs, policies, decisions"] --> GARUDA
+    CODE["Code: what was built"] --> GARUDA
+    RUNTIME["Runtime: what actually happens"] --> GARUDA
+    GARUDA["Garuda: verified state plane"]
+    GARUDA --> AGENTS["AI agents query via MCP"]
+    GARUDA --> HUMANS["Developers query via CLI and dashboard"]
+    GARUDA --> CI["CI queries via CLI"]
+    AGENTS --> CHECK["Every change checked against the model"]
+    HUMANS --> CHECK
+    CI --> CHECK
+    CHECK --> RECORD["Decisions anchored to a verifiable ledger"]
+    RECORD --> GARUDA
 ```
 
-When a developer or an AI agent proposes a change, Garuda checks it against the intent your organization has already committed to. When something drifts, you hear about it while it's still a small problem — not three months later during an incident review.
+When a developer or an AI agent proposes a change, Garuda checks it against the intent the organization has already committed to. When something drifts, you hear about it while it is still a small problem — not three months later during an incident review.
+
+### What Garuda is not competing with
+
+Garuda is not an agent framework. Microsoft Agent Framework, OpenAI's Agents SDK, and similar tools are excellent at building and orchestrating agents. Garuda sits underneath them.
+
+Garuda is not a coding agent. Cursor, Claude Code, and Copilot are excellent at performing software changes. Garuda gives them a verified map of the system they are changing.
+
+Garuda is not a code search tool. Sourcegraph is excellent at finding text and code across many repositories. Garuda answers a different question: not "where does this text appear" but "what is this, what does it depend on, and is it verified."
+
+The category Garuda occupies is smaller and more specific than any of those. It is the verification and state layer that agent frameworks and coding agents call before and after they change your software. The value is not in being another agent — it is in being the thing every agent can rely on.
 
 ---
 
@@ -81,7 +98,7 @@ Garuda reads the rule and connects it to the parts of the code it applies to.
 
 Garuda catches it immediately.
 
-```
+```text
 REVIEW — Payment services must not directly access the customer database
 
 Change:     payments.HandleCharge
@@ -104,79 +121,67 @@ That's the whole loop. It runs continuously, not during quarterly architecture r
 
 ## What you can do with Garuda
 
-Garuda is easiest to understand through what it lets you do. Here are the things teams actually use it for.
+Garuda is easiest to understand through what it lets you do. Here are the workflows teams use it for.
 
-### Onboard a new engineer in days instead of weeks
+### Onboard engineers into unfamiliar systems
 
-Open Garuda and see your whole workspace. Start at the level of repositories. Drill down into packages. Open a package and see its functions, its types, and how they connect. Click any function and see who calls it, what it depends on, and where it's used across every repository you own.
+Open Garuda and see your workspace from repositories down to packages, functions, and types. Inspect callers, dependencies, implementations, and cross-repository relationships without requiring a new engineer to reconstruct the architecture manually from scattered files.
 
-No more "read the code for two weeks before your first commit."
+### Ground AI agents in the real system
 
-### Give AI agents the real answer instead of a guess
+An AI coding agent can ask what calls a function, who implements an interface, or what would be affected by a change. Garuda returns structured answers from the shared semantic model instead of relying only on the file currently open in the agent context.
 
-Your AI coding agent needs to know what calls a function, who implements an interface, or what breaks if you change something. Today it guesses from the file it has open. With Garuda, it asks directly and gets a real answer from a verified map of your code.
+This reduces unsupported assumptions, invented callers, and unsafe "I think this is safe" changes. Experimental or heuristic relationships remain confidence-scored rather than being presented as authoritative.
 
-This means fewer hallucinated function names, fewer made-up callers, fewer "I think this is safe" moments that turn out not to be.
+### Keep documentation aligned with implementation
 
-### Keep your documentation honest
+Garuda extracts supported normative claims from Markdown, ADR, and plain-text documentation and correlates them with the semantic graph. Claims can become **Supported**, remain **Unverified**, or become **Contradicted** when available runtime evidence conflicts with them.
 
-Your documentation says a feature exists. Your code no longer does. Garuda can tell you that, and show you exactly where the mismatch is.
+The goal is not to declare that missing documentation proves missing behavior. The goal is to make the evidence boundary explicit in both directions: what documentation claims, and what the analyzed code actually contains.
 
-The check runs in both directions. A claim extracted from a document is verified against the code graph — if the code contains the relationship the document describes, the claim is **Supported**; if it does not, the claim stays **Unverified** with the exact reason, or flips to **Contradicted** when a runtime observation disagrees.
+### Catch policy violations before merge
 
-The other direction works too: Garuda tells you when the code contains an exported entity that no document mentions. Neither direction matters more than the other. Both are facts about the gap between intent and implementation.
+Write rules such as *"Payment code must not import the database driver directly"* in policy configuration. Garuda evaluates them against the workspace and produces `ALLOW`, `WARN`, `REVIEW`, or `BLOCK` outcomes.
 
-### Catch policy violations before they merge
+Policies can run in preview mode or be persisted and anchored when the organization needs an auditable governance decision.
 
-Write a rule like *"Payment code must not import the database driver directly"* in plain configuration, and Garuda will check every change against it. Violations get flagged, sent for review, or blocked depending on how strict you want to be.
+### Understand change impact
 
-The rule stops being something everyone is supposed to remember. It becomes something the system actually checks.
+Before changing an important symbol, query direct and transitive callers, implementers, subclasses, and related entities. `garuda impact` reports the blast radius present in the graph, including the important cases where the graph does not contain enough evidence to support a stronger claim.
 
-### Understand the impact of a change before you make it
+### Connect repositories into one workspace model
 
-Before you change an important function, ask Garuda who depends on it. See direct callers, indirect callers, and cross-repository connections in under a second.
+A feature may span services, shared libraries, workers, and other repositories. Garuda can resolve cross-repository Go dependencies through the workspace model. Cross-repository resolution is currently beta and should be validated against the intended workspace and tenant boundaries.
 
-This is the difference between *"I think this is safe"* and *"here are the eleven services that call this, and seven of them run in production."*
+### Preserve independently verifiable governance decisions
 
-### Compare what your code says with what your system does
-
-Source code describes what the system is designed to do. Runtime behavior shows what it actually does. Garuda connects the two. When they agree, you have real confidence. When they disagree, Garuda shows you the mismatch instead of letting you discover it during an incident.
-
-### Work across all your repositories at once
-
-Modern software doesn't live in one place. A single feature might touch a frontend, two services, a shared library, a database, and a background worker. Garuda understands them as one system, not as isolated codebases.
-
-### Keep a verifiable record of every important decision
-
-When Garuda makes a governance decision — allowing a change, blocking a change, flagging something for review — that decision is recorded in a way that anyone can independently verify later. No trust required in Garuda itself. If you need to show an auditor exactly what was decided and when, you can.
+When a persisted policy evaluation records an allow, warning, review, or block decision, the result can be verified against the Merkle ledger. The proof establishes the integrity and inclusion of the recorded decision; it does not certify that the underlying semantic model is complete or correct.
 
 ---
 
 ## How the verification works
 
-For every claim about your software, Garuda keeps track of one of three states.
+For claims about your software, Garuda tracks one of three verification states.
 
 | State | What it means |
 | :--- | :--- |
-| **Supported** | We have evidence. The code exists, and the runtime agrees. |
-| **Unverified** | The code exists, but we haven't seen it actually run yet. This does *not* mean it's broken — it just means we don't have proof. |
-| **Contradicted** | Something is wrong. The system is behaving differently from what the code or the rules say it should. |
+| **Supported** | Available evidence supports the claim within the verified scope. |
+| **Unverified** | The claim has not received sufficient supporting evidence. This does not mean it is broken. |
+| **Contradicted** | Available evidence conflicts with the claim. |
 
 A phrase you'll see a lot in Garuda's design:
 
 > **Absence of evidence is not evidence of absence.**
 
-If Garuda hasn't seen a piece of code run, it says "unverified" — not "dead" or "broken." This is important because it means Garuda will never confidently tell you something is wrong when it simply doesn't know yet.
+If Garuda has not seen a piece of code run, it says "unverified" — not "dead" or "broken." This keeps uncertainty visible instead of converting missing evidence into a false negative.
 
-This is the same discipline good engineers already follow. Garuda just makes it systematic.
+Go analysis is compiler-backed. Python and TypeScript analysis is structural. The confidence and authority of a result therefore depend on the language, relationship type, evidence source, and capability maturity shown in the current release documentation.
 
 ---
 
 ## Why the record is trustworthy
 
-Every decision Garuda makes is written into a tamper-proof log. Anyone — including someone outside your organization — can independently verify that a decision was made at a specific moment and hasn't been changed since.
-
-Think of it like a notarized ledger. Not because we expect people to lie, but because when decisions matter, "trust us" is a weaker guarantee than "verify us."
+Every persisted governance decision is written into a tamper-evident Merkle ledger. Anyone with the evaluation ID and verification logic can independently verify that the recorded decision was included at a specific block and has not been altered since.
 
 You can verify any recorded decision with a single command:
 
@@ -184,54 +189,68 @@ You can verify any recorded decision with a single command:
 garuda policy verify <decision-id>
 ```
 
-You don't need access to our systems, our database, or our keys. The proof is a pure function of three values, and the verifier is in the open source.
+You do not need access to Garuda's servers, database, or operators to verify the proof. The invariants Garuda is built on are public. [`docs/invariants.md`](docs/invariants.md) lists the rules the truth substrate must never violate.
 
-The invariants Garuda is built on are public. [`docs/invariants.md`](docs/invariants.md) lists the rules the truth substrate must never violate. If a future version breaks one, the version is wrong — not the invariant.
+### What the ledger actually proves
 
-This is the piece none of the other tools have. A code graph is easy to build. A code graph you can *prove* is a different thing entirely.
+The Merkle ledger proves that a decision was recorded at a specific block, that its content has not been altered since, and that the evaluation that produced it can be independently re-verified.
+
+It does not prove that the semantic model the decision was made against is complete or correct. That is a different claim, and Garuda does not make it.
+
+What Garuda does claim, precisely: **Garuda makes the evidence and decisions behind system governance independently verifiable.** A reader who trusts the Merkle algorithm and has the evaluation ID can confirm what was decided, when, and against which policy version — without trusting Garuda's servers, database, or operators. That is the guarantee. Everything else in this README describes what the model contains, not what the ledger certifies.
+
+This is the piece none of the other tools have. A code graph is easy to build. Making the evidence and decisions behind it independently verifiable — without trusting the operators — is a different thing entirely.
 
 ---
 
 ## How Garuda differs from what you might already use
 
-If you are already using one of these categories of tool, here is what Garuda adds that the category does not.
+Garuda is complementary to most of what you already have. The category it occupies is the layer between your organization's intent and the AI agents changing your code.
 
 | You might already use | What it does well | What Garuda adds |
 | :--- | :--- | :--- |
-| Code search (Sourcegraph, GitHub search) | Finds text fast across many repositories | A typed semantic model with stable identity, so a rename does not orphan every reference |
-| Code knowledge graphs (Graphify and similar) | Parses many languages, shows relationships | Verification state — every relationship is `SUPPORTED`, `UNVERIFIED`, or `CONTRADICTED`, and every edge carries the source file and line that justifies it |
-| Runtime observability (Datadog, Honeycomb) | Shows what is happening in production | Correlates production spans with static entities, so you can ask *"is this declared path actually exercised?"* |
-| Doc-code drift tools | Reports where documentation and code disagree | Runs the check in both directions and anchors the result to a cryptographic record anyone can verify |
-| AI coding agents (Cursor, Copilot, Claude Code) | Writes code fast with useful context | Gives those agents a structured, evidence-backed map of the system they are changing, over MCP |
+| Agent frameworks (Microsoft Agent Framework, OpenAI Agents SDK) | Building and orchestrating agents | A verified model of the software the agents are operating on. Garuda is what those frameworks call, not a replacement for them. |
+| Coding agents (Cursor, Copilot, Claude Code) | Performing software changes with useful context | A structured, evidence-backed map of the system being changed — delivered over MCP, shared across every agent and session |
+| Code search (Sourcegraph, GitHub search) | Finding text fast across many repositories | A typed semantic model with stable identity, so a rename does not orphan every reference |
+| Code knowledge graphs | Parsing many languages, showing relationships | Verification state — every relationship is `SUPPORTED`, `UNVERIFIED`, or `CONTRADICTED`, and every edge carries source evidence |
+| Runtime observability (Datadog, Honeycomb) | Showing what happens in production | Correlating production spans with static entities, so you can ask *"is this declared path actually exercised?"* |
+| Doc-code drift tools | Reporting where documentation and code disagree | Running the check in both directions and anchoring the result to a cryptographic record anyone can verify |
+| Security and policy tools (Semgrep, others) | Detecting specific classes of violations | A general policy engine with authority attribution, evidence attachment, and Merkle-anchored decisions — not limited to security checks |
 
-These are complementary, not competing. Garuda is the layer that connects them, not a replacement for any one of them.
+The integration path is MCP. Any agent that can call an MCP server can call Garuda.
 
 ---
 
-## Built for AI agents, verified like a spec
+## Built for AI agents, verified across three clients
 
-Garuda speaks the Model Context Protocol — the same language Cursor, Claude Desktop, and other AI coding tools already use. An agent connected to Garuda can ask sixteen different questions about your software and get structured answers back.
+Garuda speaks the Model Context Protocol — the same language Cursor, Claude Desktop, Codex, and other AI coding tools already use. An agent connected to Garuda can ask twenty-one different questions about your software and get structured, evidence-backed answers back.
 
-We didn't stop at "it works in one client." We wrote a second, tiny MCP client from scratch — a few hundred lines of Python, no dependencies — and ran the same test suite against both.
+The MCP server is verified against three independent clients, each with its own codebase and transport behavior:
 
+| Client | What it proves |
+| :--- | :--- |
+| Cursor | The server works inside the IDE developers actually use |
+| Claude Desktop | The server works with a client that validates responses strictly |
+| Codex CLI | The server works with an independent client from a different vendor |
+
+A fourth client is maintained in the repository: a few hundred lines of standard-library Python with no dependencies. It runs the verification suite against the server to check the protocol contract, not merely one vendor's compatibility.
+
+```text
+═══ 36/36 checks passed ═══
 ```
-═══ 18/18 checks passed ═══
-```
 
-The script lives at [`scripts/mcp_verify.py`](scripts/mcp_verify.py). If you want to run it yourself against your own workspace, you can. That's the point.
+The script lives at [`scripts/mcp_verify.py`](scripts/mcp_verify.py). Run it against your own workspace to verify the server yourself.
 
-The sixteen tools cover the questions agents actually ask:
+### The twenty-one tools
 
-- *What is around this entity?* — `garuda.neighbors`
-- *Who inherits from this?* — `garuda.subclasses`
-- *Who implements this interface?* — `garuda.implementers`
-- *Where is this by name?* — `garuda.find_entity`
-- *What would break if I changed this?* — `garuda.blast_radius`, `garuda.get_impact`
-- *What are the rules here?* — `garuda.policy.list`, `garuda.policy.evaluate`
-- *Is anything drifting?* — `garuda.check_drift`
-- *What did we decide about this?* — `garuda.get_lineage`, `garuda.query`
+| Group | Tools | What they answer |
+| :--- | :--- | :--- |
+| Session context | `garuda.briefing` | Workspace state, trust anchor, scale, hubs, policies, contradictions, and recent changes |
+| Code graph exploration | `garuda.entities`, `garuda.find_entity`, `garuda.inspect`, `garuda.neighbors`, `garuda.subclasses`, `garuda.implementers`, `garuda.blast_radius`, `garuda.query_claims`, `garuda.query` | What exists, how entities connect, who implements or calls a subject, and what claims apply |
+| Governance and decisions | `garuda.policy.list`, `garuda.policy.evaluate`, `garuda.verify_policy_evaluation`, `garuda.governance.status`, `garuda.check_drift`, `garuda.get_lineage`, `garuda.get_impact`, `garuda.detect_contradictions`, `garuda.propose_decision` | What rules apply, whether drift or contradictions exist, and how decisions are proposed and verified |
+| Multi-agent coordination | `garuda.handoff`, `garuda.resume` | How agents transfer work through transactional checkpoints |
 
-Plus inspection, entity listing, governance status, and decision proposal.
+Read-only tools are everything except `garuda.propose_decision`, `garuda.handoff`, and `garuda.resume`. `garuda.policy.evaluate` is a preview by design and never persists. `garuda.handoff` and `garuda.resume` run in Serializable transactions; a second resume of the same checkpoint returns `{ "status": "not_found" }`.
 
 ---
 
@@ -239,19 +258,23 @@ Plus inspection, entity listing, governance status, and decision proposal.
 
 ### Teams already building with AI
 
-If your team uses Cursor, Claude Code, GitHub Copilot, or similar tools and you're starting to worry about what those agents are quietly changing, Garuda is for you.
+If your team uses Cursor, Claude Code, GitHub Copilot, or similar tools and needs stronger guarantees about what those agents are changing, Garuda provides the shared verification layer beneath them.
 
 ### Developers joining unfamiliar codebases
 
-If you've ever spent two weeks reading code before making your first meaningful commit, Garuda is for you.
+If engineers spend weeks reconstructing architecture before making a meaningful commit, Garuda exposes the graph, evidence, and documented constraints they need to start with better context.
 
 ### Engineering leaders who need visibility
 
-If you need to answer "where are we drifting?" and "which rules are being violated?" without a three-week audit, Garuda is for you.
+If you need to answer "where are we drifting?" and "which rules are being violated?" without a three-week audit, Garuda provides workspace-level evidence and governance queries.
 
 ### Teams in regulated or high-trust environments
 
-If your software has to prove what it does, Garuda gives you a verifiable record without needing a compliance team to maintain it manually.
+If your software needs an independently verifiable record of governance decisions, Garuda provides technical evidence and cryptographic verification without presenting itself as a compliance certification.
+
+### Platform and security teams
+
+If architectural boundaries, tenant separation, policy enforcement, and audit evidence must be consistent across services and development workflows, Garuda provides a common semantic and governance substrate.
 
 ---
 
@@ -259,12 +282,14 @@ If your software has to prove what it does, Garuda gives you a verifiable record
 
 To keep the story honest, here's what Garuda isn't:
 
-- **Not a replacement for human judgment.** Garuda shows you what's true about your system. What to do about it is still a decision for your team.
-- **Not a compliance certification.** Garuda produces technical evidence. Whether that evidence satisfies a regulator depends on your process, not on us.
-- **Not a magic fix for AI errors.** Garuda dramatically reduces the opportunity for AI agents to work from wrong assumptions. It doesn't make any model incapable of being wrong.
-- **Not a documentation authoring tool.** Write your docs where you already write them. Garuda reads them and connects them to your code.
-- **Not a decision-maker.** You define the rules. Garuda checks whether your software still follows them.
-- **Not a complete call graph for every language.** Go call edges are resolved through the compiler and attributed to the real caller, not to the package the caller lives in. A single-language repository analyzed in isolation will still have sparse call edges at the leaf — many functions have exactly one caller, and 90% have four or fewer. This is a property of the code, not a limitation of the analysis. Structural edges — inheritance, implementation, imports — are dense and reliable; call edges are denser in workspaces with more repositories that consume each other. Claim density falls off outside Go: in the reference workspace, Go produced roughly 3.8 claims per entity, TypeScript 0.17, Python 0.06. `garuda impact` reports what the graph contains, and the graph is honest about what it does not contain.
+- **Not an agent framework.** Garuda does not build or orchestrate agents; it provides the verified state and evidence layer they can query.
+- **Not a coding agent.** Garuda does not autonomously implement software changes.
+- **Not a replacement for human judgment.** Garuda shows evidence and decisions within its verified scope. Your team still decides what action to take.
+- **Not a compliance certification.** Garuda produces technical evidence. Whether that evidence satisfies a regulator depends on your process and controls.
+- **Not a magic fix for AI errors.** Garuda reduces unsupported assumptions but does not make any model incapable of being wrong.
+- **Not a documentation authoring tool.** Write documents where you already maintain them; Garuda ingests and correlates supported normative content.
+- **Not a decision-maker.** You define the rules. Garuda evaluates the current workspace against them.
+- **Not a complete call graph for every language.** Go call edges are compiler-backed within the supported scope. Python and TypeScript analysis is structural, and dynamic call-graph tracing is experimental. `garuda impact` reports what the graph contains and preserves uncertainty where it does not contain enough evidence.
 
 ---
 
@@ -272,31 +297,32 @@ To keep the story honest, here's what Garuda isn't:
 
 ### Available today
 
-- **Code understanding across Go, Python, and TypeScript.** Compiler-grade for Go. Structural for Python and TypeScript.
-- **Document ingestion (Beta).** Extract claims from Markdown and ADR documents that use the supported format, and match them to your code. Prose, tables, and code blocks are ignored by design. See [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md).
-- **Verification states.** Every claim is tracked as supported, unverified, or contradicted.
-- **Tamper-proof decision log.** Every governance decision is anchored to a verifiable cryptographic record.
-- **Policy engine.** Write rules in simple configuration. Garuda evaluates them against your system and produces clear outcomes: allow, warn, review, or block.
-- **Interactive workspace.** Explore your entire system visually, from repositories down to individual functions.
-- **Workspace-wide search.** Find any symbol, package, file, or repository across your organization.
-- **Impact analysis.** See who depends on a change before you make it.
-- **Cross-repository intelligence (Beta).** Understand software that spans multiple services. Same-language workspaces work today; cross-language resolution is heuristic.
-- **MCP integration for AI agents.** Sixteen tools, verified against two independent clients — Cursor and a reference implementation we wrote ourselves to check the specification, not just one vendor's compatibility. Run the verification yourself: [`scripts/mcp_verify.py`](scripts/mcp_verify.py).
-- **CLI and HTTP APIs.** Everything Garuda can do is scriptable and automatable.
-- **CI/CD integration.** Run Garuda's checks as part of your existing build pipeline.
+- **Code understanding across Go, Python, and TypeScript.** Compiler-backed for Go; structural for Python and TypeScript.
+- **Document ingestion.** Extract supported normative claims from Markdown, ADR, and plain-text documents. Prose, tables, and code blocks are ignored by design. See [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md).
+- **Verification states.** Track claims as `SUPPORTED`, `UNVERIFIED`, or `CONTRADICTED`.
+- **Verifiable decision ledger.** Persist governance decisions and independently verify their Merkle inclusion proofs.
+- **Policy engine.** Evaluate rules with `ALLOW`, `WARN`, `REVIEW`, or `BLOCK` outcomes.
+- **Interactive workspace.** Explore repositories, packages, entities, relationships, evidence, and governance state.
+- **Workspace-wide semantic queries.** Find entities, packages, files, relationships, and claims across the workspace.
+- **Impact analysis.** Inspect direct and transitive graph-visible dependencies before changing a symbol.
+- **Cross-repository intelligence.** Resolve supported multi-module Go dependencies through the PostgreSQL workspace cache; currently beta and subject to workspace-boundary validation.
+- **MCP integration for AI agents.** Twenty-one tools, verified against Cursor, Claude Desktop, and Codex CLI, plus a reference implementation that checks the protocol contract. Run [`scripts/mcp_verify.py`](scripts/mcp_verify.py) yourself.
+- **Transactional multi-agent coordination.** Transfer work through Serializable handoffs and single-consumption checkpoints.
+- **CLI and HTTP APIs.** Script and automate supported workflows.
+- **CI/CD integration.** Run analysis, policy evaluation, semantic diff, and impact checks in build pipelines.
 
-Everything in this list is exercised end to end. The specific numbers and the queries that reproduce them live in [`EVIDENCE.md`](EVIDENCE.md).
+Everything in this list is exercised end to end within its documented scope. The specific evidence and reproducible queries live in [`EVIDENCE.md`](EVIDENCE.md).
 
 ### In beta with design partners
 
-- **Team accounts and access controls.** Implemented. Early partner onboarding opens once the trust-floor audit completes.
-- **Runtime verification at scale.** Connecting live production telemetry to your Garuda workspace.
+- **Team accounts and access controls.** Implemented; early partner onboarding opens once the trust-floor audit completes.
+- **Runtime verification at scale.** Connecting live production telemetry to a Garuda workspace.
 - **Multi-repository benchmarks.** Formal quality gates for workspaces of 10, 25, and 100+ repositories.
 
 ### Launching soon
 
-- **More languages.** New languages on the same pipeline. No changes to how you use Garuda — new languages just show up.
-- **More agent tools.** Deeper integrations for AI agents that need to understand impact and coverage, not just structure.
+- **More languages.** Additional analyzers on the same semantic pipeline.
+- **More agent tools.** Deeper integrations for agents that need impact and evidence, not just structure.
 - **Deeper dashboard exploration.** Richer views of evidence, drift, and system health.
 
 ---
@@ -312,34 +338,63 @@ go build -o bin/garuda ./cmd/garuda
 go build -o bin/garuda-mcp ./cmd/garuda-mcp
 ```
 
-Requires Go 1.26 or later. TypeScript support needs a C compiler.
+Requires Go 1.26 or later. TypeScript support requires `CGO_ENABLED=1` and a C compiler.
 
-### Or start the full stack with Docker
+### Start PostgreSQL
 
 ```bash
-docker compose -f deploy/compose/docker-compose.prod.yml up -d
+docker run -d \
+  --name garuda-pg \
+  -e POSTGRES_USER=garuda \
+  -e POSTGRES_PASSWORD=garuda \
+  -e POSTGRES_DB=garuda \
+  -p 5432:5432 \
+  postgres:16
 ```
 
-This starts Garuda, its database, and the background worker in one command.
+```bash
+export DATABASE_URL="postgres://garuda:garuda@localhost:5432/garuda?sslmode=disable"
+```
+
+Apply migrations:
+
+```bash
+for f in migrations/[0-9]*.sql; do
+  psql "$DATABASE_URL" -f "$f"
+done
+```
+
+### Create a workspace
+
+```bash
+export GARUDA_WORKSPACE=my-workspace
+./bin/garuda workspace create my-workspace
+```
 
 ### Point Garuda at your code
 
 ```bash
-./bin/garuda analyze /path/to/repo --save --workspace my-workspace
+./bin/garuda analyze /path/to/repo --save
 ```
 
-Garuda figures out what language your project uses automatically.
+Garuda detects Go, Python, and TypeScript projects from their module or project configuration files.
 
 ### Add your documentation
 
 ```bash
-./bin/garuda docs ingest ./docs --workspace my-workspace
+./bin/garuda docs ingest ./docs
 ```
 
 ### Evaluate your policies
 
 ```bash
 ./bin/garuda policy evaluate ./policies --workspace my-workspace
+```
+
+This is a preview by default — nothing is persisted and nothing is anchored. Add `--save` when you want a cryptographically recorded governance decision:
+
+```bash
+./bin/garuda policy evaluate ./policies --workspace my-workspace --save
 ```
 
 ### Connect your AI agent
@@ -352,12 +407,15 @@ Add Garuda to your MCP client's configuration:
     "garuda": {
       "command": "/absolute/path/to/bin/garuda-mcp",
       "env": {
-        "DATABASE_URL": "postgres://user:pass@localhost:5432/garuda?sslmode=disable"
+        "DATABASE_URL": "postgres://garuda:garuda@localhost:5432/garuda?sslmode=disable",
+        "GARUDA_WORKSPACE": "my-workspace"
       }
     }
   }
 }
 ```
+
+Use an absolute binary path. Restart the MCP client after changing its configuration.
 
 ### Verify the MCP server yourself
 
@@ -365,7 +423,7 @@ Add Garuda to your MCP client's configuration:
 WORKSPACE=my-workspace python3 scripts/mcp_verify.py
 ```
 
-You should see `18/18 checks passed`.
+You should see `36/36 checks passed`. The script exercises every tool, including negative paths — an unknown ID must return a structured failure, not a transport error.
 
 ### Open the workspace
 
@@ -384,16 +442,14 @@ flowchart LR
     DOCS["Your docs and rules"] --> GARUDA
     CODE["Your code"] --> GARUDA
     RUNTIME["Your running system"] --> GARUDA
-
     GARUDA["Garuda builds one shared understanding"]
-
     GARUDA --> VIEWS["Dashboard · CLI · AI agents · CI"]
     GARUDA --> RECORD["Verifiable decision log"]
 ```
 
-Everything you see in Garuda — the graph, the search results, the policy checks, the drift reports — comes from the same shared understanding of your software.
+Everything you see in Garuda — the graph, search results, policy checks, drift reports, and agent answers — comes from the same shared understanding of your software.
 
-The graph is one way to look at it. The AI agent interface is another. Neither one is the product on its own. The shared understanding underneath them is the product.
+The graph is one way to look at it. The AI agent interface is another. Neither is the product on its own. The shared, evidence-aware state underneath them is the product.
 
 ---
 
@@ -403,9 +459,9 @@ Garuda's long-term direction is simple to say and hard to build:
 
 > **Keep an organization's intent continuously connected to the software that implements it and the system that runs it.**
 
-That means starting with what you have today — code, docs, rules — and gradually connecting more of your organization's knowledge: runtime behavior, incident history, architectural decisions, business rules. Each connection makes the understanding richer. None of them change what Garuda fundamentally is.
+That means starting with what you have today — code, docs, and rules — and gradually connecting more of your organization's knowledge: runtime behavior, incident history, architectural decisions, and business rules. Each connection makes the understanding richer. None of them change what Garuda fundamentally is.
 
-The vision is a world where software doesn't quietly lose the context behind why it was built. Where an AI agent three years from now can still tell you *why* a boundary exists, not just *that* it exists.
+The vision is a world where software does not quietly lose the context behind why it was built. Where an AI agent three years from now can still tell you *why* a boundary exists, not just *that* it exists.
 
 ---
 
@@ -413,19 +469,19 @@ The vision is a world where software doesn't quietly lose the context behind why
 
 | Document | What's in it |
 | :--- | :--- |
-| [`PLAYBOOK.md`](PLAYBOOK.md) | Installation, operational procedures, workflow examples |
+| [`PLAYBOOK.md`](PLAYBOOK.md) | Installation, operational procedures, and workflow examples |
 | [`EVIDENCE.md`](EVIDENCE.md) | Validation results and methodology |
 | [`docs/adr/`](docs/adr/) | Architecture decision records |
-| [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) | What documents Garuda reads, and how to format them |
-| [`docs/invariants.md`](docs/invariants.md) | The invariant contract Garuda's truth substrate is built on |
-| [`SECURITY.md`](SECURITY.md) | Security model and how to report issues |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute |
+| [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) | Supported documents and claim-extraction format |
+| [`docs/invariants.md`](docs/invariants.md) | Invariant contract for Garuda's truth substrate |
+| [`SECURITY.md`](SECURITY.md) | Security model and issue-reporting process |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution guidelines |
 
 ---
 
 ## Contributing
 
-Garuda is built in the open. Contributions are welcome — new language support, better parsers, deeper AI integrations, documentation improvements. See [`CONTRIBUTING.md`](CONTRIBUTING.md) to get started.
+Garuda is built in the open. Contributions are welcome — new language support, better parsers, deeper AI integrations, documentation improvements, and verification tooling. See [`CONTRIBUTING.md`](CONTRIBUTING.md) to get started.
 
 ---
 
