@@ -89,7 +89,7 @@ def main():
         tl = read_response(proc)
         results.append(expect(tl.get("id") == 2, "tools/list id == 2 (no notification response)"))
         tools = tl.get("result", {}).get("tools", [])
-        results.append(expect(len(tools) >= 19, f"tools/list >= 19 tools (got {len(tools)})"))
+        results.append(expect(len(tools) >= 21, f"tools/list >= 21 tools (got {len(tools)})"))
 
         names = {t["name"] for t in tools}
         results.append(expect("garuda.briefing" in names, "tool garuda.briefing present"))
@@ -99,6 +99,8 @@ def main():
         results.append(expect(
             "garuda.blast_radius" in names,
             "tool garuda.blast_radius present"))
+        results.append(expect("garuda.handoff" in names, "tool garuda.handoff present"))
+        results.append(expect("garuda.resume" in names, "tool garuda.resume present"))
         for expected in (
             "garuda.entities", "garuda.neighbors", "garuda.find_entity",
             "garuda.subclasses", "garuda.implementers",
@@ -211,6 +213,52 @@ def main():
         results.append(expect(
             all("severity" in e for e in brp.get("impacted", [])),
             "every impacted entity carries a severity"))
+
+        # garuda.handoff — random UUIDs. The store's lockAgent will not
+        # find the source agent, and ExecuteHandoffTransaction returns
+        # an error. The MCP handler translates that to
+        # {status: "failed", reason: ...}, not a transport error.
+        send(proc, {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {
+                "name": "garuda.handoff",
+                "arguments": {
+                    "task_id": "00000000-0000-0000-0000-000000000001",
+                    "source_agent_id": "00000000-0000-0000-0000-000000000002",
+                    "target_agent_id": "00000000-0000-0000-0000-000000000003",
+                },
+            },
+        })
+        ho = read_response(proc)
+        results.append(expect(ho.get("id") == 9, "handoff id == 9"))
+        hop = json.loads(ho["result"]["content"][0]["text"])
+        results.append(expect(hop.get("status") == "failed",
+                              "handoff returns status=failed for unknown task/agent"))
+        results.append(expect("reason" in hop, "handoff includes a reason"))
+
+        # garuda.resume — random checkpoint UUID. The store cannot find
+        # the checkpoint (or the agent). The MCP handler translates to
+        # {status: "not_found", reason: ...}.
+        send(proc, {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "garuda.resume",
+                "arguments": {
+                    "agent_id": "00000000-0000-0000-0000-000000000004",
+                    "checkpoint_id": "00000000-0000-0000-0000-000000000005",
+                },
+            },
+        })
+        rs = read_response(proc)
+        results.append(expect(rs.get("id") == 10, "resume id == 10"))
+        rsp = json.loads(rs["result"]["content"][0]["text"])
+        results.append(expect(rsp.get("status") == "not_found",
+                              "resume returns status=not_found for unknown checkpoint"))
+        results.append(expect("reason" in rsp, "resume includes a reason"))
 
         proc.stdin.close()
         proc.wait(timeout=3)

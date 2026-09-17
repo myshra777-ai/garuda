@@ -521,6 +521,36 @@ func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 				"required": []string{"entity_id"},
 			},
 		},
+		// ── State management tools (Phase 2.4) ──
+		{
+			"name":        "garuda.handoff",
+			"description": "Initiate an atomic task handoff between two agents. Creates a checkpoint of the source agent's state, transfers task ownership, and transitions both agents' statuses. Wraps the same Serializable transaction the HTTP API uses. Caller must ensure source_agent_id currently owns task_id. Returns {status: \"completed\", handoff_id, checkpoint_id} on success, or {status: \"failed\", reason} on precondition failure.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id":       map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"task_id":         map[string]interface{}{"type": "string", "description": "Task UUID being handed off"},
+					"source_agent_id": map[string]interface{}{"type": "string", "description": "Agent UUID currently owning the task"},
+					"target_agent_id": map[string]interface{}{"type": "string", "description": "Agent UUID taking ownership"},
+					"reason":          map[string]interface{}{"type": "string", "description": "Optional human-readable reason"},
+					"checkpoint_data": map[string]interface{}{"type": "object", "description": "Optional serializable state to carry across the handoff"},
+				},
+				"required": []string{"task_id", "source_agent_id", "target_agent_id"},
+			},
+		},
+		{
+			"name":        "garuda.resume",
+			"description": "Restore the state from an active checkpoint created by garuda.handoff, and mark the checkpoint as consumed. A second resume of the same checkpoint returns {status: \"not_found\"}. Wraps the same Serializable transaction the HTTP API uses.",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"tenant_id":     map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+					"agent_id":      map[string]interface{}{"type": "string", "description": "Agent UUID performing the resume"},
+					"checkpoint_id": map[string]interface{}{"type": "string", "description": "Checkpoint UUID returned by garuda.handoff"},
+				},
+				"required": []string{"agent_id", "checkpoint_id"},
+			},
+		},
 		{
 			"name":        "garuda.find_entity",
 			"description": "Find entities by name pattern, kind, package, or file path. Results ranked by inbound edge count so the most-connected matches appear first. Read-only.",
@@ -639,6 +669,10 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleImplementers(args)
 	case "garuda.neighbors":
 		result, err = s.handleNeighbors(args)
+	case "garuda.handoff":
+		result, err = s.handleHandoff(args)
+	case "garuda.resume":
+		result, err = s.handleResume(args)
 	case "garuda.find_entity":
 		result, err = s.handleFindEntity(args)
 

@@ -584,3 +584,135 @@ func (s *MCPServer) handleBlastRadius(args map[string]interface{}) (interface{},
 		"impacted": all,
 	}, nil
 }
+
+// handleHandoff initiates an atomic task handoff between two agents.
+// Wraps store.ExecuteHandoffTransaction, which runs in a Serializable
+// transaction: it locks both agents, locks the task, creates a
+// checkpoint, records the handoff, transfers task ownership, and
+// transitions both agent statuses. The CLI equivalent is
+// `garuda handoff <task_id> <source_agent_id> <target_agent_id>`.
+//
+// Precondition failures (source already transitioning, target
+// offline, source does not own the task) are returned as
+// {status: "failed", reason: ...}, not as transport errors. An agent
+// needs to see which precondition blocked the handoff; a generic
+// "handoff execution failed" is not actionable. Errors are reserved
+// for caller bugs (missing or malformed arguments).
+func (s *MCPServer) handleHandoff(args map[string]interface{}) (interface{}, error) {
+	tenantID, _, err := s.resolveTenantAndWorkspace(args)
+	if err != nil {
+		return nil, err
+	}
+
+	taskStr, _ := args["task_id"].(string)
+	if taskStr == "" {
+		return nil, fmt.Errorf("task_id is required")
+	}
+	taskID, err := uuid.Parse(taskStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid task_id %q: %w", taskStr, err)
+	}
+
+	sourceStr, _ := args["source_agent_id"].(string)
+	if sourceStr == "" {
+		return nil, fmt.Errorf("source_agent_id is required")
+	}
+	sourceID, err := uuid.Parse(sourceStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid source_agent_id %q: %w", sourceStr, err)
+	}
+
+	targetStr, _ := args["target_agent_id"].(string)
+	if targetStr == "" {
+		return nil, fmt.Errorf("target_agent_id is required")
+	}
+	targetID, err := uuid.Parse(targetStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid target_agent_id %q: %w", targetStr, err)
+	}
+
+	reason, _ := args["reason"].(string)
+	checkpointData := args["checkpoint_data"]
+
+	req := &store.HandoffRequest{
+		TenantID:       tenantID,
+		TaskID:         taskID,
+		SourceAgentID:  sourceID,
+		TargetAgentID:  targetID,
+		Reason:         reason,
+		CheckpointData: checkpointData,
+	}
+
+	resp, err := s.store.ExecuteHandoffTransaction(context.Background(), req)
+	if err != nil {
+		return map[string]interface{}{
+			"status":          "failed",
+			"reason":          err.Error(),
+			"task_id":         taskID.String(),
+			"source_agent_id": sourceID.String(),
+			"target_agent_id": targetID.String(),
+		}, nil
+	}
+
+	return map[string]interface{}{
+		"status":          resp.Status,
+		"handoff_id":      resp.HandoffID.String(),
+		"checkpoint_id":   resp.CheckpointID.String(),
+		"task_id":         resp.TaskID.String(),
+		"source_agent_id": sourceID.String(),
+		"target_agent_id": targetID.String(),
+	}, nil
+}
+
+// handleResume restores the state from an active checkpoint and marks
+// the checkpoint as consumed. Wraps store.ResumeAgent, which runs in
+// a Serializable transaction: it locks the agent, selects the
+// checkpoint FOR UPDATE, and transitions the checkpoint from
+// 'active' to 'restored'. A second resume of the same checkpoint
+// returns {status: "not_found"}. The HTTP equivalent is
+// POST /api/v1/agents/resume.
+//
+// A consumed or unknown checkpoint is a fact, not a transport error.
+// The agent gets {status: "not_found", reason: ...} so it can react.
+// Errors are reserved for caller bugs.
+func (s *MCPServer) handleResume(args map[string]interface{}) (interface{}, error) {
+	tenantID, _, err := s.resolveTenantAndWorkspace(args)
+	if err != nil {
+		return nil, err
+	}
+
+	agentStr, _ := args["agent_id"].(string)
+	if agentStr == "" {
+		return nil, fmt.Errorf("agent_id is required")
+	}
+	agentID, err := uuid.Parse(agentStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid agent_id %q: %w", agentStr, err)
+	}
+
+	checkpointStr, _ := args["checkpoint_id"].(string)
+	if checkpointStr == "" {
+		return nil, fmt.Errorf("checkpoint_id is required")
+	}
+	checkpointID, err := uuid.Parse(checkpointStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid checkpoint_id %q: %w", checkpointStr, err)
+	}
+
+	state, err := s.store.ResumeAgent(context.Background(), tenantID, agentID, checkpointID)
+	if err != nil {
+		return map[string]interface{}{
+			"status":        "not_found",
+			"reason":        err.Error(),
+			"agent_id":      agentID.String(),
+			"checkpoint_id": checkpointID.String(),
+		}, nil
+	}
+
+	return map[string]interface{}{
+		"status":        "restored",
+		"agent_id":      agentID.String(),
+		"checkpoint_id": checkpointID.String(),
+		"state":         state,
+	}, nil
+}
