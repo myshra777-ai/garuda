@@ -88,21 +88,28 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 		return nil, fmt.Errorf("failed to marshal checkpoint data: %w", err)
 	}
 
-	// 6. Create checkpoint record
+	// 6. Generate IDs up front. handoffID is generated here, not at
+	//    step 7, so the checkpoint can carry a name unique to this
+	//    handoff. Without it, the INSERT takes the schema default
+	//    'manual_checkpoint', and the unique constraint on
+	//    (tenant_id, checkpoint_name) fires on the second handoff in
+	//    the same tenant, regardless of which task is being handed off.
 	checkpointID := uuid.New()
+	handoffID := uuid.New()
+	checkpointName := "handoff_" + handoffID.String()
+
 	checkpointQuery := `
-		INSERT INTO agent_checkpoints (id, tenant_id, task_id, agent_id, checkpoint_data, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'active', NOW(), NOW())
+		INSERT INTO agent_checkpoints (id, tenant_id, task_id, agent_id, checkpoint_name, checkpoint_data, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), NOW())
 	`
 	if _, err := tx.Exec(ctx, checkpointQuery,
 		checkpointID, req.TenantID, req.TaskID, req.SourceAgentID.String(),
-		checkpointDataJSON,
+		checkpointName, checkpointDataJSON,
 	); err != nil {
 		return nil, fmt.Errorf("failed to create checkpoint: %w", err)
 	}
 
 	// 7. Create handoff record (status = 'in_progress')
-	handoffID := uuid.New()
 	handoffQuery := `
 		INSERT INTO handoffs (id, tenant_id, task_id, source_agent_id, target_agent_id, checkpoint_id, reason, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 'in_progress', NOW())
@@ -325,8 +332,9 @@ func (s *PostgresStore) lockTask(ctx context.Context, tx pgx.Tx, taskID, tenantI
 		&t.ScopeSystem, &t.Version, &t.CreatedAt, &t.UpdatedAt, &t.CompletedAt,
 	)
 	if err != nil {
+		return nil, fmt.Errorf("task %s not found: %w", taskID, err)
 	}
-	return &t, err
+	return &t, nil
 }
 
 func (s *PostgresStore) updateAgentStatus(ctx context.Context, tx pgx.Tx, agentID, tenantID uuid.UUID, status string) error {
