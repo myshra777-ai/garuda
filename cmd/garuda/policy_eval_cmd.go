@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -90,6 +89,8 @@ var policyListCmd = &cobra.Command{
 }
 
 var policyReconcileFlag bool
+
+var policySaveFlag bool
 
 // ─────────────────────────────────────────────────────────────────────────────
 // policy validate <dir>
@@ -194,13 +195,15 @@ var policyEvaluateCmd = &cobra.Command{
 		if actor == "" {
 			actor = "cli-operator"
 		}
-
+		if policyReconcileFlag && !policySaveFlag {
+			return fmt.Errorf("--reconcile requires --save; both are write operations and must be explicit")
+		}
 		ctx := context.Background()
 		engine := policy.NewEngine(pool)
 
 		start := time.Now()
 		result, err := engine.Run(ctx, tenantID, workspaceID, dir, policySubjectKind, policySubjectID, actor,
-			policy.RunOptions{Reconcile: policyReconcileFlag})
+			policy.RunOptions{DryRun: !policySaveFlag, Reconcile: policyReconcileFlag})
 		if err != nil {
 			return fmt.Errorf("engine run failed: %w", err)
 		}
@@ -210,7 +213,7 @@ var policyEvaluateCmd = &cobra.Command{
 			out, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(out))
 		} else {
-			printPolicyRunResult(result, elapsed, wsName)
+			printPolicyRunResult(result, elapsed, wsName, !policySaveFlag)
 		}
 
 		if policyFailOnBlock && result.FinalDecision == policy.DecisionBlock {
@@ -220,12 +223,17 @@ var policyEvaluateCmd = &cobra.Command{
 	},
 }
 
-func printPolicyRunResult(r *policy.RunResult, elapsed time.Duration, wsName string) {
+func printPolicyRunResult(r *policy.RunResult, elapsed time.Duration, wsName string, dryRun bool) {
 	fmt.Println()
 	fmt.Println("╔═══════════════════════════════════════════════════════════════════╗")
 	fmt.Println("║               GARUDA POLICY ENFORCEMENT                            ║")
 	fmt.Println("╚═══════════════════════════════════════════════════════════════════╝")
 	fmt.Printf("Workspace:   %s\n", wsName)
+	if dryRun {
+		fmt.Printf("Mode:        preview (nothing written)\n")
+	} else {
+		fmt.Printf("Mode:        committed\n")
+	}
 	fmt.Printf("Duration:    %s\n", elapsed.Round(time.Millisecond))
 	fmt.Printf("Policies:    %d evaluated\n", len(r.Evaluations))
 	fmt.Println()
@@ -462,7 +470,9 @@ func init() {
 	policyEvaluateCmd.Flags().BoolVar(&policyJSONFlag, "json", false, "Output JSON")
 	policyEvaluateCmd.Flags().BoolVar(&policyFailOnBlock, "fail-on-block", false, "Exit non-zero if any policy returns BLOCK")
 	policyEvaluateCmd.Flags().BoolVar(&policyReconcileFlag, "reconcile", false,
-		"Mark active policies not present in <dir> as superseded. Off by default; a test directory evaluated against a production workspace would otherwise supersede production policies. This flag only controls the policy-row reconcile step; evaluations and Merkle anchors are written on every run regardless.")
+		"Mark active policies not present in <dir> as superseded. Off by default; a test directory evaluated against a production workspace would otherwise supersede production policies. Requires --save.")
+	policyEvaluateCmd.Flags().BoolVarP(&policySaveFlag, "save", "s", false,
+		"Persist evaluations and anchor decisions to the Merkle ledger. Off by default; without --save, policy evaluate is a preview.")
 
 	policyCmd.AddCommand(policyListCmd)
 	policyCmd.AddCommand(policyValidateCmd)
@@ -471,5 +481,4 @@ func init() {
 	policyCmd.AddCommand(policyVerifyCmd)
 
 	rootCmd.AddCommand(policyCmd)
-	_ = filepath.Separator // silence unused import if filepath not otherwise used
 }

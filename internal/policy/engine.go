@@ -40,6 +40,7 @@ type RunResult struct {
 	BlockedBy      *uuid.UUID    `json:"blocked_by,omitempty"`
 	Summary        string        `json:"summary"`
 	ReconcileCount int           `json:"reconcile_count"`
+	Preview        bool          `json:"preview"`
 }
 
 // RunOptions tunes the behavior of one policy pass.
@@ -96,6 +97,7 @@ func (e *Engine) Run(
 		WorkspaceID:   workspaceID,
 		FinalDecision: DecisionAllow,
 	}
+	result.Preview = dryRun
 
 	// Track which policy statements this pass saw. After the loop,
 	// every active policy for the tenant whose statement is not in
