@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -645,9 +646,19 @@ func (s *MCPServer) handleHandoff(args map[string]interface{}) (interface{}, err
 
 	resp, err := s.store.ExecuteHandoffTransaction(context.Background(), req)
 	if err != nil {
+		// Precondition failures are actionable; wrapped internal errors
+		// are not. Same filter as the HTTP handler so both transports
+		// surface the same message for the same failure.
+		reason := "handoff execution failed"
+		switch {
+		case errors.Is(err, store.ErrSourceTransitioning),
+			errors.Is(err, store.ErrTargetOffline),
+			errors.Is(err, store.ErrSourceDoesNotOwn):
+			reason = err.Error()
+		}
 		return map[string]interface{}{
 			"status":          "failed",
-			"reason":          err.Error(),
+			"reason":          reason,
 			"task_id":         taskID.String(),
 			"source_agent_id": sourceID.String(),
 			"target_agent_id": targetID.String(),

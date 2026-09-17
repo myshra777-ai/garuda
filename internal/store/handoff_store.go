@@ -36,6 +36,18 @@ type HandoffResponse struct {
 	Status       string    `json:"status"`
 }
 
+// Precondition errors returned by ExecuteHandoffTransaction. These
+// are the failures a caller can act on — "target agent is offline,
+// try a different target" versus "source does not own this task,
+// fix the arguments." They are typed so the HTTP and MCP handlers
+// can surface them to clients without also surfacing internal
+// wrapped errors that carry schema details.
+var (
+	ErrSourceTransitioning = errors.New("source agent is already in transition")
+	ErrTargetOffline       = errors.New("target agent is offline")
+	ErrSourceDoesNotOwn    = errors.New("source agent does not own this task")
+)
+
 // ============================================================
 // Handoff Store Methods
 // ============================================================
@@ -56,7 +68,7 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 		return nil, err
 	}
 	if sourceAgent.Status == "transitioning" {
-		return nil, errors.New("source agent is already in transition")
+		return nil, ErrSourceTransitioning
 	}
 
 	// 2. Lock and validate target agent
@@ -65,7 +77,7 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 		return nil, err
 	}
 	if targetAgent.Status == "offline" {
-		return nil, errors.New("target agent is offline")
+		return nil, ErrTargetOffline
 	}
 
 	// 3. Lock and validate task
@@ -74,7 +86,7 @@ func (s *PostgresStore) ExecuteHandoffTransaction(ctx context.Context, req *Hand
 		return nil, err
 	}
 	if task.OwnerAgentID == nil || *task.OwnerAgentID != req.SourceAgentID {
-		return nil, errors.New("source agent does not own this task")
+		return nil, ErrSourceDoesNotOwn
 	}
 
 	// 4. Mark source agent as transitioning (prevents concurrent handoffs)

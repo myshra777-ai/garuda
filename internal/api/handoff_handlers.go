@@ -8,6 +8,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -52,7 +53,19 @@ func (s *Server) HandleHandoff(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		telemetry.RecordHandoffWithModel(modelName, modelProvider, float64(time.Since(start).Milliseconds()), false)
 		slog.Error("handoff execution failed", "error", err, "request_id", requestID, "task_id", req.TaskID, "tenant_id", tenantID)
-		s.RespondWithError(w, http.StatusConflict, "handoff execution failed", requestID)
+		// Precondition failures are actionable — the caller can change
+		// the target, fix the arguments, or retry. Surface the store's
+		// message. Everything else stays collapsed: the wrapped errors
+		// carry Postgres table and constraint names that should not
+		// cross the API boundary.
+		msg := "handoff execution failed"
+		switch {
+		case errors.Is(err, store.ErrSourceTransitioning),
+			errors.Is(err, store.ErrTargetOffline),
+			errors.Is(err, store.ErrSourceDoesNotOwn):
+			msg = err.Error()
+		}
+		s.RespondWithError(w, http.StatusConflict, msg, requestID)
 		return
 	}
 	telemetry.RecordHandoffWithModel(modelName, modelProvider, float64(time.Since(start).Milliseconds()), true)
