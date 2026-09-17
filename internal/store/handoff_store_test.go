@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -178,5 +179,102 @@ func TestHandoffAndResume(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "checkpoint not found") {
 		t.Errorf("expected 'checkpoint not found' error, got %v", err)
+	}
+}
+
+// TestTwoHandoffsInSameTenant is the regression guard for a constraint
+// collision that made the second handoff in any tenant fail. The
+// checkpoint INSERT inside ExecuteHandoffTransaction did not set
+// checkpoint_name, so it took the schema default 'manual_checkpoint'.
+// The unique constraint on (tenant_id, checkpoint_name) fires on the
+// second handoff in the same tenant, regardless of which task is being
+// handed off. The Serializable transaction rolls back; the handoff
+// never happens.
+//
+// TestHandoffAndResume did not catch this because it cleans up its
+// single task's checkpoint row before every run, so the second
+// invocation never collides with the first.
+func TestTwoHandoffsInSameTenant(t *testing.T) {
+	ctx := context.Background()
+	store := getTestPostgresStore(t)
+
+	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	sourceAgentID := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab")
+	targetAgentID := uuid.MustParse("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc")
+	taskAID := uuid.MustParse("cccccccc-cccc-4ccc-8ccc-cccccccccccd")
+	taskBID := uuid.MustParse("cccccccc-cccc-4ccc-8ccc-ccccccccccce")
+
+	cleanup := func() {
+		_, _ = store.Pool().Exec(ctx, `DELETE FROM lineage_edges WHERE tenant_id = $1 AND (source_task_id IN ($2, $3) OR target_task_id IN ($2, $3))`, tenantID, taskAID, taskBID)
+		_, _ = store.Pool().Exec(ctx, `DELETE FROM handoffs WHERE tenant_id = $1 AND task_id IN ($2, $3)`, tenantID, taskAID, taskBID)
+		_, _ = store.Pool().Exec(ctx, `DELETE FROM agent_checkpoints WHERE tenant_id = $1 AND task_id IN ($2, $3)`, tenantID, taskAID, taskBID)
+		_, _ = store.Pool().Exec(ctx, `DELETE FROM tasks WHERE tenant_id = $1 AND id IN ($2, $3)`, tenantID, taskAID, taskBID)
+		_, _ = store.Pool().Exec(ctx, `DELETE FROM agents WHERE tenant_id = $1 AND id IN ($2, $3)`, tenantID, sourceAgentID, targetAgentID)
+	}
+	cleanup()
+	t.Cleanup(cleanup)
+
+	_, err := store.Pool().Exec(ctx, `
+		INSERT INTO agents (id, tenant_id, name, model_type, session_id, status)
+		VALUES ($1, $2, 'test-source-agent-2', 'test', 'test-session-source-2', 'idle')
+	`, sourceAgentID, tenantID)
+	if err != nil {
+		t.Fatalf("insert source agent: %v", err)
+	}
+
+	_, err = store.Pool().Exec(ctx, `
+		INSERT INTO agents (id, tenant_id, name, model_type, session_id, status)
+		VALUES ($1, $2, 'test-target-agent-2', 'test', 'test-session-target-2', 'idle')
+	`, targetAgentID, tenantID)
+	if err != nil {
+		t.Fatalf("insert target agent: %v", err)
+	}
+
+	for i, taskID := range []uuid.UUID{taskAID, taskBID} {
+		_, err := store.Pool().Exec(ctx, `
+			INSERT INTO tasks (id, tenant_id, title, status, owner_agent_id)
+			VALUES ($1, $2, $3, 'pending', $4)
+		`, taskID, tenantID, fmt.Sprintf("handoff-collision-test-task-%d", i), sourceAgentID)
+		if err != nil {
+			t.Fatalf("insert task %d: %v", i, err)
+		}
+	}
+
+	// First handoff in the tenant. Succeeds even with the bug: no
+	// checkpoint with the default name exists yet.
+	respA, err := store.ExecuteHandoffTransaction(ctx, &HandoffRequest{
+		TenantID:       tenantID,
+		TaskID:         taskAID,
+		SourceAgentID:  sourceAgentID,
+		TargetAgentID:  targetAgentID,
+		Reason:         "first handoff in tenant",
+		CheckpointData: map[string]string{"task": "A"},
+	})
+	if err != nil {
+		t.Fatalf("first handoff: %v", err)
+	}
+	if respA.Status != "completed" {
+		t.Errorf("first handoff status = %q, want completed", respA.Status)
+	}
+
+	// Second handoff, same tenant, same agents, different task. Before
+	// the fix, the checkpoint INSERT collides with A's row on
+	// (tenant_id, checkpoint_name='manual_checkpoint').
+	respB, err := store.ExecuteHandoffTransaction(ctx, &HandoffRequest{
+		TenantID:       tenantID,
+		TaskID:         taskBID,
+		SourceAgentID:  sourceAgentID,
+		TargetAgentID:  targetAgentID,
+		Reason:         "second handoff in tenant",
+		CheckpointData: map[string]string{"task": "B"},
+	})
+	if err != nil {
+		t.Fatalf("second handoff: %v", err)
+	}
+	if respB.Status != "completed" {
+		t.Errorf("second handoff status = %q, want completed", respB.Status)
+	}
+	if respA.CheckpointID == respB.CheckpointID {
+		t.Error("handoff A and handoff B share a checkpoint ID")
 	}
 }
