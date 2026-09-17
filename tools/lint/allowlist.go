@@ -49,8 +49,8 @@ var Allowlist = []AllowEntry{
 	{
 		File:   "../../internal/store/contradiction_store.go",
 		Check:  "sql-scoping",
-		Hash:   "6a4e812132fbfb17ac7af9f71be0a47fa5ee614ecd71c3cbb6e50fb47ea485a4",
-		Reason: "KNOWN DEFECT, tracked as B28. INSERT into contradictions does not set workspace_id; rows are written with NULL. The check fires correctly. Removing this entry is part of the B28 fix, which will derive workspace from decision_a. Until then, the only consumer is the tenant-wide contradiction report, which does not filter by workspace, so the omission is not user-visible.",
+		Hash:   "e39622de75bf2ec884b1b9e5f04e22df4db8ea2050208959a484a12cfe2d58ca",
+		Reason: "Correct by design. Migration 084 added a `kind` discriminator and split the table's shape: decision_vs_decision rows carry decision_a and decision_b, runtime_vs_static rows carry workspace_id and source_entity_id. This INSERT writes a decision_vs_decision row; per the schema's chk_contradictions_kind_decision constraint it must have decision_a and decision_b, and MUST NOT require workspace_id. decisions has no workspace_id column, so the caller has no workspace context to pass. The lint check cannot see kind-discrimination logic. See migrations/084_contradictions_runtime_kind.sql.",
 	},
 	{
 		File:   "../../internal/store/contradiction_store.go",

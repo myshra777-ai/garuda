@@ -49,9 +49,9 @@ func (s *PostgresStore) QuarantineDecision(ctx context.Context, tenantID uuid.UU
 
 	insertQuery := `
 		INSERT INTO contradictions (
-			id, tenant_id, decision_a, decision_b, severity,
-			quarantined, resolved, resolution_strategy, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+    id, tenant_id, kind, decision_a, decision_b, severity,
+    quarantined, resolved, resolution_strategy, created_at
+) VALUES ($1, $2, 'decision_vs_decision', $3, $4, $5, $6, $7, $8, $9);
 	`
 	if _, err := tx.Exec(ctx, insertQuery,
 		record.ID, record.TenantID, record.DecisionA, record.DecisionB,
