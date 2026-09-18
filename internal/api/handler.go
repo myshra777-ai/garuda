@@ -79,14 +79,19 @@ type Server struct {
 	topologyExecutor    *topology.Executor
 	sseBroker           *telemetry.SSEBroker
 	sseCount            chan struct{}
-	router              *mux.Router
 	checkpointMu        sync.RWMutex
 	checkpointStore     map[string]CheckpointRecord
 	sessions            *SessionStore
 	rateLimiter         *IPRateLimiter
 }
 
-// NewServer creates a new API server instance with initialized state, router, and SSE broker.
+// NewServer creates a new API server instance with initialized state and SSE broker.
+//
+// The router is not constructed here. SetupRouter owns the mux.Router,
+// builds the middleware chain (rate limiting, recovery, request ID),
+// calls RegisterRoutes on the returned Server, and returns the fully
+// wired handler. This keeps the middleware order in one place instead
+// of split between NewServer and SetupRouter.
 func NewServer(
 	store types.DecisionStore,
 	authService *auth.AuthService,
@@ -106,7 +111,7 @@ func NewServer(
 		rateLimiter = NewIPRateLimiter(readRateLimitPerMinute(), readRateLimitBurst())
 	}
 
-	s := &Server{
+	return &Server{
 		store:               store,
 		authService:         authService,
 		jwtConfig:           jwtConfig,
@@ -116,25 +121,18 @@ func NewServer(
 		topologyExecutor:    topologyExecutor,
 		sseBroker:           sseBroker,
 		sseCount:            make(chan struct{}, maxSSEConnections),
-		router:              mux.NewRouter(),
 		checkpointStore:     make(map[string]CheckpointRecord),
 		sessions:            NewSessionStore(SessionTTL),
 		rateLimiter:         rateLimiter,
 	}
-
-	s.RegisterRoutes(s.router)
-	return s
 }
 
 // RegisterRoutes sets up HTTP routing and subrouter middleware hierarchy.
+//
+// Rate limiting is applied by the caller's middleware chain in
+// SetupRouter, before this function's routes are reached. RegisterRoutes
+// itself does not install middleware on r.
 func (s *Server) RegisterRoutes(r *mux.Router) {
-	// Rate limit every request before any authentication or session
-	// check. Applied at the top-level router so that /health, /login,
-	// /logout, and every subrouter inherit it. Subrouter middleware
-	// runs after this, so unauthenticated floods are dropped here
-	// before they reach the auth code.
-	r.Use(s.RateLimitMiddleware)
-
 	// =========================================================================
 	// PUBLIC ROUTES (no authentication)
 	// =========================================================================
@@ -196,11 +194,6 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 
 	// Debug endpoint (only available outside production)
 	r.HandleFunc("/debug/token", s.HandleDebugToken).Methods(http.MethodGet)
-}
-
-// ServeHTTP implements http.Handler for the Server struct.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.router.ServeHTTP(w, r)
 }
 
 // HandleHealth returns gateway health status.
@@ -275,4 +268,12 @@ func readRateLimitBurst() int {
 		}
 	}
 	return defaultRateLimitBurst
+}
+
+// RateLimiter returns the server's configured IP rate limiter. Used by
+// cmd/garuda/dev_cmd.go, which builds its own router via api.SetupRouter
+// and needs to pass the same limiter the server holds. Without this
+// getter, the field is unreachable from package main.
+func (s *Server) RateLimiter() *IPRateLimiter {
+	return s.rateLimiter
 }

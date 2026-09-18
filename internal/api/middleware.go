@@ -6,12 +6,10 @@
 package api
 
 import (
-	"container/list"
 	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,102 +71,8 @@ func WithRecovery(next http.Handler) http.Handler {
 	})
 }
 
-// LRUCache implements a fixed-size LRU cache for the rate limiter.
-type lruCache struct {
-	mu       sync.Mutex
-	capacity int
-	items    map[string]*list.Element
-	order    *list.List
-}
-
-type cacheItem struct {
-	key   string
-	value *tokenBucket
-}
-
-func newLRUCache(capacity int) *lruCache {
-	return &lruCache{
-		capacity: capacity,
-		items:    make(map[string]*list.Element),
-		order:    list.New(),
-	}
-}
-
-func (c *lruCache) get(key string) (*tokenBucket, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if elem, ok := c.items[key]; ok {
-		c.order.MoveToFront(elem)
-		return elem.Value.(*cacheItem).value, true
-	}
-	return nil, false
-}
-
-func (c *lruCache) set(key string, value *tokenBucket) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if elem, ok := c.items[key]; ok {
-		c.order.MoveToFront(elem)
-		elem.Value.(*cacheItem).value = value
-		return
-	}
-	if len(c.items) >= c.capacity {
-		// Evict least recently used
-		oldest := c.order.Back()
-		if oldest != nil {
-			c.order.Remove(oldest)
-			delete(c.items, oldest.Value.(*cacheItem).key)
-		}
-	}
-	elem := c.order.PushFront(&cacheItem{key: key, value: value})
-	c.items[key] = elem
-}
-
-// RateLimiter implements a token bucket with LRU eviction.
-type RateLimiter struct {
-	cache    *lruCache
-	capacity int
-	refill   time.Duration
-}
-
-type tokenBucket struct {
-	tokens     int
-	lastRefill time.Time
-}
-
-func NewRateLimiter(capacity int, refill time.Duration, maxIPs int) *RateLimiter {
-	return &RateLimiter{
-		cache:    newLRUCache(maxIPs),
-		capacity: capacity,
-		refill:   refill,
-	}
-}
-
-func (rl *RateLimiter) Allow(ip string) bool {
-	bucket, exists := rl.cache.get(ip)
-	if !exists {
-		bucket = &tokenBucket{tokens: rl.capacity, lastRefill: time.Now()}
-		rl.cache.set(ip, bucket)
-	}
-
-	// Refill tokens
-	now := time.Now()
-	elapsed := now.Sub(bucket.lastRefill)
-	bucket.lastRefill = now
-	bucket.tokens += int(elapsed / rl.refill)
-	if bucket.tokens > rl.capacity {
-		bucket.tokens = rl.capacity
-	}
-
-	if bucket.tokens > 0 {
-		bucket.tokens--
-		return true
-	}
-	return false
-}
-
 // WithRateLimit applies rate limiting per IP address.
-func WithRateLimit(limiter *RateLimiter) func(http.Handler) http.Handler {
+func WithRateLimit(limiter *IPRateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := r.RemoteAddr

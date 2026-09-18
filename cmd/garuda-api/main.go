@@ -23,120 +23,6 @@ import (
 	"github.com/myshra777-ai/garuda/internal/topology"
 )
 
-// SetupRouter initializes and returns the complete http.Handler middleware pipeline.
-func SetupRouter(server *api.Server, jwtConfig *auth.JWTConfig, rateLimiter *api.RateLimiter) http.Handler {
-	mainMux := http.NewServeMux()
-	protectedMux := http.NewServeMux()
-
-	// ----------------------------------------------------------------
-	// A. PUBLIC / SYSTEM ENDPOINTS (No JWT required)
-	// ----------------------------------------------------------------
-	mainMux.HandleFunc("GET /health", server.HandleHealth)
-	mainMux.HandleFunc("GET /system/health", server.HandleHealth)
-	mainMux.HandleFunc("GET /system/discover", server.HandleSystemDiscover)
-	mainMux.HandleFunc("GET /system/bootstrap", server.HandleSystemBootstrap)
-	mainMux.HandleFunc("POST /sandbox", server.HandleSandbox)
-	mainMux.HandleFunc("POST /api/v1/telemetry/traces", server.HandleIngestTraces)
-
-	// Documentation & Dashboard (Public Telemetry & Search)
-	mainMux.HandleFunc("GET /dashboard", server.HandleDashboard)
-	mainMux.HandleFunc("GET /api/v1/dashboard/search", server.HandleDashboardSearch)
-	mainMux.HandleFunc("GET /api/v1/graph", server.HandleGraph)
-	mainMux.HandleFunc("GET /api/v1/events", server.HandleLiveEvents)
-	mainMux.HandleFunc("POST /api/v1/telemetry/spans", server.HandleIngestTraces)
-	mainMux.HandleFunc("GET /api/v1/runtime/coverage", server.HandleGetRuntimeCoverage)
-	mainMux.HandleFunc("GET /api/v1/dashboard/stats", server.HandleDashboardStats)
-	mainMux.HandleFunc("GET /api/v1/merkle/latest", server.HandleGetMerkleState)
-
-	mainMux.HandleFunc("GET /docs", server.HandleSwaggerUI)
-	mainMux.HandleFunc("GET /openapi.yaml", server.HandleOpenAPISpec)
-	mainMux.HandleFunc("GET /openapi.json", server.HandleOpenAPISpec)
-	mainMux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	})
-
-	// MCP Bridge & Debug Token
-	mainMux.HandleFunc("POST /mcp/bridge", mcp.BridgeHandler("http://localhost:8080"))
-	mainMux.HandleFunc("GET /debug/token", server.HandleDebugToken)
-
-	// ----------------------------------------------------------------
-	// B. PROTECTED API ROUTES (JWT required for sensitive state mutations)
-	// ----------------------------------------------------------------
-	// Decisions
-	protectedMux.HandleFunc("POST /api/v1/decisions/submit", server.HandleProposeDecision)
-	protectedMux.HandleFunc("POST /api/v1/decisions", server.HandleProposeDecision)
-	protectedMux.HandleFunc("GET /api/v1/decisions/active", server.HandleDecisionsActiveAt)
-	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/history", server.HandleDecisionHistory)
-	protectedMux.HandleFunc("GET /api/v1/decisions/{id}/lineage", server.HandleDecisionLineage)
-
-	// Topology routes
-	protectedMux.HandleFunc("POST /api/v1/topology/recommend", server.HandleTopologyRecommend)
-	protectedMux.HandleFunc("POST /api/v1/topology/{id}/execute", server.HandleTopologyExecute)
-	protectedMux.HandleFunc("GET /api/v1/topology/{id}", server.HandleTopologyStatus)
-	protectedMux.HandleFunc("GET /api/v1/topology/{id}/status", server.HandleTopologyStatus)
-
-	// Multi-Agent Execution & Checkpoints
-	protectedMux.HandleFunc("POST /api/v1/agents/warmup", server.HandleAgentWarmup)
-	protectedMux.HandleFunc("POST /api/v1/agents/checkpoint", server.HandleAgentCheckpoint)
-	protectedMux.HandleFunc("GET /api/v1/agents/checkpoint/{id}", server.HandleGetAgentCheckpoint)
-	protectedMux.HandleFunc("POST /api/v1/agents/resume", server.HandleResume)
-	protectedMux.HandleFunc("POST /api/v1/agents/handoff", server.HandleAgentHandoff)
-
-	// Audit & Compliance
-
-	protectedMux.HandleFunc("GET /api/v1/evidence/verify/{id}", server.HandleVerifyDecision)
-	protectedMux.HandleFunc("GET /api/v1/evidence/snapshots", server.HandleListMerkleSnapshots)
-
-	// Budget & Metering
-	protectedMux.HandleFunc("GET /api/v1/budget", server.HandleGetBudget)
-	protectedMux.HandleFunc("POST /api/v1/budget/consume", server.HandleConsumeBudget)
-
-	// Router Pre-Flight Evaluation
-	protectedMux.HandleFunc("POST /api/v1/router/evaluate", server.HandleEvaluateRoute)
-
-	// Plan API (protected)
-	protectedMux.HandleFunc("GET /api/v1/plan", server.HandleGetPlan)
-
-	// Policy routes
-	protectedMux.HandleFunc("POST /api/v1/policies", server.HandleRememberPolicy)
-	protectedMux.HandleFunc("GET /api/v1/policies", server.HandleListPolicies)
-	protectedMux.HandleFunc("POST /api/v1/policies/{id}/supersede", server.HandleSupersedePolicy)
-
-	// Decisions
-	protectedMux.HandleFunc("POST /api/v1/decisions/propose", server.HandleProposeDecision)
-	protectedMux.HandleFunc("POST /decisions", server.HandleProposeDecision)
-
-	// Agent Warmup / Bootstrap
-	protectedMux.HandleFunc("GET /api/v1/agent/warmup", server.HandleAgentWarmup)
-	protectedMux.HandleFunc("GET /system/bootstrap", server.HandleSystemBootstrap)
-
-	protectedMux.HandleFunc("GET /api/v1/dashboard/policies", server.HandleDashboardPolicies)
-	protectedMux.HandleFunc("GET /api/v1/dashboard/policies/verify", server.HandleDashboardPolicyVerify)
-	// ----------------------------------------------------------------
-	// C. MIDDLEWARE PIPELINE
-	// ----------------------------------------------------------------
-	// Wrap protected routes with JWT authentication
-	protectedHandler := api.WithAuth(jwtConfig)(protectedMux)
-
-	// Mount protected routes under /api/ prefix
-	mainMux.Handle("/api/", protectedHandler)
-
-	// Apply global middleware chain
-	handler := api.WithRecovery(
-		api.WithLogging(
-			api.WithRequestID(
-				server.WithMerkleHeader(
-					api.WithRateLimit(rateLimiter)(
-						api.WithCORS([]string{"*"})(mainMux),
-					),
-				),
-			),
-		),
-	)
-
-	return handler
-}
-
 func main() {
 	// 1. Initialize Telemetry
 	telConfig := telemetry.LoadConfigFromEnv()
@@ -200,10 +86,10 @@ func main() {
 	server := api.NewServer(dbStore, authService, jwtConfig, contradictionEngine, lineageEngine, topologyGenerator, topologyExecutor)
 
 	// 6. Rate Limiter
-	rateLimiter := api.NewRateLimiter(100, time.Minute, 1000)
+	rateLimiter := server.RateLimiter()
 
 	// 7. Build Router
-	handler := SetupRouter(server, jwtConfig, rateLimiter)
+	handler := api.SetupRouter(server, rateLimiter, mcp.BridgeHandler("http://localhost:8080"), nil)
 
 	// 8. HTTP Server
 	port := os.Getenv("PORT")

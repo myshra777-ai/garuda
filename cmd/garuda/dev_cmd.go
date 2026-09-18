@@ -89,39 +89,35 @@ var devCmd = &cobra.Command{
 		// and returned 404 in dev. Any future route added to
 		// RegisterRoutes is now available in dev without a second edit.
 		//
-		// Rate limiting is applied once, by RegisterRoutes
-		// (r.Use(s.RateLimitMiddleware) at the top of that function).
-		// The outer wrapper that used to apply it is removed to avoid
-		// double-wrapping.
-		//
-		// The dev-only graph overrides are registered after
-		// RegisterRoutes. Gorilla/mux matches the most recently
-		// registered route for a given path, so these replace the
-		// production handlers for /graph and /api/v1/graph.
-		router := mux.NewRouter()
-		server.RegisterRoutes(router)
-
-		router.HandleFunc("/graph", server.RequireSession(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte(visualizerHTML))
-		})).Methods(http.MethodGet)
-
-		router.HandleFunc("/api/v1/graph", server.RequireSession(func(w http.ResponseWriter, r *http.Request) {
-			if strings.Contains(r.Header.Get("Accept"), "text/html") &&
-				!strings.Contains(r.URL.Query().Get("format"), "json") {
+		// api.SetupRouter owns the middleware chain (rate limiting,
+		// recovery, request ID) and calls RegisterRoutes internally.
+		// The dev-only graph overrides are registered via the override
+		// hook: gorilla/mux matches the most recently registered route
+		// for a given path, so these replace the production handlers
+		// for /graph and /api/v1/graph.
+		router := api.SetupRouter(server, server.RateLimiter(), nil, func(r *mux.Router) {
+			r.HandleFunc("/graph", server.RequireSession(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				_, _ = w.Write([]byte(visualizerHTML))
-				return
-			}
-			server.HandleGraph(w, r)
-		})).Methods(http.MethodGet)
+			})).Methods(http.MethodGet)
+
+			r.HandleFunc("/api/v1/graph", server.RequireSession(func(w http.ResponseWriter, r *http.Request) {
+				if strings.Contains(r.Header.Get("Accept"), "text/html") &&
+					!strings.Contains(r.URL.Query().Get("format"), "json") {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					_, _ = w.Write([]byte(visualizerHTML))
+					return
+				}
+				server.HandleGraph(w, r)
+			})).Methods(http.MethodGet)
+		})
 
 		bindAddr := getBindAddr()
+
 		httpServer := &http.Server{
 			Addr:    bindAddr,
 			Handler: router,
 		}
-		slog.Info("binding HTTP server", "addr", bindAddr)
 
 		// ─────────────────────────────────────────────────────────────
 		// Background Worker Loop (10-second Merkle epoch)
@@ -174,17 +170,17 @@ var devCmd = &cobra.Command{
 		// Start HTTP API
 		// ─────────────────────────────────────────────────────────────
 		go func() {
-			fmt.Println("🚀 Garuda Unified Daemon running at http://localhost:8080")
-			fmt.Println("   • Login:               GET  http://localhost:8080/login")
-			fmt.Println("   • Dashboard:           GET  http://localhost:8080/dashboard?workspace=<name>")
-			fmt.Println("   • Dashboard Stats API: GET  http://localhost:8080/api/v1/dashboard/stats?workspace=<name>")
-			fmt.Println("   • Dashboard Search:    GET  http://localhost:8080/api/v1/dashboard/search?q=<query>")
-			fmt.Println("   • Interactive Graph:   GET  http://localhost:8080/graph")
-			fmt.Println("   • Graph JSON API:      GET  http://localhost:8080/api/v1/graph?format=json")
-			fmt.Println("   • Telemetry Ingestion: POST http://localhost:8080/api/v1/telemetry/spans")
-			fmt.Println("   • Runtime Coverage:    GET  http://localhost:8080/api/v1/runtime/coverage")
-			fmt.Println("   • Dual-Root Merkle:    GET  http://localhost:8080/api/v1/merkle/state")
-			fmt.Println("   • SSE Live Events:     GET  http://localhost:8080/api/v1/events")
+			fmt.Printf("🚀 Garuda Unified Daemon running at http://%s\n", bindAddr)
+			fmt.Printf("   • Login:               GET  http://%s/login\n", bindAddr)
+			fmt.Printf("   • Dashboard:           GET  http://%s/dashboard?workspace=<name>\n", bindAddr)
+			fmt.Printf("   • Dashboard Stats API: GET  http://%s/api/v1/dashboard/stats?workspace=<name>\n", bindAddr)
+			fmt.Printf("   • Dashboard Search:    GET  http://%s/api/v1/dashboard/search?q=<query>\n", bindAddr)
+			fmt.Printf("   • Interactive Graph:   GET  http://%s/graph\n", bindAddr)
+			fmt.Printf("   • Graph JSON API:      GET  http://%s/api/v1/graph?format=json\n", bindAddr)
+			fmt.Printf("   • Telemetry Ingestion: POST http://%s/api/v1/telemetry/spans\n", bindAddr)
+			fmt.Printf("   • Runtime Coverage:    GET  http://%s/api/v1/runtime/coverage\n", bindAddr)
+			fmt.Printf("   • Dual-Root Merkle:    GET  http://%s/api/v1/merkle/state\n", bindAddr)
+			fmt.Printf("   • SSE Live Events:     GET  http://%s/api/v1/events\n", bindAddr)
 			if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				fmt.Printf("HTTP server error: %v\n", err)
 			}
