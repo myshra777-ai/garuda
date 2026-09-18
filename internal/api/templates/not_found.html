@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Workspace not found — Garuda</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #060810; color: #f8fafc; margin: 0; padding: 60px 40px; }
+.card { max-width: 560px; margin: 60px auto; background: #0e1424; border: 1px solid #1f2b45; border-radius: 12px; padding: 32px; }
+h1 { font-size: 22px; margin: 0 0 12px; }
+p { color: #94a3b8; line-height: 1.5; margin: 8px 0; }
+code { background: #162035; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+a { color: #38bdf8; text-decoration: none; font-weight: 600; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Workspace not found</h1>
+  <p>The workspace <code>{{ .Workspace }}</code> does not exist.</p>
+  <p>Requesting a workspace that does not exist returns 404 rather than silently serving another workspace's data.</p>
+  <p style="margin-top: 20px;"><a href="/dashboard">Return to default workspace</a></p>
+</div>
+</body>
+</html>

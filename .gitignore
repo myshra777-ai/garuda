@@ -10,6 +10,7 @@
 # Output files
 *.json
 *.html
+!internal/api/templates/*.html
 *.md.gz
 *.txt
 !README.md
@@ -145,3 +146,5 @@ garuda_truth_index_*.md
 docs/truth_index_latest.md
 docs/archive/
 docs/TRACKING.md
+docs/specs/README.md
+docs/specs/tenant-tabs.md
