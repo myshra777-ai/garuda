@@ -1,6 +1,29 @@
 var urlParams = new URLSearchParams(window.location.search);
 var WORKSPACE = urlParams.get("workspace") || window.GARUDA_WORKSPACE || "";
 
+// viewToSection maps a tab name to the section ID that renders it.
+// Search is a virtual view — not in the tab strip — reachable from
+// the top bar and the search hint buttons.
+var viewToSection = {
+    workspace:  "view-overview",
+    agents:     "view-agents",
+    governance: "view-trust",
+    decisions:  "view-decisions",
+    graph:      "view-architecture",
+    search:     "view-search"
+};
+
+var tabs = ["workspace", "agents", "governance", "decisions", "graph"];
+
+// initialView reads ?tab= from the URL. Unknown or missing values
+// fall back to workspace. Search is never a URL-routed tab.
+function initialView() {
+    var params = new URLSearchParams(window.location.search);
+    var tab = params.get("tab");
+    if (viewToSection[tab] && tab !== "search") return tab;
+    return "workspace";
+}
+
 var state = {
     stats: null,
     currentView: "overview",
@@ -91,29 +114,60 @@ function setArchitectureMode(level) {
 }
 
 function showView(view) {
+    // Compatibility: legacy call sites use the old view names
+    // (overview, architecture, trust). New ones use tab names.
+    var aliases = { overview: "workspace", architecture: "graph", trust: "governance" };
+    view = aliases[view] || view;
+
+    if (!viewToSection[view]) return;
     state.currentView = view;
-    var sections = ["view-overview", "view-architecture", "view-search", "view-trust"];
-    sections.forEach(function(id) {
-        var el = document.getElementById(id);
+
+    // Section visibility: exactly one section shown at a time.
+    Object.keys(viewToSection).forEach(function(key) {
+        var el = document.getElementById(viewToSection[key]);
         if (!el) return;
-        el.style.display = (id === "view-" + view) ? "block" : "none";
+        el.style.display = (key === view) ? "block" : "none";
     });
 
-    var navs = ["nav-overview", "nav-architecture", "nav-search", "nav-trust"];
-    navs.forEach(function(id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        el.classList.remove("active");
-        if (id === "nav-" + view) el.classList.add("active");
+    // Tab active state. Search has no tab, so all tabs go inactive.
+    document.querySelectorAll(".tab").forEach(function(el) {
+        var isActive = el.dataset.tab === view;
+        el.classList.toggle("active", isActive);
+        el.setAttribute("aria-selected", isActive ? "true" : "false");
     });
 
-    if (view === "architecture") {
+    // Lazy-load only when this view becomes visible.
+    if (view === "graph") {
         loadArchitecture(state.currentLevel || "repository", state.currentFocus || "");
     }
-    if (view === "trust") {
+    if (view === "governance") {
         renderTrust();
     }
+
+    // URL. Search is a transient overlay; it does not change ?tab=.
+    if (view !== "search") {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("tab") !== view) {
+            params.set("tab", view);
+            history.pushState({ tab: view }, "", window.location.pathname + "?" + params.toString());
+        }
+    }
 }
+
+window.addEventListener("popstate", function(event) {
+    var view = (event.state && event.state.tab) || initialView();
+    showView(view);
+});
+
+document.addEventListener("keydown", function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key >= "1" && e.key <= "5") {
+        var idx = parseInt(e.key, 10) - 1;
+        if (idx < tabs.length) {
+            e.preventDefault();
+            showView(tabs[idx]);
+        }
+    }
+});
 
 async function loadStats() {
     try {
@@ -1241,6 +1295,7 @@ async function loadAll() {
 
 setupSearch();
 loadWorkspacePicker();
+showView(initialView());
 loadAll();
 
 window.addEventListener("resize", function() {

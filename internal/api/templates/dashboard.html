@@ -20,34 +20,6 @@
             </div>
         </div>
 
-        <div class="sidebar-content">
-            <div class="nav-section">
-                <div class="nav-title">Workspace</div>
-                <button class="nav-item active" id="nav-overview" onclick="showView('overview')">
-                    <span class="nav-icon">◉</span>
-                    <span>Overview</span>
-                </button>
-            </div>
-            <div class="nav-section">
-                <div class="nav-title">Explore</div>
-                <button class="nav-item" id="nav-architecture" onclick="showView('architecture')">
-                    <span class="nav-icon">◇</span>
-                    <span>Company Graph</span>
-                </button>
-                <button class="nav-item" id="nav-search" onclick="showView('search')">
-                    <span class="nav-icon">⌕</span>
-                    <span>Search</span>
-                </button>
-            </div>
-            <div class="nav-section">
-                <div class="nav-title">Trust & Evidence</div>
-                <button class="nav-item" id="nav-trust" onclick="showView('trust')">
-                    <span class="nav-icon">✓</span>
-                    <span>Evidence & Claims</span>
-                </button>
-            </div>
-        </div>
-
         <div class="sidebar-footer">
             <div class="workspace-mini">
                 <div class="workspace-mini-name" id="sidebar-workspace">{{ .WorkspaceName }}</div>
@@ -73,6 +45,14 @@
                 <button class="refresh-button" onclick="loadAll()">Refresh</button>
             </div>
         </header>
+
+        <nav class="tab-strip" role="tablist">
+            <button class="tab active" data-tab="workspace" role="tab" aria-selected="true" onclick="showView('workspace')">Workspace</button>
+            <button class="tab" data-tab="agents" role="tab" aria-selected="false" onclick="showView('agents')">Agents</button>
+            <button class="tab" data-tab="governance" role="tab" aria-selected="false" onclick="showView('governance')">Governance</button>
+            <button class="tab" data-tab="decisions" role="tab" aria-selected="false" onclick="showView('decisions')">Decisions</button>
+            <button class="tab" data-tab="graph" role="tab" aria-selected="false" onclick="showView('graph')">Graph</button>
+        </nav>
 
         <main class="content">
             <section id="view-overview">
@@ -352,6 +332,46 @@
                         <div class="list" id="evidence-list">
                             <div class="list-row"><div class="row-main"><div class="row-title">Loading evidence ledger...</div></div></div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-agents" style="display:none;">
+                <div class="breadcrumbs">
+                    <span>Workspace</span>
+                    <span>/</span>
+                    <span class="breadcrumb-current">Agents</span>
+                </div>
+                <div class="hero">
+                    <div>
+                        <h1 class="hero-title">Agent activity</h1>
+                        <div class="hero-subtitle">MCP sessions, tool calls, and multi-agent handoffs.</div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-body" style="padding: 40px 20px; text-align: center; color: var(--muted);">
+                        <p style="font-size: 15px; margin-bottom: 8px;">Agents panel coming next.</p>
+                        <p style="font-size: 12px;">MCP surface, active sessions, handoffs, briefing delta.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-decisions" style="display:none;">
+                <div class="breadcrumbs">
+                    <span>Workspace</span>
+                    <span>/</span>
+                    <span class="breadcrumb-current">Decisions</span>
+                </div>
+                <div class="hero">
+                    <div>
+                        <h1 class="hero-title">Decision history</h1>
+                        <div class="hero-subtitle">Lineage, impact, and cryptographic anchors.</div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-body" style="padding: 40px 20px; text-align: center; color: var(--muted);">
+                        <p style="font-size: 15px; margin-bottom: 8px;">Decisions panel coming next.</p>
+                        <p style="font-size: 12px;">Decision list, lineage graph, impact analysis.</p>
                     </div>
                 </div>
             </section>
