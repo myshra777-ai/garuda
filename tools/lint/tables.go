@@ -27,6 +27,7 @@ var WorkspaceScopedTables = map[string]bool{
 	"entities":             true,
 	"impact_assessments":   true,
 	"mcp_agent_watermarks": true,
+	"mcp_sessions":         true,
 	"policy_evaluations":   true,
 	"relationships":        true,
 	"repositories":         true,
