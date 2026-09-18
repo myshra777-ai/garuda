@@ -39,6 +39,8 @@ func SetupRouter(
 		router.HandleFunc("/mcp/bridge", bridgeHandler).Methods(http.MethodPost)
 	}
 
+	router.PathPrefix("/static/").Handler(server.HandleStatic())
+
 	// Middleware chain, outermost first. Rate limit runs before any
 	// route, so unauthenticated floods are dropped before they reach
 	// auth code. RegisterRoutes no longer applies rate limiting; it
