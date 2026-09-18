@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -55,7 +56,9 @@ type MCPServer struct {
 	// during the initialize handshake. Used by garuda.briefing to key
 	// the agent watermark so the same client resumes its own session
 	// across restarts. Empty until initialize completes.
-	clientName string
+	clientName  string
+	sessionDBID uuid.UUID
+	sessionMu   sync.RWMutex
 }
 
 func main() {
@@ -138,6 +141,7 @@ func main() {
 	go func() {
 		<-sigChan
 		slog.Info("Received shutdown signal", "session_id", server.sessionID)
+		server.closeSession(context.Background(), "graceful")
 		os.Exit(0)
 	}()
 
@@ -159,6 +163,7 @@ func main() {
 					"session_id", server.sessionID,
 					"requests_handled", requestCount,
 				)
+				server.closeSession(context.Background(), "graceful")
 				return
 			}
 			// Malformed input. Respond with a parse error and keep the
@@ -230,6 +235,316 @@ type MCPError struct {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tool registry
+// ─────────────────────────────────────────────────────────────────────────────
+
+// allTools is the canonical list of every tool this server exposes.
+// handleToolsList returns it verbatim; toolNames is derived from it.
+// The write path and any future policy surface iterate this slice
+// rather than maintaining a parallel list that can drift.
+var allTools = []map[string]interface{}{
+	{
+		"name":        "garuda.briefing",
+		"description": "Session-start briefing: workspace state, trust anchor, scale, top hubs, active policies, open contradictions, and what changed since this agent's last briefing. Read-only. Call this first.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name. Defaults to the server's active workspace.",
+				},
+				"agent_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Caller-supplied agent identifier. Defaults to the MCP client name from the handshake.",
+				},
+			},
+		},
+	},
+	{
+		"name":        "garuda.query",
+		"description": "Query the Garuda knowledge graph with natural language",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"query":     map[string]interface{}{"type": "string", "description": "The natural language query"},
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant ID"},
+			},
+			"required": []string{"query"},
+		},
+	},
+	{
+		"name":        "garuda.get_lineage",
+		"description": "Get the full lineage of a decision",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"decision_id": map[string]interface{}{"type": "string", "description": "The decision UUID"},
+				"tenant_id":   map[string]interface{}{"type": "string", "description": "Tenant ID"},
+			},
+			"required": []string{"decision_id"},
+		},
+	},
+	{
+		"name":        "garuda.detect_contradictions",
+		"description": "Detect unresolved contradictions in the tenant knowledge graph",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant ID"},
+				"scope":     map[string]interface{}{"type": "string", "description": "Optional scope filter"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.get_impact",
+		"description": "Find what breaks if a decision is changed",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"decision_id": map[string]interface{}{"type": "string", "description": "The decision UUID"},
+				"tenant_id":   map[string]interface{}{"type": "string", "description": "Tenant ID"},
+			},
+			"required": []string{"decision_id"},
+		},
+	},
+	{
+		"name":        "garuda.blast_radius",
+		"description": "Compute the blast radius of a symbol change: which entities consume the target entity, directly or transitively, up to a depth. Read-only. Returns a critical-first list and per-severity counts.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id":      map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace":      map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"entity_id":      map[string]interface{}{"type": "string", "description": "Target entity UUID"},
+				"depth":          map[string]interface{}{"type": "integer", "description": "Max traversal depth. Default 3."},
+				"min_confidence": map[string]interface{}{"type": "number", "description": "Minimum edge confidence. Default 0.50."},
+			},
+			"required": []string{"entity_id"},
+		},
+	},
+	{
+		"name":        "garuda.propose_decision",
+		"description": "Propose a new decision (creates a draft)",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"title":        map[string]interface{}{"type": "string", "description": "Decision title"},
+				"scope_domain": map[string]interface{}{"type": "string", "description": "Scope domain"},
+				"scope_system": map[string]interface{}{"type": "string", "description": "Scope system"},
+				"tenant_id":    map[string]interface{}{"type": "string", "description": "Tenant ID"},
+			},
+			"required": []string{"title"},
+		},
+	},
+	// ── Governance tools (Phase 2.2a) ──
+	{
+		"name":        "garuda.policy.list",
+		"description": "List policies registered for a tenant. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID; falls back to GARUDA_TENANT_ID env or default tenant"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.governance.status",
+		"description": "Aggregate governance state: active policies, documentation health, contradiction count. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name; falls back to GARUDA_WORKSPACE env or 'default'"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.check_drift",
+		"description": "Documentation-to-code drift report. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.query_claims",
+		"description": "Query document claims matching a subject. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"subject":   map[string]interface{}{"type": "string", "description": "Filter by subject or object (substring)"},
+			},
+		},
+	},
+	// ── Policy + semantic tools (Phase 2.2b/2.2c) ──
+	{
+		"name":        "garuda.policy.evaluate",
+		"description": "Dry-run the policy engine against a workspace and return the decisions it would make. Does NOT persist or Merkle-anchor. Use 'garuda policy evaluate' from the CLI to anchor a real governance decision.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id":    map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace":    map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"policy_dir":   map[string]interface{}{"type": "string", "description": "Directory containing policy YAML. Defaults to GARUDA_POLICY_DIR or ./policies"},
+				"subject_kind": map[string]interface{}{"type": "string", "description": "Optional subject kind"},
+				"subject_id":   map[string]interface{}{"type": "string", "description": "Optional subject ID"},
+				"actor":        map[string]interface{}{"type": "string", "description": "Optional actor identifier"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.verify_policy_evaluation",
+		"description": "Verify the Merkle inclusion proof for a persisted policy evaluation. Returns valid=true if the proof recomputes to the anchored root. Read-only; no side effects.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id":     map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"evaluation_id": map[string]interface{}{"type": "string", "description": "Policy evaluation UUID returned by garuda policy evaluate --save"},
+			},
+			"required": []string{"evaluation_id"},
+		},
+	},
+	{
+		"name":        "garuda.entities",
+		"description": "List semantic entities in a workspace. Filterable by package and kind. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"package":   map[string]interface{}{"type": "string", "description": "Optional package name substring"},
+				"kind":      map[string]interface{}{"type": "string", "description": "Optional entity kind (struct, interface, function, method)"},
+				"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 100, cap 1000"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.inspect",
+		"description": "Inspect one entity with its incoming and outgoing relationships. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"entity_id": map[string]interface{}{"type": "string", "description": "Entity UUID"},
+			},
+			"required": []string{"entity_id"},
+		},
+	},
+	// ── Graph structure tools (Phase 1) ──
+	{
+		"name":        "garuda.subclasses",
+		"description": "List entities that inherit from or embed the subject. Uses INHERITS and EMBEDS claims. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"entity_id": map[string]interface{}{"type": "string", "description": "Subject entity UUID"},
+				"name":      map[string]interface{}{"type": "string", "description": "Subject entity name (alternative to entity_id)"},
+				"language":  map[string]interface{}{"type": "string", "description": "Optional language filter (go, python, typescript)"},
+				"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.implementers",
+		"description": "List entities that implement the subject interface. Uses IMPLEMENTS claims. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"entity_id": map[string]interface{}{"type": "string", "description": "Subject interface UUID"},
+				"name":      map[string]interface{}{"type": "string", "description": "Subject interface name (alternative to entity_id)"},
+				"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.neighbors",
+		"description": "List every entity connected to the subject in one hop, both directions. Resolves names, packages, kinds in one query. External stubs excluded by default. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id":        map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace":        map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"entity_id":        map[string]interface{}{"type": "string", "description": "Subject entity UUID"},
+				"edge_kinds":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Optional filter, e.g. [\"CALLS\",\"IMPORTS\"]"},
+				"include_external": map[string]interface{}{"type": "boolean", "description": "Include external stubs (default false)"},
+				"limit":            map[string]interface{}{"type": "number", "description": "Max rows, default 100, cap 500"},
+			},
+			"required": []string{"entity_id"},
+		},
+	},
+	// ── State management tools (Phase 2.4) ──
+	{
+		"name":        "garuda.handoff",
+		"description": "Initiate an atomic task handoff between two agents. Creates a checkpoint of the source agent's state, transfers task ownership, and transitions both agents' statuses. Wraps the same Serializable transaction the HTTP API uses. Caller must ensure source_agent_id currently owns task_id. Returns {status: \"completed\", handoff_id, checkpoint_id} on success, or {status: \"failed\", reason} on precondition failure.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id":       map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"task_id":         map[string]interface{}{"type": "string", "description": "Task UUID being handed off"},
+				"source_agent_id": map[string]interface{}{"type": "string", "description": "Agent UUID currently owning the task"},
+				"target_agent_id": map[string]interface{}{"type": "string", "description": "Agent UUID taking ownership"},
+				"reason":          map[string]interface{}{"type": "string", "description": "Optional human-readable reason"},
+				"checkpoint_data": map[string]interface{}{"type": "object", "description": "Optional serializable state to carry across the handoff"},
+			},
+			"required": []string{"task_id", "source_agent_id", "target_agent_id"},
+		},
+	},
+	{
+		"name":        "garuda.resume",
+		"description": "Restore the state from an active checkpoint created by garuda.handoff, and mark the checkpoint as consumed. A second resume of the same checkpoint returns {status: \"not_found\"}. Wraps the same Serializable transaction the HTTP API uses.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id":     map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"agent_id":      map[string]interface{}{"type": "string", "description": "Agent UUID performing the resume"},
+				"checkpoint_id": map[string]interface{}{"type": "string", "description": "Checkpoint UUID returned by garuda.handoff"},
+			},
+			"required": []string{"agent_id", "checkpoint_id"},
+		},
+	},
+	{
+		"name":        "garuda.find_entity",
+		"description": "Find entities by name pattern, kind, package, or file path. Results ranked by inbound edge count so the most-connected matches appear first. Read-only.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id":          map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace":          map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"name_pattern":       map[string]interface{}{"type": "string", "description": "Regex against entity name"},
+				"kind":               map[string]interface{}{"type": "string", "description": "Entity kind (struct, interface, function, method, class, package)"},
+				"package":            map[string]interface{}{"type": "string", "description": "Package name substring"},
+				"file_path_contains": map[string]interface{}{"type": "string", "description": "File path substring"},
+				"exported_only":      map[string]interface{}{"type": "boolean", "description": "Only exported entities (default false)"},
+				"limit":              map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
+			},
+		},
+	},
+}
+
+// toolNames is the derived whitelist of valid tool names. Built once
+// from allTools so it cannot drift from the registry. Used by
+// handleToolsCall to reject unknown tools before dispatch.
+var toolNames = func() map[string]bool {
+	m := make(map[string]bool, len(allTools))
+	for _, t := range allTools {
+		if name, ok := t["name"].(string); ok {
+			m[name] = true
+		}
+	}
+	return m
+}()
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Request dispatch
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -260,6 +575,22 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 		}
 	}
 
+	// Record session start. Best-effort — the handshake completes
+	// regardless.
+	clientVersion := ""
+	if req.Params != nil {
+		if ci, ok := req.Params["clientInfo"].(map[string]interface{}); ok {
+			if v, ok := ci["version"].(string); ok {
+				clientVersion = v
+			}
+		}
+	}
+	agentID := os.Getenv("GARUDA_AGENT")
+	if agentID == "" {
+		agentID = "mcp-agent"
+	}
+	s.recordSessionStart(context.Background(), s.clientName, clientVersion, agentID)
+
 	return MCPResponse{
 		JSONRPC: "2.0",
 		ID:      req.ID,
@@ -281,300 +612,11 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
-	tools := []map[string]interface{}{
-		{
-			"name":        "garuda.briefing",
-			"description": "Session-start briefing: workspace state, trust anchor, scale, top hubs, active policies, open contradictions, and what changed since this agent's last briefing. Read-only. Call this first.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"workspace": map[string]interface{}{
-						"type":        "string",
-						"description": "Workspace name. Defaults to the server's active workspace.",
-					},
-					"agent_id": map[string]interface{}{
-						"type":        "string",
-						"description": "Caller-supplied agent identifier. Defaults to the MCP client name from the handshake.",
-					},
-				},
-			},
-		},
-		{
-			"name":        "garuda.query",
-			"description": "Query the Garuda knowledge graph with natural language",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"query":     map[string]interface{}{"type": "string", "description": "The natural language query"},
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant ID"},
-				},
-				"required": []string{"query"},
-			},
-		},
-		{
-			"name":        "garuda.get_lineage",
-			"description": "Get the full lineage of a decision",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"decision_id": map[string]interface{}{"type": "string", "description": "The decision UUID"},
-					"tenant_id":   map[string]interface{}{"type": "string", "description": "Tenant ID"},
-				},
-				"required": []string{"decision_id"},
-			},
-		},
-		{
-			"name":        "garuda.detect_contradictions",
-			"description": "Detect unresolved contradictions in the tenant knowledge graph",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant ID"},
-					"scope":     map[string]interface{}{"type": "string", "description": "Optional scope filter"},
-				},
-			},
-		},
-		{
-			"name":        "garuda.get_impact",
-			"description": "Find what breaks if a decision is changed",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"decision_id": map[string]interface{}{"type": "string", "description": "The decision UUID"},
-					"tenant_id":   map[string]interface{}{"type": "string", "description": "Tenant ID"},
-				},
-				"required": []string{"decision_id"},
-			},
-		},
-		{
-			"name":        "garuda.blast_radius",
-			"description": "Compute the blast radius of a symbol change: which entities consume the target entity, directly or transitively, up to a depth. Read-only. Returns a critical-first list and per-severity counts.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id":      map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace":      map[string]interface{}{"type": "string", "description": "Workspace name"},
-					"entity_id":      map[string]interface{}{"type": "string", "description": "Target entity UUID"},
-					"depth":          map[string]interface{}{"type": "integer", "description": "Max traversal depth. Default 3."},
-					"min_confidence": map[string]interface{}{"type": "number", "description": "Minimum edge confidence. Default 0.50."},
-				},
-				"required": []string{"entity_id"},
-			},
-		},
-		{
-			"name":        "garuda.propose_decision",
-			"description": "Propose a new decision (creates a draft)",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"title":        map[string]interface{}{"type": "string", "description": "Decision title"},
-					"scope_domain": map[string]interface{}{"type": "string", "description": "Scope domain"},
-					"scope_system": map[string]interface{}{"type": "string", "description": "Scope system"},
-					"tenant_id":    map[string]interface{}{"type": "string", "description": "Tenant ID"},
-				},
-				"required": []string{"title"},
-			},
-		},
-		// ── Governance tools (Phase 2.2a) ──
-		{
-			"name":        "garuda.policy.list",
-			"description": "List policies registered for a tenant. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID; falls back to GARUDA_TENANT_ID env or default tenant"},
-				},
-			},
-		},
-		{
-			"name":        "garuda.governance.status",
-			"description": "Aggregate governance state: active policies, documentation health, contradiction count. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name; falls back to GARUDA_WORKSPACE env or 'default'"},
-				},
-			},
-		},
-		{
-			"name":        "garuda.check_drift",
-			"description": "Documentation-to-code drift report. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				},
-			},
-		},
-		{
-			"name":        "garuda.query_claims",
-			"description": "Query document claims matching a subject. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-					"subject":   map[string]interface{}{"type": "string", "description": "Filter by subject or object (substring)"},
-				},
-			},
-		},
-		// ── Policy + semantic tools (Phase 2.2b/2.2c) ──
-		{
-			"name":        "garuda.policy.evaluate",
-			"description": "Dry-run the policy engine against a workspace and return the decisions it would make. Does NOT persist or Merkle-anchor. Use 'garuda policy evaluate' from the CLI to anchor a real governance decision.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id":    map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace":    map[string]interface{}{"type": "string", "description": "Workspace name"},
-					"policy_dir":   map[string]interface{}{"type": "string", "description": "Directory containing policy YAML. Defaults to GARUDA_POLICY_DIR or ./policies"},
-					"subject_kind": map[string]interface{}{"type": "string", "description": "Optional subject kind"},
-					"subject_id":   map[string]interface{}{"type": "string", "description": "Optional subject ID"},
-					"actor":        map[string]interface{}{"type": "string", "description": "Optional actor identifier"},
-				},
-			},
-		},
-		{
-			"name":        "garuda.verify_policy_evaluation",
-			"description": "Verify the Merkle inclusion proof for a persisted policy evaluation. Returns valid=true if the proof recomputes to the anchored root. Read-only; no side effects.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id":     map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"evaluation_id": map[string]interface{}{"type": "string", "description": "Policy evaluation UUID returned by garuda policy evaluate --save"},
-				},
-				"required": []string{"evaluation_id"},
-			},
-		},
-		{
-			"name":        "garuda.entities",
-			"description": "List semantic entities in a workspace. Filterable by package and kind. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-					"package":   map[string]interface{}{"type": "string", "description": "Optional package name substring"},
-					"kind":      map[string]interface{}{"type": "string", "description": "Optional entity kind (struct, interface, function, method)"},
-					"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 100, cap 1000"},
-				},
-			},
-		},
-		{
-			"name":        "garuda.inspect",
-			"description": "Inspect one entity with its incoming and outgoing relationships. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-					"entity_id": map[string]interface{}{"type": "string", "description": "Entity UUID"},
-				},
-				"required": []string{"entity_id"},
-			},
-		},
-		// ── Graph structure tools (Phase 1) ──
-		{
-			"name":        "garuda.subclasses",
-			"description": "List entities that inherit from or embed the subject. Uses INHERITS and EMBEDS claims. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-					"entity_id": map[string]interface{}{"type": "string", "description": "Subject entity UUID"},
-					"name":      map[string]interface{}{"type": "string", "description": "Subject entity name (alternative to entity_id)"},
-					"language":  map[string]interface{}{"type": "string", "description": "Optional language filter (go, python, typescript)"},
-					"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
-				},
-			},
-		},
-		{
-			"name":        "garuda.implementers",
-			"description": "List entities that implement the subject interface. Uses IMPLEMENTS claims. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-					"entity_id": map[string]interface{}{"type": "string", "description": "Subject interface UUID"},
-					"name":      map[string]interface{}{"type": "string", "description": "Subject interface name (alternative to entity_id)"},
-					"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
-				},
-			},
-		},
-		{
-			"name":        "garuda.neighbors",
-			"description": "List every entity connected to the subject in one hop, both directions. Resolves names, packages, kinds in one query. External stubs excluded by default. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id":        map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace":        map[string]interface{}{"type": "string", "description": "Workspace name"},
-					"entity_id":        map[string]interface{}{"type": "string", "description": "Subject entity UUID"},
-					"edge_kinds":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Optional filter, e.g. [\"CALLS\",\"IMPORTS\"]"},
-					"include_external": map[string]interface{}{"type": "boolean", "description": "Include external stubs (default false)"},
-					"limit":            map[string]interface{}{"type": "number", "description": "Max rows, default 100, cap 500"},
-				},
-				"required": []string{"entity_id"},
-			},
-		},
-		// ── State management tools (Phase 2.4) ──
-		{
-			"name":        "garuda.handoff",
-			"description": "Initiate an atomic task handoff between two agents. Creates a checkpoint of the source agent's state, transfers task ownership, and transitions both agents' statuses. Wraps the same Serializable transaction the HTTP API uses. Caller must ensure source_agent_id currently owns task_id. Returns {status: \"completed\", handoff_id, checkpoint_id} on success, or {status: \"failed\", reason} on precondition failure.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id":       map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"task_id":         map[string]interface{}{"type": "string", "description": "Task UUID being handed off"},
-					"source_agent_id": map[string]interface{}{"type": "string", "description": "Agent UUID currently owning the task"},
-					"target_agent_id": map[string]interface{}{"type": "string", "description": "Agent UUID taking ownership"},
-					"reason":          map[string]interface{}{"type": "string", "description": "Optional human-readable reason"},
-					"checkpoint_data": map[string]interface{}{"type": "object", "description": "Optional serializable state to carry across the handoff"},
-				},
-				"required": []string{"task_id", "source_agent_id", "target_agent_id"},
-			},
-		},
-		{
-			"name":        "garuda.resume",
-			"description": "Restore the state from an active checkpoint created by garuda.handoff, and mark the checkpoint as consumed. A second resume of the same checkpoint returns {status: \"not_found\"}. Wraps the same Serializable transaction the HTTP API uses.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id":     map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"agent_id":      map[string]interface{}{"type": "string", "description": "Agent UUID performing the resume"},
-					"checkpoint_id": map[string]interface{}{"type": "string", "description": "Checkpoint UUID returned by garuda.handoff"},
-				},
-				"required": []string{"agent_id", "checkpoint_id"},
-			},
-		},
-		{
-			"name":        "garuda.find_entity",
-			"description": "Find entities by name pattern, kind, package, or file path. Results ranked by inbound edge count so the most-connected matches appear first. Read-only.",
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"tenant_id":          map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-					"workspace":          map[string]interface{}{"type": "string", "description": "Workspace name"},
-					"name_pattern":       map[string]interface{}{"type": "string", "description": "Regex against entity name"},
-					"kind":               map[string]interface{}{"type": "string", "description": "Entity kind (struct, interface, function, method, class, package)"},
-					"package":            map[string]interface{}{"type": "string", "description": "Package name substring"},
-					"file_path_contains": map[string]interface{}{"type": "string", "description": "File path substring"},
-					"exported_only":      map[string]interface{}{"type": "boolean", "description": "Only exported entities (default false)"},
-					"limit":              map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
-				},
-			},
-		},
-	}
-
 	return MCPResponse{
 		JSONRPC: "2.0",
 		ID:      req.ID,
 		Result: map[string]interface{}{
-			"tools": tools,
+			"tools": allTools,
 		},
 	}
 }
@@ -618,6 +660,13 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	toolName, ok := req.Params["name"].(string)
 	if !ok {
 		return s.errorResponse(req.ID, -32602, "Invalid tool name")
+	}
+
+	// Whitelist check before dispatch. Reject unknown tools here so
+	// the switch below only handles valid names; the default branch
+	// stays as defense-in-depth if the whitelist and switch ever drift.
+	if !toolNames[toolName] {
+		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
 	}
 
 	args, _ := req.Params["arguments"].(map[string]interface{})
@@ -696,6 +745,7 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		duration,
 		err == nil,
 	)
+	s.recordToolCall(context.Background(), toolName, duration, err, args)
 
 	if err != nil {
 		return s.errorResponse(req.ID, -32000, err.Error())

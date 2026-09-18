@@ -260,6 +260,21 @@ def main():
                               "resume returns status=not_found for unknown checkpoint"))
         results.append(expect("reason" in rsp, "resume includes a reason"))
 
+        # Negative path: unknown tool name. The whitelist must reject
+        # with JSON-RPC error -32601 (Method not found) and must not
+        # write a row to mcp_tool_calls. The absence of a row is
+        # verified out-of-band with the psql check documented next to
+        # this file; this script can only assert the wire response.
+        send(proc, {
+            "jsonrpc": "2.0", "id": 11, "method": "tools/call",
+            "params": {"name": "garuda.nonexistent", "arguments": {}},
+        })
+        unk = read_response(proc)
+        results.append(expect(unk.get("id") == 11, "unknown tool id == 11"))
+        results.append(expect(
+            unk.get("error", {}).get("code") == -32601,
+            "unknown tool returns -32601"))
+
         proc.stdin.close()
         proc.wait(timeout=3)
         results.append(expect(proc.returncode == 0, "server exited cleanly"))
