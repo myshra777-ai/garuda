@@ -15,8 +15,10 @@ import (
 
 type RevisionChainEntry struct {
 	ID                   uuid.UUID
+	RevisionNumber       int
 	DecisionHash         []byte
 	PreviousRevisionHash []byte
+	CreatedAt            time.Time
 }
 
 type DecisionExplanation struct {
@@ -51,7 +53,7 @@ type DecisionExplanation struct {
 // can compare each entry to its predecessor without re-sorting.
 func (s *PostgresStore) GetRevisionChain(ctx context.Context, tenantID, decisionID uuid.UUID) ([]RevisionChainEntry, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, decision_hash, previous_revision_hash
+		SELECT id, revision_number, decision_hash, previous_revision_hash, created_at
 		FROM decision_revisions
 		WHERE tenant_id = $1 AND decision_id = $2
 		ORDER BY revision_number ASC
@@ -64,7 +66,13 @@ func (s *PostgresStore) GetRevisionChain(ctx context.Context, tenantID, decision
 	var chain []RevisionChainEntry
 	for rows.Next() {
 		var entry RevisionChainEntry
-		if err := rows.Scan(&entry.ID, &entry.DecisionHash, &entry.PreviousRevisionHash); err != nil {
+		if err := rows.Scan(
+			&entry.ID,
+			&entry.RevisionNumber,
+			&entry.DecisionHash,
+			&entry.PreviousRevisionHash,
+			&entry.CreatedAt,
+		); err != nil {
 			return nil, fmt.Errorf("failed to scan revision entry: %w", err)
 		}
 		chain = append(chain, entry)

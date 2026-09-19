@@ -20,8 +20,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/tenant"
+	"github.com/myshra777-ai/garuda/internal/types"
 )
 
 // -----------------------------------------------------------------------------
@@ -1881,4 +1883,213 @@ func (s *Server) HandleDashboardSessions(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard decisions — decision log, lineage, and Merkle anchors
+// ─────────────────────────────────────────────────────────────────────────────
+
+// DecisionListRow is one row in the Decisions tab list.
+type DecisionListRow struct {
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	Status        string `json:"status"`
+	ScopeDomain   string `json:"scope_domain,omitempty"`
+	ScopeSystem   string `json:"scope_system,omitempty"`
+	Owner         string `json:"owner,omitempty"`
+	RevisionCount int    `json:"revision_count"`
+	MerkleHash    string `json:"merkle_hash,omitempty"`
+	Anchored      bool   `json:"anchored"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+// DecisionDetail is the drawer payload for one decision.
+type DecisionDetail struct {
+	Decision  DecisionListRow   `json:"decision"`
+	Ancestors []DecisionListRow `json:"ancestors"`
+	Children  []DecisionListRow `json:"children"`
+	Revisions []RevisionRow     `json:"revisions"`
+}
+
+// RevisionRow is one entry in the revision chain.
+//
+// Author is intentionally not a field. decision_revisions has no
+// author column; the actor is recorded on the decisions row, not on
+// each revision.
+type RevisionRow struct {
+	ID              string `json:"id"`
+	RevisionNumber  int    `json:"revision_number"`
+	DecisionHashHex string `json:"decision_hash_hex,omitempty"`
+	PreviousHashHex string `json:"previous_hash_hex,omitempty"`
+	CreatedAt       string `json:"created_at"`
+}
+
+type DashboardDecisionsResponse struct {
+	Workspace string            `json:"workspace"`
+	Decisions []DecisionListRow `json:"decisions"`
+	Total     int               `json:"total"`
+}
+
+// HandleDashboardDecisions lists decisions in the current workspace's tenant.
+//
+// Filters (all optional via query params):
+//
+//	status=APPROVED|draft|...      comma-separated, matches decisions.status
+//	scope_domain=...               exact match
+//	scope_system=...               exact match
+//	limit=N                        default 100, cap 500
+func (s *Server) HandleDashboardDecisions(w http.ResponseWriter, r *http.Request) {
+	applySecurityHeaders(w)
+	ctx := r.Context()
+
+	pgStore, ok := s.store.(*store.PostgresStore)
+	if !ok || pgStore == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "dashboard store unavailable", nil)
+		return
+	}
+
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
+	if err != nil {
+		writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
+		return
+	}
+
+	limit := 100
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+
+	statusFilter := r.URL.Query().Get("status")
+	domainFilter := r.URL.Query().Get("scope_domain")
+	systemFilter := r.URL.Query().Get("scope_system")
+
+	rows, err := pgStore.Pool().Query(ctx, `
+		SELECT d.id, d.title, d.status,
+		       COALESCE(d.scope_domain, ''), COALESCE(d.scope_system, ''),
+		       COALESCE(d.owner, ''),
+		       COALESCE(d.merkle_hash, ''),
+		       d.created_at, d.updated_at,
+		       (SELECT COUNT(*)::int FROM decision_revisions r WHERE r.decision_id = d.id::text)
+		  FROM decisions d
+		 WHERE d.tenant_id = $1
+		   AND ($2 = '' OR d.status = $2)
+		   AND ($3 = '' OR d.scope_domain = $3)
+		   AND ($4 = '' OR d.scope_system = $4)
+		 ORDER BY d.created_at DESC
+		 LIMIT $5
+	`, scope.TenantID, statusFilter, domainFilter, systemFilter, limit)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "query decisions failed", map[string]any{"detail": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	resp := DashboardDecisionsResponse{
+		Workspace: scope.WorkspaceName,
+		Decisions: []DecisionListRow{},
+	}
+
+	for rows.Next() {
+		var row DecisionListRow
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(
+			&row.ID, &row.Title, &row.Status,
+			&row.ScopeDomain, &row.ScopeSystem,
+			&row.Owner,
+			&row.MerkleHash,
+			&createdAt, &updatedAt,
+			&row.RevisionCount,
+		); err != nil {
+			slog.Warn("scan decisions row", "error", err)
+			continue
+		}
+		row.Anchored = row.MerkleHash != ""
+		row.CreatedAt = createdAt.Format(time.RFC3339)
+		row.UpdatedAt = updatedAt.Format(time.RFC3339)
+		resp.Decisions = append(resp.Decisions, row)
+	}
+
+	resp.Total = len(resp.Decisions)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// HandleDashboardDecisionDetail returns one decision with its lineage
+// chain and revision history.
+func (s *Server) HandleDashboardDecisionDetail(w http.ResponseWriter, r *http.Request) {
+	applySecurityHeaders(w)
+	ctx := r.Context()
+
+	pgStore, ok := s.store.(*store.PostgresStore)
+	if !ok || pgStore == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "dashboard store unavailable", nil)
+		return
+	}
+
+	decisionIDStr := mux.Vars(r)["id"]
+	decisionID, err := uuid.Parse(decisionIDStr)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid decision id", nil)
+		return
+	}
+
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
+	if err != nil {
+		writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
+		return
+	}
+
+	ancestors, err := pgStore.GetDecisionAncestors(ctx, scope.TenantID, decisionID)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "decision not found", map[string]any{"detail": err.Error()})
+		return
+	}
+
+	children, _ := pgStore.ListDecisionsByParent(ctx, scope.TenantID, decisionID)
+
+	chain, _ := pgStore.GetRevisionChain(ctx, scope.TenantID, decisionID)
+
+	toRow := func(d *types.Decision) DecisionListRow {
+		row := DecisionListRow{
+			ID:          d.ID.String(),
+			Title:       d.Title,
+			Status:      d.Status.String(),
+			ScopeDomain: d.Scope.Domain,
+			ScopeSystem: d.Scope.System,
+			Owner:       d.Owner,
+			CreatedAt:   d.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:   d.UpdatedAt.Format(time.RFC3339),
+		}
+		return row
+	}
+
+	detail := DecisionDetail{
+		Ancestors: []DecisionListRow{},
+		Children:  []DecisionListRow{},
+		Revisions: []RevisionRow{},
+	}
+	if len(ancestors) > 0 {
+		detail.Decision = toRow(ancestors[0])
+	}
+	for _, a := range ancestors {
+		detail.Ancestors = append(detail.Ancestors, toRow(a))
+	}
+	for _, c := range children {
+		detail.Children = append(detail.Children, toRow(c))
+	}
+	for _, entry := range chain {
+		detail.Revisions = append(detail.Revisions, RevisionRow{
+			ID:              entry.ID.String(),
+			RevisionNumber:  entry.RevisionNumber,
+			DecisionHashHex: hex.EncodeToString(entry.DecisionHash),
+			PreviousHashHex: hex.EncodeToString(entry.PreviousRevisionHash),
+			CreatedAt:       entry.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(detail)
 }
