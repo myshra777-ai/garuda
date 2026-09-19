@@ -183,9 +183,15 @@ func (s *Server) HandleControlPlane(w http.ResponseWriter, r *http.Request) {
 	default:
 		tab = "business"
 	}
+
+	data := map[string]any{"Tab": tab}
+	if tab == "business" {
+		data["Business"] = s.loadBusinessMetrics(r.Context(), r.URL.Query().Get("range"))
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = controlPlaneTmpl.Execute(w, map[string]any{"Tab": tab})
+	_ = controlPlaneTmpl.Execute(w, data)
 }
 
 // HandleControlPlaneLoginGET renders the token form. If the browser
@@ -286,6 +292,31 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .logout { margin-left:auto; }
 .logout button { background:transparent; border:1px solid var(--border); color:var(--text-2); padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; }
 .logout button:hover { color:var(--text); border-color:var(--text-2); }
+
+.tab-actions { display:flex; justify-content:flex-end; margin-bottom:20px; gap:8px; align-items:center; }
+.tab-actions label { color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; margin-right:6px; }
+.range-pill { padding:6px 12px; border-radius:6px; color:var(--text-2); text-decoration:none; border:1px solid var(--border); font-size:12px; font-weight:600; }
+.range-pill:hover { color:var(--text); border-color:var(--text-2); }
+.range-pill.active { color:var(--brand); border-color:var(--brand); background:rgba(56,189,248,0.1); }
+
+.metric-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:24px; }
+.metric-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px; cursor:help; }
+.metric-label { color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
+.metric-value { font-size:28px; font-weight:800; margin-top:8px; color:var(--text); }
+.metric-value.muted { color:var(--text-2); font-size:15px; font-style:italic; font-weight:500; }
+.metric-foot { color:var(--muted); font-size:11px; margin-top:4px; }
+
+.panel { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.panel-header { padding:16px 20px; border-bottom:1px solid var(--border); }
+.panel-title { font-weight:700; font-size:14px; color:var(--text); }
+.panel-subtitle { color:var(--muted); font-size:11px; margin-top:3px; }
+
+.data-table { width:100%; border-collapse:collapse; }
+.data-table th, .data-table td { padding:10px 20px; text-align:left; font-size:13px; border-bottom:1px solid var(--border); }
+.data-table th { color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
+.data-table tr:last-child td { border-bottom:0; }
+.empty-state { padding:40px 20px; text-align:center; color:var(--muted); font-size:13px; }
+.error-banner { padding:16px 20px; background:rgba(244,63,94,0.1); border:1px solid rgba(244,63,94,0.3); border-radius:10px; color:var(--text); font-size:13px; margin-bottom:20px; }
 </style>
 </head>
 <body>
@@ -307,11 +338,81 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
   </nav>
   <main class="content">
     {{if eq .Tab "business"}}
-      <div class="placeholder">
-        <h1>Business</h1>
-        <p>Growth, adoption, and usage metrics.</p>
-        <p style="margin-top:16px;font-size:12px;">Lands in the next commit.</p>
+      {{with .Business}}
+      {{if .Error}}
+        <div class="error-banner">{{.Error}}</div>
+      {{end}}
+
+      <div class="tab-actions">
+        <label>Range:</label>
+        <a href="/_/control?tab=business&range=30" class="range-pill {{if eq .RangeDays 30}}active{{end}}">30d</a>
+        <a href="/_/control?tab=business&range=60" class="range-pill {{if eq .RangeDays 60}}active{{end}}">60d</a>
+        <a href="/_/control?tab=business&range=90" class="range-pill {{if eq .RangeDays 90}}active{{end}}">90d</a>
       </div>
+
+      <div class="metric-grid">
+        <div class="metric-card" title="Total tenant count. Formula: SELECT COUNT(*) FROM tenants">
+          <div class="metric-label">Tenants</div>
+          {{if .TenantsError}}
+            <div class="metric-value muted" title="{{.TenantsError}}">Not measured</div>
+          {{else}}
+            <div class="metric-value">{{.Tenants}}</div>
+          {{end}}
+          <div class="metric-foot">All time</div>
+        </div>
+
+        <div class="metric-card" title="Tenants created in the last {{.RangeLabel}}. Formula: SELECT COUNT(*) FROM tenants WHERE created_at >= NOW() - INTERVAL '{{.RangeDays}} days'">
+          <div class="metric-label">New tenants ({{.RangeLabel}})</div>
+          {{if .NewTenantsError}}<div class="metric-value muted" title="{{.NewTenantsError}}">Not measured</div>{{else}}<div class="metric-value">{{.NewTenants}}</div>{{end}}
+          <div class="metric-foot">Signups</div>
+        </div>
+
+        <div class="metric-card" title="Total workspaces across every tenant. Formula: SELECT COUNT(*) FROM workspaces">
+          <div class="metric-label">Workspaces</div>
+          {{if .WorkspacesError}}<div class="metric-value muted" title="{{.WorkspacesError}}">Not measured</div>{{else}}<div class="metric-value">{{.Workspaces}}</div>{{end}}
+          <div class="metric-foot">Across all tenants</div>
+        </div>
+
+        <div class="metric-card" title="Distinct users active in the last {{.RangeLabel}}. Requires tenant_members.last_seen_at to be populated.">
+          <div class="metric-label">Active users ({{.RangeLabel}})</div>
+          {{if .UsersError}}
+            <div class="metric-value muted" title="{{.UsersError}}">Not yet measured</div>
+          {{else if .UsersMeasured}}
+            <div class="metric-value">{{.UsersRecent}}</div>
+          {{else}}
+            <div class="metric-value muted">Not yet measured</div>
+          {{end}}
+          <div class="metric-foot">Requires last_seen_at tracking</div>
+        </div>
+
+        <div class="metric-card" title="MCP sessions started in the last {{.RangeLabel}}, orphaned sessions excluded. Formula: SELECT COUNT(*) FROM mcp_sessions WHERE started_at >= NOW() - INTERVAL '{{.RangeDays}} days' AND client_name != 'orphaned'">
+          <div class="metric-label">Sessions ({{.RangeLabel}})</div>
+          {{if .SessionsError}}<div class="metric-value muted" title="{{.SessionsError}}">Not measured</div>{{else}}<div class="metric-value">{{.Sessions}}</div>{{end}}
+          <div class="metric-foot">All clients, all tenants</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Client breakdown</div>
+          <div class="panel-subtitle">MCP sessions grouped by client, all time. Orphaned sessions excluded.</div>
+        </div>
+        {{if .ClientBreakdownError}}
+          <div class="empty-state">Not measured: {{.ClientBreakdownError}}</div>
+        {{else if .ClientBreakdown}}
+          <table class="data-table">
+            <thead><tr><th>Client</th><th style="text-align:right;">Sessions</th></tr></thead>
+            <tbody>
+              {{range .ClientBreakdown}}
+                <tr><td>{{.Name}}</td><td style="text-align:right;">{{.Count}}</td></tr>
+              {{end}}
+            </tbody>
+          </table>
+        {{else}}
+          <div class="empty-state">No sessions yet.</div>
+        {{end}}
+      </div>
+      {{end}}
     {{else if eq .Tab "tenants"}}
       <div class="placeholder">
         <h1>Tenants</h1>
