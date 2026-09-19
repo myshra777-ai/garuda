@@ -1781,3 +1781,104 @@ func (s *Server) HandleLiveEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard sessions — MCP session activity for the current workspace
+// ─────────────────────────────────────────────────────────────────────────────
+
+// SessionRow is one row in the Agents tab's sessions panels.
+type SessionRow struct {
+	ID             string `json:"id"`
+	ClientName     string `json:"client_name"`
+	ClientVersion  string `json:"client_version,omitempty"`
+	AgentID        string `json:"agent_id"`
+	StartedAt      string `json:"started_at"`
+	LastActivityAt string `json:"last_activity_at"`
+	DurationSec    int    `json:"duration_seconds"`
+	ToolCallCount  int    `json:"tool_call_count"`
+	RequestCount   int    `json:"request_count"`
+	ClosedAt       string `json:"closed_at,omitempty"`
+	CloseReason    string `json:"close_reason,omitempty"`
+}
+
+type DashboardSessionsResponse struct {
+	Workspace string       `json:"workspace"`
+	Active    []SessionRow `json:"active"`
+	Recent    []SessionRow `json:"recent"`
+}
+
+// HandleDashboardSessions returns MCP session activity for the current
+// workspace. Active = last_activity_at within 5 minutes and not closed.
+// Recent = started in the last 24 hours. Orphaned sessions excluded.
+//
+// Sessions with a NULL workspace_id are not shown: they belong to no
+// workspace and displaying them in every workspace would be wrong.
+func (s *Server) HandleDashboardSessions(w http.ResponseWriter, r *http.Request) {
+	applySecurityHeaders(w)
+	ctx := r.Context()
+
+	pgStore, ok := s.store.(*store.PostgresStore)
+	if !ok || pgStore == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "dashboard store unavailable", nil)
+		return
+	}
+
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
+	if err != nil {
+		writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
+		return
+	}
+
+	rows, err := pgStore.Pool().Query(ctx, `
+		SELECT id, client_name, COALESCE(client_version, ''), COALESCE(agent_id, ''),
+		       started_at, last_activity_at,
+		       EXTRACT(EPOCH FROM (last_activity_at - started_at))::int,
+		       tool_call_count, request_count,
+		       closed_at, COALESCE(close_reason, '')
+		  FROM mcp_sessions
+		 WHERE workspace_id = $1
+		   AND client_name != 'orphaned'
+		   AND started_at >= NOW() - INTERVAL '24 hours'
+		 ORDER BY last_activity_at DESC
+		 LIMIT 100
+	`, scope.WorkspaceID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "query sessions failed", map[string]any{"detail": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	resp := DashboardSessionsResponse{
+		Workspace: scope.WorkspaceName,
+		Active:    []SessionRow{},
+		Recent:    []SessionRow{},
+	}
+	activeThreshold := time.Now().Add(-5 * time.Minute)
+
+	for rows.Next() {
+		var row SessionRow
+		var startedAt, lastActivityAt time.Time
+		var closedAt *time.Time
+		if err := rows.Scan(
+			&row.ID, &row.ClientName, &row.ClientVersion, &row.AgentID,
+			&startedAt, &lastActivityAt, &row.DurationSec,
+			&row.ToolCallCount, &row.RequestCount,
+			&closedAt, &row.CloseReason,
+		); err != nil {
+			slog.Warn("scan mcp_sessions row", "error", err)
+			continue
+		}
+		row.StartedAt = startedAt.Format(time.RFC3339)
+		row.LastActivityAt = lastActivityAt.Format(time.RFC3339)
+		if closedAt != nil {
+			row.ClosedAt = closedAt.Format(time.RFC3339)
+		}
+		resp.Recent = append(resp.Recent, row)
+		if closedAt == nil && lastActivityAt.After(activeThreshold) {
+			resp.Active = append(resp.Active, row)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}

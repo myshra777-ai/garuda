@@ -348,10 +348,28 @@
                         <div class="hero-subtitle">MCP sessions, tool calls, and multi-agent handoffs.</div>
                     </div>
                 </div>
+
+                <div class="panel" style="margin-bottom: 20px;">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Active sessions</div>
+                            <div class="panel-subtitle">Clients with activity in the last 5 minutes.</div>
+                        </div>
+                    </div>
+                    <div class="list" id="agents-active-list">
+                        <div class="list-row"><div class="row-main"><div class="row-title">Loading active sessions...</div></div></div>
+                    </div>
+                </div>
+
                 <div class="panel">
-                    <div class="panel-body" style="padding: 40px 20px; text-align: center; color: var(--muted);">
-                        <p style="font-size: 15px; margin-bottom: 8px;">Agents panel coming next.</p>
-                        <p style="font-size: 12px;">MCP surface, active sessions, handoffs, briefing delta.</p>
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Recent sessions</div>
+                            <div class="panel-subtitle">MCP sessions started in the last 24 hours.</div>
+                        </div>
+                    </div>
+                    <div class="list" id="agents-recent-list">
+                        <div class="list-row"><div class="row-main"><div class="row-title">Loading recent sessions...</div></div></div>
                     </div>
                 </div>
             </section>

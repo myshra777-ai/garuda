@@ -143,6 +143,9 @@ function showView(view) {
     if (view === "governance") {
         renderTrust();
     }
+    if (view === "agents") {
+        loadAgents();
+    }
 
     // URL. Search is a transient overlay; it does not change ?tab=.
     if (view !== "search") {
@@ -1291,6 +1294,10 @@ async function loadAll() {
     if (state.currentView === "architecture") {
         await loadArchitecture(state.currentLevel, state.currentFocus);
     }
+    if (state.currentView === "agents") {
+        agentsLoaded = false;
+        await loadAgents();
+    }
 }
 
 setupSearch();
@@ -1303,3 +1310,75 @@ window.addEventListener("resize", function() {
         setTimeout(fitGraph, 100);
     }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agents tab — MCP session activity
+// ─────────────────────────────────────────────────────────────────────────────
+
+var agentsLoaded = false;
+
+async function loadAgents() {
+    // Idempotent: only fetch on the first activation. Manual refresh
+    // through the top-bar Refresh button calls loadAll which can also
+    // re-trigger this.
+    if (agentsLoaded) return;
+    agentsLoaded = true;
+
+    var activeEl = document.getElementById("agents-active-list");
+    var recentEl = document.getElementById("agents-recent-list");
+    if (!activeEl || !recentEl) return;
+
+    try {
+        var res = await fetch("/api/v1/dashboard/sessions?workspace=" + encodeURIComponent(WORKSPACE), {
+            headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var data = await res.json();
+        renderSessionList(activeEl, data.active || [], "No active sessions.", true);
+        renderSessionList(recentEl, data.recent || [], "No sessions in the last 24 hours.", false);
+    } catch (err) {
+        activeEl.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">Failed to load sessions</div><div class="row-meta">' + escapeHTML(String(err)) + '</div></div></div>';
+        recentEl.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">Failed to load sessions</div></div></div>';
+    }
+}
+
+function renderSessionList(container, sessions, emptyMessage, isActivePanel) {
+    if (!sessions || sessions.length === 0) {
+        container.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">' + escapeHTML(emptyMessage) + '</div></div></div>';
+        return;
+    }
+    container.innerHTML = "";
+    sessions.forEach(function(s) {
+        var row = document.createElement("div");
+        row.className = "list-row";
+        var clientLabel = escapeHTML(s.client_name || "unknown");
+        if (s.client_version) {
+            clientLabel += " <span style=\"color:var(--muted); font-size:10px;\">" + escapeHTML(s.client_version) + "</span>";
+        }
+        var duration = formatDuration(s.duration_seconds);
+        var activity = formatDate(s.last_activity_at);
+        var badge = "";
+        if (s.close_reason) {
+            badge = '<span class="badge-pill info">' + escapeHTML(s.close_reason) + '</span>';
+        } else if (isActivePanel) {
+            badge = '<span class="badge-pill success">active</span>';
+        }
+        row.innerHTML =
+            '<div class="row-main">' +
+                '<div class="row-title">' + clientLabel + ' · ' + escapeHTML(s.agent_id || "mcp-agent") + '</div>' +
+                '<div class="row-meta">' + s.tool_call_count + ' tool calls · ' + duration + ' · last activity ' + escapeHTML(activity) + '</div>' +
+            '</div>' +
+            badge;
+        container.appendChild(row);
+    });
+}
+
+function formatDuration(seconds) {
+    if (!seconds || seconds < 1) return "<1s";
+    if (seconds < 60) return seconds + "s";
+    var m = Math.floor(seconds / 60);
+    var s = seconds % 60;
+    if (m < 60) return m + "m" + (s > 0 ? " " + s + "s" : "");
+    var h = Math.floor(m / 60);
+    return h + "h " + (m % 60) + "m";
+}
