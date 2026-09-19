@@ -29,12 +29,16 @@ func TestSignupUser_CreatesFullScope(t *testing.T) {
 	email := "signup-test-" + uuid.New().String()[:8] + "@local"
 	passwordHash := "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
+	var cleanupTenantID uuid.UUID
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
-		// The tenant_members and workspace_members rows cascade from
-		// tenants via ON DELETE CASCADE, so deleting the tenant is
-		// enough. The users row is deleted last because it is
-		// referenced by tenant_members.
+		// Delete the tenant first. tenant_members, workspaces, and
+		// workspace_members cascade. Then delete the user, which has
+		// no FK to tenants and would survive the tenant delete.
+		if cleanupTenantID != uuid.Nil {
+			_, _ = pgStore.Pool().Exec(cleanupCtx,
+				`DELETE FROM tenants WHERE id = $1`, cleanupTenantID)
+		}
 		_, _ = pgStore.Pool().Exec(cleanupCtx,
 			`DELETE FROM users WHERE email = $1`, email)
 	})
@@ -46,6 +50,7 @@ func TestSignupUser_CreatesFullScope(t *testing.T) {
 	if user == nil || ws == nil {
 		t.Fatalf("SignupUser returned nil user or workspace")
 	}
+	cleanupTenantID = ws.TenantID
 	if user.Email != email {
 		t.Fatalf("user.Email = %q; want %q", user.Email, email)
 	}
@@ -103,8 +108,16 @@ func TestSignupUser_RejectsDuplicateEmail(t *testing.T) {
 	email := "signup-dup-" + uuid.New().String()[:8] + "@local"
 	passwordHash := "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
+	var cleanupTenantID uuid.UUID
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
+		// Delete the tenant first. tenant_members, workspaces, and
+		// workspace_members cascade. Then delete the user, which has
+		// no FK to tenants and would survive the tenant delete.
+		if cleanupTenantID != uuid.Nil {
+			_, _ = pgStore.Pool().Exec(cleanupCtx,
+				`DELETE FROM tenants WHERE id = $1`, cleanupTenantID)
+		}
 		_, _ = pgStore.Pool().Exec(cleanupCtx,
 			`DELETE FROM users WHERE email = $1`, email)
 	})
@@ -113,6 +126,7 @@ func TestSignupUser_RejectsDuplicateEmail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first SignupUser failed: %v", err)
 	}
+	cleanupTenantID = firstWS.TenantID
 
 	_, _, err = pgStore.SignupUser(ctx, email, passwordHash, "Second")
 	if !errors.Is(err, ErrEmailExists) {
