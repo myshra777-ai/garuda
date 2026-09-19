@@ -90,6 +90,11 @@ type Server struct {
 	// handlers only. Nil when CONTROL_DATABASE_URL is unset, in
 	// which case the Control Plane returns 404 for every request.
 	controlPool *pgxpool.Pool
+
+	// processStart is the wall-clock time the API server began
+	// accepting requests. Used by the Control Plane Operations tab
+	// to render uptime. Set once in NewServer; never updated.
+	processStart time.Time
 }
 
 // SetControlPool attaches the read-only Control Plane pool. Called by
@@ -138,6 +143,7 @@ func NewServer(
 		checkpointStore:     make(map[string]CheckpointRecord),
 		sessions:            NewSessionStore(SessionTTL),
 		rateLimiter:         rateLimiter,
+		processStart:        time.Now().UTC(),
 	}
 }
 
