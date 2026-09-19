@@ -194,6 +194,24 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 
 	// Debug endpoint (only available outside production)
 	r.HandleFunc("/debug/token", s.HandleDebugToken).Methods(http.MethodGet)
+
+	// ── Control Plane (/ _ / control) ──
+	//
+	// Owner-facing platform panel. Registered here, alongside the
+	// tenant routes, because every entry point that calls
+	// RegisterRoutes should serve it. Public login/logout routes are
+	// registered first so they take precedence over the protected
+	// subtree; gorilla matches in registration order.
+	//
+	// Unauthenticated requests to the protected subtree return 404,
+	// not 401 — a 401 confirms the endpoint exists.
+	r.HandleFunc("/_/control/login", s.HandleControlPlaneLoginGET).Methods(http.MethodGet)
+	r.HandleFunc("/_/control/login", s.HandleControlPlaneLoginPOST).Methods(http.MethodPost)
+	r.HandleFunc("/_/control/logout", s.HandleControlPlaneLogout).Methods(http.MethodPost)
+
+	cp := r.PathPrefix("/_/control").Subrouter()
+	cp.Use(s.controlPlaneAuth)
+	cp.HandleFunc("", s.HandleControlPlane).Methods(http.MethodGet)
 }
 
 // HandleHealth returns gateway health status.
