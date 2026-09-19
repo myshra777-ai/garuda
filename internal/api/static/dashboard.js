@@ -146,6 +146,9 @@ function showView(view) {
     if (view === "agents") {
         loadAgents();
     }
+    if (view === "decisions") {
+        loadDecisions();
+    }
 
     // URL. Search is a transient overlay; it does not change ?tab=.
     if (view !== "search") {
@@ -1298,6 +1301,10 @@ async function loadAll() {
         agentsLoaded = false;
         await loadAgents();
     }
+    if (state.currentView === "decisions") {
+        decisionsLoaded = false;
+        await loadDecisions();
+    }
 }
 
 setupSearch();
@@ -1381,4 +1388,164 @@ function formatDuration(seconds) {
     if (m < 60) return m + "m" + (s > 0 ? " " + s + "s" : "");
     var h = Math.floor(m / 60);
     return h + "h " + (m % 60) + "m";
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Decisions tab — decision log, lineage, revision chain
+// ─────────────────────────────────────────────────────────────────────────────
+
+var decisionsLoaded = false;
+
+async function loadDecisions() {
+    if (decisionsLoaded) return;
+    decisionsLoaded = true;
+
+    var listEl = document.getElementById("decisions-list");
+    var subtitleEl = document.getElementById("decisions-subtitle");
+    if (!listEl) return;
+
+    try {
+        var res = await fetch("/api/v1/dashboard/decisions?workspace=" + encodeURIComponent(WORKSPACE), {
+            headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var data = await res.json();
+        var decisions = data.decisions || [];
+
+        if (subtitleEl) {
+            subtitleEl.textContent = decisions.length === 1
+                ? "1 decision in this workspace."
+                : decisions.length + " decisions in this workspace.";
+        }
+        renderDecisionList(listEl, decisions);
+    } catch (err) {
+        if (subtitleEl) subtitleEl.textContent = "Failed to load.";
+        listEl.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">Failed to load decisions</div><div class="row-meta">' + escapeHTML(String(err)) + '</div></div></div>';
+    }
+}
+
+function renderDecisionList(container, decisions) {
+    if (!decisions || decisions.length === 0) {
+        container.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No decisions recorded.</div><div class="row-meta">Propose one with <code>garuda propose_decision</code> or via the MCP tool.</div></div></div>';
+        return;
+    }
+    container.innerHTML = "";
+    decisions.forEach(function(d) {
+        var row = document.createElement("div");
+        row.className = "list-row";
+        row.style.cursor = "pointer";
+        row.onclick = function() { openDecisionDetail(d.id); };
+
+        var statusClass = decisionStatusClass(d.status);
+        var statusBadge = '<span class="badge-pill ' + statusClass + '">' + escapeHTML(d.status || "unknown") + '</span>';
+        var anchorBadge = d.anchored
+            ? '<span class="badge-pill success" title="Merkle-anchored">anchored</span>'
+            : '<span class="badge-pill info" title="Not anchored">unanchored</span>';
+
+        var meta = [];
+        if (d.scope_domain) meta.push(escapeHTML(d.scope_domain));
+        if (d.scope_system) meta.push(escapeHTML(d.scope_system));
+        meta.push(d.revision_count + (d.revision_count === 1 ? " revision" : " revisions"));
+        if (d.owner) meta.push(escapeHTML(d.owner));
+
+        row.innerHTML =
+            '<div class="row-main">' +
+                '<div class="row-title">' + escapeHTML(d.title || "(untitled)") + '</div>' +
+                '<div class="row-meta">' + meta.join(' · ') + '</div>' +
+            '</div>' +
+            statusBadge + anchorBadge;
+        container.appendChild(row);
+    });
+}
+
+function decisionStatusClass(status) {
+    var s = (status || "").toUpperCase();
+    if (s === "APPROVED" || s === "CANONICAL") return "success";
+    if (s === "DRAFT") return "info";
+    if (s === "PENDING" || s === "REVIEW") return "warning";
+    if (s === "QUARANTINED" || s === "BLOCKED") return "critical";
+    return "info";
+}
+
+async function openDecisionDetail(id) {
+    var drawer = document.getElementById("drawer");
+    var overlay = document.getElementById("drawer-overlay");
+    var body = document.getElementById("drawer-body");
+    if (!drawer || !overlay || !body) return;
+
+    body.innerHTML = '<div class="detail-section"><div class="detail-section-title">Loading decision...</div></div>';
+    drawer.classList.add("open");
+    overlay.classList.add("open");
+
+    try {
+        var res = await fetch("/api/v1/dashboard/decisions/" + encodeURIComponent(id) + "?workspace=" + encodeURIComponent(WORKSPACE), {
+            headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var data = await res.json();
+        renderDecisionDetail(body, data);
+    } catch (err) {
+        body.innerHTML = '<div class="detail-section"><div class="detail-section-title">Failed to load decision</div><div class="detail-value">' + escapeHTML(String(err)) + '</div></div>';
+    }
+}
+
+function renderDecisionDetail(body, data) {
+    var d = data.decision || {};
+    var html = '';
+
+    html += '<div class="detail-section"><div class="detail-section-title">Decision</div>';
+    html += propertyRow("Title", d.title || "(untitled)");
+    html += propertyRow("Status", d.status || "unknown");
+    html += propertyRow("Owner", d.owner || "—");
+    html += propertyRow("Scope domain", d.scope_domain || "—");
+    html += propertyRow("Scope system", d.scope_system || "—");
+    html += propertyRow("Created", d.created_at || "—");
+    html += propertyRow("Updated", d.updated_at || "—");
+    html += propertyRow("Merkle anchor", d.anchored ? "anchored" : "not anchored");
+    html += '</div>';
+
+    var ancestors = data.ancestors || [];
+    if (ancestors.length > 1) {
+        html += '<div class="detail-section"><div class="detail-section-title">Ancestors (' + (ancestors.length - 1) + ')</div>';
+        for (var i = 1; i < ancestors.length; i++) {
+            html += propertyRow("→ " + (i), ancestors[i].title || ancestors[i].id);
+        }
+        html += '</div>';
+    }
+
+    var children = data.children || [];
+    if (children.length > 0) {
+        html += '<div class="detail-section"><div class="detail-section-title">Superseded by (' + children.length + ')</div>';
+        children.forEach(function(c) {
+            html += propertyRow("→", c.title || c.id);
+        });
+        html += '</div>';
+    }
+
+    var revisions = data.revisions || [];
+    if (revisions.length > 0) {
+        html += '<div class="detail-section"><div class="detail-section-title">Revision chain (' + revisions.length + ')</div>';
+        revisions.forEach(function(r) {
+            var hashShort = (r.decision_hash_hex || "").slice(0, 12);
+            var prevShort = (r.previous_hash_hex || "").slice(0, 12);
+            var isGenesis = (r.previous_hash_hex || "").replace(/0/g, "") === "";
+            html += '<div class="detail-property">';
+            html += '<div class="detail-key">rev ' + r.revision_number + '</div>';
+            html += '<div class="detail-value">';
+            html += escapeHTML(hashShort) + '…';
+            if (isGenesis) {
+                html += ' <span class="badge-pill info">genesis</span>';
+            }
+            html += '<div class="row-meta" style="margin-top:4px;">prev ' + escapeHTML(prevShort) + '… · ' + escapeHTML(r.created_at || "") + '</div>';
+            html += '</div></div>';
+        });
+        html += '</div>';
+    } else {
+        html += '<div class="detail-section"><div class="detail-section-title">Revision chain</div>';
+        html += '<div class="row-meta">No revisions recorded for this decision.</div>';
+        html += '</div>';
+    }
+
+    body.innerHTML = html;
 }
