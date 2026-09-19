@@ -114,12 +114,18 @@ func main() {
 	// is unset, the Control Plane returns 404 for every request and
 	// the tenant dashboard is unaffected.
 	if controlURL := os.Getenv("CONTROL_DATABASE_URL"); controlURL != "" {
-		controlPool, err := pgxpool.New(context.Background(), controlURL)
+		controlConfig, err := pgxpool.ParseConfig(controlURL)
 		if err != nil {
-			slog.Warn("Control Plane pool failed to open; Control Plane will return 404", "error", err)
+			slog.Warn("Control Plane pool config parse failed; Control Plane will return 404", "error", err)
 		} else {
-			server.SetControlPool(controlPool)
-			defer controlPool.Close()
+			controlConfig.ConnConfig.Tracer = store.QueryTracer{}
+			controlPool, err := pgxpool.NewWithConfig(context.Background(), controlConfig)
+			if err != nil {
+				slog.Warn("Control Plane pool failed to open; Control Plane will return 404", "error", err)
+			} else {
+				server.SetControlPool(controlPool)
+				defer controlPool.Close()
+			}
 		}
 	}
 

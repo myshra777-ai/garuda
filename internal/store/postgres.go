@@ -20,7 +20,12 @@ type PostgresStore struct {
 
 // NewPostgresStore initializes the connection pool against the database target.
 func NewPostgresStore(connString string) (*PostgresStore, error) {
-	pool, err := pgxpool.New(context.Background(), connString)
+	poolConfig, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, fmt.Errorf("parse pool config: %w", err)
+	}
+	poolConfig.ConnConfig.Tracer = QueryTracer{}
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pool: %w", err)
 	}

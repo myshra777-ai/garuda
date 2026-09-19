@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/myshra777-ai/garuda/internal/store"
 )
 
 // StalledSession is one row in the Operations stalled-sessions panel.
@@ -69,8 +71,11 @@ type OperationsMetrics struct {
 	RecentErrors      []RecentError
 	RecentErrorsError string
 
-	// Locked panels
-	LatencyInstrumented bool
+	// Query latency — real, from the in-process pgx tracer.
+	QueryLatencyP50Ms   float64
+	QueryLatencyP95Ms   float64
+	QueryLatencyP99Ms   float64
+	QueryLatencySamples int
 
 	// Fatal pool error — the read-only pool is missing.
 	Error string
@@ -82,9 +87,7 @@ type OperationsMetrics struct {
 // yet. The corresponding Locked flags are false so the template
 // renders them as locked cards rather than fabricated zeros.
 func (s *Server) loadOperationsMetrics(ctx context.Context) OperationsMetrics {
-	m := OperationsMetrics{
-		LatencyInstrumented: false,
-	}
+	m := OperationsMetrics{}
 
 	if s.controlPool == nil {
 		m.Error = "Control Plane database pool is not configured."
@@ -179,6 +182,14 @@ func (s *Server) loadOperationsMetrics(ctx context.Context) OperationsMetrics {
 			m.ErrorRatePct = float64(errs) / float64(total) * 100
 		}
 	}
+
+	// Query latency percentiles from the in-process pgx tracer. Never
+	// errors; the ring is local.
+	p50, p95, p99, samples := store.QueryLatencyPercentiles()
+	m.QueryLatencyP50Ms = p50
+	m.QueryLatencyP95Ms = p95
+	m.QueryLatencyP99Ms = p99
+	m.QueryLatencySamples = samples
 
 	// Recent errors — last 24 hours, 50 max, newest first.
 	rows3, err := s.controlPool.Query(qctx, `

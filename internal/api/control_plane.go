@@ -515,11 +515,19 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
           <div class="metric-foot">Above 5% threshold</div>
         </div>
 
-        <div class="metric-card locked" title="Not yet instrumented. Requires an in-process query latency ring buffer.">
-          <div class="metric-label">Query latency</div>
-          <div class="metric-value muted">Not yet instrumented</div>
-          <div class="metric-foot">P50 / P95 / P99</div>
-        </div>
+        {{if lt .QueryLatencySamples 10}}
+          <div class="metric-card locked" title="Collecting samples. Percentiles need at least 10 queries before they are meaningful.">
+            <div class="metric-label">Query latency</div>
+            <div class="metric-value muted">Collecting samples ({{.QueryLatencySamples}}/10)</div>
+            <div class="metric-foot">P50 / P95 / P99</div>
+          </div>
+        {{else}}
+          <div class="metric-card" title="Query latency percentiles over the last {{.QueryLatencySamples}} queries. In-process ring buffer, reset on process restart.">
+            <div class="metric-label">Query latency</div>
+            <div class="metric-value">{{printf "%.1fms" .QueryLatencyP50Ms}}</div>
+            <div class="metric-foot">P95 {{printf "%.1fms" .QueryLatencyP95Ms}} · P99 {{printf "%.1fms" .QueryLatencyP99Ms}} · {{.QueryLatencySamples}} samples</div>
+          </div>
+        {{end}}
 
         <div class="metric-card" title="5xx responses over total responses in the last 60 minutes. Formula: errors / total, from an in-process counter.">
           <div class="metric-label">Error rate (1h)</div>
