@@ -52,10 +52,14 @@ type OperationsMetrics struct {
 	ToolErrors      []ToolErrorRow
 	ToolErrorsError string
 
+	// Error rate — real, from the in-process counter.
+	ErrorRatePct    float64
+	ErrorRateTotal  int64
+	ErrorRateErrors int64
+
 	// Locked panels
-	LatencyInstrumented   bool
-	ErrorRateInstrumented bool
-	ErrorLogInstrumented  bool
+	LatencyInstrumented  bool
+	ErrorLogInstrumented bool
 
 	// Fatal pool error — the read-only pool is missing.
 	Error string
@@ -68,9 +72,8 @@ type OperationsMetrics struct {
 // renders them as locked cards rather than fabricated zeros.
 func (s *Server) loadOperationsMetrics(ctx context.Context) OperationsMetrics {
 	m := OperationsMetrics{
-		LatencyInstrumented:   false,
-		ErrorRateInstrumented: false,
-		ErrorLogInstrumented:  false,
+		LatencyInstrumented:  false,
+		ErrorLogInstrumented: false,
 	}
 
 	if s.controlPool == nil {
@@ -153,6 +156,17 @@ func (s *Server) loadOperationsMetrics(ctx context.Context) OperationsMetrics {
 				continue
 			}
 			m.ToolErrors = append(m.ToolErrors, r)
+		}
+	}
+
+	// Error rate from the in-process counter. Never errors; if no
+	// requests have been served, totals are zero and pct stays 0.
+	if s.errorRate != nil {
+		total, errs := s.errorRate.Snapshot()
+		m.ErrorRateTotal = total
+		m.ErrorRateErrors = errs
+		if total > 0 {
+			m.ErrorRatePct = float64(errs) / float64(total) * 100
 		}
 	}
 

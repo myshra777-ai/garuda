@@ -95,6 +95,10 @@ type Server struct {
 	// accepting requests. Used by the Control Plane Operations tab
 	// to render uptime. Set once in NewServer; never updated.
 	processStart time.Time
+
+	// errorRate tracks 5xx-over-total responses in a rolling 60-minute
+	// window. Consumed by the Control Plane Operations tab.
+	errorRate *rateCounter
 }
 
 // SetControlPool attaches the read-only Control Plane pool. Called by
@@ -144,6 +148,7 @@ func NewServer(
 		sessions:            NewSessionStore(SessionTTL),
 		rateLimiter:         rateLimiter,
 		processStart:        time.Now().UTC(),
+		errorRate:           &rateCounter{},
 	}
 }
 

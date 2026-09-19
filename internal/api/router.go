@@ -53,9 +53,11 @@ func SetupRouter(
 	return WithRecovery(
 		WithLogging(
 			WithRequestID(
-				server.WithMerkleHeader(
-					WithRateLimit(rateLimiter)(
-						WithCORS([]string{"*"})(router),
+				WithErrorRateTracking(server.errorRate)(
+					server.WithMerkleHeader(
+						WithRateLimit(rateLimiter)(
+							WithCORS([]string{"*"})(router),
+						),
 					),
 				),
 			),

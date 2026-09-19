@@ -521,10 +521,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
           <div class="metric-foot">P50 / P95 / P99</div>
         </div>
 
-        <div class="metric-card locked" title="Not yet instrumented. Requires an in-process request error counter.">
+        <div class="metric-card" title="5xx responses over total responses in the last 60 minutes. Formula: errors / total, from an in-process counter.">
           <div class="metric-label">Error rate (1h)</div>
-          <div class="metric-value muted">Not yet instrumented</div>
-          <div class="metric-foot">Errors / total requests</div>
+          <div class="metric-value">{{printf "%.2f%%" .ErrorRatePct}}</div>
+          <div class="metric-foot">{{.ErrorRateTotal}} requests · {{.ErrorRateErrors}} errors</div>
         </div>
 
         <div class="metric-card locked" title="Not yet instrumented. Requires an errors_log table.">
