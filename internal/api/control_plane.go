@@ -191,6 +191,12 @@ func (s *Server) HandleControlPlane(w http.ResponseWriter, r *http.Request) {
 	if tab == "tenants" {
 		data["Tenants"] = s.loadTenantsMetrics(r.Context())
 	}
+	if tab == "operations" {
+		data["Operations"] = s.loadOperationsMetrics(r.Context())
+	}
+	if tab == "operations" {
+		data["Operations"] = s.loadOperationsMetrics(r.Context())
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -323,6 +329,8 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .health-green { color:#22c55e; }
 .health-amber { color:#f59e0b; }
 .health-red   { color:#ef4444; }
+.metric-card.locked { cursor:default; opacity:0.65; }
+.metric-card.locked .metric-value { font-style:italic; font-weight:500; font-size:14px; color:var(--text-2); }
 </style>
 </head>
 <body>
@@ -465,11 +473,131 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       </div>
       {{end}}
     {{else if eq .Tab "operations"}}
-      <div class="placeholder">
-        <h1>Operations</h1>
-        <p>Platform health, error rates, session activity.</p>
-        <p style="margin-top:16px;font-size:12px;">Lands last.</p>
+      {{with .Operations}}
+      {{if .Error}}
+        <div class="error-banner">{{.Error}}</div>
+      {{end}}
+
+      <div class="metric-grid">
+        <div class="metric-card" title="Time since the API server process started.">
+          <div class="metric-label">Uptime</div>
+          <div class="metric-value">{{.UptimeHuman}}</div>
+          <div class="metric-foot">Since process start</div>
+        </div>
+
+        <div class="metric-card" title="PostgreSQL database size. Formula: SELECT pg_database_size(current_database())">
+          <div class="metric-label">DB size</div>
+          {{if .DBSizeError}}
+            <div class="metric-value muted" title="{{.DBSizeError}}">Not measured</div>
+          {{else}}
+            <div class="metric-value">{{.DBSizeHuman}}</div>
+          {{end}}
+          <div class="metric-foot">Current database</div>
+        </div>
+
+        <div class="metric-card" title="Sessions not closed and with no activity in the last 30 minutes.">
+          <div class="metric-label">Stalled sessions</div>
+          {{if .StalledSessionsError}}
+            <div class="metric-value muted" title="{{.StalledSessionsError}}">Not measured</div>
+          {{else}}
+            <div class="metric-value">{{len .StalledSessions}}</div>
+          {{end}}
+          <div class="metric-foot">Idle over 30 minutes</div>
+        </div>
+
+        <div class="metric-card" title="Tools with an error rate over 5% in the last hour.">
+          <div class="metric-label">Tool errors (1h)</div>
+          {{if .ToolErrorsError}}
+            <div class="metric-value muted" title="{{.ToolErrorsError}}">Not measured</div>
+          {{else}}
+            <div class="metric-value">{{len .ToolErrors}}</div>
+          {{end}}
+          <div class="metric-foot">Above 5% threshold</div>
+        </div>
+
+        <div class="metric-card locked" title="Not yet instrumented. Requires an in-process query latency ring buffer.">
+          <div class="metric-label">Query latency</div>
+          <div class="metric-value muted">Not yet instrumented</div>
+          <div class="metric-foot">P50 / P95 / P99</div>
+        </div>
+
+        <div class="metric-card locked" title="Not yet instrumented. Requires an in-process request error counter.">
+          <div class="metric-label">Error rate (1h)</div>
+          <div class="metric-value muted">Not yet instrumented</div>
+          <div class="metric-foot">Errors / total requests</div>
+        </div>
+
+        <div class="metric-card locked" title="Not yet instrumented. Requires an errors_log table.">
+          <div class="metric-label">Recent errors</div>
+          <div class="metric-value muted">Not yet instrumented</div>
+          <div class="metric-foot">Last 24 hours</div>
+        </div>
       </div>
+
+      <div class="panel" style="margin-bottom:20px;">
+        <div class="panel-header">
+          <div class="panel-title">Stalled sessions</div>
+          <div class="panel-subtitle">Sessions with no activity in over 30 minutes. Orphaned sessions excluded.</div>
+        </div>
+        {{if .StalledSessionsError}}
+          <div class="empty-state">Not measured: {{.StalledSessionsError}}</div>
+        {{else if .StalledSessions}}
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Last activity</th>
+                <th style="text-align:right;">Idle for</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .StalledSessions}}
+                <tr>
+                  <td>{{.ClientName}}</td>
+                  <td>{{.LastActivityAt}}</td>
+                  <td style="text-align:right;">{{.IdleFor}}</td>
+                </tr>
+              {{end}}
+            </tbody>
+          </table>
+        {{else}}
+          <div class="empty-state">All sessions healthy.</div>
+        {{end}}
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">MCP tool errors</div>
+          <div class="panel-subtitle">Tools with an error rate over 5% in the last hour.</div>
+        </div>
+        {{if .ToolErrorsError}}
+          <div class="empty-state">Not measured: {{.ToolErrorsError}}</div>
+        {{else if .ToolErrors}}
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th style="text-align:right;">Total</th>
+                <th style="text-align:right;">Errors</th>
+                <th style="text-align:right;">Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .ToolErrors}}
+                <tr>
+                  <td>{{.ToolName}}</td>
+                  <td style="text-align:right;">{{.Total}}</td>
+                  <td style="text-align:right;">{{.Errors}}</td>
+                  <td style="text-align:right;">{{printf "%.1f%%" .RatePct}}</td>
+                </tr>
+              {{end}}
+            </tbody>
+          </table>
+        {{else}}
+          <div class="empty-state">No tool errors in the last hour.</div>
+        {{end}}
+      </div>
+      {{end}}
     {{else if eq .Tab "internal"}}
       <div class="placeholder">
         <h1>Internal</h1>
