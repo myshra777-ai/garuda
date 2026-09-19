@@ -99,10 +99,12 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 	insertQuery := `
 		INSERT INTO decisions (
 			tenant_id, id, title, status, scope_domain, scope_system, scope, owner, confidence,
+			parent_id,
 			merkle_hash, parent_merkle_hash, merkle_proof, verification_version,
 			created_at, updated_at, approved_at, valid_from, valid_to
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1,
-			NOW(), NOW(), $13, $14, $15)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+			$11, $12, $13, 1,
+			NOW(), NOW(), $14, $15, $16)
 		ON CONFLICT (tenant_id, id) DO UPDATE SET
 			title = EXCLUDED.title,
 			status = EXCLUDED.status,
@@ -111,6 +113,7 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 			scope = EXCLUDED.scope,
 			owner = EXCLUDED.owner,
 			confidence = EXCLUDED.confidence,
+			parent_id = EXCLUDED.parent_id,
 			merkle_hash = EXCLUDED.merkle_hash,
 			parent_merkle_hash = EXCLUDED.parent_merkle_hash,
 			merkle_proof = EXCLUDED.merkle_proof,
@@ -124,6 +127,7 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 	_, err = tx.Exec(ctx, insertQuery,
 		d.TenantID, d.ID, d.Title, d.Status.String(),
 		d.ScopeDomain, d.ScopeSystem, scopeJSON, d.Owner, d.Confidence,
+		d.ParentID,
 		d.MerkleHash, d.ParentMerkleHash, proofJSON,
 		d.ApprovedAt, d.ValidFrom, d.ValidTo,
 	)
@@ -138,11 +142,13 @@ func (s *PostgresStore) SaveDecision(ctx context.Context, d *types.Decision) err
 	return nil
 }
 
-// GetDecision retrieves a decision by tenant and ID including Merkle hashes and temporal fields.
+// GetDecision retrieves a decision by tenant and ID including Merkle
+// hashes, the parent link, and temporal fields.
 func (s *PostgresStore) GetDecision(ctx context.Context, tenantID, decisionID uuid.UUID) (*types.Decision, error) {
 	query := `
 		SELECT id, tenant_id, title, status, scope_domain, scope_system, owner,
-		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''), 
+		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''),
+		       parent_id,
 		       approved_at, valid_from, valid_to, created_at, updated_at
 		FROM decisions
 		WHERE tenant_id = $1 AND id = $2;
@@ -151,7 +157,8 @@ func (s *PostgresStore) GetDecision(ctx context.Context, tenantID, decisionID uu
 	var d types.Decision
 	err := s.pool.QueryRow(ctx, query, tenantID, decisionID).Scan(
 		&d.ID, &d.TenantID, &d.Title, &d.Status, &d.ScopeDomain, &d.ScopeSystem, &d.Owner,
-		&d.MerkleHash, &d.ParentMerkleHash, &d.ApprovedAt, &d.ValidFrom, &d.ValidTo,
+		&d.MerkleHash, &d.ParentMerkleHash, &d.ParentID,
+		&d.ApprovedAt, &d.ValidFrom, &d.ValidTo,
 		&d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
@@ -168,11 +175,13 @@ func (s *PostgresStore) GetDecisionRevisions(ctx context.Context, tenantID, deci
 	return []types.DecisionRevision{}, nil
 }
 
-// GetDecisionsByScope fetches decisions with optional domain/system filters including temporal fields.
+// GetDecisionsByScope fetches decisions with optional domain/system
+// filters, including the parent link and temporal fields.
 func (s *PostgresStore) GetDecisionsByScope(ctx context.Context, tenantID uuid.UUID, domain, system string) ([]*types.Decision, error) {
 	query := `
 		SELECT id, tenant_id, title, status, scope_domain, scope_system, owner,
-		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''), 
+		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''),
+		       parent_id,
 		       approved_at, valid_from, valid_to, created_at, updated_at
 		FROM decisions
 		WHERE tenant_id = $1
@@ -202,7 +211,8 @@ func (s *PostgresStore) GetDecisionsByScope(ctx context.Context, tenantID uuid.U
 		var d types.Decision
 		if err := rows.Scan(
 			&d.ID, &d.TenantID, &d.Title, &d.Status, &d.ScopeDomain, &d.ScopeSystem, &d.Owner,
-			&d.MerkleHash, &d.ParentMerkleHash, &d.ApprovedAt, &d.ValidFrom, &d.ValidTo,
+			&d.MerkleHash, &d.ParentMerkleHash, &d.ParentID,
+			&d.ApprovedAt, &d.ValidFrom, &d.ValidTo,
 			&d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan decision row: %w", err)
@@ -213,11 +223,13 @@ func (s *PostgresStore) GetDecisionsByScope(ctx context.Context, tenantID uuid.U
 	return decisions, nil
 }
 
-// ListDecisionsByParent fetches decisions that have a specific parent including temporal fields.
+// ListDecisionsByParent fetches decisions that have a specific parent,
+// including the parent link and temporal fields.
 func (s *PostgresStore) ListDecisionsByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*types.Decision, error) {
 	query := `
 		SELECT id, tenant_id, title, status, scope_domain, scope_system, owner,
-		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''), 
+		       COALESCE(merkle_hash, ''), COALESCE(parent_merkle_hash, ''),
+		       parent_id,
 		       approved_at, valid_from, valid_to, created_at, updated_at
 		FROM decisions
 		WHERE tenant_id = $1 AND parent_id = $2
@@ -234,7 +246,8 @@ func (s *PostgresStore) ListDecisionsByParent(ctx context.Context, tenantID, par
 		var d types.Decision
 		if err := rows.Scan(
 			&d.ID, &d.TenantID, &d.Title, &d.Status, &d.ScopeDomain, &d.ScopeSystem, &d.Owner,
-			&d.MerkleHash, &d.ParentMerkleHash, &d.ApprovedAt, &d.ValidFrom, &d.ValidTo,
+			&d.MerkleHash, &d.ParentMerkleHash, &d.ParentID,
+			&d.ApprovedAt, &d.ValidFrom, &d.ValidTo,
 			&d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan decision row: %w", err)
@@ -243,6 +256,50 @@ func (s *PostgresStore) ListDecisionsByParent(ctx context.Context, tenantID, par
 		results = append(results, &d)
 	}
 	return results, nil
+}
+
+// GetDecisionAncestors walks the parent_id chain upward from a decision
+// to its root. The returned slice is ordered from the decision itself
+// (index 0) to the root (last index). A decision with no parent returns
+// a single-element slice containing itself.
+//
+// Guards against cycles: if a decision ID appears twice, the walk stops
+// and returns what it has. This can only happen if the data is corrupt,
+// but a corrupt chain must not hang a dashboard request.
+//
+// This function is correct as written, but it depends on GetDecision
+// populating ParentID. Before commit b2e0d1e, GetDecision did not
+// select the parent_id column and ParentID was always nil, so the walk
+// returned a single element on every call.
+func (s *PostgresStore) GetDecisionAncestors(ctx context.Context, tenantID, decisionID uuid.UUID) ([]*types.Decision, error) {
+	const maxDepth = 32
+
+	var chain []*types.Decision
+	seen := make(map[uuid.UUID]bool, maxDepth)
+	current := decisionID
+
+	for depth := 0; depth < maxDepth; depth++ {
+		if seen[current] {
+			break
+		}
+		seen[current] = true
+
+		d, err := s.GetDecision(ctx, tenantID, current)
+		if err != nil {
+			if depth == 0 {
+				return nil, err
+			}
+			break
+		}
+		chain = append(chain, d)
+
+		if d.ParentID == nil || *d.ParentID == uuid.Nil {
+			break
+		}
+		current = *d.ParentID
+	}
+
+	return chain, nil
 }
 
 // parseStatus converts a database string to DecisionStatus.
