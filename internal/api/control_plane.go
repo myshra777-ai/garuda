@@ -188,6 +188,9 @@ func (s *Server) HandleControlPlane(w http.ResponseWriter, r *http.Request) {
 	if tab == "business" {
 		data["Business"] = s.loadBusinessMetrics(r.Context(), r.URL.Query().Get("range"))
 	}
+	if tab == "tenants" {
+		data["Tenants"] = s.loadTenantsMetrics(r.Context())
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -316,7 +319,10 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
 .data-table th { color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
 .data-table tr:last-child td { border-bottom:0; }
 .empty-state { padding:40px 20px; text-align:center; color:var(--muted); font-size:13px; }
-.error-banner { padding:16px 20px; background:rgba(244,63,94,0.1); border:1px solid rgba(244,63,94,0.3); border-radius:10px; color:var(--text); font-size:13px; margin-bottom:20px; }
+.health { font-size:16px; line-height:1; }
+.health-green { color:#22c55e; }
+.health-amber { color:#f59e0b; }
+.health-red   { color:#ef4444; }
 </style>
 </head>
 <body>
@@ -414,11 +420,50 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
       </div>
       {{end}}
     {{else if eq .Tab "tenants"}}
-      <div class="placeholder">
-        <h1>Tenants</h1>
-        <p>Per-customer drilldown and health.</p>
-        <p style="margin-top:16px;font-size:12px;">Lands after Business.</p>
+      {{with .Tenants}}
+      {{if .Error}}
+        <div class="error-banner">{{.Error}}</div>
+      {{end}}
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Tenants</div>
+          <div class="panel-subtitle">{{.Total}} tenant{{if ne .Total 1}}s{{end}}. Red first — tenants needing attention at the top. Data reads from the read-only Control Plane pool.</div>
+        </div>
+        {{if .Rows}}
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:24px;"></th>
+                <th>Tenant</th>
+                <th style="text-align:right;">Workspaces</th>
+                <th style="text-align:right;">Users</th>
+                <th style="text-align:right;">Entities</th>
+                <th style="text-align:right;">Sessions (7d)</th>
+                <th style="text-align:right;">Policies</th>
+                <th>Last activity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Rows}}
+                <tr>
+                  <td><span class="health health-{{.Health}}" title="{{.HealthReason}}">●</span></td>
+                  <td>{{.Name}}</td>
+                  <td style="text-align:right;">{{.Workspaces}}</td>
+                  <td style="text-align:right;">{{.Users}}</td>
+                  <td style="text-align:right;">{{.Entities}}</td>
+                  <td style="text-align:right;">{{.Sessions7d}}</td>
+                  <td style="text-align:right;">{{.Policies}}</td>
+                  <td>{{.LastActivity}}</td>
+                </tr>
+              {{end}}
+            </tbody>
+          </table>
+        {{else if not .Error}}
+          <div class="empty-state">No tenants yet.</div>
+        {{end}}
       </div>
+      {{end}}
     {{else if eq .Tab "operations"}}
       <div class="placeholder">
         <h1>Operations</h1>
