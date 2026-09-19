@@ -2,9 +2,9 @@
 
 **Installation · Setup · Everyday Workflows · Agent Integration · Reference**
 
-This playbook is a practical guide to running Garuda against a real codebase. It assumes you have read the README and want the exact commands, expected outputs, and operating workflows for the current release.
+This playbook is the operational guide for running Garuda against a real codebase. It assumes you have read [`README.md`](README.md) and want exact commands, expected behavior, integration examples, and troubleshooting guidance for the current release.
 
-> **Release contract:** Commands and behaviors documented here describe the current release. If an observed behavior differs, file an issue with the command, environment, release commit, and output.
+> **Release contract:** Commands and behaviors documented here describe the current release. If observed behavior differs, record the command, environment, release commit, database configuration, and output before filing an issue.
 
 ---
 
@@ -16,29 +16,35 @@ This playbook is a practical guide to running Garuda against a real codebase. It
 4. [Installation](#installation)
 5. [Your First Workspace](#your-first-workspace)
 6. [Analyzing Code](#analyzing-code)
-7. [Connecting an AI Agent](#connecting-an-ai-agent)
-8. [Working with Policies](#working-with-policies)
-9. [Ingesting Documentation](#ingesting-documentation)
-10. [Verifying What You Built](#verifying-what-you-built)
-11. [MCP Server Reference](#mcp-server-reference)
-12. [Running in CI](#running-in-ci)
-13. [Troubleshooting](#troubleshooting)
-14. [Command Reference](#command-reference)
+7. [Connecting AI Clients](#connecting-ai-clients)
+8. [Workspace Console and IDE](#workspace-console-and-ide)
+9. [Working with Policies](#working-with-policies)
+10. [Ingesting Documentation](#ingesting-documentation)
+11. [Runtime Evidence and Contradictions](#runtime-evidence-and-contradictions)
+12. [Verifying What You Built](#verifying-what-you-built)
+13. [MCP Server Reference](#mcp-server-reference)
+14. [Multi-Agent Coordination](#multi-agent-coordination)
+15. [Running in CI](#running-in-ci)
+16. [Troubleshooting](#troubleshooting)
+17. [Command Reference](#command-reference)
+18. [Evidence and Specifications](#evidence-and-specifications)
 
 ---
 
 ## What Garuda Is For
 
-Garuda builds a verified semantic model of software and makes that model available to developers and AI agents. The model is stored in PostgreSQL and is derived from compiler-backed type information where supported, rather than from text-pattern matching.
+Garuda is a verified state and governance plane for AI-assisted software development. It builds a shared semantic model of code, relationships, documentation claims, runtime observations, policies, evidence, and decisions, then exposes that model through CLI, HTTP, MCP, dashboards, CI, and VS Code.
 
 Garuda is primarily used to:
 
-- Give AI agents grounded answers about what actually exists in a codebase.
-- Evaluate proposed or existing code against organizational policies.
-- Connect normative documentation to implementation evidence.
-- Record governance decisions in a cryptographically verifiable Merkle ledger.
-- Analyze dependency neighborhoods, callers, implementers, and change impact.
-- Coordinate multi-agent work through transactional handoffs and checkpoints.
+- Give AI agents grounded answers about what exists and how software is connected.
+- Evaluate implementation state against organizational policies.
+- Connect normative documentation to code and runtime evidence.
+- Surface `SUPPORTED`, `UNVERIFIED`, and `CONTRADICTED` states.
+- Record committed governance decisions in a cryptographically verifiable Merkle ledger.
+- Analyze callers, implementers, dependencies, neighborhoods, and graph-visible impact.
+- Coordinate multi-agent task handoffs through checkpoints and transactional resume operations.
+- Display policy violations, contradictions, unverified claims, graph relationships, and evidence in the Workspace Console and IDE integration.
 
 ### Operating model
 
@@ -47,10 +53,14 @@ Repositories ──analyze──▶ Semantic Graph ──query──▶ Develope
        │                         │
        └── docs ingest ──▶ Claims ──verify──▶ Drift and contradictions
                                   │
-Policies ──evaluate──▶ Decisions ──anchor──▶ Merkle Ledger ──verify──▶ Evidence
+Runtime observations ──correlate─▶ Evidence and verification states
+                                  │
+Policies ──evaluate──▶ Decisions ──anchor──▶ Merkle Ledger ──verify──▶ Proof
 ```
 
-Everything is local by default. No data leaves the machine unless you configure an external service or integration.
+Everything is local by default. No data leaves the machine unless you configure an external service, telemetry source, or integration.
+
+Garuda is not an agent framework or coding agent. It is the shared semantic, evidence, and governance layer underneath those tools.
 
 ---
 
@@ -58,48 +68,56 @@ Everything is local by default. No data leaves the machine unless you configure 
 
 | Layer | Responsibility | Primary interface |
 |---|---|---|
-| Repository analysis | Extract entities, relationships, and evidence | `garuda analyze` |
-| PostgreSQL model | Persist workspace, repository, graph, claim, and governance data | `DATABASE_URL` |
+| Repository analysis | Extract entities, relationships, and source evidence | `garuda analyze` |
+| PostgreSQL model | Persist tenant, workspace, repository, graph, claims, runtime, and governance state | `DATABASE_URL` |
 | Documentation claims | Extract normative requirements from supported documents | `garuda docs ingest` |
 | Verification | Correlate claims with code and runtime evidence | `garuda docs verify` |
-| Policy engine | Evaluate organizational rules and produce decisions | `garuda policy evaluate` |
-| Trust layer | Anchor persisted decisions in a Merkle ledger | `garuda status`, `garuda policy verify` |
+| Runtime evidence | Ingest observations and identify supported or contradictory behavior | Runtime API and telemetry paths |
+| Policy engine | Evaluate rules and produce `ALLOW`, `WARN`, `REVIEW`, or `BLOCK` | `garuda policy evaluate` |
+| Trust layer | Anchor committed evaluations and decisions in a Merkle ledger | `garuda status`, `garuda verify`, `garuda policy verify` |
 | AI integration | Expose graph and governance tools over MCP | `garuda-mcp` |
-| Agent coordination | Create and consume transactional handoffs | `garuda.handoff`, `garuda.resume` |
+| Agent coordination | Transfer tasks and consume checkpoints transactionally | `garuda.handoff`, `garuda.resume` |
+| Workspace Console | Present workspace, agent, governance, decision, and graph views | `garuda dev` |
+| IDE integration | Present ledger, contradictions, diagnostics, graph, and hover impact | `vscode-extension/` |
 
 ---
 
 ## Before You Start
 
-You need:
+### Requirements
 
 | Requirement | Minimum or supported option |
 |---|---|
 | PostgreSQL | Version 14 or later |
 | Go | Version 1.26 or later |
-| Codebase | A Go module for compiler-backed analysis; Python and TypeScript are also supported |
-| Shell | Bash, Zsh, or an equivalent shell |
-| Editor | Any text editor |
+| Codebase | Go for compiler-backed analysis; Python and TypeScript are also supported structurally |
+| Shell | Bash, Zsh, or equivalent |
+| Node.js/npm | Required to compile the VS Code extension |
+| C compiler | Required for TypeScript analyzer support |
+| Editor | Any text editor; VS Code for the extension workflow |
 
 You do not need:
 
-- A cloud account.
-- An API key.
-- A license.
+- A cloud account for local operation.
+- An external API key for the core local workflow.
+- A license for the open-source local workflow.
 
 ### Analyzer support
 
-| Language | Detection | Analysis mode |
-|---|---|---|
-| Go | `go.mod` | Compiler-backed and validated |
-| Python | `pyproject.toml` or `setup.py` | Structural |
-| TypeScript | `tsconfig.json` or `package.json` | Structural; requires CGO and a C compiler |
+| Language | Detection | Analysis mode | Maturity |
+|---|---|---|---|
+| Go | `go.mod` | Compiler-backed and validated | Production within supported scope |
+| Python | `pyproject.toml` or `setup.py` | Structural | Beta |
+| TypeScript | `tsconfig.json` or `package.json` | Structural; requires CGO and a C compiler | Beta |
+| Rust | — | Planned | Upcoming |
+| Java | — | Planned | Upcoming |
+| Elixir | — | Planned | Upcoming |
 
 ---
 
 ## Installation
 
-### Build from source
+### Build Garuda from source
 
 ```bash
 git clone https://github.com/myshra777-ai/garuda.git
@@ -109,13 +127,15 @@ go build -o bin/garuda ./cmd/garuda
 go build -o bin/garuda-mcp ./cmd/garuda-mcp
 ```
 
-For TypeScript analysis, enable CGO and ensure a C compiler is available:
+For TypeScript analysis:
 
 ```bash
 export CGO_ENABLED=1
 ```
 
-Rebuild `bin/garuda-mcp` whenever you pull changes to `cmd/garuda-mcp/` or `internal/policy/`. MCP clients spawn the binary independently and will not detect a stale build until they are restarted.
+Ensure a C compiler is available on `PATH`.
+
+Rebuild `bin/garuda-mcp` whenever changes affect `cmd/garuda-mcp/`, MCP tool definitions, or governance code used by the server. MCP clients spawn the binary independently and will not detect a stale build until restarted.
 
 ### Start PostgreSQL with Docker
 
@@ -135,7 +155,7 @@ Export the connection string in every shell that uses Garuda:
 export DATABASE_URL="postgres://garuda:garuda@localhost:5432/garuda?sslmode=disable"
 ```
 
-Persist it in `~/.bashrc`, `~/.zshrc`, or your shell's equivalent if appropriate.
+The URL must match the database container you started. If multiple PostgreSQL containers exist, Garuda uses whichever database is specified by the exported `DATABASE_URL`.
 
 ### Apply migrations
 
@@ -145,7 +165,18 @@ for f in migrations/[0-9]*.sql; do
 done
 ```
 
-Migrations are idempotent. Running them again is safe. When upgrading from an older release, run every migration in order so that the migration files can apply the required upgrade logic.
+Migrations are intended to be idempotent. When upgrading, apply them in release order. If the migration directory contains duplicate numeric prefixes, inspect the filenames and verify ordering before applying them automatically.
+
+### Compile the VS Code extension
+
+```bash
+cd vscode-extension
+npm install
+npm run compile
+cd ..
+```
+
+The extension entry point is `vscode-extension/out/extension.js`.
 
 ### Verify the installation
 
@@ -154,22 +185,22 @@ Migrations are idempotent. Running them again is safe. When upgrading from an ol
 ./bin/garuda status
 ```
 
-`garuda status` reports database reachability, Merkle block height, root hash, and verification state distribution.
+`garuda status` reports database reachability, Merkle block height, root hash, verification distribution, and daemon state.
 
 ---
 
 ## Your First Workspace
 
-A workspace is a logical group of repositories. Use one workspace per product, domain, or team.
+A workspace is a logical group of repositories and semantic state. Use one workspace per product, domain, or team.
 
-### Create a workspace
+### Create and select a workspace
 
 ```bash
 export GARUDA_WORKSPACE=my-first-workspace
 ./bin/garuda workspace create my-first-workspace
 ```
 
-Set `GARUDA_WORKSPACE` explicitly. Without it, many commands fall back to the most recently updated workspace, which can produce confusing results.
+Set `GARUDA_WORKSPACE` explicitly in every shell and MCP client configuration. Without an explicit workspace, commands may resolve the most recently updated workspace within the applicable scope.
 
 ### Confirm the workspace
 
@@ -177,7 +208,14 @@ Set `GARUDA_WORKSPACE` explicitly. Without it, many commands fall back to the mo
 ./bin/garuda workspace list
 ```
 
-The output includes the workspace name and UUID. Other tools, dashboards, and CI runners use this identity to resolve the workspace.
+The output includes workspace names and UUIDs. Dashboards, MCP clients, CI runners, and APIs use this identity to resolve the active workspace.
+
+### Inspect workspace state
+
+```bash
+./bin/garuda summary
+./bin/garuda status
+```
 
 ---
 
@@ -189,7 +227,7 @@ The output includes the workspace name and UUID. Other tools, dashboards, and CI
 ./bin/garuda analyze /path/to/repo --save
 ```
 
-`--save` persists entities, relationships, and evidence. Without it, Garuda analyzes the repository without making the result visible to other clients.
+`--save` persists entities, relationships, and evidence. Without it, Garuda analyzes the repository without making the result available to other clients.
 
 Language detection is automatic:
 
@@ -201,7 +239,7 @@ Language detection is automatic:
 
 ### Analyze multiple repositories
 
-Run the command once for each repository in the same workspace:
+Run the command once per repository in the same workspace:
 
 ```bash
 ./bin/garuda analyze ~/code/service-a --save
@@ -209,16 +247,17 @@ Run the command once for each repository in the same workspace:
 ./bin/garuda analyze ~/code/shared-lib --save
 ```
 
-Cross-repository edges are computed during subsequent analyses when an import path resolves to an entity in another repository.
+Supported cross-repository edges are computed when import paths resolve to entities in other repositories.
 
-### Analyzer output
+### What analysis produces
 
 | Output | Description |
 |---|---|
-| Entities | Structs, interfaces, functions, methods, fields, and packages |
-| Relationships | Calls, imports, implements, embeds, and references |
-| Evidence | Source file and line supporting each relationship |
-| Relationship types | Distinguishes calls from imports, embeds, references, and other edges |
+| Entities | Structs, interfaces, functions, methods, fields, packages, and supported external entities |
+| Relationships | Calls, imports, implements, embeds, inherits, references, and cross-repository bridges |
+| Evidence | Source file, line span, and derivation context supporting a relationship |
+| Identity | Stable semantic identity for query and persistence across analyses |
+| Maturity | Compiler-backed, structural, or heuristic resolution tier |
 
 ### Check persisted results
 
@@ -226,13 +265,21 @@ Cross-repository edges are computed during subsequent analyses when an import pa
 ./bin/garuda summary
 ```
 
-The summary reports repository, entity, and relationship counts. Counts should be non-zero for a successfully analyzed codebase and should increase when additional repositories are saved.
+The summary reports repository, package, entity, and relationship counts. A successful saved analysis should produce non-zero counts for a non-empty codebase.
+
+### View impact
+
+```bash
+./bin/garuda impact <entity-name>
+```
+
+The CLI reports graph-visible callers and transitive impact. Results describe the evidence present in the graph; they are not a guarantee that every dynamic runtime dependency has been discovered.
 
 ---
 
-## Connecting an AI Agent
+## Connecting AI Clients
 
-Garuda exposes its semantic graph and governance functions through an MCP server using line-delimited JSON-RPC 2.0 over standard input and output.
+Garuda exposes its semantic graph, governance functions, evidence queries, and multi-agent coordination through MCP using line-delimited JSON-RPC 2.0 over stdio.
 
 ### 1. Check the MCP binary
 
@@ -240,11 +287,11 @@ Garuda exposes its semantic graph and governance functions through an MCP server
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | ./bin/garuda-mcp
 ```
 
-The response should contain `protocolVersion: "2025-06-18"` and a `serverInfo` block. A `DATABASE_URL` error means the variable is not available in the current shell.
+The response should contain protocol version `2025-06-18` and a `serverInfo` block.
 
 ### 2. Configure Cursor
 
-Add the following to Cursor's MCP configuration. Replace the binary path with an absolute path:
+Add Garuda to Cursor's MCP configuration with an absolute binary path:
 
 ```json
 {
@@ -260,11 +307,11 @@ Add the following to Cursor's MCP configuration. Replace the binary path with an
 }
 ```
 
-Cursor does not expand `~` and does not rely on your interactive shell's `PATH`.
+Cursor does not expand `~` and does not depend on your interactive shell's `PATH`.
 
 ### 3. Configure Claude Desktop
 
-Use the same JSON structure in the platform-specific configuration file:
+Use the same JSON structure in the platform-specific file:
 
 | Platform | Configuration path |
 |---|---|
@@ -272,40 +319,112 @@ Use the same JSON structure in the platform-specific configuration file:
 | Linux | `~/.config/Claude/claude_desktop_config.json` |
 | Windows | `%APPDATA%\\Claude\\claude_desktop_config.json` |
 
-Restart Claude Desktop after editing the file.
+Restart Claude Desktop after editing the configuration.
 
-### 4. Verify the connection
+### 4. Configure Codex CLI
+
+```bash
+codex mcp add garuda \
+  --env DATABASE_URL="postgres://garuda:garuda@localhost:5432/garuda?sslmode=disable" \
+  --env GARUDA_WORKSPACE="my-first-workspace" \
+  -- /absolute/path/to/bin/garuda-mcp
+```
+
+### 5. Verify the reference client
 
 ```bash
 WORKSPACE=my-first-workspace python3 scripts/mcp_verify.py
 ```
 
-Expected result:
+Current reference-verifier result:
 
 ```text
-═══ 36/36 checks passed ═══
+═══ 38/38 checks passed ═══
 ```
 
-The most common causes of failure are an incorrect binary path, a stale `DATABASE_URL`, a workspace mismatch, or a stale MCP binary.
+The verifier exercises tool discovery, positive and negative paths, structured errors, protocol notifications, and clean shutdown behavior.
 
-### 5. Supported clients
+### 6. Verified client matrix
 
-| Client | Configuration method |
+| Client | What was validated |
 |---|---|
-| Codex CLI | `codex mcp add garuda --env ... -- /path/to/garuda-mcp` |
-| Claude Desktop | Platform-specific JSON configuration |
-| Cursor | MCP settings panel or `.cursor/mcp.json` |
-| Other MCP clients | Must support line-delimited JSON-RPC 2.0 over stdio |
+| Cursor | MCP integration in the developer IDE |
+| Claude Desktop | MCP integration in a desktop client with strict response handling |
+| Codex CLI | MCP integration in an independent CLI client |
+| Reference verifier | Dependency-free protocol and negative-path contract checks |
 
-### 6. Use the agent integration
+### 7. Use the agent integration
 
 Example prompt:
 
 ```text
-What calls HandleCharge in the payments service?
+What calls HandleCharge in the payments service, and what policy constraints apply?
 ```
 
-A connected agent should use `garuda.neighbors` or `garuda.find_entity` and return specific entities, packages, and relationships grounded in the semantic graph.
+A connected agent should query Garuda and return specific entities, packages, relationships, claims, and policy context rather than relying only on local file context.
+
+---
+
+## Workspace Console and IDE
+
+### Workspace Console
+
+Start the service:
+
+```bash
+./bin/garuda dev
+```
+
+Open:
+
+```text
+http://localhost:8080
+```
+
+The tenant-facing Workspace Console provides:
+
+| Surface | What it shows |
+|---|---|
+| Workspace | Repository, package, entity, and relationship counts; language composition; architectural hubs; recent evidence; workspace health |
+| Agents | MCP surface, active and recent sessions, tool-call activity, and agent coordination state |
+| Governance | Policy enforcement, documentation claims, drift, contradictions, verification states, and Merkle trust |
+| Decisions | Decision history, evidence, ancestors, descendants, revision chains, and anchor status |
+| Graph | Interactive topology, communities, repositories, packages, relationships, and exploration controls |
+
+The Console can display policy violations, contradictions, unverified claims, graph relationships, runtime evidence, governance attention items, and impact-related information within the selected workspace.
+
+### VS Code extension
+
+From the repository root:
+
+```bash
+cd vscode-extension
+npm install
+npm run compile
+```
+
+Open the repository in VS Code and use the Garuda Architecture Shield commands and views.
+
+| Extension capability | Description |
+|---|---|
+| Cryptographic Ledger | View ledger and verification state |
+| Quarantined Contradictions | Inspect contradiction diagnostics |
+| Problems-panel diagnostics | Surface analyzer-backed violations and runtime contradictions |
+| Graph visualizer | Open the architecture graph |
+| Workspace reanalysis | Re-index the workspace AST |
+| State refresh | Refresh ledger and verification state |
+| Go symbol hover | Display blast-radius and dependency information when enabled |
+
+Configure these settings when required:
+
+| Setting | Purpose |
+|---|---|
+| `garuda.executablePath` | Path to the Garuda CLI binary |
+| `garuda.databaseUrl` | PostgreSQL connection string |
+| `garuda.daemonUrl` | Unified daemon HTTP API URL |
+| `garuda.enableHoverBlastRadius` | Enable blast-radius and dependency information on Go symbol hover |
+
+The extension is tested for editor-integrated diagnostics and exploration. Its update behavior depends on configured daemon/database connectivity and refresh or reanalysis events. Do not interpret “real-time” as a guarantee that every file mutation is continuously analyzed without an analysis event.
 
 ---
 
@@ -344,21 +463,21 @@ The `when` block contains predicates. A policy fires when all predicates in the 
 | Predicate | Purpose |
 |---|---|
 | `entity_exists` | Tests whether matching entities exist in the workspace |
-| `claim_exists` | Tests whether matching relationships exist in the workspace |
+| `claim_exists` | Tests whether matching relationships or claims exist |
 | `contradiction_exists` | Tests whether a `CONTRADICTED` verification exists |
-| `verification_missing` | Tests whether an entity lacks runtime verification |
+| `verification_missing` | Tests whether an entity lacks required runtime verification |
 | `language_matches` | Tests whether the scope contains entities of a given language |
 
 ### Decision levels
 
 | Decision | Meaning |
 |---|---|
-| `ALLOW` | The change or state is permitted |
-| `WARN` | The condition is reported but does not necessarily block |
-| `REVIEW` | Human or governance review is required |
-| `BLOCK` | The condition must prevent the operation or merge |
+| `ALLOW` | No blocking condition was found |
+| `WARN` | A non-blocking condition is reported |
+| `REVIEW` | Human or specialist review is required |
+| `BLOCK` | The policy result should prevent the governed action or merge |
 
-### Validate, evaluate, and anchor
+### Validate, preview, reconcile, and anchor
 
 Validate syntax without evaluating against the database:
 
@@ -372,13 +491,17 @@ Preview policy decisions without persistence:
 ./bin/garuda policy evaluate ./policies
 ```
 
-Persist the evaluation and anchor it in the Merkle ledger:
+Persist and anchor the evaluation:
 
 ```bash
 ./bin/garuda policy evaluate ./policies --save
 ```
 
-Preview mode leaves no trace. `--save` creates an auditable evaluation at a specific point in time. The CLI refuses `--reconcile` without `--save` because reconciliation retires policy rows that are no longer represented on disk.
+Preview mode leaves no trace. `--save` persists the evaluation and anchors it in the Merkle ledger. `--reconcile` retires active policy rows whose YAML file is absent and requires `--save`:
+
+```bash
+./bin/garuda policy evaluate ./policies --save --reconcile
+```
 
 ### Inspect and verify an evaluation
 
@@ -387,7 +510,7 @@ Preview mode leaves no trace. `--save` creates an auditable evaluation at a spec
 ./bin/garuda policy verify <evaluation-id>
 ```
 
-`policy show` displays the fired policy, matching entities and claims, matched predicates, and Merkle block height. `policy verify` re-derives the inclusion proof against the current epoch root and reports any failure.
+`policy show` displays the policy, evidence, matching entities and claims, predicates, decision, and Merkle block height. `policy verify` re-derives and checks the inclusion proof.
 
 ---
 
@@ -402,7 +525,7 @@ A line is eligible for extraction only when both conditions are true:
 1. It contains a modal term such as `MUST`, `SHOULD`, `MUST NOT`, or `SHALL`.
 2. It appears under a heading suggesting normative content, such as `Decision`, `Requirement`, `Constraint`, `Policy`, or `Specification`.
 
-Prose, tables, and code blocks are intentionally excluded to reduce false positives. See `docs/DOCUMENT_FORMATS.md` for the complete format contract.
+Prose, tables, and code blocks are intentionally excluded to reduce false positives. See [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) for the complete format contract.
 
 ### Ingest a directory
 
@@ -425,7 +548,7 @@ documents:
   - path: /absolute/path/to/adr
 ```
 
-Synchronize all configured sources:
+Synchronize configured sources:
 
 ```bash
 ./bin/garuda docs sync
@@ -439,11 +562,51 @@ Synchronize all configured sources:
 
 | Verification result | Meaning |
 |---|---|
-| `SUPPORTED` | The claim matches a semantic entity or relationship |
-| `UNVERIFIED` | No matching implementation evidence was found |
-| `CONTRADICTED` | Runtime behavior conflicts with the claim |
+| `SUPPORTED` | The claim matches available semantic or runtime evidence |
+| `UNVERIFIED` | Sufficient matching evidence was not found |
+| `CONTRADICTED` | Available runtime or semantic evidence conflicts with the claim |
 
-Currently, only `CALLS` predicates are verified against the graph. Other predicates remain `UNVERIFIED` by design.
+An unverified claim is not automatically false. It means the current evidence is insufficient.
+
+---
+
+## Runtime Evidence and Contradictions
+
+Garuda can ingest runtime observations and correlate them with semantic entities.
+
+### Runtime workflow
+
+```text
+Telemetry or runtime source
+          ↓
+Runtime observation ingestion
+          ↓
+Entity and operation correlation
+          ↓
+Evidence or contradiction record
+          ↓
+Policy evaluation
+          ↓
+ALLOW / WARN / REVIEW / BLOCK
+```
+
+### What runtime evidence can support
+
+- Runtime observation records.
+- Trace and span association.
+- Entity and operation correlation.
+- Supported or contradicted verification state.
+- `verification_missing` policy evaluation.
+- Dashboard attention items.
+- IDE contradiction diagnostics where configured.
+
+### Current boundary
+
+The runtime path is implemented and exercised with controlled and synthetic evidence. Larger-scale autonomous correlation, dead-code detection, and unused-import detection are next-arc capabilities.
+
+### Review workflow
+
+When an exported handler lacks runtime evidence, a policy can produce `REVIEW` rather than incorrectly declaring the handler broken. The review record can show the matched entities, predicate, reason, decision, and Merkle block or anchor status.
 
 ---
 
@@ -455,7 +618,7 @@ Currently, only `CALLS` predicates are verified against the graph. Other predica
 ./bin/garuda status
 ```
 
-Reports the Merkle block height, root hash, verification distribution, and daemon status.
+Reports database reachability, Merkle block height, root hash, verification distribution, and daemon status.
 
 ### Inspect an entity
 
@@ -463,7 +626,7 @@ Reports the Merkle block height, root hash, verification distribution, and daemo
 ./bin/garuda inspect <entity-name>
 ```
 
-Displays the entity's package, kind, incoming relationships, outgoing relationships, and matching documentation claims.
+Displays package, kind, incoming relationships, outgoing relationships, and matching documentation claims.
 
 ### Analyze change impact
 
@@ -471,57 +634,72 @@ Displays the entity's package, kind, incoming relationships, outgoing relationsh
 ./bin/garuda impact <entity-name>
 ```
 
-Reports callers transitively and provides the full graph-visible blast radius. Results reflect the edges present in the semantic graph; sparse leaf call edges are a property of the analyzed code, not an assumption that every function has many callers.
+Reports graph-visible callers and transitive impact. Sparse leaf call edges are a property of the analyzed code; the command reports what the graph contains.
 
 ### Compare snapshots
 
 ```bash
-garuda analyze . --save -o before.json
-garuda analyze . --save -o after.json
-./bin/garuda diff before.json after.json
+./bin/garuda analyze . --save -o /tmp/before.json
+./bin/garuda analyze . --save -o /tmp/after.json
+./bin/garuda diff /tmp/before.json /tmp/after.json
 ```
 
 The semantic diff reports added, removed, or changed entities and relationships. Both snapshots must be produced by `garuda analyze`.
+
+### Verify ledger integrity
+
+```bash
+./bin/garuda verify
+```
+
+Use this to verify the ledger and decision-chain integrity exposed by the CLI.
 
 ---
 
 ## MCP Server Reference
 
-The MCP server exposes twenty-one tools over line-delimited JSON-RPC 2.0 over stdio.
+The MCP server exposes 21 tools over line-delimited JSON-RPC 2.0 over stdio.
 
 ### Tool catalog
 
 | Group | Tool | Description | Access |
 |---|---|---|---|
-| Session / overview | `garuda.briefing` | Reports workspace state, trust anchor, scale, hubs, policies, contradictions, and changes since the previous briefing | Read-only |
+| Session / overview | `garuda.briefing` | Workspace state, trust anchor, scale, hubs, policies, contradictions, and recent changes | Read-only |
 | Code graph | `garuda.entities` | Lists semantic entities, filterable by package and kind | Read-only |
 | Code graph | `garuda.find_entity` | Finds entities by name pattern, kind, package, or file path | Read-only |
-| Code graph | `garuda.inspect` | Inspects one entity and its incoming and outgoing relationships | Read-only |
-| Code graph | `garuda.neighbors` | Lists all entities connected to a subject in one hop, in both directions | Read-only |
-| Code graph | `garuda.subclasses` | Lists entities that inherit from or embed the subject | Read-only |
-| Code graph | `garuda.implementers` | Lists entities that implement the subject interface | Read-only |
-| Code graph | `garuda.blast_radius` | Computes the transitive impact of changing a subject | Read-only |
-| Code graph | `garuda.query_claims` | Queries documentation claims matching a subject | Read-only |
+| Code graph | `garuda.inspect` | Inspects one entity and incoming/outgoing relationships | Read-only |
+| Code graph | `garuda.neighbors` | Lists one-hop inbound and outbound connections | Read-only |
+| Code graph | `garuda.subclasses` | Finds inheritance or embedding relationships | Read-only |
+| Code graph | `garuda.implementers` | Finds interface implementers | Read-only |
+| Code graph | `garuda.blast_radius` | Computes graph-visible impact of changing a symbol | Read-only |
+| Code graph | `garuda.query_claims` | Queries documentation claims related to a subject | Read-only |
 | Code graph | `garuda.query` | Queries the knowledge graph using natural language | Read-only |
 | Governance | `garuda.policy.list` | Lists policies registered for the tenant | Read-only |
 | Governance | `garuda.policy.evaluate` | Performs a non-persisting policy evaluation | Read-only |
-| Governance | `garuda.verify_policy_evaluation` | Verifies a Merkle inclusion proof for a persisted evaluation | Read-only |
+| Governance | `garuda.verify_policy_evaluation` | Verifies a persisted evaluation proof | Read-only |
 | Governance | `garuda.governance.status` | Aggregates active policies, documentation health, and contradiction count | Read-only |
 | Governance | `garuda.check_drift` | Produces a documentation-to-code drift report | Read-only |
-| Governance | `garuda.get_lineage` | Returns the full lineage of a decision | Read-only |
-| Governance | `garuda.get_impact` | Reports what breaks if a decision changes | Read-only |
-| Governance | `garuda.detect_contradictions` | Lists unresolved contradictions in the tenant graph | Read-only |
+| Governance | `garuda.get_lineage` | Returns full decision lineage | Read-only |
+| Governance | `garuda.get_impact` | Reports impact if a decision changes | Read-only |
+| Governance | `garuda.detect_contradictions` | Lists unresolved contradictions | Read-only |
 | Governance | `garuda.propose_decision` | Creates a budget-checked decision draft | Mutating |
-| Multi-agent coordination | `garuda.handoff` | Atomically hands off work between agents and creates a checkpoint | Mutating |
-| Multi-agent coordination | `garuda.resume` | Restores an active checkpoint and consumes it transactionally | Mutating |
+| Multi-agent coordination | `garuda.handoff` | Atomically transfers work and creates a checkpoint | Mutating |
+| Multi-agent coordination | `garuda.resume` | Restores and consumes an active checkpoint | Mutating |
 
 ### Mutation semantics
 
-`garuda.propose_decision`, `garuda.handoff`, and `garuda.resume` are the mutating tools.
+The mutating tools are `garuda.propose_decision`, `garuda.handoff`, and `garuda.resume`.
 
-- `garuda.handoff` runs in a Serializable transaction, creates a checkpoint, records the handoff, and transitions both agent statuses.
+- `garuda.handoff` runs in a Serializable transaction, creates a checkpoint, records the handoff, and transitions agent/task state.
 - `garuda.resume` consumes a checkpoint in a Serializable transaction and marks it restored.
 - A second resume of the same checkpoint returns `{ "status": "not_found" }` because double consumption is rejected transactionally.
+
+### Tool behavior clarifications
+
+- `garuda.policy.evaluate` is a preview by default. The CLI uses `--save` for persistence and anchoring.
+- `garuda.blast_radius` answers what may be affected if a symbol changes from the semantic graph.
+- `garuda.get_impact` answers what may be affected if a decision changes from the lineage DAG.
+- Unknown tools, evaluations, entities, tasks, or checkpoints should return structured failures rather than transport-level failures.
 
 ### MCP compliance verification
 
@@ -529,7 +707,42 @@ The MCP server exposes twenty-one tools over line-delimited JSON-RPC 2.0 over st
 WORKSPACE=my-first-workspace python3 scripts/mcp_verify.py
 ```
 
-The reference client runs 36 checks, including negative-path assertions for every tool. Unknown IDs must return structured failures rather than transport errors. The verification suite also checks that notifications do not receive forbidden responses.
+The current reference verifier reports 38/38 checks. It covers initialization, protocol version, tool discovery, graph queries, policy-proof failure handling, blast-radius output, handoff and resume negative paths, unknown-tool errors, notification behavior, and clean shutdown.
+
+---
+
+## Multi-Agent Coordination
+
+Garuda coordinates agent work at the task-transfer and checkpoint layer. It does not itself provide model inference or general-purpose agent-process orchestration.
+
+### Handoff and resume
+
+A handoff can:
+
+1. Validate source and target agent state.
+2. Validate task ownership and scope.
+3. Create a checkpoint.
+4. Record the handoff.
+5. Transfer task ownership.
+6. Transition agent state.
+7. Commit atomically.
+
+Resume restores an active checkpoint and consumes it transactionally. Duplicate resume attempts are rejected with a structured `not_found` response.
+
+### Sessions and tool calls
+
+The MCP activity surface can record:
+
+- Client name and version.
+- Agent identity.
+- Session identity and lifecycle.
+- Workspace and tenant association.
+- Tool name.
+- Duration.
+- Success or error status.
+- Whitelisted argument summaries.
+
+Free-form query and business-context fields should not be recorded in argument summaries.
 
 ---
 
@@ -541,7 +754,7 @@ The reference client runs 36 checks, including negative-path assertions for ever
 ./bin/garuda policy evaluate ./policies --fail-on BLOCK
 ```
 
-`--fail-on` accepts `BLOCK`, `REVIEW`, `WARN`, or `ALLOW`. The command exits non-zero when an evaluation reaches the selected level or higher.
+`--fail-on` accepts `BLOCK`, `REVIEW`, `WARN`, or `ALLOW`. The command exits non-zero when an evaluation reaches the selected threshold or higher.
 
 ### Annotate pull requests with impact
 
@@ -549,7 +762,7 @@ The reference client runs 36 checks, including negative-path assertions for ever
 ./bin/garuda impact <changed-symbol> --format github
 ```
 
-The GitHub format emits annotations for graph-visible callers of the changed symbol.
+The GitHub format emits annotations for graph-visible callers and impact results.
 
 ### Compare semantic snapshots
 
@@ -561,19 +774,17 @@ git stash pop
 ./bin/garuda diff /tmp/before.json /tmp/after.json
 ```
 
-The resulting structured JSON can be used to comment on a pull request, fail a build, or publish a CI artifact.
-
 ### Recommended CI sequence
 
 ```text
 1. Start PostgreSQL.
 2. Apply migrations.
-3. Select the target workspace.
+3. Resolve the tenant and target workspace.
 4. Analyze the repository with --save.
 5. Validate policies.
 6. Evaluate policies with --fail-on BLOCK.
-7. Verify documentation claims when documentation is part of the change.
-8. Publish semantic diff and impact artifacts.
+7. Verify documentation or runtime evidence when relevant.
+8. Publish semantic diff, impact, and verification artifacts.
 ```
 
 ---
@@ -582,34 +793,51 @@ The resulting structured JSON can be used to comment on a pull request, fail a b
 
 | Symptom | Likely cause | Resolution |
 |---|---|---|
-| `garuda dev` reports `bind: address already in use` | Another process is listening on port 8080 | Stop the process or run `./bin/garuda dev --port 8081` |
-| `garuda analyze` finds zero entities | Not inside a Go module, build errors, or no exported/referenced symbols | Check for `go.mod`, run `go build ./...`, and inspect package visibility |
+| `garuda dev` reports `bind: address already in use` | Another process is listening on port 8080 | Stop it or run `./bin/garuda dev --port 8081` |
+| `garuda analyze` finds zero entities | Wrong module location, build errors, or no exported/referenced symbols | Check for `go.mod`, run `go build ./...`, and inspect package visibility |
 | MCP connects but tools return empty results | Workspace or database mismatch | Compare `GARUDA_WORKSPACE` and `DATABASE_URL` with the values used during analysis |
-| MCP reports a missing tool or unexpected response | Stale `bin/garuda-mcp` | Rebuild the binary and restart the MCP client |
-| `policy verify` reports a proof failure | Row tampering, reset root hash, or verification-format mismatch | Check database history, workspace lifecycle, and `verification_version` |
-| Dashboard is empty | Analysis was not saved or targeted another workspace | Run `./bin/garuda summary` and confirm non-zero counts |
+| MCP reports a missing tool or unexpected response | Stale MCP binary | Rebuild `bin/garuda-mcp` and restart the MCP client |
+| MCP verifier count differs from documentation | Stale evidence or verifier output | Run `scripts/mcp_verify.py`, then synchronize README, PLAYBOOK, EVIDENCE, and SPECS |
+| VS Code diagnostics are empty | Extension not compiled, wrong executable/database/daemon settings, or state not refreshed | Run `npm run compile`, verify settings, re-index the workspace, and refresh Garuda state |
+| `policy verify` reports a proof failure | Row tampering, reset root hash, or verification-format mismatch | Check database history, workspace lifecycle, and verification version |
+| Dashboard is empty | Analysis was not saved or targeted another workspace | Run `garuda summary` and confirm non-zero counts |
+| Policy evaluation returns no matches | Wrong workspace, unsupported predicate path, or policy scope mismatch | Confirm workspace, language, predicate, and analyzed entities |
 
 ### Inspect workspace resolution
 
 ```bash
-psql "$DATABASE_URL" -c "SELECT id, name FROM workspaces;"
+psql "$DATABASE_URL" -c "SELECT id, tenant_id, name FROM workspaces ORDER BY updated_at DESC;"
 ```
 
-Compare the returned workspace with the configured `GARUDA_WORKSPACE`.
+Compare the returned workspace and tenant with `GARUDA_WORKSPACE` and the configured tenant context.
+
+### Inspect MCP tool count
+
+```bash
+WORKSPACE=my-first-workspace python3 scripts/mcp_verify.py
+```
+
+The current reference result should be:
+
+```text
+═══ 38/38 checks passed ═══
+```
 
 ### Proof failure details
 
 A policy proof failure can indicate:
 
 - A database row was edited after the proof was written.
-- The tenant's root hash was reset, commonly after dropping and recreating a workspace.
-- The proof format changed between the writing and reading versions.
+- The tenant root hash was reset, commonly after dropping and recreating state.
+- The proof format changed between writing and reading versions.
 
-Check `verification_version` on the evaluation row. The current format is version 1. If the cause remains unclear, file an issue with the evaluation ID and block height.
+Check the evaluation identifier, block height, and verification version before filing an issue.
 
 ---
 
 ## Command Reference
+
+Run `garuda <command> --help` for the authoritative flags for the installed binary.
 
 ### Analysis
 
@@ -617,9 +845,9 @@ Check `verification_version` on the evaluation row. The current format is versio
 |---|---|
 | `garuda analyze <path>` | Analyze a repository |
 | `garuda diff <before> <after>` | Compare semantic snapshots |
-| `garuda inspect <entity>` | Inspect one entity and relationships |
+| `garuda inspect <entity>` | Inspect an entity and relationships |
 | `garuda entities` | List entities in the workspace |
-| `garuda impact <entity>` | Compute transitive blast radius |
+| `garuda impact <entity>` | Compute graph-visible transitive impact |
 | `garuda summary` | Show workspace architectural counts |
 
 ### Workspaces and repositories
@@ -666,16 +894,52 @@ Check `verification_version` on the evaluation row. The current format is versio
 
 | Command | Purpose |
 |---|---|
-| `garuda status` | Inspect ledger and daemon status |
-| `garuda verify` | Verify ledger integrity |
-| `garuda bench` | Run the GAP-20 grounding benchmark |
+| `garuda status` | Inspect ledger, verification, and daemon status |
+| `garuda verify` | Verify ledger and decision-chain integrity |
+| `garuda bench` | Run the grounding benchmark |
 | `garuda ci` | Run CI mode with baseline comparison |
 | `garuda judge <baseline> <proposed>` | Produce a governance judgment between snapshots |
 
-### Help and support
+### VS Code extension
 
-```bash
-garuda <command> --help
-```
+| Command or operation | Purpose |
+|---|---|
+| `npm install` in `vscode-extension/` | Install extension dependencies |
+| `npm run compile` | Compile the extension |
+| `Garuda: Refresh Ledger & Verification State` | Refresh ledger and verification state |
+| `Garuda: Open Graph Visualizer` | Open graph visualization |
+| `Garuda: Re-index Workspace AST` | Re-analyze the workspace |
 
-For issue reports, use GitHub Issues. For design discussions, use GitHub Discussions. Architecture decisions are documented in `docs/adr/`, and evidence and benchmarks are documented in `EVIDENCE.md`.
+### MCP tools
+
+The current MCP surface contains 21 tools grouped into session context, graph exploration, governance and decisions, and multi-agent coordination. See the [MCP Server Reference](#mcp-server-reference) for the complete catalog.
+
+---
+
+## Evidence and Specifications
+
+| Document | Purpose |
+|---|---|
+| [`README.md`](README.md) | Product positioning and overview |
+| [`docs/SPECS.md`](docs/SPECS.md) | Detailed product and system specification |
+| [`EVIDENCE.md`](EVIDENCE.md) | Validation results and methodology |
+| [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) | Analyzer and product capability maturity matrix |
+| [`docs/specs/`](docs/specs/) | Subsystem and operational specifications |
+| [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) | Supported document formats and claim extraction |
+| [`docs/invariants.md`](docs/invariants.md) | Invariant contract for the trust substrate |
+| [`docs/adr/`](docs/adr/) | Architecture decision records |
+| [`vscode-extension/`](vscode-extension/) | VS Code integration |
+| [`scripts/mcp_verify.py`](scripts/mcp_verify.py) | Dependency-free MCP verifier |
+| [`openapi.yaml`](openapi.yaml) | HTTP API contract |
+| [`SECURITY.md`](SECURITY.md) | Security model and reporting |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution guidelines |
+
+For implementation details, consult `docs/SPECS.md`. For current validation numbers, prefer the latest reproducible command output and synchronized evidence documents over historical drafts.
+
+---
+
+## Support and Contribution
+
+For issue reports, use GitHub Issues. For design discussions, use GitHub Discussions. Architecture decisions are documented in `docs/adr/`, and reproducible evidence is documented in `EVIDENCE.md`.
+
+Contributions are welcome across analyzers, semantic resolution, policy evaluation, runtime evidence, MCP, dashboards, VS Code tooling, testing, and documentation.
