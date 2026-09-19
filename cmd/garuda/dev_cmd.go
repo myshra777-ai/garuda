@@ -74,6 +74,19 @@ var devCmd = &cobra.Command{
 
 		server := api.NewServer(pgStore, authService, jwtConfig, contraEngine, lineageEngine, topoGen, topoExec)
 
+		// Control Plane read-only pool. Optional: if CONTROL_DATABASE_URL
+		// is unset, the Control Plane returns 404 for every request and
+		// the tenant dashboard is unaffected.
+		if controlURL := os.Getenv("CONTROL_DATABASE_URL"); controlURL != "" {
+			controlPool, err := pgxpool.New(context.Background(), controlURL)
+			if err != nil {
+				slog.Warn("Control Plane pool failed to open; Control Plane will return 404", "error", err)
+			} else {
+				server.SetControlPool(controlPool)
+				defer controlPool.Close()
+			}
+		}
+
 		// Create the default admin user on first boot. Prints the
 		// generated password once to stderr.
 		if err := server.BootstrapAdminIfEmpty(ctx); err != nil {

@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/api"
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/engine"
@@ -83,15 +84,43 @@ func main() {
 	topologyGenerator := topology.NewGenerator(dbStore)
 
 	authService := auth.NewAuthService(dbStore, jwtConfig)
-	server := api.NewServer(dbStore, authService, jwtConfig, contradictionEngine, lineageEngine, topologyGenerator, topologyExecutor)
 
-	// 6. Rate Limiter
+	// 6. API Server
+	//
+	// NewServer constructs the rate limiter internally when none is
+	// passed. The Control Plane pool is attached after construction,
+	// via SetControlPool, because it depends on an optional env var
+	// that NewServer should not read.
+	server := api.NewServer(
+		dbStore,
+		authService,
+		jwtConfig,
+		contradictionEngine,
+		lineageEngine,
+		topologyGenerator,
+		topologyExecutor,
+	)
+
+	// Control Plane read-only pool. Optional: if CONTROL_DATABASE_URL
+	// is unset, the Control Plane returns 404 for every request and
+	// the tenant dashboard is unaffected.
+	if controlURL := os.Getenv("CONTROL_DATABASE_URL"); controlURL != "" {
+		controlPool, err := pgxpool.New(context.Background(), controlURL)
+		if err != nil {
+			slog.Warn("Control Plane pool failed to open; Control Plane will return 404", "error", err)
+		} else {
+			server.SetControlPool(controlPool)
+			defer controlPool.Close()
+		}
+	}
+
+	// 7. Rate Limiter
 	rateLimiter := server.RateLimiter()
 
-	// 7. Build Router
+	// 8. Build Router
 	handler := api.SetupRouter(server, rateLimiter, mcp.BridgeHandler("http://localhost:8080"), nil)
 
-	// 8. HTTP Server
+	// 9. HTTP Server
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -106,7 +135,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// 9. Graceful Shutdown
+	// 10. Graceful Shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 

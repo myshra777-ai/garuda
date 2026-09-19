@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/engine"
 	"github.com/myshra777-ai/garuda/internal/telemetry"
@@ -83,6 +84,19 @@ type Server struct {
 	checkpointStore     map[string]CheckpointRecord
 	sessions            *SessionStore
 	rateLimiter         *IPRateLimiter
+
+	// controlPool is a separate database connection scoped to the
+	// garuda_control_ro role. Read-only. Used by Control Plane
+	// handlers only. Nil when CONTROL_DATABASE_URL is unset, in
+	// which case the Control Plane returns 404 for every request.
+	controlPool *pgxpool.Pool
+}
+
+// SetControlPool attaches the read-only Control Plane pool. Called by
+// the two entry points (cmd/garuda-api, cmd/garuda/dev) after
+// NewServer, when CONTROL_DATABASE_URL is set.
+func (s *Server) SetControlPool(pool *pgxpool.Pool) {
+	s.controlPool = pool
 }
 
 // NewServer creates a new API server instance with initialized state and SSE broker.

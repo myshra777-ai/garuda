@@ -140,7 +140,7 @@ func (s *Server) recordControlAccess(r *http.Request, status int, authResult str
 func (s *Server) controlPlaneAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		configured := controlPlaneToken()
-		if configured == "" {
+		if configured == "" || os.Getenv("CONTROL_DATABASE_URL") == "" || s.controlPool == nil {
 			http.NotFound(w, r)
 			return
 		}
