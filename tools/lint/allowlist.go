@@ -53,6 +53,12 @@ var Allowlist = []AllowEntry{
 		Reason: "Correct by design. Migration 084 added a `kind` discriminator and split the table's shape: decision_vs_decision rows carry decision_a and decision_b, runtime_vs_static rows carry workspace_id and source_entity_id. This INSERT writes a decision_vs_decision row; per the schema's chk_contradictions_kind_decision constraint it must have decision_a and decision_b, and MUST NOT require workspace_id. decisions has no workspace_id column, so the caller has no workspace context to pass. The lint check cannot see kind-discrimination logic. See migrations/084_contradictions_runtime_kind.sql.",
 	},
 	{
+		File:   "../../internal/api/control_plane_tenants.go",
+		Check:  "sql-scoping",
+		Hash:   "c06e17bf704b0045ef0178ba86e849e28da7fca6210e1d10b1cab705ec4e2c2d",
+		Reason: "The Control Plane Tenants list intentionally aggregates across every workspace of a tenant. The entities and mcp_sessions counts are per-tenant, not per-workspace. Adding a workspace_id filter would break the Tenants tab metric. See docs/specs/control-plane-metrics.md §Tenants tab.",
+	},
+	{
 		File:   "../../internal/store/contradiction_store.go",
 		Check:  "sql-scoping",
 		Hash:   "3d66e168315d582f1c45d86e521ca47c79cae3711ed753955212a49422ec92b0",
