@@ -527,9 +527,13 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
           <div class="metric-foot">{{.ErrorRateTotal}} requests · {{.ErrorRateErrors}} errors</div>
         </div>
 
-        <div class="metric-card locked" title="Not yet instrumented. Requires an errors_log table.">
+        <div class="metric-card" title="Count of WARN and ERROR entries in the last 24 hours. Formula: SELECT COUNT(*) FROM errors_log WHERE occurred_at >= NOW() - INTERVAL '24 hours'">
           <div class="metric-label">Recent errors</div>
-          <div class="metric-value muted">Not yet instrumented</div>
+          {{if .RecentErrorsError}}
+            <div class="metric-value muted" title="{{.RecentErrorsError}}">Not measured</div>
+          {{else}}
+            <div class="metric-value">{{len .RecentErrors}}</div>
+          {{end}}
           <div class="metric-foot">Last 24 hours</div>
         </div>
       </div>
@@ -595,6 +599,39 @@ body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-sys
           </table>
         {{else}}
           <div class="empty-state">No tool errors in the last hour.</div>
+        {{end}}
+      </div>
+
+      <div class="panel" style="margin-top:20px;">
+        <div class="panel-header">
+          <div class="panel-title">Recent errors</div>
+          <div class="panel-subtitle">WARN and ERROR log entries from the last 24 hours. Newest first.</div>
+        </div>
+        {{if .RecentErrorsError}}
+          <div class="empty-state">Not measured: {{.RecentErrorsError}}</div>
+        {{else if .RecentErrors}}
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:180px;">Time</th>
+                <th style="width:80px;">Level</th>
+                <th>Message</th>
+                <th style="width:300px;">Request ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .RecentErrors}}
+                <tr>
+                  <td>{{.OccurredAt}}</td>
+                  <td>{{.Level}}</td>
+                  <td>{{.Message}}</td>
+                  <td><code style="font-size:11px;">{{.RequestID}}</code></td>
+                </tr>
+              {{end}}
+            </tbody>
+          </table>
+        {{else}}
+          <div class="empty-state">No errors in the last 24 hours.</div>
         {{end}}
       </div>
       {{end}}

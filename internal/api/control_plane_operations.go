@@ -27,6 +27,14 @@ type ToolErrorRow struct {
 	RatePct  float64
 }
 
+// RecentError is one row in the Recent errors panel.
+type RecentError struct {
+	OccurredAt string
+	Level      string
+	Message    string
+	RequestID  string
+}
+
 // OperationsMetrics is the payload the Operations tab renders.
 //
 // The four working panels each have a paired Error field. When the
@@ -57,9 +65,12 @@ type OperationsMetrics struct {
 	ErrorRateTotal  int64
 	ErrorRateErrors int64
 
+	// Recent errors — real, from the errors_log table.
+	RecentErrors      []RecentError
+	RecentErrorsError string
+
 	// Locked panels
-	LatencyInstrumented  bool
-	ErrorLogInstrumented bool
+	LatencyInstrumented bool
 
 	// Fatal pool error — the read-only pool is missing.
 	Error string
@@ -72,8 +83,7 @@ type OperationsMetrics struct {
 // renders them as locked cards rather than fabricated zeros.
 func (s *Server) loadOperationsMetrics(ctx context.Context) OperationsMetrics {
 	m := OperationsMetrics{
-		LatencyInstrumented:  false,
-		ErrorLogInstrumented: false,
+		LatencyInstrumented: false,
 	}
 
 	if s.controlPool == nil {
@@ -167,6 +177,29 @@ func (s *Server) loadOperationsMetrics(ctx context.Context) OperationsMetrics {
 		m.ErrorRateErrors = errs
 		if total > 0 {
 			m.ErrorRatePct = float64(errs) / float64(total) * 100
+		}
+	}
+
+	// Recent errors — last 24 hours, 50 max, newest first.
+	rows3, err := s.controlPool.Query(qctx, `
+		SELECT occurred_at, level, message, COALESCE(request_id, '')
+		  FROM errors_log
+		 WHERE occurred_at >= NOW() - INTERVAL '24 hours'
+		 ORDER BY occurred_at DESC
+		 LIMIT 50
+	`)
+	if err != nil {
+		m.RecentErrorsError = err.Error()
+	} else {
+		defer rows3.Close()
+		for rows3.Next() {
+			var e RecentError
+			var occurredAt time.Time
+			if err := rows3.Scan(&occurredAt, &e.Level, &e.Message, &e.RequestID); err != nil {
+				continue
+			}
+			e.OccurredAt = occurredAt.Format("2006-01-02 15:04:05")
+			m.RecentErrors = append(m.RecentErrors, e)
 		}
 	}
 

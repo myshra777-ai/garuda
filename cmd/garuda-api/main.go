@@ -75,6 +75,15 @@ func main() {
 	}
 	defer dbStore.Close()
 
+	// 5b. Error log — wrap the default slog handler so every Warn and
+	// Error record is also persisted to errors_log. Must run after
+	// the store pool exists (the writer needs it) and before any
+	// request is served.
+	innerHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
+	errHandler := api.NewErrorLogHandler(innerHandler, 1024)
+	slog.SetDefault(slog.New(errHandler))
+	go api.StartErrorLogWriter(context.Background(), errHandler, dbStore.Pool())
+
 	_ = lineage.NewGraph(1000)
 	lineageEngine := engine.NewLineageEngine(dbStore)
 	contradictionEngine := engine.NewContradictionEngine(dbStore)
