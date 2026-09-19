@@ -51,8 +51,8 @@ func SetupRouter(
 	// auth code. RegisterRoutes no longer applies rate limiting; it
 	// lives here, once.
 	return WithRecovery(
-		WithLogging(
-			WithRequestID(
+		WithRequestID(
+			WithLogging(
 				WithErrorRateTracking(server.errorRate)(
 					server.WithMerkleHeader(
 						WithRateLimit(rateLimiter)(
