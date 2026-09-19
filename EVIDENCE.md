@@ -1,132 +1,176 @@
-```markdown
-# 🦅 Garuda Evidence & Verification Summary
+# Garuda Evidence & Verification Summary
 
-Garuda separates product claims from reproducible evidence. This document summarizes all empirical benchmarks, multi-repository validation datasets, and runtime telemetry tests.
+Garuda separates product claims from reproducible evidence. This document records empirical benchmarks, multi-repository validation datasets, runtime verification tests, MCP compatibility checks, workspace demonstrations, and known measurement boundaries.
 
-Every number below is measured. Where a number is a benchmark result rather than an absolute guarantee, it is labelled as such. Where a claim covers a subset of what the tool can do, the subset is named.
+Every number below is a measured result, a snapshot value, or an explicitly labelled benchmark observation. A benchmark result is not presented as a universal guarantee. Where a claim covers only a subset of Garuda's capabilities, that subset is named.
 
-Two independent corpora are documented here. They are not the same test at different points in time — they are two distinct evaluations, each with its own purpose and its own scope. Both are still valid. Both are reported separately because they measure different things.
-
----
-
-## Corpus A — Go-only validation (14 repositories)
-
-Purpose: measure the analyzer's behaviour when every language in the corpus is compiler-backed. This is the strongest evidence Garuda can produce for the Go analyzer, because there is no heuristic component anywhere in the pipeline.
-
-| Verification Dimension | Measured Metric | Verification State |
-| :--- | :---: | :--- |
-| **Tested Codebases** | **14 Repositories** | Go-only, multi-module workspaces |
-| **AST Symbols Indexed** | **4,888 Entities** | Deterministic identity, stable across analysis runs |
-| **Static Claims Indexed** | **5,894 Relationships** | Calls, imports, implements, embeds, references |
-| **Cross-Module Bridges** | **55 Bridges** | Inter-repository edges |
-| **Controlled Contradictions** | **10 / 10 Detected** | 100% quarantine rate |
-| **Merkle Ledger Height** | **Block #898+** | Cryptographically verified |
-
-Corpus progression across the Go-only milestones:
-
-```
-Repositories:     5 Repos  ──▶ 7 Repos  ──▶ 10 Repos ──▶ 14 Repos
-Entities:         1,420    ──▶ 2,181    ──▶ 3,333    ──▶ 4,888 Entities
-Relationships:    1,890    ──▶ 2,442    ──▶ 4,510    ──▶ 5,894 Claims
-Cross-Repo:       3        ──▶ 12       ──▶ 28       ──▶ 55 Bridges
-```
-
-Every relationship in this corpus was derived from compiler type information. There is no heuristic component. The entity counts, claim counts, and bridge counts are the analyzer's output on those commits, reproducible by running `garuda analyze` against the same sources.
+> **Current-state note:** Historical evidence remains useful when it explains how a capability was validated. Current product claims should use the latest reproducible result and should not silently reuse superseded tool counts, client counts, or check totals.
 
 ---
 
-## Corpus B — Blended multi-language validation (9 repositories)
+## Evidence at a Glance
 
-Purpose: measure the analyzer's behaviour when the workspace contains Go, Python, and TypeScript side by side. This corpus validates the claim that Garuda produces one unified semantic model across languages, and it measures how the pipeline behaves when different languages coexist in the same workspace.
+| Area | Current evidence |
+|---|---|
+| Reference MCP verifier | `38/38` checks passed |
+| MCP tools | 21 tools exposed |
+| MCP clients tested | Cursor, Claude Desktop, Codex CLI, and dependency-free reference verifier |
+| Go-only validation | 14 repositories |
+| Blended validation | 9 repositories across Go, Python, and TypeScript |
+| Blended workspace snapshot | 14,333 entities and 40,956 relationships |
+| Controlled runtime contradiction test | 10/10 injected contradictions detected |
+| Workspace Console | Workspace, Agents, Governance, Decisions, and Graph surfaces exercised |
+| VS Code integration | Ledger, contradictions, diagnostics, graph, refresh, reanalysis, and Go hover workflows exercised |
 
-Workspace: `go-validation-10` (`c71c76f5-5dad-4eb8-b35f-fc9b01e0fff7`)
-Measured: **2026-09-15**
+---
 
-| Verification Dimension | Measured Metric | Verification State |
-| :--- | :---: | :--- |
-| **Tested Codebases** | **9 Repositories** | Go, Python, TypeScript |
-| **AST Symbols Indexed** | **14,333 Entities** | Single unified semantic model |
-| **Static Claims Indexed** | **40,956 Relationships** | Calls, imports, implements, embeds, references |
-| **Cross-Repository Edges** | **2 Edges** | Drawn between two Go modules |
-| **Languages in Workspace** | **3** | Go, Python, TypeScript coexisting |
+## Evidence Model
 
-Language coverage in this corpus, with the resolution tier each language operates at:
+Garuda records evidence in several layers:
 
-| Language | Resolution Tier | Method |
-| :--- | :--- | :--- |
-| Go | Tier 5 — compiler-resolved | Compiler type information |
-| Python | Tier 2 — imports resolved, calls heuristic | Structural extraction |
-| TypeScript | Tier 2 — imports resolved, calls heuristic | tree-sitter |
+```text
+Source code and compiler/type information
+                  ↓
+Semantic entities and typed relationships
+                  ↓
+Documentation claims and policy predicates
+                  ↓
+Runtime observations and contradictions
+                  ↓
+Governance decisions and Merkle proofs
+```
 
-Tier 5 means a relationship is derived from compiler type information and is the strongest claim Garuda can make. Tier 2 means the relationship is derived from syntax and pattern matching — imports are reliable, calls are heuristic. Garuda reports the tier with each claim so the reader knows how strong the evidence is.
+The evidence state is explicit:
 
-The two cross-repository edges reflect a real property of this workspace: the Python and TypeScript projects were analyzed but did not have declared inter-repository dependencies to any other module. The corpus tests that a mixed-language workspace produces a coherent semantic model; it does not test cross-language resolution, which is heuristic and is named as such under "What Is Not Measured" below.
+| State | Meaning |
+|---|---|
+| `SUPPORTED` | Available evidence supports the claim within the verified scope |
+| `UNVERIFIED` | Evidence is insufficient; this does not mean the claim is false |
+| `CONTRADICTED` | Available evidence conflicts with the claim |
 
-### Reproducing Corpus B
+---
+
+## Corpus A — Go-Only Validation
+
+**Scope:** 14 repositories
+**Purpose:** Measure analyzer behavior when every language in the corpus is compiler-backed Go. This is the strongest evidence set for supported Go relationship classes because the corpus contains no Python or TypeScript heuristic component.
+
+| Verification dimension | Measured metric | Verification state |
+|---|---:|---|
+| Tested codebases | **14 repositories** | Go-only, multi-module workspaces |
+| AST symbols indexed | **4,888 entities** | Deterministic identity within the measured corpus |
+| Static claims indexed | **5,894 relationships** | Calls, imports, implementations, embeddings, and references |
+| Cross-module bridges | **55 bridges** | Inter-repository edges observed in the corpus |
+| Controlled contradictions | **10 / 10 detected** | 100% observed quarantine rate in the controlled test |
+| Merkle ledger | **Block #898+** | Cryptographically verified in the reported run |
+
+### Corpus progression
+
+```text
+Repositories:   5 repos ──▶ 7 repos ──▶ 10 repos ──▶ 14 repos
+Entities:       1,420    ──▶ 2,181    ──▶ 3,333     ──▶ 4,888
+Relationships:  1,890    ──▶ 2,442    ──▶ 4,510     ──▶ 5,894
+Cross-repo:     3        ──▶ 12       ──▶ 28        ──▶ 55
+```
+
+These values describe analyzer output on the named validation sources. They are not universal product limits and do not independently prove real-repository relationship precision.
+
+### Interpretation
+
+- Go relationships in this corpus were derived through compiler/type information within the supported analyzer scope.
+- Cross-repository bridge counts represent resolved edges observed in the tested workspaces.
+- The corpus supports claims about extraction and persistence behavior; it does not prove that every possible dynamic runtime relationship is discoverable.
+
+---
+
+## Corpus B — Blended Multi-Language Validation
+
+**Workspace:** `go-validation-10`
+**Workspace ID:** `c71c76f5-5dad-4eb8-b35f-fc9b01e0fff7`
+**Measured:** 2026-09-15
+**Scope:** 9 repositories across Go, Python, and TypeScript.
+
+| Verification dimension | Measured metric | Verification state |
+|---|---:|---|
+| Tested codebases | **9 repositories** | Go, Python, and TypeScript |
+| AST symbols indexed | **14,333 entities** | Single unified semantic model |
+| Static claims indexed | **40,956 relationships** | Calls, imports, implementations, embeddings, and references |
+| Cross-repository edges | **2 edges** | Both observed between Go modules |
+| Languages in workspace | **3** | Coexisting analyzers and persisted graph state |
+
+### Resolution tiers
+
+| Language | Resolution tier | Method |
+|---|---|---|
+| Go | Tier 5 — compiler-resolved | Compiler/type information |
+| Python | Tier 2 — structural | Imports are stronger; dynamic calls are heuristic |
+| TypeScript | Tier 2 — structural | Structural/tree-sitter analysis |
+
+Tier 5 is the strongest supported static resolution tier in this evidence set. Tier 2 results are useful structural evidence but should not be interpreted as equivalent to compiler-resolved relationships.
+
+The two cross-repository edges reflect the measured workspace: the Python and TypeScript repositories were analyzed, but no declared cross-repository dependency to another module was present for those projects. This corpus validates a unified multi-language workspace model; it does not validate compiler-backed cross-language resolution.
+
+### Reproduce Corpus B counts
 
 ```sql
 SELECT
-  (SELECT COUNT(*) FROM repositories      WHERE workspace_id = '<workspace-id>') AS repos,
-  (SELECT COUNT(*) FROM entities          WHERE workspace_id = '<workspace-id>' AND kind != 'external') AS entities,
-  (SELECT COUNT(*) FROM claims            WHERE workspace_id = '<workspace-id>') AS claims,
-  (SELECT COUNT(*) FROM cross_repo_edges  WHERE workspace_id = '<workspace-id>') AS cross_edges;
+  (SELECT COUNT(*) FROM repositories     WHERE workspace_id = '<workspace-id>') AS repos,
+  (SELECT COUNT(*) FROM entities         WHERE workspace_id = '<workspace-id>' AND kind != 'external') AS entities,
+  (SELECT COUNT(*) FROM claims           WHERE workspace_id = '<workspace-id>') AS claims,
+  (SELECT COUNT(*) FROM cross_repo_edges WHERE workspace_id = '<workspace-id>') AS cross_edges;
 ```
 
-Expected output on the reference corpus:
+Expected reference output:
 
-```
+```text
  repos | entities | claims | cross_edges
--------+----------+--------+-------------
+-------+----------+--------+------------
      9 |    14333 |  40956 |           2
 ```
 
 ---
 
-## 1. Controlled Runtime Verification Results
+## Controlled Runtime Verification
 
-Runtime deviations were injected against the reference workspace on **2026-09-15**, targeting unapproved ports and unauthorized driver access. Each injection was a discrete observation posted to the telemetry ingestion endpoint. The verification engine correlated each observation against the static model.
+Runtime deviations were injected against the reference workspace on 2026-09-15. The test targeted unapproved ports and unauthorized driver-access patterns. Each injection was posted as a discrete telemetry observation and correlated against the static model.
 
-```
+```text
 CONTROLLED RUNTIME DRIFT DETECTION
 ┌────────────────────────────────────────────────────────────┐
-│ Injected Observations:        10                           │
-│ Successfully Ingested:        10                           │
-│ Contradictions Produced:      10                           │
-│ Missed / Unquarantined:        0                           │
-│ Observed Detection Rate:    100%                           │
+│ Injected observations:        10                           │
+│ Successfully ingested:       10                           │
+│ Contradictions produced:     10                           │
+│ Missed / unquarantined:       0                           │
+│ Observed detection rate:   100%                           │
 └────────────────────────────────────────────────────────────┘
 ```
 
-The ten injected observations:
-
 | # | Operation | Source |
-| :-: | :--- | :--- |
-| 1 | `WithTransportCredentials` | test-harness |
-| 2 | `Channel` | test-harness |
-| 3 | `WithCodec` | test-harness |
-| 4 | `ApplyServerOptions` | test-harness |
-| 5 | `SetExtraHeader` | test-harness |
-| 6 | `test_default_bool` | test-harness |
-| 7 | `XRevRangeN` | test-harness |
-| 8 | `SetPickedCluster` | test-harness |
-| 9 | `StaticMethod` | test-harness |
-| 10 | `ApplyDefaultsWithPoolSize` | test-harness |
+|---:|---|---|
+| 1 | `WithTransportCredentials` | test harness |
+| 2 | `Channel` | test harness |
+| 3 | `WithCodec` | test harness |
+| 4 | `ApplyServerOptions` | test harness |
+| 5 | `SetExtraHeader` | test harness |
+| 6 | `test_default_bool` | test harness |
+| 7 | `XRevRangeN` | test harness |
+| 8 | `SetPickedCluster` | test harness |
+| 9 | `StaticMethod` | test harness |
+| 10 | `ApplyDefaultsWithPoolSize` | test harness |
 
-Each observation was correlated to a real entity in the static graph and checked against that entity's outgoing claims. All ten produced a `CONTRADICTED` verification.
+Each observation was correlated to a real entity in the static graph and checked against outgoing claims. All ten produced a `CONTRADICTED` verification in the controlled test.
 
-### Verification state distribution
+### Verification-state distribution
 
 | Status | Count |
-| :--- | ---: |
+|---|---:|
 | `CONTRADICTED` | 10 |
 | `SUPPORTED` | 188 |
 | `UNVERIFIED` | 40,653 |
 
-**Scope:** this measures the correlation path — whether a runtime observation that conflicts with the static model is detected and quarantined. It does not measure the rate at which real production systems produce such deviations. The observations are a controlled corpus, not live traffic.
+**Scope:** This measures whether injected observations that conflict with the static model are detected and quarantined. It does not measure the rate at which real production systems produce deviations.
 
-### Reproducing the detection rate
-
-`scripts/runtime_contradiction_test.py` produces the number above. It injects ten observations with a contradiction marker, posts them to the telemetry endpoint, waits one verifier tick, and counts rows that landed `CONTRADICTED` in `claim_verifications`.
+### Reproduce the contradiction test
 
 ```bash
 DATABASE_URL=... python3 scripts/runtime_contradiction_test.py
@@ -134,134 +178,256 @@ DATABASE_URL=... python3 scripts/runtime_contradiction_test.py
 
 Expected output:
 
-```
+```text
 ═══ 10/10 contradicted ═══
 ```
 
-The script cleans up its own residue on entry, so running it twice does not accumulate rows. It counts against the same `claim_verifications` table the dashboard's "Needs attention" panel reads from, so the number the script verifies is the number the UI shows.
-
-The `CONTRADICTED`-path test corpus was produced by injecting observations against unapproved targets into the reference workspace. Section 5 names the boundary on what this measures.
+The script cleans its test residue on entry so repeated runs do not accumulate the same fixtures. The count is taken from the verification table consumed by the attention and governance surfaces.
 
 ---
 
-### Reproducing the extraction → verification loop
+## Documentation Extraction and Verification
 
-`scripts/doc_verify_test.py` produces the number above. It writes a
-synthetic ADR whose bullets name a real CALLS edge, a real entity with
-an invented object, and two fully invented names. It runs `garuda docs
-ingest`, runs `garuda docs verify`, and counts the claims by status.
+`scripts/doc_verify_test.py` exercises the extraction-to-verification loop. It writes a synthetic ADR containing:
+
+- A real `CALLS` relationship.
+- A real entity with an invented target.
+- Fully invented names.
+
+It then runs documentation ingestion and verification and counts the resulting states.
 
 ```bash
 DATABASE_URL=... python3 scripts/doc_verify_test.py
+```
 
 Expected output:
 
-text
+```text
 ═══ Status distribution ═══
   SUPPORTED     1
   UNVERIFIED    2
   CONTRADICTED  0
 
 ═══ PASS ═══
+```
 
-The first bullet names a real edge in the workspace and flips to
-SUPPORTED. The second names a real entity but an invented object, and
-stays UNVERIFIED with the reason Target '<name>' not found in codebase AST. The third names nothing real and stays UNVERIFIED with
-the reason Subject '<name>' not found in codebase AST.
-
-## 2. Telemetry Pipeline Characteristics
-
-| Metric Dimension | Observed Characteristic | Verification Protocol |
-| :--- | :--- | :--- |
-| **Ingestion Endpoint** | `POST /api/v1/telemetry/spans` | OpenTelemetry OTLP span mapping |
-| **Admission Latency** | `~1.8 ms` (p95) | HTTP 202 Accepted acknowledgment |
-| **Verification Engine** | Asynchronous worker | Evaluates static vs runtime parity |
-| **Merkle Commit Cadence** | `10 seconds` per epoch | Recomputes static and runtime roots |
-| **UI / IDE Convergence** | `~1–2 minutes` | Propagates `ARCH_DRIFT_001` markers |
-
-These figures describe the tested environment: a local Linux x86_64 deployment, PostgreSQL 16 on NVMe storage, single-node worker, no external network hop between the ingestion endpoint and the database. Production deployments with different topology, network latency, and worker concurrency will see different numbers.
+This test demonstrates that a claim naming a real supported edge can become `SUPPORTED`, while claims with missing targets remain `UNVERIFIED` with reasons rather than being treated as contradictions.
 
 ---
 
-## 3. MCP Server Verification
+## Telemetry Pipeline Characteristics
 
-The MCP server is validated against two independent clients: Cursor and a reference implementation written from scratch in the Garuda repository ([`scripts/mcp_verify.py`](../scripts/mcp_verify.py)).
+| Metric dimension | Observed characteristic | Verification protocol |
+|---|---|---|
+| Ingestion endpoint | `POST /api/v1/telemetry/spans` | OpenTelemetry/OTLP span mapping |
+| Admission latency | Approximately `1.8 ms` p95 | HTTP `202 Accepted` acknowledgment |
+| Verification engine | Asynchronous worker | Static-versus-runtime correlation |
+| Merkle commit cadence | Approximately `10 seconds` per epoch | Static/runtime root recomputation |
+| UI/IDE convergence | Approximately `1–2 minutes` | Propagation of `ARCH_DRIFT_001` markers |
 
-| Verification Dimension | Result |
-| :--- | :--- |
-| **Tools exposed** | 16 |
-| **Spec-compliance checks** | 18 / 18 |
-| **Clients verified against** | Cursor + reference implementation |
-| **Reference client dependencies** | Python standard library only |
+These values describe the tested environment: local Linux x86_64 deployment, PostgreSQL 16 on NVMe storage, single-node worker, and no external network hop between ingestion and database. They are observations, not production SLAs.
 
-The reference client exists because vendor compatibility is not the same as specification compliance. Cursor exposed one real bug — the server was responding to JSON-RPC notifications, which the specification forbids. A second implementation catches that class of bug before a user does.
+---
 
-Anyone can run the verification against their own workspace and reproduce the result:
+## MCP Server Verification
+
+The current MCP server exposes 21 tools and has been tested against four clients:
+
+| Client | Verification scope |
+|---|---|
+| Cursor | MCP integration in the developer IDE |
+| Claude Desktop | MCP integration in a desktop client with strict response handling |
+| Codex CLI | MCP integration in an independent CLI client |
+| Reference verifier | Dependency-free protocol, tool, and negative-path verification |
+
+### Current reference result
+
+```text
+═══ 38/38 checks passed ═══
+```
+
+Run the current verifier against your workspace:
 
 ```bash
 WORKSPACE=<workspace> python3 scripts/mcp_verify.py
 ```
 
-Expected output:
+The verifier checks:
 
+- Initialization and request identifiers.
+- MCP protocol version `2025-06-18`.
+- Tool discovery and 21-tool availability.
+- Entity lookup and graph relationships.
+- Subclass and implementer semantics.
+- Policy-proof failure behavior for unknown evaluations.
+- Blast-radius output and severity fields.
+- Handoff and resume negative paths.
+- Structured unknown-tool errors.
+- Notification response suppression.
+- Clean server shutdown.
+
+The dependency-free verifier checks protocol behavior and server contracts. Client-specific UI rendering, schema caching, and transport behavior are validated separately through Cursor, Claude Desktop, and Codex CLI usage.
+
+---
+
+## Workspace Console Evidence
+
+The tenant-facing Workspace Console has been exercised across the following surfaces:
+
+| Surface | Observed capability |
+|---|---|
+| Workspace | Repository, package, entity, relationship, language, policy, evidence, and health summaries |
+| Agents | MCP sessions, tool-call activity, active/recent session views, and coordination state |
+| Governance | Policy outcomes, documentation claims, drift, contradictions, verification states, and cryptographic trust |
+| Decisions | Decision history, evidence, ancestors, descendants, revisions, and anchor status |
+| Graph | Interactive topology, communities, repositories, packages, relationships, and exploration |
+| Evidence and Trust | Ledger status, block height, root, parent/genesis, observation time, and verification controls |
+
+A reference workspace view has displayed values such as 9 repositories, 1,567 packages, 14,333 entities, 40,956 relationships, 2 cross-repository bridges, 2 active policies, and 10 contradiction or attention records. These are workspace snapshot values, not product limits.
+
+### Governance evidence example
+
+A policy review record can display:
+
+```text
+Decision:     REVIEW
+Predicate:    verification_missing
+Entities:     10
+Claims:       0
+Contradictions: 0
+Block height: #66
+Proof stored: Yes
 ```
-═══ 18/18 checks passed ═══
-```
+
+This demonstrates a review decision based on missing runtime evidence rather than an unsupported claim that the code is broken.
+
+### Cryptographic trust evidence
+
+The Evidence and Trust view can display:
+
+- Verified ledger state.
+- Block height.
+- Current root.
+- Parent root or genesis marker.
+- Observation time.
+- Stored proof state.
+- Anchor verification controls.
 
 ---
 
-## 4. Empirical Benchmark Reports
+## VS Code Integration Evidence
 
-- **[GAP-20 Grounding Benchmark — 0% structural hallucination, 87.2% token compression](benchmarks/gap20-grounding.md)**
-- **[14-Repository Go Validation Report](reports/platform-readiness.md)**
-- **[9-Repository Multi-Language Validation Report](reports/multi-language-validation.md)**
-- **[Visual Interface & Screenshot Tour](../docs/WALKTHROUGH.md)**
+Garuda's VS Code extension is located under `vscode-extension/` and has been exercised for editor-integrated architecture and evidence workflows.
 
----
+### Tested extension surfaces
 
-## 5. What Is Not Measured
+- Cryptographic Ledger view.
+- Quarantined Contradictions view.
+- Problems-panel diagnostics.
+- Policy and runtime contradiction markers.
+- Architecture graph visualizer.
+- Workspace AST reanalysis.
+- Ledger and verification-state refresh.
+- Go symbol hover with blast-radius and dependency information.
 
-For every claim above, there is a limit. The limits are stated here so a reader does not infer more than the evidence supports.
+The extension manifest identifies the Garuda Architecture Shield, its commands, views, settings, Go activation paths, daemon URL, executable path, database URL, and hover-blast-radius option.
 
-- **Real-repository relationship precision is not measured.** The figures in both corpora describe what the analyzer produced. They do not measure what fraction of those relationships are correct against an independent ground truth. The Go analyzer is compiler-backed and therefore high-confidence by construction; the Python and TypeScript analyzers are structural and weaker.
+### IDE boundary
 
-- **The runtime detection rate is measured on injected observations.** Section 1 reports 10/10 on a controlled test. Production telemetry may include observation shapes not present in the test corpus.
-
-- **Cross-language resolution is heuristic.** A Go workspace resolving into Python or TypeScript dependencies is not yet compiler-backed. Corpus B contains two cross-repository edges, both drawn between Go modules. Cross-language edges are not represented in this evidence.
-
-- **Call edges at the leaf are sparse.** Median inbound call count per target is 1. The 90th percentile is 4. 73% of targets have exactly one caller. This is a property of the code under analysis, not a limitation of the analyzer. `garuda impact` reports what the graph contains; the graph is honest about what it does not.
-
-- **Admission latency, cadence, and convergence times are environment-specific.** They describe the tested deployment, not a universal production SLA.
-
-- **The Python and TypeScript analyzers have not been validated against a real cross-language workspace.** Their extraction runs correctly on their own corpora. Their interaction with the Go analyzer across module boundaries has not been measured.
+The extension is tested for editor-integrated diagnostics and exploration. Its update behavior depends on configured state, daemon/database connectivity, and refresh or reanalysis events. The evidence does not claim unrestricted continuous analysis of every file mutation without an analysis event.
 
 ---
 
-## 6. Reproducing These Results
+## Multi-Agent and Session Evidence
 
-Every number in this document is produced by a command in the Garuda CLI. To reproduce:
+Garuda's current MCP and coordination surface includes:
+
+- 21 MCP tools.
+- Transactional handoff.
+- Checkpoint creation.
+- Resume and single-consumption behavior.
+- Session and tool-call activity visibility.
+- Client and agent metadata where available.
+- Tool duration and status tracking.
+- Whitelisted argument summaries.
+
+Handoff and resume verification includes failure paths for unknown task, agent, and checkpoint identifiers. The current reference verifier confirms structured failure responses rather than transport-level failures.
+
+---
+
+## What Is Not Measured
+
+The following boundaries remain explicit:
+
+- Real-repository relationship precision is not measured against an independent complete ground-truth corpus.
+- Go compiler-backed results are high-confidence within supported relationship classes but do not prove universal runtime coverage.
+- Python and TypeScript structural analysis is weaker for dynamic behavior than Go compiler-backed analysis.
+- Runtime detection is measured on controlled injected observations, not on representative live production traffic.
+- Cross-language resolution is not established as compiler-backed by Corpus B.
+- Call edges at graph leaves can be sparse because of actual code topology and analysis scope.
+- Admission latency, Merkle cadence, and UI/IDE convergence are environment-specific observations, not universal SLAs.
+- Larger production-scale runtime verification remains a beta validation area.
+- Dead-code and unused-import detection exposed through MCP are next-arc capabilities.
+- The Merkle ledger proves integrity and inclusion of recorded evidence and decisions; it does not prove semantic-model completeness or correctness.
+- Dashboard screenshots demonstrate exercised product surfaces but do not replace automated regression tests.
+
+---
+
+## Reproducing Results
+
+### Analyze and save a repository
 
 ```bash
-# Analyze a repository and save the result to a workspace
 garuda analyze /path/to/repo --save --workspace <workspace-name>
+```
 
-# Reproduce the CONTRADICTED-path detection rate
-DATABASE_URL=... python3 scripts/runtime_contradiction_test.py
-# Expected: ═══ 10/10 contradicted ═══
+### Reproduce controlled contradiction detection
 
 ```bash
-# Reproduce the extraction → verification loop
+DATABASE_URL=... python3 scripts/runtime_contradiction_test.py
+```
+
+Expected:
+
+```text
+═══ 10/10 contradicted ═══
+```
+
+### Reproduce documentation verification
+
+```bash
 DATABASE_URL=... python3 scripts/doc_verify_test.py
-# Expected: ═══ PASS ═══ (1 SUPPORTED, 2 UNVERIFIED)
+```
 
-# Re-run the MCP verification against your own workspace
+Expected: one `SUPPORTED`, two `UNVERIFIED`, zero `CONTRADICTED`, and `PASS`.
+
+### Re-run MCP verification
+
+```bash
 WORKSPACE=<workspace-name> python3 scripts/mcp_verify.py
-# Expected: ═══ 18/18 checks passed ═══
+```
 
-# Inspect the Merkle ledger height and current roots
+Expected:
+
+```text
+═══ 38/38 checks passed ═══
+```
+
+### Inspect ledger status
+
+```bash
 garuda status
+```
 
-# Query the verification state distribution
+### Verify ledger integrity
+
+```bash
+garuda verify
+```
+
+### Query verification-state distribution
+
+```bash
 psql "$DATABASE_URL" -c "
   SELECT status, COUNT(*)::int
     FROM claim_verifications
@@ -270,5 +436,20 @@ psql "$DATABASE_URL" -c "
 "
 ```
 
-The corpus and commits for each report are documented in the linked files under `evidence/`.
-```
+---
+
+## Evidence Sources
+
+- [`README.md`](README.md) — Product claims and public positioning.
+- [`PLAYBOOK.md`](PLAYBOOK.md) — Operational workflows and command reference.
+- [`docs/SPECS.md`](docs/SPECS.md) — Detailed product and system specification.
+- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — Capability maturity and analyzer matrix.
+- [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) — Visual interface and screenshot tour.
+- [`docs/adr/`](docs/adr/) — Architecture decision records.
+- [`docs/invariants.md`](docs/invariants.md) — Invariant contract.
+- [`scripts/mcp_verify.py`](scripts/mcp_verify.py) — MCP reference verifier.
+- [`scripts/runtime_contradiction_test.py`](scripts/runtime_contradiction_test.py) — Controlled runtime contradiction test.
+- [`scripts/doc_verify_test.py`](scripts/doc_verify_test.py) — Documentation extraction and verification test.
+- [`vscode-extension/`](vscode-extension/) — VS Code integration source and manifest.
+
+Historical evidence documents may contain earlier corpus sizes or MCP check totals. Such entries should be read as historical milestones; the current MCP reference result is `38/38` and the current public product surface is documented in `README.md`, `PLAYBOOK.md`, and `docs/SPECS.md`.
