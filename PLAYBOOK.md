@@ -751,7 +751,7 @@ Free-form query and business-context fields should not be recorded in argument s
 ### Block policy violations
 
 ```bash
-./bin/garuda policy evaluate ./policies --fail-on BLOCK
+./bin/garuda policy evaluate ./policies --fail-on-block
 ```
 
 `--fail-on` accepts `BLOCK`, `REVIEW`, `WARN`, or `ALLOW`. The command exits non-zero when an evaluation reaches the selected threshold or higher.
@@ -759,10 +759,12 @@ Free-form query and business-context fields should not be recorded in argument s
 ### Annotate pull requests with impact
 
 ```bash
-./bin/garuda impact <changed-symbol> --format github
+./bin/garuda impact --target <changed-symbol>
 ```
 
 The GitHub format emits annotations for graph-visible callers and impact results.
+
+GitHub-specific PR annotation output is not part of the current verified CLI contract. Use the JSON or human-readable impact report as a CI artifact.
 
 ### Compare semantic snapshots
 
@@ -782,7 +784,7 @@ git stash pop
 3. Resolve the tenant and target workspace.
 4. Analyze the repository with --save.
 5. Validate policies.
-6. Evaluate policies with --fail-on BLOCK.
+* **Impact reporting:** Exposes topological impact and blast-radius results through the CLI for use in CI workflows. GitHub-specific PR annotation output is not part of the current verified CLI contract.
 7. Verify documentation or runtime evidence when relevant.
 8. Publish semantic diff, impact, and verification artifacts.
 ```
