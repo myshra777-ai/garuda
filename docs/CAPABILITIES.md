@@ -123,7 +123,7 @@ Garuda natively integrates with continuous integration pipelines to evaluate sem
 * **Semantic Diffing:** Evaluates current codebase against `garuda-baseline.json`. Can automatically halt builds on breaking changes using the `--block-on-break` flag.
 * **Policy Enforcement:** Evaluates architectural rules during CI and fails the build when `--fail-on-block` is enabled and a policy returns `BLOCK`.
 * **Contradiction Blocking:** Fails builds if new code contradicts ingested Architecture Decision Records (ADRs) or documentation claims (`--fail-on-contradiction`).
-* **GitHub PR Annotations:** Outputs topological impact analysis and blast radius directly to GitHub PR comments using `--format github`.
+* **Impact reporting:** Exposes topological impact and blast-radius results through the CLI for use in CI workflows. GitHub-specific PR annotation output is not part of the current verified CLI contract.
 
 ## Static Hygiene (report-only)
 
