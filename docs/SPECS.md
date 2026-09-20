@@ -466,7 +466,7 @@ Example:
 ./bin/garuda policy evaluate ./policies --fail-on-block
 ```
 
-Do not use `--fail-on-block` or `--format github` as current examples unless those flags are implemented and verified in a future release.
+The current CLI contract does not include `--format github`. The verified policy gate is `--fail-on-block`; do not use provider-specific GitHub annotation flags unless a future release implements and verifies them.
 
 ---
 
