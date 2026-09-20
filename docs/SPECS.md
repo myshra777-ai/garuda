@@ -1,773 +1,439 @@
 # Garuda Specifications
 
 **Version:** 0.1.x  
-**Document status:** Public reference specification  
-**Scope:** Semantic analysis, evidence verification, governance, MCP integration, workspace intelligence, runtime correlation, dashboards, and IDE integration  
-**Updated:** 2026-09-19
+**Document status:** Current-state reference draft  
+**Updated:** 2026-09-20  
+**Scope:** Verified repository capabilities, validation boundaries, and explicitly marked future work.
 
-> This document describes Garuda as a verified state and governance plane for AI-assisted software development. It documents shipped behavior, validation boundaries, and planned capabilities. It is not a claim that Garuda is a general-purpose agent runtime, model-orchestration framework, or compliance certification.
+> This document describes Garuda as implemented and verified in the current repository state. A capability is not considered current merely because it appears in a roadmap, design document, dashboard label, or generated artifact.
 
----
+## Status legend
 
-## Table of Contents
-
-1. [Product Boundary](#1-product-boundary)
-2. [Core Concepts](#2-core-concepts)
-3. [System Architecture](#3-system-architecture)
-4. [Semantic Model](#4-semantic-model)
-5. [Analyzer Capabilities](#5-analyzer-capabilities)
-6. [Workspace Intelligence](#6-workspace-intelligence)
-7. [Documentation and Claims](#7-documentation-and-claims)
-8. [Runtime Verification](#8-runtime-verification)
-9. [Policy Engine](#9-policy-engine)
-10. [Trust and Merkle Layer](#10-trust-and-merkle-layer)
-11. [MCP Surface](#11-mcp-surface)
-12. [Multi-Agent Coordination](#12-multi-agent-coordination)
-13. [Workspace Console](#13-workspace-console)
-14. [VS Code Integration](#14-vs-code-integration)
-15. [Tenant and Workspace Isolation](#15-tenant-and-workspace-isolation)
-16. [Control Plane](#16-control-plane)
-17. [CLI and HTTP Interfaces](#17-cli-and-http-interfaces)
-18. [CI/CD Integration](#18-cicd-integration)
-19. [Observability](#19-observability)
-20. [Data and Persistence Model](#20-data-and-persistence-model)
-21. [Security and Invariants](#21-security-and-invariants)
-22. [Validation and Evidence](#22-validation-and-evidence)
-23. [Operational Workflows](#23-operational-workflows)
-24. [Known Boundaries](#24-known-boundaries)
-25. [Roadmap](#25-roadmap)
-26. [Versioning](#26-versioning)
-27. [Glossary](#27-glossary)
-
----
-
-## 1. Product Boundary
-
-Garuda is a semantic software-intelligence and governance platform for teams using AI-assisted development workflows. It builds a shared model of code, relationships, documentation claims, runtime observations, policies, and governance decisions.
-
-AI agents and developers query that model through MCP, CLI, HTTP, dashboards, CI, and the VS Code extension. Garuda is designed to answer questions such as:
-
-- What exists in the workspace?
-- What depends on this symbol?
-- Who implements this interface?
-- What documentation claims apply to this code?
-- What policy rules apply to the current state?
-- What runtime evidence supports or contradicts the static model?
-- What would be affected by changing a symbol or decision?
-- What was decided, under which policy version, and can that decision be independently verified?
-
-### Product category
-
-Garuda is a **verified state plane for AI-assisted software development**.
-
-It is not an agent framework, coding agent, general-purpose code search engine, runtime observability replacement, or compliance certification. It can integrate with those categories and provide the semantic, governance, and evidence layer beneath them.
-
-### Primary users
-
-| User | Primary value |
+| Status | Meaning |
 |---|---|
-| AI-enabled engineering teams | Ground agents in a shared semantic model rather than only local file context |
-| Platform and architecture teams | Inspect dependencies, boundaries, policy violations, drift, and change impact |
-| Security and governance teams | Record and verify policy decisions with evidence and cryptographic proofs |
-| Engineering leaders | View workspace health, governance state, runtime evidence, and decision history |
-| Developers in unfamiliar codebases | Navigate entities, callers, implementers, relationships, and claims faster |
+| Current | Implemented and verified by code, tests, or reproducible commands |
+| Beta | Implemented, but constrained by scope, language, scale, or deployment maturity |
+| Experimental | Available with confidence or coverage limitations |
+| Planned | Designed or queued; not a current capability |
+| Historical | Retained for context and not a current product contract |
+
+## Contents
+
+1. [Product boundary](#1-product-boundary)
+2. [System architecture](#2-system-architecture)
+3. [Semantic model](#3-semantic-model)
+4. [Analyzer capabilities](#4-analyzer-capabilities)
+5. [Workspace intelligence](#5-workspace-intelligence)
+6. [Documentation and claims](#6-documentation-and-claims)
+7. [Runtime verification](#7-runtime-verification)
+8. [Policy engine](#8-policy-engine)
+9. [Trust and Merkle layer](#9-trust-and-merkle-layer)
+10. [MCP surface](#10-mcp-surface)
+11. [Agent coordination](#11-agent-coordination)
+12. [Workspace Console](#12-workspace-console)
+13. [VS Code integration](#13-vs-code-integration)
+14. [Tenant and workspace isolation](#14-tenant-and-workspace-isolation)
+15. [CLI and HTTP interfaces](#15-cli-and-http-interfaces)
+16. [CI/CD integration](#16-cicd-integration)
+17. [Observability](#17-observability)
+18. [Data and persistence](#18-data-and-persistence)
+19. [Security and invariants](#19-security-and-invariants)
+20. [Hygiene](#20-hygiene)
+21. [Validation and evidence](#21-validation-and-evidence)
+22. [Known boundaries](#22-known-boundaries)
+23. [Roadmap](#23-roadmap)
+24. [Versioning](#24-versioning)
+25. [Glossary](#25-glossary)
 
 ---
 
-## 2. Core Concepts
+## 1. Product boundary
 
-### Four artifact categories
+Garuda is a PostgreSQL-backed semantic software-intelligence and governance system. It analyzes supported source repositories, stores scoped semantic state, correlates documentation and runtime evidence, evaluates policies, exposes query and coordination surfaces, and provides cryptographic verification for persisted governance records.
 
-Garuda connects four classes of artifacts:
+Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. The current repository does not provide a production execution harness that autonomously modifies code, reanalyzes a worktree, evaluates policy, and merges changes.
 
-| Artifact | Meaning | Examples |
+### Current product questions
+
+Garuda is designed to answer questions such as:
+
+- What entities and relationships exist in a scoped workspace?
+- Which entities call, implement, inherit from, embed, or depend on another entity?
+- What documentation claims apply to a workspace?
+- What policy outcomes apply to the current state?
+- What runtime evidence supports or contradicts a static claim?
+- What graph-visible entities are affected by changing a symbol?
+- What decisions and revisions exist, and can a persisted decision be independently verified?
+
+### Artifact categories
+
+| Artifact | Current meaning | Examples |
 |---|---|---|
-| Intent | What an organization says should be true | Policies, requirements, ADRs, specifications |
-| Code | What has been implemented | Packages, structs, interfaces, functions, methods, imports, calls |
-| Runtime | What the system has been observed doing | Traces, spans, runtime observations, contradictions |
-| Evidence | What supports a claim or decision | Source locations, relationship evidence, verification records, Merkle proofs |
+| Intent | Statements of what should be true | Policies, ADRs, documented requirements |
+| Code | Analyzed implementation state | Packages, types, functions, methods, imports, calls |
+| Runtime | Observed execution evidence | Spans, runtime observations, contradictions |
+| Governance | Decisions and policy outcomes | Evaluations, decisions, revisions, Merkle records |
 
-### Three verification states
+### Verification states
 
 | State | Meaning |
 |---|---|
 | `SUPPORTED` | Available evidence supports the claim within the verified scope |
-| `UNVERIFIED` | The claim lacks sufficient evidence; this does not mean it is false or broken |
+| `UNVERIFIED` | Evidence is insufficient; this is not proof of failure |
 | `CONTRADICTED` | Available evidence conflicts with the claim |
 
-### Evidence authority
+---
 
-Garuda preserves an explicit evidence hierarchy:
+## 2. System architecture
 
 ```text
-Compiler-backed AST and type evidence
-              ↓
-Persisted semantic relationships with source evidence
-              ↓
-Validated documentation claims
-              ↓
-Runtime observations and correlation results
-              ↓
-Confidence-scored heuristic relationships
+Source repositories ── analyze ──> Semantic graph ── query ──> CLI / MCP / HTTP / Console
+        │                              │
+        └──── documentation claims ────┤
+                                       │
+Runtime observations ── correlate ────┤
+                                       ↓
+                                Policy evaluation
+                                       ↓
+                         Optional committed governance record
+                                       ↓
+                                Merkle verification
 ```
 
-The exact authority order depends on the operation. Heuristic relationships must remain labeled and must not silently override stronger evidence.
+| Layer | Responsibility | Current status |
+|---|---|---|
+| Analyzer | Extract entities and relationships | Current for supported Go, Python, and TypeScript paths |
+| Store | Persist tenant, workspace, repository, graph, policy, runtime, and governance state | Current |
+| Knowledge layer | Ingest and verify documentation claims | Current within documented formats |
+| Runtime layer | Correlate observations and record contradictions | Current with controlled and synthetic evidence boundaries |
+| Policy layer | Evaluate declarative policy outcomes | Current |
+| Trust layer | Anchor and verify committed records | Current |
+| Integration layer | CLI, MCP, HTTP, dashboard, CI, and VS Code surfaces | Mixed; see individual sections |
+| Execution harness | Autonomous sandboxed code-edit loop | Planned; not current |
 
-### Maturity levels
-
-| Status | Meaning |
-|---|---|
-| Production (GA) | Shipped, tested, and suitable for authoritative workflows within the documented scope |
-| Beta | Functional and validated, but subject to scale, language, deployment, or release-boundary constraints |
-| Experimental | Available for exploration; confidence-scored or heuristic behavior requires independent validation |
-| Upcoming | Designed or queued; not a current shipped capability |
+Garuda’s persistent source of truth is PostgreSQL. The pure Hygiene analyzer is deliberately side-effect free and operates on typed in-memory semantic data.
 
 ---
 
-## 3. System Architecture
-
-```mermaid
-flowchart TD
-    DOCS["Documentation, ADRs, and policies"] --> INGEST["Ingestion and claim extraction"]
-    CODE["Source repositories"] --> ANALYZE["AST and semantic analyzers"]
-    RUNTIME["Telemetry and runtime observations"] --> VERIFY["Runtime correlation and verification"]
-    ANALYZE --> GRAPH["Tenant/workspace semantic graph"]
-    INGEST --> GRAPH
-    VERIFY --> GRAPH
-    GRAPH --> POLICY["Policy engine"]
-    GRAPH --> MCP["MCP server"]
-    GRAPH --> API["CLI and HTTP APIs"]
-    GRAPH --> CONSOLE["Workspace Console"]
-    GRAPH --> IDE["VS Code extension"]
-    POLICY --> LEDGER["Merkle trust layer"]
-    LEDGER --> PROOF["Independent verification"]
-    MCP --> AGENTS["AI clients and agents"]
-```
-
-### Architectural layers
-
-| Layer | Responsibility |
-|---|---|
-| Analyzer layer | Parse source, resolve types where supported, and emit entities and relationships |
-| Knowledge layer | Store claims, entities, relationships, evidence, and verification states |
-| Runtime layer | Ingest observations, correlate observations with semantic entities, and record contradictions |
-| Policy layer | Evaluate declarative rules and produce governance outcomes |
-| Trust layer | Anchor committed evaluations and decisions in Merkle structures |
-| Integration layer | Expose MCP, CLI, HTTP, dashboard, CI, and IDE interfaces |
-| Persistence layer | Store tenant, workspace, repository, graph, policy, runtime, session, and ledger state in PostgreSQL |
-
----
-
-## 4. Semantic Model
+## 3. Semantic model
 
 ### Entities
 
-Entities represent identifiable software symbols and architectural objects, including:
-
-- Packages.
-- Structs.
-- Interfaces.
-- Functions.
-- Methods.
-- Fields.
-- Repositories.
-- Workspaces.
-- External or unresolved references where the analyzer preserves them as graph objects.
-
-Entities carry stable identifiers and source metadata. The analyzer preserves declaration kind, package context, file path, line span, language, repository, tenant, and workspace scope where available.
+Entities represent semantic objects such as packages, files, structs, interfaces, functions, methods, fields, repositories, and workspaces. Entity records include identifiers and source metadata where available, including kind, name, package, file, language, line range, repository, tenant, and workspace.
 
 ### Relationships
 
-Relationships are typed rather than represented as unstructured links.
+Relationships are typed graph claims. Current relationship families include:
 
 | Relationship | Meaning |
 |---|---|
-| `CALLS` | One function or method invokes another |
+| `CALLS` | A function or method invokes another function or method |
 | `IMPORTS` | A package or module imports another package or module |
 | `IMPLEMENTS` | A concrete type satisfies an interface |
-| `INHERITS` | A type inherits from or structurally derives from another supported type |
+| `INHERITS` | A supported inheritance or derivation relationship |
 | `EMBEDS` | A struct embeds another type |
-| `REFERENCES` | A symbol refers to another semantic entity |
-| Cross-repository bridge | A supported dependency crosses repository boundaries |
+| `REFERENCES` | A semantic reference between entities |
+| Cross-repository bridge | A supported dependency crossing repository boundaries |
 
-Each relationship should retain source evidence such as file and line location, derivation method, and resolution tier.
+Relationships may carry confidence, resolution status, resolution method, source file, line range, evidence hash, tenant, workspace, and repository metadata.
 
-### Stable identity
+### Claims and evidence
 
-Garuda uses canonical identities to avoid treating every textual rename as an unrelated object. The exact identity representation depends on the semantic model and language adapter; the public contract is that queries and persisted relationships operate on stable semantic identities rather than raw text matches alone.
+A documentation claim is a normalized statement extracted from an eligible source. A relationship is evidence about code structure. A runtime observation is evidence from execution. A policy evaluation combines applicable predicates and produces an outcome with evidence references.
 
-### Resolution tiers
+Evidence authority is operation-specific. Compiler-backed resolution is stronger than name-only or structural heuristics, and heuristic results must remain identifiable as such.
 
-| Tier | Typical source | Authority |
-|---|---|---|
-| Tier 5 | Go compiler/type information | Highest supported static authority |
-| Tier 2 | Structural Python and TypeScript analysis | Useful structural evidence; lower authority for dynamic behavior |
-| Heuristic | SSA or dynamic call approximation | Confidence-scored and non-authoritative unless explicitly permitted |
+### Identity and scope
+
+Queries and persisted records use semantic identifiers and explicit tenant/workspace scope. The exact identifier format is an implementation contract of the analyzer and store layers; callers must not substitute display names for scoped identity when an ID is available.
 
 ---
 
-## 5. Analyzer Capabilities
+## 4. Analyzer capabilities
 
-### Go analyzer
+### Go
 
-Go analysis is compiler-backed within the supported scope. Current validated capabilities include:
+Go analysis is compiler-backed within the supported scope. Current analyzer and benchmark coverage includes entities, signatures, receiver identity, type information, interfaces, embedding, generic forms, aliases, variadic signatures, closures, source locations, and call relationships.
 
-- Struct and field extraction.
-- JSON, database, and validation tags.
-- Source line spans.
-- Pointer and slice flags.
-- Pointer and value receiver disambiguation.
-- Interface implementation matching.
-- Generic type-parameter handling.
-- Type alias versus type-definition distinction.
-- Struct embedding and `EMBEDS` relationships.
-- Variadic signatures.
-- Nested closure and function-literal traversal.
-- Cross-repository dependency resolution through the workspace model.
+Go call relationships can be resolved through `go/types` and carry resolution metadata. Unresolved or heuristic paths must not be presented as equivalent to authoritative compiler resolution.
 
-The supplied benchmark matrix reports production status for the named benchmark gates, including method identity, generics, aliases, embedding, variadic handling, and closure handling.
+### Python
 
-### Python analyzer
+Python support is structural. It can provide useful source and relationship information, but dynamic dispatch, imports generated at runtime, and other runtime behavior are outside the authority of purely structural analysis.
 
-Python analysis is structural. Import relationships are more reliable than dynamic call resolution. Python results should be interpreted according to relationship type and corpus coverage rather than a single universal accuracy number.
+### TypeScript
 
-### TypeScript analyzer
+TypeScript support is structural and uses the repository’s documented build requirements, including CGO and a C compiler where required. The capability is not equivalent to complete runtime or dynamic call-graph knowledge.
 
-TypeScript analysis is structural and requires CGO and a C compiler in the documented build path. It supports structural extraction and relationship discovery within the supported analyzer scope.
-
-### Current and queued languages
+### Language status
 
 | Language | Status |
 |---|---|
-| Go | Production (GA), compiler-backed within supported scope |
-| Python | Beta, structural |
-| TypeScript | Beta, structural |
-| Rust | Upcoming |
-| Java | Upcoming |
-| Elixir | Upcoming |
+| Go | Current; compiler-backed within supported scope |
+| Python | Beta; structural |
+| TypeScript | Beta; structural |
+| Rust | Planned |
+| Java | Planned |
+| Elixir | Planned |
 
-### Experimental call-graph behavior
+### Analysis persistence
 
-Dynamic or heuristic call-graph results must carry confidence information. They are not equivalent to compiler-resolved relationships and should not be silently promoted into strict governance evidence.
-
----
-
-## 6. Workspace Intelligence
-
-A workspace is a logical, tenant-scoped collection of repositories and their semantic state. Garuda presents repositories as parts of one system rather than isolated codebases.
-
-### Workspace views
-
-The Workspace Console can expose:
-
-- Repository, package, entity, and relationship totals.
-- Language composition.
-- Architectural hubs ranked by graph centrality.
-- Recent evidence and runtime observations.
-- Policy enforcement state.
-- Contradictions and unverified claims.
-- Documentation drift.
-- Decision history.
-- Interactive topology and community exploration.
-
-### Cross-repository intelligence
-
-Garuda supports cross-repository relationships for validated multi-module workspaces. The current capability has been exercised across multi-repository Go corpora and the `go-validation-10` workspace.
-
-The current operational contract is:
-
-- Supported repository relationships are persisted in the workspace model.
-- Cross-repository bridges can be surfaced in briefing and dashboard views.
-- The quality of a bridge depends on language, import resolution, repository configuration, and analyzer maturity.
-- Cross-language resolution and larger-scale quality gates remain separate validation concerns.
-
-### Example workspace snapshot
-
-A validated workspace view has displayed values such as:
-
-- 9 repositories.
-- 1,567 packages.
-- 14,333 entities.
-- 40,956 relationships or graph claims.
-- 2 cross-repository bridges.
-
-These values describe a particular snapshot, not product limits.
+The existing `garuda analyze` CLI can analyze repositories and, with the applicable save options, persist semantic results. The current Hygiene command does not trigger analysis or refresh the graph; it reads the already indexed workspace state.
 
 ---
 
-## 7. Documentation and Claims
+## 5. Workspace intelligence
 
-### Supported document formats
+A workspace is a tenant-scoped logical grouping of repositories and semantic state. Workspace queries include repositories, packages, entities, relationships, documentation claims, policies, runtime evidence, decisions, and graph-visible impact.
 
-Garuda can ingest Markdown, ADR, and plain-text documents according to the documented format contract.
+Current workspace surfaces include:
 
-A line is eligible for normative extraction when:
+- Workspace and repository summaries.
+- Entity and relationship inspection.
+- Search and graph exploration.
+- Architectural hubs and centrality summaries.
+- Cross-repository bridge summaries.
+- Briefing and governance status.
+- Impact and blast-radius queries.
+- Documentation drift and contradiction views.
 
-1. It contains a supported modal term such as `MUST`, `SHOULD`, `MUST NOT`, or `SHALL`.
-2. It occurs under a heading suggesting normative content, such as `Decision`, `Requirement`, `Constraint`, `Policy`, or `Specification`.
+### Cross-repository capability
 
-Free-form prose, tables, and code blocks are intentionally excluded unless they satisfy the parser contract.
+Cross-repository Go dependency resolution is implemented through the workspace model and has been exercised against multi-repository validation data. It remains subject to repository configuration, analyzer coverage, workspace-boundary validation, and scale limits. It is not a universal cross-language dependency guarantee.
 
-### Claim lifecycle
+### Blast radius versus decision impact
+
+- `garuda.blast_radius` asks what graph-visible entities may be affected if a symbol changes.
+- `garuda.get_impact` asks what decision-lineage entities may be affected if a governance decision changes.
+
+These are different evidence sources and must not be treated as interchangeable.
+
+---
+
+## 6. Documentation and claims
+
+Garuda can ingest supported Markdown, ADR, and plain-text documentation. The document parser extracts eligible normative statements according to the contract in [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md).
+
+The claim lifecycle is:
 
 ```text
-Document discovery
-      ↓
-Normative line extraction
-      ↓
-Claim normalization
-      ↓
-Semantic graph correlation
-      ↓
-Runtime correlation where available
-      ↓
-SUPPORTED / UNVERIFIED / CONTRADICTED
+discover → extract → normalize → correlate → verify
 ```
 
-### Drift directions
+Claims can become `SUPPORTED`, `UNVERIFIED`, or `CONTRADICTED` depending on available evidence. Missing documentation does not automatically prove that implementation is invalid, and missing runtime evidence does not automatically prove that a path is absent.
 
-Garuda can inspect both directions of drift:
-
-- Documentation claims without matching implementation evidence.
-- Code entities and relationships without corresponding documentation claims.
-- Static claims whose runtime observations are missing.
-- Static or documented expectations contradicted by runtime observations.
-
-The system must not interpret undocumented code as automatically invalid. It reports the evidence gap and leaves the governance decision to policy or human review.
+Documentation-to-code and code-to-documentation drift are distinct queries. Runtime contradictions are a separate evidence class from static drift.
 
 ---
 
-## 8. Runtime Verification
+## 7. Runtime verification
 
-Garuda accepts runtime observations and correlates them with semantic entities. The runtime path can support:
+The repository contains runtime observation and correlation paths for controlled and synthetic evidence. These paths can associate observations with semantic entities, record verification changes, and create contradiction records.
+
+Runtime verification can support:
 
 - Trace and span ingestion.
-- Entity association.
-- Runtime evidence records.
-- Contradiction creation.
-- Verification-state changes.
-- Policy predicates such as `verification_missing`.
-- Dashboard presentation of recent evidence and contradictions.
+- Entity correlation.
+- Runtime observation storage.
+- Contradiction registration.
+- Verification-state updates.
+- Governance and dashboard reporting.
 
-### Example runtime workflow
-
-```text
-OpenTelemetry or runtime source
-          ↓
-Runtime observation ingestion
-          ↓
-Entity and operation correlation
-          ↓
-Evidence or contradiction record
-          ↓
-Policy evaluation
-          ↓
-ALLOW / WARN / REVIEW / BLOCK
-```
-
-### Current boundary
-
-The runtime verification path is implemented and exercised with controlled and synthetic evidence. Autonomous, large-scale, continuously scheduled correlation, dead-code detection, and unused-import detection are part of the next capability arc.
-
-The correct interpretation of `SUPPORTED` is therefore scope-dependent: it means the current evidence supports the claim under the active verification path. It does not mean every claim in every workspace has been observed in production.
-
-### Contradictions
-
-A contradiction represents an evidence conflict, such as a runtime operation that violates a statically or normatively established expectation. Contradictions can appear in workspace dashboards, attention panels, policy evidence, and IDE diagnostics.
+The current evidence does not justify claiming universal production coverage, continuous autonomous correlation, or complete dynamic behavior discovery. `SUPPORTED` means supported within the applicable workspace, source, and verification scope.
 
 ---
 
-## 9. Policy Engine
+## 8. Policy engine
 
-Policies are declarative rules evaluated against a tenant and workspace.
+Policies express organizational intent as declarative rules over a tenant and workspace.
 
-### Policy structure
+### Predicate families
 
-A policy may define:
+Current policy predicates include:
 
-- Identifier.
-- Version.
-- Title.
-- Priority.
-- Language or domain scope.
-- Authority.
-- Predicates.
-- Decision outcome.
-- Human-readable reason.
-
-### Predicates
-
-| Predicate | Meaning |
-|---|---|
-| `entity_exists` | Matching entities exist |
-| `claim_exists` | Matching relationships or claims exist |
-| `contradiction_exists` | A contradiction exists in the applicable scope |
-| `verification_missing` | Required verification evidence is absent |
-| `language_matches` | The scope contains a target language |
+- `entity_exists`.
+- `claim_exists`.
+- `contradiction_exists`.
+- `verification_missing`.
+- `language_matches`.
 
 ### Outcomes
 
 | Outcome | Meaning |
 |---|---|
-| `ALLOW` | No blocking condition was found |
-| `WARN` | A non-blocking condition is reported |
-| `REVIEW` | Human or specialist review is required |
-| `BLOCK` | The policy violation should prevent the governed action or merge |
+| `ALLOW` | No applicable blocking condition was found |
+| `WARN` | A non-blocking concern was found |
+| `REVIEW` | Additional review is required |
+| `BLOCK` | The evaluated policy requires the governed action to stop or be rejected |
 
-### Evaluation modes
+### Preview and committed evaluation
 
-| Mode | Behavior |
-|---|---|
-| Preview | Evaluates without persisting or anchoring the result |
-| Committed | Persists the evaluation and anchors it to the Merkle ledger; requires `--save` |
-| Reconcile | Opt-in state reconciliation that retires active policies whose YAML files are absent; requires `--save` |
+CLI policy evaluation is preview by default. Add `--save` to persist and anchor the evaluation. `--reconcile` retires active policy rows whose YAML source is absent and requires `--save`.
 
-### Authority attribution
+The MCP `garuda.policy.evaluate` tool is preview-only by design and does not persist or anchor a decision.
 
-Policies can carry an authority such as a team or organizational owner. This preserves who is responsible for the rule and provides context for review and audit workflows.
+### CLI examples
+
+```bash
+garuda policy validate ./policies
+garuda policy evaluate ./policies
+garuda policy evaluate ./policies --save
+garuda policy evaluate ./policies --fail-on-block
+```
+
+Policy evaluation is not itself a merge engine. An `ALLOW` result does not authorize arbitrary automatic merging unless a separate integration explicitly defines and enforces that behavior.
 
 ---
 
-## 10. Trust and Merkle Layer
+## 9. Trust and Merkle layer
 
-### Purpose
+The Merkle layer anchors persisted governance records and supports independent verification of their inclusion and integrity.
 
-The trust layer provides an independently verifiable record of persisted decisions and evidence commitments.
+It can establish that a recorded payload was included in a particular ledger state and that the proof recomputes under the applicable canonical encoding and verification rules.
 
-### What it proves
+It does not establish that:
 
-The ledger can prove that:
+- The semantic graph is complete.
+- The analyzer is correct for every language.
+- The policy is substantively correct.
+- The source code is safe.
+- Runtime observations cover every production path.
 
-- A decision or evaluation was recorded in a specific tenant ledger.
-- The record was included at a specific block height.
-- The recorded content has not changed since inclusion, assuming the verifier trusts the published root and verification algorithm.
-- The stored inclusion proof can be independently re-derived and checked.
-
-### What it does not prove
-
-The ledger does not prove that:
-
-- The semantic model is complete.
-- The analyzer is correct for every language or relationship type.
-- The underlying code is safe.
-- The runtime corpus represents every production path.
-- The policy itself is substantively correct.
-
-### Verification commands
+Useful commands include:
 
 ```bash
 garuda policy verify <evaluation-id>
 garuda verify
 ```
 
-The first verifies an individual policy evaluation or anchor. The second verifies the broader ledger and decision-chain integrity exposed by the CLI.
-
-### Merkle terminology
-
-Garuda uses the terms **tamper-evident**, **cryptographically anchored**, and **independently verifiable**. These terms describe the proof guarantee without claiming that every surrounding operational system is impossible to compromise.
-
-### Dashboard presentation
-
-The Evidence and Trust view can display:
-
-- Ledger status.
-- Block height.
-- Current root.
-- Parent root or genesis marker.
-- Observation time.
-- Verification state.
-- Policy evaluation evidence.
-- Anchor verification controls.
+The canonical trust and invariant contracts are documented in the ADRs and [`docs/invariants.md`](docs/invariants.md).
 
 ---
 
-## 11. MCP Surface
+## 10. MCP surface
 
-### Transport
+### Transport and initialization
 
-Garuda's MCP server uses line-delimited JSON-RPC 2.0 over standard input and output.
+Garuda exposes MCP over line-delimited JSON-RPC on standard input and output. The current verified initialization response uses protocol version `2025-06-18`.
 
-The current initialization contract reports MCP protocol version `2025-06-18`.
+### Current tools
 
-### Tool catalog
+The current catalog contains 21 tools across session, graph, governance, and coordination groups.
 
-| Group | Tool | Purpose | Access |
-|---|---|---|---|
-| Session | `garuda.briefing` | Workspace state, trust anchor, scale, hubs, policies, contradictions, and recent changes | Read-only |
-| Graph | `garuda.entities` | List semantic entities | Read-only |
-| Graph | `garuda.find_entity` | Find entities by name, kind, package, or path | Read-only |
-| Graph | `garuda.inspect` | Inspect one entity and relationships | Read-only |
-| Graph | `garuda.neighbors` | List one-hop inbound and outbound connections | Read-only |
-| Graph | `garuda.subclasses` | Find inheritance or embedding relationships | Read-only |
-| Graph | `garuda.implementers` | Find interface implementers | Read-only |
-| Graph | `garuda.blast_radius` | Compute graph-visible impact of changing a symbol | Read-only |
-| Graph | `garuda.query_claims` | Query documentation claims related to a subject | Read-only |
-| Graph | `garuda.query` | Query the knowledge graph using natural language | Read-only |
-| Governance | `garuda.policy.list` | List tenant policies | Read-only |
-| Governance | `garuda.policy.evaluate` | Preview policy outcomes | Read-only; preview by design |
-| Governance | `garuda.verify_policy_evaluation` | Verify a persisted evaluation proof | Read-only |
-| Governance | `garuda.governance.status` | Aggregate governance health | Read-only |
-| Governance | `garuda.check_drift` | Report documentation-to-code drift | Read-only |
-| Governance | `garuda.get_lineage` | Retrieve decision lineage | Read-only |
-| Governance | `garuda.get_impact` | Compute impact of a decision change | Read-only |
-| Governance | `garuda.detect_contradictions` | List unresolved contradictions | Read-only |
-| Governance | `garuda.propose_decision` | Create a budget-checked draft | Mutating |
-| Coordination | `garuda.handoff` | Transfer work and create a checkpoint | Mutating |
-| Coordination | `garuda.resume` | Restore and consume a checkpoint | Mutating |
+| Group | Tools |
+|---|---|
+| Session context | `garuda.briefing` |
+| Graph exploration | `garuda.entities`, `garuda.find_entity`, `garuda.inspect`, `garuda.neighbors`, `garuda.subclasses`, `garuda.implementers`, `garuda.blast_radius`, `garuda.query_claims`, `garuda.query` |
+| Governance | `garuda.policy.list`, `garuda.policy.evaluate`, `garuda.verify_policy_evaluation`, `garuda.governance.status`, `garuda.check_drift`, `garuda.get_lineage`, `garuda.get_impact`, `garuda.detect_contradictions`, `garuda.propose_decision` |
+| Coordination | `garuda.handoff`, `garuda.resume` |
 
-### Mutation semantics
+The precise JSON schemas are defined by the server’s tool registry and should be discovered with `tools/list`; clients should not assume that a prose document is the schema authority.
 
-The mutating tools are:
+### Mutation boundary
+
+The current mutating tools are:
 
 - `garuda.propose_decision`.
 - `garuda.handoff`.
 - `garuda.resume`.
 
-`garuda.policy.evaluate` is a preview by default and does not persist. CLI committed evaluation requires `--save`.
+`garuda.policy.evaluate` is a preview operation. Hygiene is not currently an MCP tool.
 
-### Tool distinction
+### Verification
 
-- `garuda.blast_radius` answers what may be affected if a symbol changes, using the semantic graph.
-- `garuda.get_impact` answers what may be affected if a decision changes, using decision lineage.
-
-### Client validation
-
-The MCP server has been tested against:
-
-| Client | Scope |
-|---|---|
-| Cursor | IDE MCP integration |
-| Claude Desktop | Desktop MCP integration |
-| Codex CLI | Independent CLI MCP integration |
-| Reference verifier | Dependency-free protocol, tool, and negative-path checks |
-
-Current reference verification:
+The dependency-free reference verifier currently reports:
 
 ```text
-═══ 38/38 checks passed ═══
+38/38 checks passed
 ```
 
-The reference verifier checks initialization, protocol version, tool discovery, entity lookup, graph relationships, policy-proof failures, blast-radius output, handoff and resume failure paths, unknown-tool errors, and clean shutdown.
+The verification suite covers initialization, tool discovery, protocol behavior, representative graph queries, negative paths, handoff/resume responses, unknown-tool behavior, and clean shutdown. It is not a complete proof of every tool’s semantic correctness.
+
+Verified client categories include Cursor, Claude Desktop, Codex CLI, and the in-repository reference implementation.
 
 ---
 
-## 12. Multi-Agent Coordination
+## 11. Agent coordination
 
-Garuda coordinates agent work at the state and task-transfer layer. It does not itself provide model inference or general agent-process orchestration.
+Garuda supports task and checkpoint coordination through transactional handoff and resume paths. It does not provide model inference, agent planning, sandbox execution, or autonomous code merging.
 
-### Handoff
+`garuda.handoff` transfers task ownership and creates a checkpoint under the applicable store transaction. `garuda.resume` restores and consumes a checkpoint; replaying a consumed checkpoint returns a structured failure rather than restoring it twice.
 
-`garuda.handoff` transfers task ownership between a source agent and a target agent. The transaction can:
+The handoff path uses Serializable transaction semantics and has regression coverage for repeated handoffs and happy-path MCP invocation.
 
-1. Validate task and agent preconditions.
-2. Lock the relevant task and checkpoint state.
-3. Create a checkpoint.
-4. Record the handoff.
-5. Transition agent and task state.
-6. Commit atomically.
-
-### Resume
-
-`garuda.resume` restores an active checkpoint and consumes it transactionally. A second attempt to consume the same checkpoint returns a structured `not_found` result rather than restoring it twice.
-
-### Isolation level
-
-The handoff and resume paths use Serializable transaction semantics and row locking where required by the store path. Concurrency behavior is part of the release verification contract.
-
-### Sessions and tool calls
-
-The current MCP product surface includes session and tool-call observability:
-
-- MCP process session identity.
-- Client and client-version metadata where available.
-- Agent and workspace association.
-- Tool-call duration.
-- Tool-call status.
-- Whitelisted argument summaries.
-- Graceful and inferred session closure state.
-
-Free-form query and business-context fields should not be recorded in argument summaries.
+The proposed autonomous execution harness is not part of the current Garuda product contract. It remains a future external orchestrator that must be designed around verified MCP contracts, sandbox boundaries, fresh-analysis guarantees, and explicit merge authorization.
 
 ---
 
-## 13. Workspace Console
+## 12. Workspace Console
 
-The Workspace Console is the tenant-facing user dashboard.
+The tenant-facing dashboard is served at `/dashboard` under session-cookie authentication in the current web application.
 
-### Workspace
+Current dashboard families include:
 
-The Workspace view presents:
+- Workspace statistics and repository state.
+- Search and graph exploration.
+- Governance and policy state.
+- Evidence and verification state.
+- Decision history and lineage.
+- MCP session activity where the corresponding data is available.
 
-- Repository count.
-- Package count.
-- Entity count.
-- Relationship count.
-- Language composition.
-- Active policy count.
-- Drift or quarantined-contract indicators.
-- Architectural hubs.
-- Recent evidence.
-- Workspace health and trust status.
-
-### Agents
-
-The Agents view presents MCP activity, including active and recent sessions, tool-call activity, and agent coordination state.
-
-### Governance
-
-The Governance view presents:
-
-- Policy decision summaries.
-- `ALLOW`, `WARN`, `REVIEW`, and `BLOCK` counts.
-- Documentation claim totals.
-- Supported, unverified, and contradicted claims.
-- Knowledge drift.
-- Contradictions and attention items.
-- Merkle and cryptographic trust state.
-
-### Decisions
-
-The Decisions view presents:
-
-- Decision history.
-- Decision status.
-- Policy and scope metadata.
-- Ancestors and descendants.
-- Revision chains.
-- Merkle or anchor status.
-- Detail drawers for evidence and lineage.
-
-### Graph
-
-The Graph view presents:
-
-- Interactive topology.
-- Entity communities.
-- Repository and package relationships.
-- Architectural hubs.
-- Level-based navigation.
-- Local and full-graph exploration.
-- Relationship highlighting and inspection.
+The dashboard is a presentation surface over scoped API and store queries. A dashboard label is not, by itself, evidence that an underlying metric or workflow is fully instrumented.
 
 ---
 
-## 14. VS Code Integration
+## 13. VS Code integration
 
-Garuda provides a VS Code extension under `vscode-extension/`.
+The repository contains a VS Code extension under `vscode-extension/` for Garuda workspace exploration and architecture-oriented diagnostics.
 
-### Extension identity
+The extension includes commands and views for workspace refresh, graph visualization, ledger state, and contradiction or architecture diagnostics according to the current extension manifest and compiled surface.
 
-| Field | Value |
-|---|---|
-| Display name | Garuda Epistemic Architecture Shield |
-| Version | `0.1.0` |
-| Primary scope | Go workspace architecture and verification assistance |
-| Activation | Go language, workspace containing `go.mod`, or startup completion |
-| Main entry point | `out/extension.js` |
+The extension is not an autonomous code-writing agent. It depends on the configured Garuda CLI, daemon, database, or MCP/API path appropriate to the installed version.
 
-### Commands
-
-| Command | Purpose |
-|---|---|
-| `garuda.refreshState` | Refresh ledger and verification state |
-| `garuda.openVisualizer` | Open graph visualizer |
-| `garuda.reanalyzeWorkspace` | Re-index workspace AST |
-
-### Extension views
-
-- Cryptographic Ledger.
-- Quarantined Contradictions.
-
-### Configuration
-
-| Setting | Purpose |
-|---|---|
-| `garuda.executablePath` | Path to the Garuda CLI binary |
-| `garuda.databaseUrl` | PostgreSQL state-store connection string |
-| `garuda.daemonUrl` | Unified daemon HTTP API URL |
-| `garuda.enableHoverBlastRadius` | Enable blast-radius and dependency information on Go symbol hover |
-
-### Editor diagnostics
-
-The extension can surface analyzer-backed architecture and runtime issues through the VS Code Problems view. The supplied validation evidence shows diagnostics for quarantined runtime contradictions and violations such as `ARCH_DRIFT_001`.
-
-The extension also supports architecture-oriented hover and graph workflows, including blast-radius and dependency information where enabled.
-
-### Verification boundary
-
-The extension should be described as **tested and shipped for editor-integrated diagnostics and exploration**. “Real-time” should be interpreted according to the configured refresh, reanalysis, daemon, and diagnostic-update paths. It should not be read as a guarantee that every repository mutation is continuously analyzed without a refresh or analysis event.
+Current documentation must distinguish shipped commands from planned diagnostic expansion. Do not describe every future Hygiene finding as an existing IDE diagnostic.
 
 ---
 
-## 15. Tenant and Workspace Isolation
+## 14. Tenant and workspace isolation
 
-Garuda models tenants, users, memberships, workspaces, repositories, entities, claims, policies, runtime evidence, decisions, and ledger state with explicit scope fields.
+Tenant isolation is enforced at the server and store boundaries, not by environment variables alone.
 
-### Tenant scope
+The required pattern is:
 
-Tenant-scoped data is resolved through authenticated or configured tenant context. Queries against tenant-owned resources must include the applicable tenant boundary.
+```text
+resolve tenant
+    ↓
+resolve workspace within tenant
+    ↓
+apply tenant/workspace predicates to every scoped query
+    ↓
+return only authorized scoped state
+```
 
-### Workspace scope
+Workspace names are not authorization boundaries. Same-named workspaces in different tenants must remain distinct. Cross-tenant reads must not return another tenant’s workspace, entities, relationships, policies, decisions, or runtime evidence.
 
-Workspace-scoped data is resolved through the active workspace and tenant. Workspace relationships are used to prevent one workspace's semantic state from being incorrectly presented as another workspace's state.
-
-### Shared workspaces
-
-A workspace can be shared by authorized developers and agents. The workspace is the collaboration boundary for repositories, graph state, policies, evidence, and decisions.
-
-### Access-control principles
-
-- Resolve tenant before reading tenant-owned state.
-- Resolve workspace within tenant scope.
-- Preserve workspace identifiers in semantic and governance records.
-- Reject or return structured failure for unauthorized scope resolution.
-- Keep cross-tenant reads structurally unavailable through query scoping and access checks.
-- Treat tenant and workspace isolation tests as release gates.
-
-### Scope caveat
-
-Isolation guarantees apply to the implemented authentication, API, CLI, MCP, dashboard, and store paths covered by the current release tests. New access paths must inherit the same scope-resolution contract rather than introducing default or implicit cross-scope behavior.
+The current codebase includes tenant and workspace isolation tests across API, store, benchmark, MCP, and workspace-resolution paths. New surfaces must reuse the established scope-resolution contract.
 
 ---
 
-## 16. Control Plane
+## 15. CLI and HTTP interfaces
 
-The Control Plane is an owner-facing operational surface and is distinct from the tenant-facing Workspace Console. It is not the primary public product surface documented for ordinary workspace users.
+### CLI families
 
-Where enabled, it can provide operational and tenant-level visibility with protected access and read-only database access for reporting paths.
+The CLI contains commands for:
 
-### Separation of concerns
-
-| Surface | Audience | Scope |
-|---|---|---|
-| Workspace Console | Tenant users, developers, agents | Current tenant and workspace |
-| Control Plane | Owner/operator | Platform-level operational administration |
-
-Internal roadmap, feature-flag, and beta-operations views are not treated as tenant-facing product capabilities.
-
----
-
-## 17. CLI and HTTP Interfaces
-
-### CLI
-
-The CLI supports workflows for:
-
-- Analysis.
-- Workspace management.
-- Repository management.
-- Entity and graph inspection.
-- Impact analysis.
-- Semantic diff.
-- Policy validation and evaluation.
-- Evaluation display and verification.
+- Workspace and repository management.
+- Repository analysis and semantic persistence.
+- Entity, graph, and inspection queries.
+- Summary, briefing, impact, and semantic diff workflows.
 - Documentation ingestion and verification.
-- Status and ledger verification.
-- CI operation.
-- Benchmarks and governance judgment.
-- Development daemon and dashboard operation.
+- Policy validation, preview, persistence, and proof verification.
+- CI checks and contradiction gates.
+- Agent coordination.
+- Dashboard or development operation.
+- Report-only static Hygiene.
 
-Use command-specific help for the authoritative flags:
+Use command help as the authoritative flag reference:
 
 ```bash
 garuda <command> --help
@@ -775,360 +441,304 @@ garuda <command> --help
 
 ### HTTP and OpenAPI
 
-Garuda exposes HTTP handlers for supported workspace, authentication, dashboard, policy, runtime, handoff, budget, ledger, and operational workflows. `openapi.yaml` provides the machine-readable API contract for the documented HTTP surface.
+The HTTP surface contains authentication, dashboard, workspace, graph, decision, policy, runtime, checkpoint, handoff, resume, and operational routes according to the current server and `openapi.yaml`.
 
-### Automation boundary
-
-Supported CLI, HTTP, MCP, and CI workflows are scriptable. A dashboard-only presentation is not automatically equivalent to an independently callable API; new dashboard actions should be backed by an explicit endpoint or MCP tool before being described as automation capabilities.
+The exact route contract belongs to the generated or maintained OpenAPI and handler definitions. Do not infer route availability from dashboard navigation alone.
 
 ---
 
-## 18. CI/CD Integration
+## 16. CI/CD integration
 
-Garuda can be integrated into build and review pipelines.
+Current CI-oriented capabilities include semantic analysis, policy gating, contradiction checks, and impact-oriented reporting.
 
-### Policy gate
-
-```bash
-./bin/garuda policy evaluate ./policies --fail-on BLOCK
-```
-
-`--fail-on` supports `BLOCK`, `REVIEW`, `WARN`, and `ALLOW` thresholds.
-
-### Impact annotation
-
-```bash
-./bin/garuda impact <changed-symbol> --format github
-```
-
-### Semantic diff
-
-```bash
-./bin/garuda analyze . --save -o /tmp/before.json
-./bin/garuda analyze . --save -o /tmp/after.json
-./bin/garuda diff /tmp/before.json /tmp/after.json
-```
-
-### Recommended pipeline
-
-1. Start or provision PostgreSQL.
-2. Apply migrations.
-3. Resolve the tenant and workspace.
-4. Analyze and persist the repository state.
-5. Validate policies.
-6. Run preview or committed policy evaluation.
-7. Fail on the configured decision threshold.
-8. Verify documentation or runtime evidence where applicable.
-9. Publish semantic diff, impact, and verification artifacts.
-
----
-
-## 19. Observability
-
-Garuda's observability surface includes product and platform evidence relevant to workspace operation.
-
-### MCP activity
-
-MCP sessions and tool calls can record:
-
-- Client identity.
-- Version metadata.
-- Agent identity.
-- Session lifecycle.
-- Tool name.
-- Duration.
-- Success or error status.
-- Whitelisted argument summary.
-
-### Runtime evidence
-
-Runtime observation records can include trace identifiers, span identifiers, parent spans, service names, operations, entity association, timing, and contradiction state.
-
-### Dashboard indicators
-
-The Workspace Console can present:
-
-- Supported claims.
-- Unverified claims.
-- Contradictions.
-- Runtime evidence.
-- Policy attention items.
-- Architectural hubs.
-- Trust state.
-
-### Privacy boundary
-
-Free-form business context should not be included in whitelisted session argument summaries. Runtime and error data should be scoped according to tenant and operator access rules.
-
----
-
-## 20. Data and Persistence Model
-
-PostgreSQL is the system of record for Garuda's persistent semantic and governance state.
-
-### Major data domains
-
-| Domain | Representative data |
+| Capability | Current interface |
 |---|---|
-| Identity | Users, sessions, tenants, memberships |
-| Workspace | Workspaces, repositories, workspace membership |
-| Semantic graph | Entities, packages, claims, relationships, cross-repository bridges |
-| Documentation | Documents, document claims, verification states |
-| Runtime | Observations, spans, contradictions, correlation records |
-| Governance | Policies, evaluations, violations, decisions, revisions, lineage |
-| Agent coordination | Tasks, agent state, checkpoints, handoffs |
-| Trust | Merkle roots, blocks, proofs, evidence records |
-| Observability | MCP sessions, tool calls, operational records |
-| Resource control | Tenant budgets and execution accounting |
+| Breaking-change gate | `garuda ci` with `--block-on-break` |
+| Policy threshold gate | `garuda policy evaluate` with `--fail-on-block` |
+| Contradiction gate | `garuda ci check` with `--fail-on-contradiction` |
+| Impact reporting | CLI impact and graph reports; provider-specific PR annotations are not part of the verified current contract |
 
-### Migration discipline
+Example:
 
-Migrations define schema evolution. They should be applied in order, tested for idempotence, and verified against the active release. Duplicate numeric prefixes must be reviewed before automated migration execution.
+```bash
+./bin/garuda ci check --fail-on-contradiction=true
+./bin/garuda policy evaluate ./policies --fail-on-block
+```
 
-### Scope discipline
-
-Tables containing tenant- or workspace-owned data must preserve the relevant scope key and enforce it in reads and writes. Store methods are expected to keep scope resolution explicit rather than relying on caller assumptions.
+Do not use `--fail-on BLOCK` or `--format github` as current examples unless those flags are implemented and verified in a future release.
 
 ---
 
-## 21. Security and Invariants
+## 17. Observability
 
-Garuda's security posture is based on explicit invariants rather than on UI labels alone.
+Current observability spans product evidence, runtime records, agent coordination, and server diagnostics. The exact availability depends on the deployed path and migrations applied.
 
-### Core invariants
+Supported or implemented observability areas include:
 
-- Tenant boundaries must be preserved on tenant-owned reads and writes.
-- Workspace boundaries must be preserved on workspace-owned reads and writes.
-- Storage presence does not automatically imply semantic visibility.
-- Evidence and decisions must retain source and scope context.
-- Committed governance records must be auditable and independently verifiable.
-- Policy evaluation and anchoring must not silently downgrade failures into success.
-- Heuristic evidence must remain distinguishable from compiler-backed evidence.
-- Mutating agent-coordination operations must be transactional and idempotent where required.
-- Revocation or invalidation state must dominate dependent exposure paths where applicable.
+- Request IDs and structured logs where configured.
+- Runtime observations and correlation metadata.
+- Contradiction records.
+- MCP session and tool-call data where the corresponding tables and write path are enabled.
+- Dashboard evidence and governance state.
+- Error and query instrumentation where present in the deployment.
 
-The canonical invariant contract is maintained in [`docs/invariants.md`](docs/invariants.md). This specification summarizes the model; the invariant document remains authoritative for exact rules and notation.
-
-### Fail-closed behavior
-
-When required integrity, scope, audit, or verification work fails, the governed operation should preserve the failure state rather than expose an unverified success. The exact behavior is operation-specific and must be tested at the store, API, CLI, MCP, and dashboard boundaries.
+The system should not be documented as collecting arbitrary agent prompts or free-form business context. Whitelisted argument summaries and scoped operational records are the safer contract.
 
 ---
 
-## 22. Validation and Evidence
+## 18. Data and persistence
 
-### Reference verification
+PostgreSQL stores the persistent truth substrate. Major domains include:
+
+- Tenants, users, sessions, and memberships.
+- Workspaces and repositories.
+- Entities and claims.
+- Cross-repository edges.
+- Documents and document claims.
+- Runtime observations and contradictions.
+- Policies, evaluations, decisions, revisions, and lineage.
+- Agent tasks, checkpoints, and handoffs.
+- Merkle roots, blocks, evidence, and proofs.
+- Budgets and operational records.
+
+Migration order and idempotency matter. Existing migration naming must be reviewed where numeric prefixes are duplicated.
+
+Hygiene findings are currently ephemeral CLI results. There is no current persisted Hygiene finding table, baseline store, suppression store, or observation lifecycle.
+
+---
+
+## 19. Security and invariants
+
+The canonical invariant contract is [`docs/invariants.md`](docs/invariants.md). This document records the practical boundaries relevant to current interfaces.
+
+- Scope is enforced at server/store boundaries.
+- Tenant and workspace IDs must remain attached to scoped records.
+- Mutating handoff and resume paths must preserve transaction semantics.
+- Merkle verification must fail rather than silently validate altered content.
+- Heuristic relationships and findings must remain identifiable as heuristic or advisory.
+- Preview policy evaluation must not persist or anchor.
+- New integrations must not bypass the existing scope and authority model.
+- Environment variables select context but do not replace authorization.
+- A report-only command must not mutate the graph or source tree.
+
+### No external dependency for core integrity
+
+The Merkle and semantic core do not require an LLM provider. MCP clients and future harnesses are external integration layers, not part of the cryptographic integrity primitive.
+
+### Autonomous harness boundary
+
+No current release guarantee is made for sandbox escape prevention, automatic remediation, automatic merge, loop prevention, or LLM reasoning correctness. Those belong to a separate execution-harness design and validation arc.
+
+---
+
+## 20. Hygiene
+
+Hygiene is the current report-only static-analysis capability described in [`docs/hygiene.md`](docs/hygiene.md).
+
+### Commands
+
+```bash
+garuda hygiene .
+garuda hygiene . --json -o hygiene.json
+garuda ponytail .
+```
+
+`garuda ponytail` is a deprecated compatibility alias. Both commands use the same pure `internal/hygiene` analyzer and produce equivalent reports.
+
+### Findings
+
+| Finding | Current meaning | Not proof of |
+|---|---|---|
+| Static unreferenced candidate | Non-package, non-file entity has no incoming relationship in the indexed graph | Dead code or safe removal |
+| Duplicate symbol-name candidate | Non-empty symbol name appears in multiple packages | Duplicated implementation |
+| Standard-library alternative | Name contains `Contains` or `Sort` and matches a naming heuristic | Replaceable implementation |
+
+### JSON compatibility
+
+The CLI preserves the existing top-level fields:
+
+```text
+dead_code
+duplications
+stdlib_alternatives
+summary
+total_entities
+total_relationships
+```
+
+The internal category names are more precise than the legacy JSON field names. `dead_code` is retained as a compatibility field but contains advisory static unreferenced candidates.
+
+### Scope and behavior
+
+Hygiene reads the resolved tenant/workspace graph and performs pure in-memory classification. It does not refresh analysis, persist findings, write source files, create decisions, anchor records, suppress findings, create baselines, expose an MCP tool, or merge code.
+
+Malformed untyped graph rows with missing, non-string, or empty `from`, `to`, or `type` fields are skipped by the CLI adapter. Findings are deterministically sorted. The analyzer does not mutate its input slices or external state.
+
+### Reference measurement
+
+A verified reference run against `go-validation-10` measured:
+
+```text
+Entities: 22905
+Relationships: 40956
+Static unreferenced candidates: 11919
+Duplicate symbol-name candidates: 1480
+Standard-library alternatives: 59
+```
+
+These are counts for one indexed snapshot, not defect counts or quality scores.
+
+### Future Hygiene work
+
+Planned or undecided work includes:
+
+- Analysis freshness metadata.
+- Read-only MCP exposure.
+- Persisted observations.
+- Suppression and baseline semantics.
+- VS Code finding lifecycle.
+- Higher-confidence unused-import and over-scoped-file analysis.
+
+None of these should be inferred from the current CLI.
+
+---
+
+## 21. Validation and evidence
+
+### Repository verification
+
+The current Hygiene arc has been verified with:
+
+```bash
+gofmt -d ...
+go test ./... -count=1
+go build ./...
+go vet ./...
+```
+
+The exact command list and current measured outputs should be recorded in `EVIDENCE.md` when the evidence corpus is updated.
+
+### MCP verification
 
 ```bash
 WORKSPACE=go-validation-10 python3 scripts/mcp_verify.py
 ```
 
-Current reference result:
+The current recorded reference result is:
 
 ```text
-═══ 38/38 checks passed ═══
+38/38 checks passed
 ```
-
-### Workspace validation
-
-Validated workspace evidence includes a multi-repository Go corpus with dashboard-visible scale, graph relationships, policy evaluations, runtime observations, contradictions, and Merkle state.
-
-### MCP clients
-
-MCP integration has been tested against Cursor, Claude Desktop, Codex CLI, and the dependency-free reference verifier.
-
-### Dashboard evidence
-
-The user-facing Workspace Console has been exercised across:
-
-- Workspace intelligence.
-- Graph exploration.
-- Governance and policy enforcement.
-- Evidence and cryptographic trust.
-- Decision history.
-- Agent/session activity.
-
-### IDE evidence
-
-The VS Code extension has been exercised with:
-
-- Cryptographic ledger view.
-- Contradiction view.
-- Problems-panel diagnostics.
-- Architecture and graph commands.
-- Go symbol hover support.
-- Workspace reanalysis and state refresh commands.
 
 ### Evidence discipline
 
-Every capability status should be accompanied by:
+A capability claim should identify:
 
-- Release or commit identity.
-- Test, benchmark, or reproducible command.
-- Corpus or workspace scope.
-- Known limitations.
-- Whether the result is authoritative, beta, or heuristic.
-
----
-
-## 23. Operational Workflows
-
-### First local workspace
-
-```bash
-export DATABASE_URL="postgres://garuda:garuda@localhost:5432/garuda?sslmode=disable"
-export GARUDA_WORKSPACE=my-workspace
-./bin/garuda workspace create my-workspace
-./bin/garuda analyze /path/to/repo --save
-./bin/garuda summary
-```
-
-### Documentation verification
-
-```bash
-./bin/garuda docs ingest ./docs
-./bin/garuda docs verify
-```
-
-### Policy preview and commit
-
-```bash
-./bin/garuda policy validate ./policies
-./bin/garuda policy evaluate ./policies
-./bin/garuda policy evaluate ./policies --save
-```
-
-### Policy proof verification
-
-```bash
-./bin/garuda policy show <evaluation-id>
-./bin/garuda policy verify <evaluation-id>
-```
-
-### MCP verification
-
-```bash
-go build -o bin/garuda-mcp ./cmd/garuda-mcp
-WORKSPACE=my-workspace python3 scripts/mcp_verify.py
-```
-
-### Impact review
-
-```bash
-./bin/garuda impact <entity-name>
-```
-
-### VS Code workflow
-
-1. Build the extension with `npm run compile` from `vscode-extension/`.
-2. Configure the Garuda executable and daemon/database settings.
-3. Open a Go workspace containing `go.mod`.
-4. Run `Garuda: Re-index Workspace AST`.
-5. Inspect the Garuda Architecture Shield views.
-6. Review Problems-panel diagnostics and hover impact information.
-7. Refresh ledger and verification state after policy or runtime changes.
+- The code or command that provides it.
+- The test or reproducible run that verifies it.
+- The tenant, workspace, corpus, or fixture scope.
+- Whether the claim is current, beta, experimental, planned, or historical.
+- What the evidence does not establish.
 
 ---
 
-## 24. Known Boundaries
+## 22. Known boundaries
 
-Garuda deliberately preserves uncertainty and capability boundaries.
-
-- Go compiler-backed analysis is not equivalent to universal runtime knowledge.
-- Python and TypeScript structural analysis has lower authority for dynamic behavior.
-- Heuristic call-graph results are confidence-scored.
-- A graph-visible blast radius is not a proof that every runtime dependency was discovered.
-- `UNVERIFIED` is not the same as false, dead, or broken.
-- A Merkle proof verifies recorded decision integrity, not semantic-model completeness.
-- Runtime verification depends on the quality and coverage of the observation source.
-- Cross-repository intelligence depends on repository configuration and resolvable dependency paths.
-- Dashboard state is scoped to the selected tenant and workspace.
-- Public product documentation excludes private operator-only Control Plane details unless explicitly marked.
-- Upcoming autonomous verification, dead-code detection, unused-import detection, and shared agent memory are not current GA capabilities.
-
----
-
-## 25. Roadmap
-
-### Next capability arc
-
-- Autonomous runtime correlation.
-- Dead-code and unused-import detection exposed through MCP.
-- Ponytail-oriented unused-symbol and over-scoped-file analysis.
-- Rust, Java, and Elixir analyzers.
-- Cross-agent shared memory.
-- Memory compression for long-running agent workflows.
-- Stale MCP-session cleanup.
-- Deeper lint coverage for store-versus-DTO and contract mismatches.
-- Expanded operational observability.
-
-### Promotion rule
-
-A roadmap capability should not be described as shipped until its implementation, persistence, isolation, failure-path behavior, and reproducible validation are complete for the target release.
+- A graph is not a complete runtime model.
+- Missing incoming references are not proof of dead code.
+- Repeated names are not proof of duplicated code.
+- A naming heuristic is not a refactoring proof.
+- `UNVERIFIED` is not false, dead, or broken.
+- A policy `ALLOW` is not automatically a merge authorization.
+- A Merkle proof does not prove semantic completeness.
+- An MCP protocol pass does not prove every semantic result is correct.
+- Tenant isolation must be enforced by the server and store, not configuration strings alone.
+- A dashboard panel does not prove that every underlying metric is fully instrumented.
+- The current system is not an autonomous execution harness.
+- The current system does not provide universal language coverage or complete dynamic call-graph resolution.
 
 ---
 
-## 26. Versioning
+## 23. Roadmap
 
-Garuda has multiple compatibility surfaces:
+The following are planned or require a separate design and verification arc:
+
+1. Hygiene evidence and contract expansion.
+2. Optional read-only Hygiene MCP exposure.
+3. Analysis freshness and workspace reanalysis contract.
+4. External read-only MCP execution harness.
+5. Patch artifacts and disposable worktrees.
+6. Sandboxed single-agent execution loop.
+7. Durable harness state and replay.
+8. Human review and explicit merge authorization.
+9. Multi-agent orchestration after the single-agent path is reliable.
+10. Suppression, baselines, and persisted Hygiene observations.
+11. Expanded language analyzers and larger multi-repository benchmarks.
+
+The execution harness must not bypass Garuda’s tenant, workspace, evidence, policy, and transaction boundaries.
+
+---
+
+## 24. Versioning
+
+Garuda has independent compatibility surfaces:
 
 | Surface | Compatibility concern |
 |---|---|
 | Semantic model | Entity, relationship, claim, and identity representation |
-| Analyzer version | Language resolution and evidence behavior |
-| Database schema | Ordered migrations and persisted state |
-| Merkle version | Canonical encoding, root, proof, and verification behavior |
-| MCP protocol | JSON-RPC transport, protocol version, tools, schemas, and response shapes |
-| CLI | Commands, flags, output formats, and exit codes |
-| HTTP/OpenAPI | Routes, request schemas, response schemas, and auth behavior |
-| VS Code extension | Commands, settings, views, diagnostics, and daemon compatibility |
+| Analyzer | Language resolution and evidence behavior |
+| Database | Ordered migrations and persisted state |
+| Merkle layer | Canonical encoding, roots, blocks, proofs, and verification |
+| MCP | Protocol version, tool names, input schemas, and response shapes |
+| CLI | Commands, flags, JSON fields, output, and exit codes |
+| HTTP/OpenAPI | Routes, schemas, authentication, and response behavior |
+| VS Code | Commands, settings, views, diagnostics, and daemon compatibility |
+| Hygiene | Finding kinds, advisory semantics, report fields, and alias behavior |
 
-Breaking changes should be documented with the affected surface, migration path, verification impact, and release identifier.
+Breaking changes should state which surface changed, how compatibility is handled, and how the change was verified.
 
 ---
 
-## 27. Glossary
+## 25. Glossary
 
 | Term | Definition |
 |---|---|
-| Entity | A stable semantic object such as a package, type, function, method, or field |
-| Relationship | A typed connection between semantic entities |
-| Claim | A normalized statement extracted from documentation or another intent source |
-| Evidence | Source, runtime, or cryptographic material supporting a claim or decision |
-| Supported | Evidence supports the claim within the verified scope |
-| Unverified | Evidence is insufficient to establish the claim |
-| Contradicted | Evidence conflicts with the claim |
-| Workspace | A logical group of repositories and semantic state |
-| Tenant | An isolation and ownership boundary for users, workspaces, policies, evidence, and decisions |
+| Entity | A typed semantic object such as a package, function, type, method, or field |
+| Relationship | A typed graph connection between entities |
+| Claim | A normalized statement extracted from intent or documentation |
+| Evidence | Source, runtime, semantic, or cryptographic material supporting a claim or decision |
+| Supported | Evidence supports a claim within a defined scope |
+| Unverified | Evidence is insufficient to establish a claim |
+| Contradicted | Evidence conflicts with a claim |
+| Workspace | Tenant-scoped grouping of repositories and semantic state |
+| Tenant | Isolation and ownership boundary for users, workspaces, policies, and evidence |
 | Blast radius | Graph-visible impact of changing a symbol |
 | Decision impact | Lineage-visible impact of changing a governance decision |
-| Policy evaluation | A run of policies against the current workspace state |
+| Policy evaluation | Applying policies to a scoped workspace state |
 | Merkle root | Cryptographic summary of a ledger state |
-| Block | A ledger position containing anchored records or state |
-| Inclusion proof | Evidence that a record belongs to a Merkle root or block |
-| Runtime observation | A recorded observation from an execution or telemetry source |
-| Contradiction | A detected conflict between available evidence and an expected claim or relationship |
-| Tier 5 | Compiler-backed semantic resolution tier used for supported Go analysis |
-| Tier 2 | Structural analysis tier used for supported Python and TypeScript paths |
-| MCP | Model Context Protocol interface used by AI clients to query and operate on Garuda |
+| Inclusion proof | Proof that a record belongs to a committed Merkle state |
+| Runtime observation | Recorded execution or telemetry evidence |
+| Hygiene candidate | Advisory static finding requiring human or downstream analysis |
 | Checkpoint | Persisted state used to transfer or resume agent work |
-| Handoff | Transactional transfer of task ownership between agents |
+| Handoff | Transactional transfer of task ownership |
+| MCP | Model Context Protocol interface for AI clients |
 | Control Plane | Operator-facing platform surface distinct from the tenant Workspace Console |
 
 ---
 
-## Evidence and Documentation Index
+## Evidence index
 
-- [`README.md`](README.md) — Product overview and positioning.
-- [`PLAYBOOK.md`](PLAYBOOK.md) — Installation, setup, workflows, and command reference.
-- [`EVIDENCE.md`](EVIDENCE.md) — Validation evidence and methodology.
-- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — Analyzer and product capability matrix.
-- [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) — Documentation ingestion contract.
-- [`docs/invariants.md`](docs/invariants.md) — Canonical invariant contract.
-- [`docs/adr/`](docs/adr/) — Architecture decision records.
+- [`README.md`](README.md) — product overview.
+- [`PLAYBOOK.md`](PLAYBOOK.md) — installation and operational workflows.
+- [`EVIDENCE.md`](EVIDENCE.md) — validation corpus and methodology.
+- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — capability matrix.
+- [`docs/hygiene.md`](docs/hygiene.md) — Hygiene command and report contract.
+- [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) — documentation ingestion contract.
+- [`docs/invariants.md`](docs/invariants.md) — invariant contract.
+- [`docs/adr/`](docs/adr/) — architecture decision records.
+- [`scripts/mcp_verify.py`](scripts/mcp_verify.py) — MCP reference verifier.
+- [`openapi.yaml`](openapi.yaml) — HTTP contract.
 - [`vscode-extension/`](vscode-extension/) — VS Code integration.
-- [`scripts/mcp_verify.py`](scripts/mcp_verify.py) — Dependency-free MCP reference verifier.
-- [`openapi.yaml`](openapi.yaml) — HTTP API contract.
 
 ---
 
