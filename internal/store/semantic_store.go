@@ -739,7 +739,7 @@ func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID 
 
 	var entities []analyzer.Entity
 	for rows.Next() {
-		var id, name, kind, pkg, pkgPath, modPath, recType, file, signature string
+		var id, name, kind, pkg, pkgPath, modPath, recType, file, signature, language string
 		var exported bool
 		var fieldsJSON, methodsJSON []byte
 		var line, lineStart, lineEnd int
@@ -747,9 +747,9 @@ func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID 
 		if err := rows.Scan(
 			&id, &name, &kind, &pkg, &pkgPath, &modPath, &recType,
 			&file, &signature, &fieldsJSON, &methodsJSON, &exported,
-			&line, &lineStart, &lineEnd,
+			&language, &line, &lineStart, &lineEnd,
 		); err != nil {
-			continue
+			return nil, fmt.Errorf("failed to scan entity row: %w", err)
 		}
 
 		entity := analyzer.Entity{
@@ -763,6 +763,7 @@ func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID 
 			File:         file,
 			Signature:    signature,
 			Exported:     exported,
+			Language:     language,
 			Line:         line,
 			LineStart:    lineStart,
 			LineEnd:      lineEnd,
