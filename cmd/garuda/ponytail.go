@@ -69,7 +69,7 @@ func hygieneRelationships(edges []map[string]interface{}) []analyzer.Relationshi
 		from, fromOK := edge["from"].(string)
 		to, toOK := edge["to"].(string)
 		typ, typeOK := edge["type"].(string)
-		if !fromOK || !toOK || !typeOK || from == "" || to == "" {
+		if !fromOK || !toOK || !typeOK || from == "" || to == "" || typ == "" {
 			continue
 		}
 		relationships = append(relationships, analyzer.Relationship{

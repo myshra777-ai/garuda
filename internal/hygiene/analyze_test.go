@@ -92,3 +92,129 @@ func TestAnalyzeDoesNotMutateInputs(t *testing.T) {
 		t.Fatal("Analyze mutated relationships")
 	}
 }
+
+func TestAnalyzeEmptyInput(t *testing.T) {
+	report := Analyze(nil, nil)
+
+	if len(report.Findings) != 0 {
+		t.Fatalf("findings = %d, want 0", len(report.Findings))
+	}
+	if report.EntityCount != 0 {
+		t.Fatalf("entity count = %d, want 0", report.EntityCount)
+	}
+	if report.RelationCount != 0 {
+		t.Fatalf("relationship count = %d, want 0", report.RelationCount)
+	}
+	if report.Summary != (Summary{}) {
+		t.Fatalf("summary = %+v, want zero summary", report.Summary)
+	}
+}
+
+func TestAnalyzeExcludesPackageAndFileCandidates(t *testing.T) {
+	entities := []analyzer.Entity{
+		{
+			ID:   "package",
+			Name: "pkg",
+			Kind: analyzer.KindPackage,
+		},
+		{
+			ID:   "file",
+			Name: "pkg.go",
+			Kind: analyzer.KindFile,
+		},
+	}
+
+	report := Analyze(entities, nil)
+
+	if report.Summary.StaticUnreferencedCandidates != 0 {
+		t.Fatalf("static candidates = %d, want 0", report.Summary.StaticUnreferencedCandidates)
+	}
+}
+
+func TestAnalyzeIgnoresEmptyDuplicateNames(t *testing.T) {
+	entities := []analyzer.Entity{
+		{
+			ID:      "one",
+			Name:    "",
+			Package: "one",
+			Kind:    analyzer.KindFunction,
+		},
+		{
+			ID:      "two",
+			Name:    "",
+			Package: "two",
+			Kind:    analyzer.KindFunction,
+		},
+	}
+
+	report := Analyze(entities, nil)
+
+	if report.Summary.DuplicateSymbolNames != 0 {
+		t.Fatalf("duplicate findings = %d, want 0", report.Summary.DuplicateSymbolNames)
+	}
+}
+
+func TestAnalyzeDuplicateNameIsAggregated(t *testing.T) {
+	entities := []analyzer.Entity{
+		{
+			ID:      "one",
+			Name:    "Shared",
+			Package: "zeta",
+			Kind:    analyzer.KindFunction,
+		},
+		{
+			ID:      "two",
+			Name:    "Shared",
+			Package: "alpha",
+			Kind:    analyzer.KindFunction,
+		},
+		{
+			ID:      "three",
+			Name:    "Shared",
+			Package: "alpha",
+			Kind:    analyzer.KindMethod,
+		},
+	}
+
+	report := Analyze(entities, nil)
+
+	if report.Summary.DuplicateSymbolNames != 1 {
+		t.Fatalf("duplicate findings = %d, want 1", report.Summary.DuplicateSymbolNames)
+	}
+
+	var finding Finding
+	for _, candidate := range report.Findings {
+		if candidate.Kind == FindingDuplicateSymbolName {
+			finding = candidate
+			break
+		}
+	}
+
+	if finding.Name != "Shared" {
+		t.Fatalf("duplicate name = %q, want Shared", finding.Name)
+	}
+	if !reflect.DeepEqual(finding.Packages, []string{"alpha", "zeta"}) {
+		t.Fatalf("packages = %v, want [alpha zeta]", finding.Packages)
+	}
+}
+
+func TestAnalyzeIsIndependentOfInputOrder(t *testing.T) {
+	firstEntities := []analyzer.Entity{
+		{ID: "z", Name: "Shared", Kind: analyzer.KindFunction, Package: "zeta", File: "z.go"},
+		{ID: "a", Name: "Shared", Kind: analyzer.KindFunction, Package: "alpha", File: "a.go"},
+		{ID: "c", Name: "ContainsItems", Kind: analyzer.KindFunction, Package: "pkg", File: "c.go"},
+	}
+
+	secondEntities := []analyzer.Entity{
+		firstEntities[2],
+		firstEntities[0],
+		firstEntities[1],
+	}
+
+	first := Analyze(firstEntities, nil)
+	second := Analyze(secondEntities, nil)
+
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("analysis depends on input order:\nfirst=%+v\nsecond=%+v", first, second)
+	}
+}

@@ -70,6 +70,15 @@ func sortFindings(findings []Finding) {
 		if findings[i].File != findings[j].File {
 			return findings[i].File < findings[j].File
 		}
-		return findings[i].LineStart < findings[j].LineStart
+		if findings[i].LineStart != findings[j].LineStart {
+			return findings[i].LineStart < findings[j].LineStart
+		}
+		if findings[i].LineEnd != findings[j].LineEnd {
+			return findings[i].LineEnd < findings[j].LineEnd
+		}
+		if findings[i].EntityID != findings[j].EntityID {
+			return findings[i].EntityID < findings[j].EntityID
+		}
+		return findings[i].Message < findings[j].Message
 	})
 }
