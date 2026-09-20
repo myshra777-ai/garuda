@@ -24,6 +24,7 @@
   <a href="#getting-started">Get started</a> ·
   <a href="#why-now">Why now</a> ·
   <a href="#what-garuda-does">What Garuda does</a> ·
+  <a href="#the-execution-harness-vision">Execution harness vision</a> ·
   <a href="docs/SPECS.md">Specifications</a> ·
   <a href="EVIDENCE.md">Evidence</a> ·
   <a href="PLAYBOOK.md">Playbook</a>
@@ -57,7 +58,7 @@ Garuda connects organizational intent, source code, runtime observations, polici
 
 ## Why now
 
-Software development is moving from AI-assisted coding toward increasingly agentic execution. Agents can now plan multi-step work, modify repositories, run tools, review changes, coordinate with other agents, and operate for longer periods with less direct supervision.
+Software development is moving from AI-assisted coding toward increasingly agentic execution. Agents can plan multi-step work, modify repositories, run tools, review changes, coordinate with other agents, and operate for longer periods with less direct supervision.
 
 The important consequence is not simply that more code gets written. It is that **software can change faster than teams can reconstruct and verify system context**.
 
@@ -78,7 +79,7 @@ The problem becomes more important as organizations adopt:
 - Runtime-aware governance.
 - AI-generated changes that require human review at system scale.
 
-DORA's AI-capabilities research similarly frames AI adoption as a systems and organizational capability problem, not merely a model or editor problem. Garuda is designed for the missing layer between agent execution and system understanding.
+Garuda is designed for the missing layer between agent execution and system understanding. It does not claim that every agent action is safe or that every semantic result is complete.
 
 ---
 
@@ -162,10 +163,10 @@ An unverified claim is not automatically false. It means the evidence boundary r
 
 Policies define scope, authority, predicates, outcomes, and reasons. The current decision outcomes are:
 
-- `ALLOW`
-- `WARN`
-- `REVIEW`
-- `BLOCK`
+- `ALLOW`.
+- `WARN`.
+- `REVIEW`.
+- `BLOCK`.
 
 Policies can run as non-persisting previews or as committed evaluations anchored to the Merkle ledger.
 
@@ -229,7 +230,26 @@ The answer comes from the shared workspace model rather than only the file curre
 
 This is coordination state, not a replacement for a model harness. Garuda does not itself run a general planner/executor/observer loop, launch arbitrary model fleets, or provide a general-purpose code-execution sandbox.
 
-### 8. Meter and classify agent work
+### 8. Report static Hygiene findings
+
+Garuda provides a report-only Hygiene command over the scoped semantic graph:
+
+```bash
+garuda hygiene .
+garuda hygiene . --json -o hygiene.json
+```
+
+The historical `garuda ponytail` command remains available as a deprecated compatibility alias. Both commands use the same typed analyzer and produce the same report.
+
+Current advisory findings include:
+
+- Static unreferenced candidates.
+- Duplicate symbol-name candidates across packages.
+- Standard-library alternative suggestions for `Contains` and `Sort` naming patterns.
+
+These findings are not authoritative defect classifications. A static unreferenced candidate is not proof of dead code, a duplicate name is not proof of duplicated implementation, and a standard-library suggestion is not an automatic refactoring instruction. See [`docs/hygiene.md`](docs/hygiene.md).
+
+### 9. Meter and classify agent work
 
 The repository also contains supporting controls for agent infrastructure:
 
@@ -240,6 +260,97 @@ The repository also contains supporting controls for agent infrastructure:
 - Model-selection recommendations based on task domain and budget state.
 
 This layer is a pre-flight classifier and routing policy, not a complete model-serving fabric or provider gateway.
+
+---
+
+## The execution harness vision
+
+Garuda is the truth substrate. The execution harness is a separate controller that may eventually use Garuda to operate a closed-loop, multi-agent software workflow.
+
+This distinction matters:
+
+```text
+Garuda truth substrate
+  semantic graph · evidence · policy · decisions · checkpoints
+                  ↓ MCP / HTTP contracts
+Execution harness
+  controller · budgets · artifacts · sandbox lifecycle · approvals
+                  ↓
+Agent sandboxes
+  plan · edit · test · propose patch
+```
+
+The harness is a **vision and future integration**, not a current shipped Garuda capability.
+
+### Intended responsibility split
+
+| Component | Responsibility | Authority boundary |
+|---|---|---|
+| Garuda | Semantic state, scoped evidence, policy outcomes, governance records, transactional coordination | Authoritative for the data and decisions it stores and verifies |
+| Harness controller | Run state, budgets, retries, replay, artifact tracking, sandbox lifecycle, approval routing | Must not invent Garuda facts or bypass Garuda scope checks |
+| Agent | Planning, coding, testing, and proposing changes | Produces proposals and artifacts, not authoritative governance facts |
+| Sandbox | Isolated execution environment for an agent attempt | Must not receive Garuda database credentials or unrestricted host access |
+| Human or merge service | Final authorization where required | Explicit merge authorization remains separate from `ALLOW` |
+
+### Proposed closed loop
+
+The future harness should follow this sequence:
+
+```text
+Task
+  ↓
+Architectural context from Garuda
+  ↓
+Isolated agent attempt
+  ↓
+Patch artifact and tests
+  ↓
+Apply to disposable worktree
+  ↓
+Fresh workspace analysis
+  ↓
+Policy evaluation
+  ├── ALLOW → candidate for configured review gate
+  ├── WARN  → warning review or configured exception
+  ├── REVIEW → human or specialist review
+  └── BLOCK → remediation required; never merge automatically
+```
+
+The harness must reject stale evidence. A policy result should not be treated as current when the analyzed revision does not match the candidate revision.
+
+### Planned harness capabilities
+
+The design direction includes:
+
+- External Python or Go controller connected over MCP stdio or HTTP.
+- Dynamic MCP tool discovery rather than hardcoded schemas.
+- Correlated request and run events.
+- Bounded retries, tool-call budgets, wall-clock limits, patch limits, and handoff limits.
+- Patch artifacts with path validation and content digests.
+- Disposable worktrees or stronger sandbox runtimes.
+- Read-only operation before autonomous mutation.
+- Replayable event logs.
+- Durable controller state and restart recovery.
+- Explicit human approval and merge gates.
+- Multi-agent handoffs only after the single-agent loop is reliable.
+
+### Non-goals of the first harness release
+
+The first harness should not attempt to provide:
+
+- Automatic merging after `ALLOW`.
+- LLM-generated facts treated as Garuda evidence.
+- Arbitrary host filesystem synchronization.
+- Agent access to PostgreSQL credentials.
+- Unbounded autonomous loops.
+- A second competing source of truth for Garuda entities or policy decisions.
+- Guaranteed prevention of every prompt-injection or sandbox attack.
+
+### Required prerequisite
+
+A future `garuda.workspace.analyze` capability would be needed for a reliable mutation loop. It must define workspace authorization, repository/worktree identity, revision or content digest, write transaction semantics, idempotency, failure behavior, and analysis freshness before it is used by an autonomous controller.
+
+Until that contract exists and is verified, the harness remains a design direction rather than an implementation claim.
 
 ---
 
@@ -307,6 +418,10 @@ Use durable checkpoints and transactional handoffs instead of depending on one s
 ### Investigate runtime drift
 
 Correlate observed behavior with static expectations and route contradictions or missing evidence to policy review.
+
+### Review static Hygiene candidates
+
+Run `garuda hygiene` against an indexed workspace, inspect the advisory findings, and verify the implementation before changing code. Do not treat a candidate as an automatic deletion or rewrite instruction.
 
 ---
 
@@ -388,6 +503,7 @@ garuda policy verify <evaluation-id>
 | **Multi-tenancy** | Users, tenants, memberships, workspace resolution, and scoped state |
 | **Agent metering** | Token and execution budgets with consumption state |
 | **Pre-flight controls** | Task classification and secret-like payload redaction |
+| **Static Hygiene** | Report-only `garuda hygiene` command with deprecated `garuda ponytail` compatibility alias |
 | **User surfaces** | Workspace Console, Agents, Governance, Decisions, Graph, and VS Code integration |
 
 These are implementation and validation facts within the documented scope, not claims that every capability has been tested at every production scale.
@@ -410,6 +526,7 @@ The latest tagged public release is `v0.2.0`. The `main` branch may contain addi
 - Merkle-backed governance records.
 - MCP integration and reference verification.
 - Transactional handoff and resume.
+- Report-only Hygiene CLI and compatibility alias.
 - Workspace Console and IDE integrations.
 
 ### Beta or validation-sensitive
@@ -418,6 +535,7 @@ The latest tagged public release is `v0.2.0`. The `main` branch may contain addi
 - Runtime verification against production-scale telemetry.
 - Large multi-repository validation beyond named corpora.
 - Deployment hardening across every operational access path.
+- Future autonomous execution harness design.
 
 ### Explicit non-claims for the current release
 
@@ -426,6 +544,8 @@ The latest tagged public release is `v0.2.0`. The `main` branch may contain addi
 - Durable autonomous scheduling.
 - Complete model-provider orchestration.
 - Cross-agent shared memory as a finished capability.
+- Automatic code remediation or merge based only on a policy `ALLOW`.
+- Hygiene persistence, suppression, baselines, or MCP exposure.
 
 Capability maturity is tracked in [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md).
 
@@ -443,6 +563,7 @@ Garuda will not claim:
 - A cryptographic ledger as proof that the underlying software is correct.
 - A model router as a replacement for a complete inference gateway.
 - A checkpoint system as a complete agent runtime.
+- A static Hygiene candidate as proof that code can be safely deleted.
 
 The product is designed to become more trustworthy by making its limits visible.
 
@@ -498,6 +619,19 @@ export GARUDA_WORKSPACE=my-workspace
 
 Analyze each repository against the same workspace to build a multi-repository model.
 
+### Run Hygiene
+
+```bash
+./bin/garuda hygiene .
+./bin/garuda hygiene . --json -o hygiene.json
+```
+
+The command reads the indexed workspace graph and reports advisory findings. It does not refresh the semantic graph. The old command remains available as a deprecated alias:
+
+```bash
+./bin/garuda ponytail .
+```
+
 ### Ingest and verify documentation
 
 ```bash
@@ -517,6 +651,8 @@ Preview mode does not persist or anchor the result. Add `--save` for a recorded 
 ```bash
 ./bin/garuda policy evaluate ./policies --workspace my-workspace --save
 ```
+
+Use `--fail-on-block` in automation when a `BLOCK` policy outcome should make the command exit non-zero.
 
 ### Start the workspace service
 
@@ -545,11 +681,11 @@ Expected:
 | Interface | Purpose |
 |---|---|
 | **MCP** | Agent-native access to workspace state, governance, evidence, impact, and coordination |
-| **CLI** | Analysis, policies, documentation, verification, impact, CI, and operations |
+| **CLI** | Analysis, policies, documentation, verification, impact, CI, Hygiene, and operations |
 | **HTTP / OpenAPI** | Machine-readable programmatic integrations |
 | **Workspace Console** | Human-facing workspace, agents, governance, decisions, and graph views |
 | **VS Code extension** | In-editor architecture, ledger, contradiction, diagnostics, and exploration workflows |
-| **CI integration** | Policy gates, semantic analysis, and automated engineering checks |
+| **CI integration** | Policy gates, semantic analysis, contradiction checks, and automated engineering checks |
 
 ---
 
@@ -658,6 +794,7 @@ The roadmap extends the same system rather than creating unrelated products.
 - Broader dashboard and IDE integration.
 - Stale-session lifecycle handling.
 - Deeper policy and contract analysis.
+- Hygiene persistence, suppression, baselines, and additional finding types after their contracts are defined.
 
 ### Agent intelligence layer
 
@@ -666,12 +803,15 @@ The roadmap extends the same system rather than creating unrelated products.
 - Richer handoff semantics.
 - More complete agent attribution and cost accounting.
 
-### System-integrity layer
+### Execution harness layer
 
-- Stronger policy coverage for business-critical invariants.
-- Richer runtime-to-intent verification.
-- Expanded evidence exchange between engineering systems.
-- Integrations for larger organizational software estates.
+- Read-only MCP controller and replay mode.
+- Workspace reanalysis with explicit revision freshness.
+- Patch artifacts and disposable worktrees.
+- Sandboxed single-agent execution.
+- Durable controller state and recovery.
+- Human review and explicit merge authorization.
+- Multi-agent orchestration after the single-agent path is reliable.
 
 Planned capabilities are not current shipped capabilities.
 
@@ -683,6 +823,7 @@ Planned capabilities are not current shipped capabilities.
 |---|---|
 | [`docs/SPECS.md`](docs/SPECS.md) | Detailed public system and product specification |
 | [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) | Capability maturity and analyzer verification status |
+| [`docs/hygiene.md`](docs/hygiene.md) | Report-only Hygiene command and finding contract |
 | [`EVIDENCE.md`](EVIDENCE.md) | Evidence methodology and current validation record |
 | [`BENCHMARKS_AND_VERIFICATION_v1.0.0.md`](BENCHMARKS_AND_VERIFICATION_v1.0.0.md) | Detailed benchmark and verification report |
 | [`PLAYBOOK.md`](PLAYBOOK.md) | Installation, workflows, and operational reference |
@@ -692,7 +833,6 @@ Planned capabilities are not current shipped capabilities.
 | [`openapi.yaml`](openapi.yaml) | Machine-readable HTTP API contract |
 | [`scripts/mcp_verify.py`](scripts/mcp_verify.py) | Dependency-free MCP reference verifier |
 | [`SECURITY.md`](SECURITY.md) | Security model and vulnerability reporting |
-| [Hygiene](docs/hygiene.md) | Report-only advisory static findings and compatibility behavior |
 
 ---
 
