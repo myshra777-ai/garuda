@@ -10,9 +10,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/analyzer"
+	"github.com/myshra777-ai/garuda/internal/hygiene"
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -30,13 +31,14 @@ func init() {
 
 var ponytailCmd = &cobra.Command{
 	Use:   "ponytail [path]",
-	Short: "Detect dead code, duplications, and standard-lib alternatives",
-	Long: `Scans the codebase and reports:
-  - Dead code (zero incoming references)
-  - Duplications (similar structural entities)
-  - Standard library alternatives
+	Short: "Report static hygiene candidates and standard-library alternatives",
+	Long: `Scans the workspace semantic graph and reports advisory findings:
+  - Static unreferenced candidates (zero incoming graph references)
+  - Duplicate symbol-name candidates across packages
+  - Standard-library alternative suggestions
 
-Uses the semantic graph for evidence-backed findings.
+These findings are advisory. A zero-incoming entity is not proof of dead code,
+and a repeated symbol name is not proof of duplicated implementation.
 
 Examples:
   garuda ponytail .
@@ -49,6 +51,24 @@ Examples:
 		}
 		handlePonytail(path)
 	},
+}
+
+func hygieneRelationships(edges []map[string]interface{}) []analyzer.Relationship {
+	relationships := make([]analyzer.Relationship, 0, len(edges))
+	for _, edge := range edges {
+		from, fromOK := edge["from"].(string)
+		to, toOK := edge["to"].(string)
+		typ, typeOK := edge["type"].(string)
+		if !fromOK || !toOK || !typeOK || from == "" || to == "" {
+			continue
+		}
+		relationships = append(relationships, analyzer.Relationship{
+			From: from,
+			To:   to,
+			Type: typ,
+		})
+	}
+	return relationships
 }
 
 func handlePonytail(path string) {
@@ -85,14 +105,9 @@ func handlePonytail(path string) {
 		os.Exit(1)
 	}
 
-	// Build incoming references map
-	incomingCount := make(map[string]int)
-	for _, e := range edges {
-		target := e["to"].(string)
-		incomingCount[target]++
-	}
+	relationships := hygieneRelationships(edges)
+	hygieneReport := hygiene.Analyze(entities, relationships)
 
-	// Build report
 	report := struct {
 		DeadCode      []string       `json:"dead_code"`
 		Duplications  []string       `json:"duplications"`
@@ -102,50 +117,24 @@ func handlePonytail(path string) {
 		Relationships int            `json:"total_relationships"`
 	}{}
 
-	deadCode := []string{}
-	for _, e := range entities {
-		if incomingCount[e.ID] == 0 && e.Kind != "package" && e.Kind != "file" {
-			deadCode = append(deadCode, fmt.Sprintf("%s (%s) in %s", e.Name, e.Kind, e.File))
+	for _, finding := range hygieneReport.Findings {
+		switch finding.Kind {
+		case hygiene.FindingStaticUnreferencedCandidate:
+			report.DeadCode = append(report.DeadCode, finding.Message)
+		case hygiene.FindingDuplicateSymbolName:
+			report.Duplications = append(report.Duplications, finding.Message)
+		case hygiene.FindingStandardLibraryAlternative:
+			report.StdLibAlts = append(report.StdLibAlts, finding.Message)
 		}
 	}
-	report.DeadCode = deadCode
-
-	// Simple duplications: same name in different packages (simplistic)
-	dupMap := make(map[string][]string)
-	for _, e := range entities {
-		dupMap[e.Name] = append(dupMap[e.Name], e.Package)
-	}
-	duplications := []string{}
-	for name, pkgs := range dupMap {
-		if len(pkgs) > 1 && name != "" {
-			duplications = append(duplications, fmt.Sprintf("%s appears in %s", name, strings.Join(pkgs, ", ")))
-		}
-	}
-	report.Duplications = duplications
-
-	// Stdlib alternatives: contains, sort, etc.
-	stdlib := []string{}
-	for _, e := range entities {
-		if strings.Contains(e.Name, "Contains") || strings.Contains(e.Name, "Sort") {
-			alt := "slices.Contains or slices.Sort"
-			if strings.Contains(e.Name, "Contains") {
-				alt = "slices.Contains"
-			}
-			if strings.Contains(e.Name, "Sort") {
-				alt = "slices.Sort"
-			}
-			stdlib = append(stdlib, fmt.Sprintf("%s → use %s", e.Name, alt))
-		}
-	}
-	report.StdLibAlts = stdlib
 
 	report.Summary = map[string]int{
-		"dead_code":    len(deadCode),
-		"duplications": len(duplications),
-		"stdlib_alts":  len(stdlib),
+		"dead_code":    len(report.DeadCode),
+		"duplications": len(report.Duplications),
+		"stdlib_alts":  len(report.StdLibAlts),
 	}
-	report.Entities = len(entities)
-	report.Relationships = len(edges)
+	report.Entities = hygieneReport.EntityCount
+	report.Relationships = hygieneReport.RelationCount
 
 	if ponytailJSON {
 		data, _ := json.MarshalIndent(report, "", "  ")
@@ -163,28 +152,28 @@ func handlePonytail(path string) {
 	fmt.Println("📊 Ponytail report generated.")
 	fmt.Printf("Entities: %d, Relationships: %d\n\n", report.Entities, report.Relationships)
 
-	if len(deadCode) > 0 {
-		fmt.Printf("🔴 DEAD CODE (%d):\n", len(deadCode))
-		for _, dc := range deadCode {
+	if len(report.DeadCode) > 0 {
+		fmt.Printf("STATIC UNREFERENCED CANDIDATES %d\n", len(report.DeadCode))
+		for _, dc := range report.DeadCode {
 			fmt.Printf("  • %s\n", dc)
 		}
 		fmt.Println()
 	}
-	if len(duplications) > 0 {
-		fmt.Printf("🟡 DUPLICATIONS (%d):\n", len(duplications))
-		for _, dup := range duplications {
+	if len(report.Duplications) > 0 {
+		fmt.Printf("DUPLICATE SYMBOL-NAME CANDIDATES %d\n", len(report.Duplications))
+		for _, dup := range report.Duplications {
 			fmt.Printf("  • %s\n", dup)
 		}
 		fmt.Println()
 	}
-	if len(stdlib) > 0 {
-		fmt.Printf("📚 STANDARD LIBRARY ALTERNATIVES (%d):\n", len(stdlib))
-		for _, alt := range stdlib {
+	if len(report.StdLibAlts) > 0 {
+		fmt.Printf("STANDARD-LIBRARY ALTERNATIVE SUGGESTIONS %d\n", len(report.StdLibAlts))
+		for _, alt := range report.StdLibAlts {
 			fmt.Printf("  • %s\n", alt)
 		}
 		fmt.Println()
 	}
-	if len(deadCode) == 0 && len(duplications) == 0 && len(stdlib) == 0 {
-		fmt.Println("✅ No issues found – your code is lean and clean.")
+	if len(report.DeadCode) == 0 && len(report.Duplications) == 0 && len(report.StdLibAlts) == 0 {
+		fmt.Println("No static hygiene candidates or suggestions found.")
 	}
 }
