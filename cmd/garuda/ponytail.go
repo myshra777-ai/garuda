@@ -18,21 +18,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	ponytailOutput string
-	ponytailJSON   bool
-)
+func newHygieneCommand(use string, deprecated string) *cobra.Command {
+	var outputJSON bool
+	var outputPath string
 
-func init() {
-	ponytailCmd.Flags().StringVarP(&ponytailOutput, "output", "o", "", "Write report to file")
-	ponytailCmd.Flags().BoolVar(&ponytailJSON, "json", false, "Output JSON")
-	rootCmd.AddCommand(ponytailCmd)
-}
-
-var ponytailCmd = &cobra.Command{
-	Use:   "ponytail [path]",
-	Short: "Report static hygiene candidates and standard-library alternatives",
-	Long: `Scans the workspace semantic graph and reports advisory findings:
+	cmd := &cobra.Command{
+		Use:        use,
+		Short:      "Report static hygiene candidates and standard-library alternatives",
+		Deprecated: deprecated,
+		Long: `Scans the workspace semantic graph and reports advisory findings:
   - Static unreferenced candidates (zero incoming graph references)
   - Duplicate symbol-name candidates across packages
   - Standard-library alternative suggestions
@@ -41,16 +35,32 @@ These findings are advisory. A zero-incoming entity is not proof of dead code,
 and a repeated symbol name is not proof of duplicated implementation.
 
 Examples:
-  garuda ponytail .
-  garuda ponytail . --json -o ponytail.json`,
-	Args: cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		path := "."
-		if len(args) > 0 {
-			path = args[0]
-		}
-		handlePonytail(path)
-	},
+  garuda hygiene .
+  garuda hygiene . --json -o hygiene.json`,
+		Args: cobra.MaximumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			path := "."
+			if len(args) > 0 {
+				path = args[0]
+			}
+			handleHygiene(path, outputJSON, outputPath)
+		},
+	}
+
+	cmd.Flags().BoolVar(&outputJSON, "json", false, "Output JSON")
+	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "Write report to file")
+
+	return cmd
+}
+
+var (
+	hygieneCmd  = newHygieneCommand("hygiene [path]", "")
+	ponytailCmd = newHygieneCommand("ponytail [path]", "use `garuda hygiene` instead")
+)
+
+func init() {
+	rootCmd.AddCommand(hygieneCmd)
+	rootCmd.AddCommand(ponytailCmd)
 }
 
 func hygieneRelationships(edges []map[string]interface{}) []analyzer.Relationship {
@@ -71,7 +81,7 @@ func hygieneRelationships(edges []map[string]interface{}) []analyzer.Relationshi
 	return relationships
 }
 
-func handlePonytail(path string) {
+func handleHygiene(path string, outputJSON bool, outputPath string) {
 	dbURL := getDBURL()
 	tenantID := getTenantIDString()
 	ctx := context.Background()
@@ -136,11 +146,11 @@ func handlePonytail(path string) {
 	report.Entities = hygieneReport.EntityCount
 	report.Relationships = hygieneReport.RelationCount
 
-	if ponytailJSON {
+	if outputJSON {
 		data, _ := json.MarshalIndent(report, "", "  ")
-		if ponytailOutput != "" {
-			os.WriteFile(ponytailOutput, data, 0644)
-			fmt.Printf("📄 JSON written to %s\n", ponytailOutput)
+		if outputPath != "" {
+			os.WriteFile(outputPath, data, 0644)
+			fmt.Printf("📄 JSON written to %s\n", outputPath)
 		} else {
 			fmt.Println(string(data))
 		}
