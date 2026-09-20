@@ -1,8 +1,9 @@
 # Garuda Specifications
 
 **Version:** 0.1.x  
-**Document status:** Current-state reference draft  
-**Updated:** 2026-09-20  
+**Document status:** Current-state reference draft
+
+**Updated:** 2026-09-20
 **Scope:** Verified repository capabilities, validation boundaries, and explicitly marked future work.
 
 > This document describes Garuda as implemented and verified in the current repository state. A capability is not considered current merely because it appears in a roadmap, design document, dashboard label, or generated artifact.
