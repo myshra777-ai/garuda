@@ -116,6 +116,42 @@ The **Verification tier** column uses benchmark identifiers only. Human-readable
 | **Cross-agent shared memory** | 🔵 **Upcoming** | — | Named as an RFS capability gap. No shared pool today; watermarks are per-agent. |
 | **Memory compression** | 🔵 **Upcoming** | — | Named as an RFS capability gap. Raw data exists; no summarization layer. |
 
+## CI/CD Integration & Semantic Gating
+
+Garuda natively integrates with continuous integration pipelines to evaluate semantic AST diffs rather than raw text changes. It acts as a deterministic gate against architectural drift.
+
+* **Semantic Diffing:** Evaluates current codebase against `garuda-baseline.json`. Can automatically halt builds on breaking changes using the `--block-on-break` flag.
+* **Policy Enforcement:** Evaluates architectural rules during CI and fails the build when `--fail-on-block` is enabled and a policy returns `BLOCK`.
+* **Contradiction Blocking:** Fails builds if new code contradicts ingested Architecture Decision Records (ADRs) or documentation claims (`--fail-on-contradiction`).
+* **GitHub PR Annotations:** Outputs topological impact analysis and blast radius directly to GitHub PR comments using `--format github`.
+
+## Static Hygiene (report-only)
+
+Garuda provides a report-only Hygiene command over the scoped semantic workspace graph:
+
+```bash
+garuda hygiene .
+garuda hygiene . --json -o hygiene.json
+```
+
+The former `garuda ponytail` command remains available as a deprecated compatibility alias. Both commands use the same typed `internal/hygiene` analyzer and produce the same JSON report.
+
+Current advisory findings:
+
+- Static unreferenced candidates: non-package, non-file entities with no incoming relationship in the indexed graph.
+- Duplicate symbol-name candidates: non-empty names occurring in multiple packages, aggregated by name.
+- Standard-library alternative suggestions: naming-based suggestions for `Contains` and `Sort` patterns.
+
+These findings are not authoritative defect classifications:
+
+- A static unreferenced candidate is not proof of dead code.
+- A duplicate symbol name is not proof of duplicated implementation.
+- A standard-library alternative is not an automatic refactoring instruction.
+
+The command is read-only. It does not refresh the semantic graph, persist findings, create policy decisions, anchor ledger records, modify source files, suppress findings, or merge changes. Workspace reads remain scoped by tenant ID and workspace ID.
+
+The current Hygiene contract and evidence are documented in [`docs/hygiene.md`](hygiene.md).
+
 ### User Dashboard
 
 *Tenant-facing. `/dashboard`. Session cookie auth.*

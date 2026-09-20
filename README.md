@@ -692,6 +692,7 @@ Planned capabilities are not current shipped capabilities.
 | [`openapi.yaml`](openapi.yaml) | Machine-readable HTTP API contract |
 | [`scripts/mcp_verify.py`](scripts/mcp_verify.py) | Dependency-free MCP reference verifier |
 | [`SECURITY.md`](SECURITY.md) | Security model and vulnerability reporting |
+| [Hygiene](docs/hygiene.md) | Report-only advisory static findings and compatibility behavior |
 
 ---
 
