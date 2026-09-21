@@ -1,76 +1,64 @@
+# Changelog
+
+All notable changes to Garuda will be documented in this file.
+
 ## [Unreleased]
 
 ### Added
-
-* **Multi-Tenancy & Workspace Governance**
-  * Added database schemas for tenants and memberships, workspace resolution, and session-scoped tenant handling.
-  * Added `/signup` endpoint to initialize user, tenant, and workspace resources.
-  * Added dedicated admin dashboard at `/admin` and workspace picker sidebar component on the user dashboard.
-  * Added `telemetry_aggregates` aggregation table and automated refresh job.
-
-* **Model Context Protocol (MCP)**
-  * Implemented stdio long-lived MCP server process (`Phase 2.1`).
-  * Added read-only governance tools (`Phase 2.2a`), dry-run policy evaluation, and semantic analysis tools (`Phase 2.2b/2.2c`).
-  * Added MCP invocation telemetry tracking tool executions per invocation.
-
-* **Merkle Verification Ledger (ADR-0002)**
-  * Added RFC 6962 Merkle tree implementation with canonical byte encoding and golden test vectors.
-  * Added canonical encoders for genesis, decision, and policy evaluation artifacts.
-  * Added tenant-scoped genesis generation, epoch leaves schema, and `EpochRoot` computation.
-  * Added v1 write primitives, decision/policy write paths, and evidence attachments to graph edges.
-
-* **Language Analysis & Semantic Features**
-  * Added import resolution and class taxonomy infrastructure for multi-language analysis.
-  * Enhanced graph views with entity degree calculations, 200-node caps, caching, and cross-repo merging.
-  * Added support for type alias extraction, defined types, and `MeasuredMetric` contract for runtime metrics.
-  * Added browser session authentication.
-
----
+- **Hygiene & Advisory CLI**: Introduced `garuda hygiene` command with typed advisory analysis core, contract hardening, and `ponytail` compatibility alias.
+- **MCP Integration & Server**:
+  - Consolidated MCP into a long-lived stdio server binary.
+  - Added MCP tools: `garuda.briefing`, `garuda.handoff`, `garuda.resume`, `garuda.blast_radius`, `garuda.verify_policy_evaluation`, and graph structure exploration tools.
+  - Added session tracking and telemetry per tool invocation in `mcp_sessions` and `mcp_tool_calls`.
+- **Control Plane & Dashboard**:
+  - Multi-tab Control Plane dashboard (Operations, Tenants, Decisions, Agents, Business metrics).
+  - Added read-only DB role and background telemetry refresh jobs (`telemetry_aggregates`).
+  - UI improvements including embedded static CSS/JS assets, workspace picker on sidebar, detail drawers, and revision chain tracking for decisions.
+- **Multi-Tenancy & Workspace Scope**:
+  - Schema additions for tenant memberships and user signup flow (`/signup`).
+  - Session-scoped and workspace-scoped data isolation across storage, HTTP API, and CLI.
+- **Multi-Language Parsing**:
+  - Python AST parsing support and unified polyglot knowledge graph construction.
+  - TypeScript parser support via Tree-sitter.
+- **Merkle Verification System**:
+  - RFC 6962 Merkle tree structure with golden test vectors.
+  - Canonical evaluation encoders, epoch leaves schema, and epoch root hash writes.
+- **Benchmarking**:
+  - Expanded benchmark corpus to 20 fixtures (GAP-20) with verified deterministic output.
 
 ### Changed
-
-* **Workspace & Tenant Isolation**
-  * Enforced strictly scoped `workspace_id` constraints across CLI, knowledge readers, entity lookups, and database tables (`workspace_id NOT NULL` migration 082).
-  * Removed `'default'` workspace fallback across all CLI commands and HTTP request handlers.
-  * Scoped repository unique constraints to individual workspace contexts.
-  * Replaced package path inference (`inferRepositoryFromPackage`) with explicit foreign key joins to `repositories`.
-
-* **Dashboard & Metrics**
-  * Segregated deployment-wide administration metrics from workspace-level user dashboards.
-
-* **Tooling & Dependencies**
-  * Upgraded project toolchain to Go 1.26 and promoted `tree-sitter` to a direct dependency.
-  * Updated README and documentation regarding repository URL resolution and current capabilities.
-
----
+- **CLI Flags & Command Usage**:
+  - Renamed `--fail-on BLOCK` flag to `--fail-on-block` across CLI, playbooks, and capabilities specification.
+  - Policy evaluations now require `--save` flag to persist execution writes.
+  - Policy directory reconciliation made explicitly opt-in via `--reconcile`.
+- **Architecture & Refactoring**:
+  - Decoupled CLI handlers from direct SQL access in favor of a typed storage layer.
+  - Modularized `cmd/garuda` into dedicated command handlers.
+  - Updated Go toolchain to Go 1.25.13 and updated `tree-sitter` dependency.
+  - Scoped repository unique constraints per workspace.
+  - Replaced package inference heuristics (`inferRepositoryFromPackage`) with formal repository foreign keys.
 
 ### Fixed
-
-* **Security & Multi-Tenant Data Leaks**
-  * Resolved cross-tenant and cross-workspace data leakage vectors in `resolveWorkspaceID` and knowledge readers.
-  * Fixed concurrent race condition when calling `CreateWorkspace` with duplicate names.
-  * Cleaned up residue leaks in tenant isolation test fixtures.
-  * Hardened dashboard authentication and session security.
-
-* **AST Parsing & Semantic Graph Extraction**
-  * Prevented self-referential `IMPLEMENTS` edges on interface definitions.
-  * Restored `DEFINES`, `EMBEDS`, and `REFERENCES` extraction routines and corrected alias references.
-
-* **Database & Migrations**
-  * Fixed goose migration runner to execute strictly the `Up` migration section.
-  * Corrected SQL statement in `SaveClaims` INSERT queries.
-  * Fixed `cross_repo_edges` persistent writes and cross-repository bridge counts on the dashboard.
-
----
+- **Storage & Tenant Leakage**:
+  - Fixed cross-tenant and cross-workspace leaks across knowledge readers, inspectors, stats queries, and evaluators.
+  - Resolved race condition during concurrent workspace creation with identical names.
+  - Guaranteed `workspace_id NOT NULL` constraints on core entity and claim tables.
+- **API & Middleware**:
+  - Corrected API middleware ordering so `WithRequestID` runs prior to `WithLogging`.
+  - Unified rate limiting around `IPRateLimiter`.
+  - Corrected surface error responses for failed handoffs to HTTP clients.
+- **Graph & Verifier**:
+  - Attributed `CALLS` graph edges to true callers and restored edge reading directly from claims.
+  - Preserved entity rows during semantic scans.
+  - Properly released MCP budget reservations on error paths during contradiction listing.
 
 ### Removed
-
-* Removed dead internal polyglot AST parser (`internal/ast/polyglot.go`) and deprecated budget code.
-* Removed suspended deployment manifests (`render.yaml` and `fly.toml`).
-* Removed obsolete test suites (`resolve_workspace_id_test.go`).
-
----
+- Removed legacy `cas` (Content Addressable Storage) package and `IngestBlocks` routines.
+- Removed deprecated audit-store package, functions, and corresponding HTTP endpoints.
+- Removed dead AST polyglot package (`internal/ast/polyglot.go`).
+- Purged orphan workspaces, test tenant residual data, and obsolete deployment config files (`fly.toml`, `render.yaml`).
 
 ### Semantic Changes
-
-* **Epistemic Class Terminology**: Renamed `Unimplemented` status/class to `Unverified`.
+- **Quarantine Store for Runtime Contradictions**: Mismatches between runtime observed claims and static code expectations (`runtime_vs_static`) are now explicitly isolated in the quarantine decision table.
+- **Merkle Tree & Epoch Auditing**: Implemented epoch-based Merkle tree leaves and tenant-scoped genesis records enforcing cryptographic verifiability of evaluation outputs.
+- **Database Schema Migrations**: Introduced schema migrations (`082`-`086`) enforcing non-nullable workspace IDs, MCP session tracking tables, agent checkpoint lineage, and `mcp_agent_watermarks`.

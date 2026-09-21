@@ -1,12 +1,13 @@
-# CLI Reference
+# Garuda CLI API Reference
 
-The complete list of Garuda CLI commands, with flags and examples, lives in two places:
+This document provides the API reference and command-line usage for the Garuda CLI.
 
-- **[README — Command Reference](../README.md#command-reference)** — the short table. One line per command, grouped by category. Enough to see what exists.
-- **[PLAYBOOK — Command Reference](PLAYBOOK.md#command-reference)** — the long form. Same commands, plus what each one does, when to reach for it, and worked examples.
+## Overview
 
-For flag-level detail, use the built-in help:
+Currently, there are no stable or planned commands registered in the specification. 
 
-```bash
-garuda --help
-garuda <command> --help
+---
+
+## Commands
+
+*(No commands are currently available or documented.)*
