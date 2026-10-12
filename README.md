@@ -1,856 +1,131 @@
+
+
 <p align="center">
-  <img src="assets/garuda-logo.png" width="112" alt="Garuda">
+  <img src="assets/garuda-logo.png" width="96" alt="Garuda Logo">
 </p>
 
 <h1 align="center">Garuda</h1>
 
 <p align="center">
-  <strong>The software intelligence and verification layer for AI-native engineering.</strong>
+  <strong>Prevent AI coding agents from compromising your system architecture.</strong><br>
+  Deterministic CI/CD gates, verified MCP codebase context, and automated architectural drift prevention.
 </p>
 
 <p align="center">
-  Give AI agents and engineering teams a shared, evidence-backed understanding of what a software system is, what it is intended to do, what changed, and what the available evidence supports.
-</p>
-
-<p align="center">
-  <a href="https://github.com/myshra777-ai/garuda/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/release-v0.2.0-blue.svg?style=flat-square" alt="Release v0.2.0"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-green.svg?style=flat-square" alt="Apache 2.0 License"></a>
-  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.26-00ADD8.svg?style=flat-square" alt="Go 1.26+"></a>
-  <a href="scripts/mcp_verify.py"><img src="https://img.shields.io/badge/MCP-21%20tools%2C%2038%2F38%20reference%20checks-success.svg?style=flat-square" alt="MCP 21 tools, 38 of 38 checks passed"></a>
-  <a href="SECURITY.md"><img src="https://img.shields.io/badge/security-documented-informational.svg?style=flat-square" alt="Security documentation"></a>
-</p>
-
-<p align="center">
-  <a href="#getting-started">Get started</a> ·
-  <a href="#why-now">Why now</a> ·
-  <a href="#what-garuda-does">What Garuda does</a> ·
-  <a href="#the-execution-harness-vision">Execution harness vision</a> ·
-  <a href="docs/SPECS.md">Specifications</a> ·
-  <a href="EVIDENCE.md">Evidence</a> ·
-  <a href="PLAYBOOK.md">Playbook</a>
+  <a href="https://github.com/myshra777-ai/garuda/releases/tag/v0.2.0"><img src="https://img.shields.io/badge/release-v0.2.0-blue.svg?style=flat-square" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-green.svg?style=flat-square" alt="License"></a>
+  <a href="PLAYBOOK.md"><img src="https://img.shields.io/badge/Quickstart-Read%20the%20Playbook-orange.svg?style=flat-square" alt="Quickstart"></a>
+  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/Benchmarks-View%20Evidence-purple.svg?style=flat-square" alt="Benchmarks"></a>
 </p>
 
 ---
 
-## The thesis
+## 💡 Why Garuda?
 
-AI is making software execution abundant.
+Autonomous coding agents (Cursor, Claude, Devin, Codex) generate code faster than humans can review it. While individual functions may look correct, multi-file changes often introduce **architectural drift**:
+- Presentation layers silently importing database drivers.
+- Circular dependencies and undesirable cross-package coupling.
+- Changes that pass unit tests but violate core system invariants.
 
-The scarce resource is becoming **trustworthy system context**: knowing what a system is, what it is supposed to do, what changed, what depends on it, and whether available evidence supports the resulting state.
-
-Garuda is the software intelligence and verification layer between AI agents and the software systems they change.
-
-```text
-AI agents
-    │
-    ▼
-GARUDA — software intelligence, evidence, and governance
-    │
-    ▼
-Software systems
-```
-
-Garuda connects organizational intent, source code, runtime observations, policies, decisions, and verifiable history into one persistent workspace model.
-
-> **Understand the system. Verify the change. Keep AI aligned.**
+Traditional linters analyze files in isolation. **Garuda gives AI agents a verified, compiler-backed system graph *before* they write code, and acts as a deterministic policy gate *during* CI/CD.**
 
 ---
 
-## Why now
+## 🚀 Key Features
 
-Software development is moving from AI-assisted coding toward increasingly agentic execution. Agents can plan multi-step work, modify repositories, run tools, review changes, coordinate with other agents, and operate for longer periods with less direct supervision.
-
-The important consequence is not simply that more code gets written. It is that **software can change faster than teams can reconstruct and verify system context**.
-
-This creates a growing gap between:
-
-```text
-What was intended  →  What was implemented  →  What is observed
-```
-
-Garuda calls this **AI Development Drift**.
-
-The problem becomes more important as organizations adopt:
-
-- Parallel coding agents.
-- Background and long-running engineering tasks.
-- Multi-repository architectures.
-- Policy-driven development workflows.
-- Runtime-aware governance.
-- AI-generated changes that require human review at system scale.
-
-Garuda is designed for the missing layer between agent execution and system understanding. It does not claim that every agent action is safe or that every semantic result is complete.
+- 🛡️ **CI/CD Enforcement Gate:** Validate architectural constraints on every PR. Use `garuda policy evaluate --fail-on-block` to automatically intercept breaking changes.
+- 🧠 **Verified MCP Context:** Integrate with **Cursor, Claude Desktop, or Codex CLI**. Agents query Garuda for exact symbol and call graphs instead of guessing package dependencies.
+- ⚡ **Local Drift Prevention:** The VS Code extension reports structural violations in real-time, surfacing `ARCH_DRIFT` warnings before you even commit.
+- 🔒 **Cryptographic Provenance:** Every policy validation produces a Merkle-backed receipt, creating a verifiable audit history of structural modifications.
 
 ---
 
-## The business problem
-
-| Business cost | What creates it | What Garuda provides |
-|---|---|---|
-| **Rework** | A locally reasonable change violates a dependency, architecture rule, or documented requirement | Semantic relationships, policies, and impact analysis |
-| **Review bottlenecks** | Reviewers reconstruct architecture and intent before trusting agent-generated changes | Persistent system state with source-backed evidence |
-| **Context reconstruction** | Agents and engineers rediscover the same facts across sessions and tools | Shared workspace state through MCP, CLI, HTTP, dashboard, CI, and IDE interfaces |
-| **Operational risk** | Documentation, code, and runtime behavior diverge | Explicit `SUPPORTED`, `UNVERIFIED`, and `CONTRADICTED` states |
-| **Governance overhead** | Teams cannot easily prove which rule was applied to which system state | Deterministic policy evaluation and verifiable decision records |
-| **Multi-agent coordination cost** | Agents duplicate work or transfer incomplete context | Transactional handoff, checkpoint, and resume primitives |
-
-These are mechanisms of value, not guaranteed dollar savings. Actual outcomes depend on codebase complexity, workflow design, agent autonomy, and adoption depth.
-
----
-
-## What Garuda is
-
-Garuda is a **persistent software state, evidence, and governance layer for AI-native engineering teams**.
-
-It maintains a workspace model that connects four artifact categories:
-
-| Artifact | What it represents | Examples |
-|---|---|---|
-| **Intent** | What an organization says should be true | Requirements, ADRs, specifications, policies |
-| **Code** | What has been implemented | Repositories, packages, types, functions, methods, relationships |
-| **Runtime** | What the system has been observed doing | Traces, spans, operations, runtime observations |
-| **Evidence** | What supports a claim or decision | Source locations, verification records, contradictions, Merkle proofs |
-
-Garuda does not attempt to become the model, the coding agent, the observability platform, or the entire agent runtime. It provides the shared state and verification layer those systems can use.
-
-### The questions Garuda answers
-
-- What exists in this workspace?
-- What is this symbol and what does it depend on?
-- Who calls or implements it?
-- What documentation claims apply here?
-- What policies govern this change?
-- What evidence supports the claim?
-- What is still unverified?
-- What contradicts the expected state?
-- What could be affected if this symbol changes?
-- What decision introduced this constraint?
-- Can the recorded decision be independently verified?
-
----
-
-## What Garuda does
-
-### 1. Build a semantic model of software
-
-Garuda analyzes repositories and represents software as typed entities and relationships rather than only text matches.
-
-The model can include:
-
-- Repositories and packages.
-- Structs, interfaces, functions, methods, and fields.
-- Imports, calls, references, implementations, embedding, and inheritance where supported.
-- Cross-repository bridges.
-- Source locations and evidence metadata.
-- Stable semantic identity.
-- Analyzer resolution tier and confidence boundaries.
-
-Go analysis is compiler-backed within the supported scope. Python and TypeScript analysis are structural and carry lower authority for dynamic behavior.
-
-### 2. Connect documentation to implementation
-
-Garuda ingests supported engineering documents and extracts normative claims. Claims are correlated with semantic and runtime evidence rather than accepted as unquestioned truth.
-
-| State | Meaning |
-|---|---|
-| `SUPPORTED` | Available evidence supports the claim within the active verification scope |
-| `UNVERIFIED` | There is not enough evidence to support or contradict the claim |
-| `CONTRADICTED` | Available evidence conflicts with the claim |
-
-An unverified claim is not automatically false. It means the evidence boundary remains open.
-
-### 3. Enforce engineering policies
-
-Policies define scope, authority, predicates, outcomes, and reasons. The current decision outcomes are:
-
-- `ALLOW`.
-- `WARN`.
-- `REVIEW`.
-- `BLOCK`.
-
-Policies can run as non-persisting previews or as committed evaluations anchored to the Merkle ledger.
-
-Example policy intent:
-
-```text
-Payment services must not import database/sql directly.
-```
-
-Garuda converts the rule into an executable governance check against the current workspace state.
-
-### 4. Show impact before changes become surprises
-
-Garuda provides two distinct impact paths:
-
-```text
-garuda.blast_radius  →  symbol and graph impact
-garuda.get_impact     →  decision and lineage impact
-```
-
-The result is a structured view of graph-visible consequences, not a guarantee that every dynamic runtime effect has been discovered.
-
-### 5. Correlate static expectations with runtime evidence
-
-Garuda can associate runtime observations with semantic entities and identify whether observed behavior supports or contradicts the expected system state.
-
-```text
-Intent / static model
-          ↓
-Expected behavior
-          ↓
-Runtime observation
-          ↓
-SUPPORTED / UNVERIFIED / CONTRADICTED
-          ↓
-Policy or human review
-```
-
-The runtime path is implemented and validated with controlled and synthetic evidence. Production-scale continuous verification remains a validation area rather than a claim that every production execution is continuously observed.
-
-### 6. Give agents persistent system context
-
-Garuda exposes workspace state through MCP, CLI, HTTP, dashboard, CI, and VS Code interfaces.
-
-An AI client can ask:
-
-```text
-What implements this interface?
-What calls this function?
-What policies apply to this change?
-Which claims are contradicted?
-What could be affected if I change this type?
-What decision introduced this constraint?
-```
-
-The answer comes from the shared workspace model rather than only the file currently open in the agent context.
-
-### 7. Coordinate work between agents
-
-`garuda.handoff` transfers task ownership while creating a checkpoint. `garuda.resume` restores and consumes that checkpoint transactionally.
-
-This is coordination state, not a replacement for a model harness. Garuda does not itself run a general planner/executor/observer loop, launch arbitrary model fleets, or provide a general-purpose code-execution sandbox.
-
-### 8. Report static Hygiene findings
-
-Garuda provides a report-only Hygiene command over the scoped semantic graph:
-
-```bash
-garuda hygiene .
-garuda hygiene . --json -o hygiene.json
-```
-
-The historical `garuda ponytail` command remains available as a deprecated compatibility alias. Both commands use the same typed analyzer and produce the same report.
-
-Current advisory findings include:
-
-- Static unreferenced candidates.
-- Duplicate symbol-name candidates across packages.
-- Standard-library alternative suggestions for `Contains` and `Sort` naming patterns.
-
-These findings are not authoritative defect classifications. A static unreferenced candidate is not proof of dead code, a duplicate name is not proof of duplicated implementation, and a standard-library suggestion is not an automatic refactoring instruction. See [`docs/hygiene.md`](docs/hygiene.md).
-
-### 9. Meter and classify agent work
-
-The repository also contains supporting controls for agent infrastructure:
-
-- Tenant-level token and execution metering.
-- Budget consumption checks.
-- Pre-flight task classification.
-- Payload redaction for common secret-like patterns.
-- Model-selection recommendations based on task domain and budget state.
-
-This layer is a pre-flight classifier and routing policy, not a complete model-serving fabric or provider gateway.
-
----
-
-## The execution harness vision
-
-Garuda is the truth substrate. The execution harness is a separate controller that may eventually use Garuda to operate a closed-loop, multi-agent software workflow.
-
-This distinction matters:
-
-```text
-Garuda truth substrate
-  semantic graph · evidence · policy · decisions · checkpoints
-                  ↓ MCP / HTTP contracts
-Execution harness
-  controller · budgets · artifacts · sandbox lifecycle · approvals
-                  ↓
-Agent sandboxes
-  plan · edit · test · propose patch
-```
-
-The harness is a **vision and future integration**, not a current shipped Garuda capability.
-
-### Intended responsibility split
-
-| Component | Responsibility | Authority boundary |
-|---|---|---|
-| Garuda | Semantic state, scoped evidence, policy outcomes, governance records, transactional coordination | Authoritative for the data and decisions it stores and verifies |
-| Harness controller | Run state, budgets, retries, replay, artifact tracking, sandbox lifecycle, approval routing | Must not invent Garuda facts or bypass Garuda scope checks |
-| Agent | Planning, coding, testing, and proposing changes | Produces proposals and artifacts, not authoritative governance facts |
-| Sandbox | Isolated execution environment for an agent attempt | Must not receive Garuda database credentials or unrestricted host access |
-| Human or merge service | Final authorization where required | Explicit merge authorization remains separate from `ALLOW` |
-
-### Proposed closed loop
-
-The future harness should follow this sequence:
-
-```text
-Task
-  ↓
-Architectural context from Garuda
-  ↓
-Isolated agent attempt
-  ↓
-Patch artifact and tests
-  ↓
-Apply to disposable worktree
-  ↓
-Fresh workspace analysis
-  ↓
-Policy evaluation
-  ├── ALLOW → candidate for configured review gate
-  ├── WARN  → warning review or configured exception
-  ├── REVIEW → human or specialist review
-  └── BLOCK → remediation required; never merge automatically
-```
-
-The harness must reject stale evidence. A policy result should not be treated as current when the analyzed revision does not match the candidate revision.
-
-### Planned harness capabilities
-
-The design direction includes:
-
-- External Python or Go controller connected over MCP stdio or HTTP.
-- Dynamic MCP tool discovery rather than hardcoded schemas.
-- Correlated request and run events.
-- Bounded retries, tool-call budgets, wall-clock limits, patch limits, and handoff limits.
-- Patch artifacts with path validation and content digests.
-- Disposable worktrees or stronger sandbox runtimes.
-- Read-only operation before autonomous mutation.
-- Replayable event logs.
-- Durable controller state and restart recovery.
-- Explicit human approval and merge gates.
-- Multi-agent handoffs only after the single-agent loop is reliable.
-
-### Non-goals of the first harness release
-
-The first harness should not attempt to provide:
-
-- Automatic merging after `ALLOW`.
-- LLM-generated facts treated as Garuda evidence.
-- Arbitrary host filesystem synchronization.
-- Agent access to PostgreSQL credentials.
-- Unbounded autonomous loops.
-- A second competing source of truth for Garuda entities or policy decisions.
-- Guaranteed prevention of every prompt-injection or sandbox attack.
-
-### Required prerequisite
-
-A future `garuda.workspace.analyze` capability would be needed for a reliable mutation loop. It must define workspace authorization, repository/worktree identity, revision or content digest, write transaction semantics, idempotency, failure behavior, and analysis freshness before it is used by an autonomous controller.
-
-Until that contract exists and is verified, the harness remains a design direction rather than an implementation claim.
-
----
-
-## Where Garuda fits
+## 🏗️ Architecture Overview
 
 ```mermaid
 flowchart LR
-    AGENTS["AI coding agents\nCursor · Claude · Codex · MCP clients"] --> GARUDA["GARUDA\nSoftware intelligence + verification"]
-    GARUDA --> CODE["Code\nrepositories · packages · symbols"]
-    GARUDA --> INTENT["Intent\ndocs · ADRs · policies"]
-    GARUDA --> RUNTIME["Runtime\nobservations · traces"]
-    GARUDA --> GOVERNANCE["Governance\npolicies · decisions"]
-    GARUDA --> EVIDENCE["Evidence\nprovenance · Merkle proofs"]
-    GARUDA --> INTERFACES["Interfaces\nCLI · API · CI · IDE · Console"]
+    A[Repository Code + Policies] --> B[Garuda: Semantic Ontology Engine]
+    B --> C[MCP Server: Verified Context for AI Agents]
+    B --> D[IDE / CLI: Immediate Impact Analysis]
+    B --> E[CI/CD: Deterministic Policy Evaluation]
+    E --> F{Merge Gate}
+    F -->|Clean| G[Pass & Generate Provenance Receipt]
+    F -->|Violation| H[Block PR: Zero Bypass]
 ```
-
-The agent remains responsible for acting. Garuda helps the agent understand the system it is acting on and preserves evidence about important governance state.
-
----
-
-## What Garuda is not competing with
-
-Garuda is complementary to most of the tools teams already use.
-
-| Category | What it does well | What Garuda adds |
-|---|---|---|
-| Agent frameworks | Build and orchestrate agents | A verified software state model for the agents to query |
-| Coding agents | Make software changes | Evidence-backed context about the system being changed |
-| Code search | Find text quickly | Typed entities, relationships, impact, claims, and verification states |
-| Knowledge graphs | Show objects and connections | Evidence tiers, runtime correlation, policy, lineage, and decision integrity |
-| Observability platforms | Show production behavior | Correlation between runtime observations and software structure |
-| Documentation drift tools | Find disagreement between docs and code | Bidirectional claim verification with explicit uncertainty |
-| Security and policy tools | Detect specific rule violations | General governance with authority, evidence, and Merkle-backed decisions |
-
-Garuda's category is the layer between organizational intent and the agents changing software.
+*Garuda complements your existing test suites and linters by adding a dedicated structural safety layer.*
 
 ---
 
-## User workflows
+## ⚡ Quickstart
 
-### Give an agent system context
+### Prerequisites
+- Go 1.25+
+- PostgreSQL 14+
 
-An agent queries the workspace rather than reconstructing architecture from one local file or one short-lived context window.
-
-### Review a critical change
-
-Inspect callers, implementers, dependencies, claims, policies, and graph-visible impact before accepting a change.
-
-### Connect requirements to implementation
-
-Ingest normative documentation and determine whether implementation or runtime evidence supports, contradicts, or fails to verify the requirement.
-
-### Turn architecture rules into governance
-
-Express important engineering boundaries as policies and evaluate them in preview or committed mode.
-
-### Preserve important decisions
-
-Anchor committed evaluations and decision records so their recorded state can be independently checked later.
-
-### Transfer work between agents
-
-Use durable checkpoints and transactional handoffs instead of depending on one session retaining all context.
-
-### Investigate runtime drift
-
-Correlate observed behavior with static expectations and route contradictions or missing evidence to policy review.
-
-### Review static Hygiene candidates
-
-Run `garuda hygiene` against an indexed workspace, inspect the advisory findings, and verify the implementation before changing code. Do not treat a candidate as an automatic deletion or rewrite instruction.
-
----
-
-## Workspace Console and VS Code
-
-### Workspace Console
-
-The tenant-facing Workspace Console provides:
-
-| Surface | Capability |
-|---|---|
-| **Workspace** | Repository, package, entity, relationship, language, policy, evidence, and health summaries |
-| **Agents** | MCP sessions, tool-call activity, active and recent sessions, and coordination state |
-| **Governance** | Policy outcomes, documentation claims, drift, contradictions, verification states, and cryptographic trust |
-| **Decisions** | Decision history, evidence, ancestors, descendants, revisions, and anchor status |
-| **Graph** | Interactive topology, communities, repositories, packages, relationships, and exploration |
-
-### VS Code extension
-
-Garuda includes a VS Code extension under [`vscode-extension/`](vscode-extension/).
-
-Current extension workflows include:
-
-- Cryptographic Ledger view.
-- Quarantined Contradictions view.
-- Problems-panel diagnostics.
-- Policy and runtime contradiction markers.
-- Architecture graph visualizer.
-- Workspace AST reanalysis.
-- Ledger and verification-state refresh.
-- Go symbol hover with blast-radius and dependency information.
-
-The extension is tested for editor-integrated diagnostics and exploration. Its update behavior depends on configured state, daemon/database connectivity, and refresh or reanalysis events. “Real-time” should not be read as a guarantee that every file mutation is continuously analyzed without an analysis event.
-
----
-
-## Evidence and trust
-
-Garuda follows a simple rule:
-
-> **Evidence before confidence.**
-
-The trust layer uses a Merkle structure for committed governance records.
-
-A verifier can check whether a specific record is included under a known root and whether its recorded content has changed since inclusion.
-
-That does not prove:
-
-- The semantic model is complete.
-- A policy is substantively correct.
-- Runtime telemetry covers every production path.
-- The underlying software is safe.
-- Every language has compiler-grade resolution.
-
-It proves the narrower property that matters for auditability:
-
-> **What Garuda recorded as a governance decision can be independently verified as a recorded fact.**
-
-Verify a committed evaluation with:
-
+### 1. Build from Source
 ```bash
-garuda policy verify <evaluation-id>
-```
-
----
-
-## Current proof points
-
-| Area | Current evidence |
-|---|---|
-| **MCP surface** | 21 tools in the MCP server registry |
-| **MCP verification** | `scripts/mcp_verify.py` reports 38/38 reference checks |
-| **Client validation** | Cursor, Claude Desktop, Codex CLI, and dependency-free reference verifier |
-| **Semantic analysis** | Go compiler-backed within supported scope; Python and TypeScript structural analyzers |
-| **Documentation ingestion** | Supported Markdown, PDF, DOCX, TXT, RST, and normalized ADR-style content |
-| **Governance** | Declarative policy evaluation with `ALLOW`, `WARN`, `REVIEW`, and `BLOCK` outcomes |
-| **Trust layer** | Merkle commitments, inclusion proofs, and decision-chain verification |
-| **Multi-agent state** | Transactional handoff, checkpoint, resume, and duplicate-consumption protection |
-| **Multi-tenancy** | Users, tenants, memberships, workspace resolution, and scoped state |
-| **Agent metering** | Token and execution budgets with consumption state |
-| **Pre-flight controls** | Task classification and secret-like payload redaction |
-| **Static Hygiene** | Report-only `garuda hygiene` command with deprecated `garuda ponytail` compatibility alias |
-| **User surfaces** | Workspace Console, Agents, Governance, Decisions, Graph, and VS Code integration |
-
-These are implementation and validation facts within the documented scope, not claims that every capability has been tested at every production scale.
-
-See [`EVIDENCE.md`](EVIDENCE.md), [`BENCHMARKS_AND_VERIFICATION_v1.0.0.md`](BENCHMARKS_AND_VERIFICATION_v1.0.0.md), and [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) for methodology and boundaries.
-
----
-
-## Current maturity
-
-**Current status: Early / testing.**
-
-The latest tagged public release is `v0.2.0`. The `main` branch may contain additional unreleased work beyond that tag, including current MCP, workspace, coordination, dashboard, and operational capabilities.
-
-### Stable within the current development line
-
-- Semantic software modeling within documented analyzer scopes.
-- Workspace-scoped state and graph persistence.
-- Policy evaluation and governance outcomes.
-- Merkle-backed governance records.
-- MCP integration and reference verification.
-- Transactional handoff and resume.
-- Report-only Hygiene CLI and compatibility alias.
-- Workspace Console and IDE integrations.
-
-### Beta or validation-sensitive
-
-- Python and TypeScript semantic depth.
-- Runtime verification against production-scale telemetry.
-- Large multi-repository validation beyond named corpora.
-- Deployment hardening across every operational access path.
-- Future autonomous execution harness design.
-
-### Explicit non-claims for the current release
-
-- General-purpose agent execution sandboxing.
-- Enterprise secrets or credential brokering.
-- Durable autonomous scheduling.
-- Complete model-provider orchestration.
-- Cross-agent shared memory as a finished capability.
-- Automatic code remediation or merge based only on a policy `ALLOW`.
-- Hygiene persistence, suppression, baselines, or MCP exposure.
-
-Capability maturity is tracked in [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md).
-
----
-
-## Current limitations and non-goals
-
-Garuda will not claim:
-
-- Zero hallucinations.
-- 100% semantic accuracy across every language.
-- Complete knowledge of every code path.
-- Guaranteed prevention of every unsafe change.
-- Universal runtime coverage.
-- A cryptographic ledger as proof that the underlying software is correct.
-- A model router as a replacement for a complete inference gateway.
-- A checkpoint system as a complete agent runtime.
-- A static Hygiene candidate as proof that code can be safely deleted.
-
-The product is designed to become more trustworthy by making its limits visible.
-
----
-
-## Getting started
-
-### Build from source
-
-```bash
-git clone https://github.com/myshra777-ai/garuda.git
+git clone https://github.com.myshra777-ai/garuda.git
 cd garuda
-
+mkdir -p bin
 go build -o bin/garuda ./cmd/garuda
 go build -o bin/garuda-mcp ./cmd/garuda-mcp
 ```
+*(See the [Playbook](PLAYBOOK.md) for automated database configuration and migration setup).*
 
-Requires Go 1.26 or later. TypeScript support requires `CGO_ENABLED=1` and a C compiler.
+### 2. Connect to Cursor or Claude Desktop
+Add Garuda to your agent configuration (`claude_desktop_config.json` or `.cursor/mcp.json`). **Note:** Ensure `DATABASE_URL` and `GARUDA_WORKSPACE` match your environment.
 
-### Start PostgreSQL
-
-```bash
-docker run -d \
-  --name garuda-pg \
-  -e POSTGRES_USER=garuda \
-  -e POSTGRES_PASSWORD=garuda \
-  -e POSTGRES_DB=garuda \
-  -p 5432:5432 \
-  postgres:16
+```json
+{
+  "mcpServers": {
+    "garuda": {
+      "command": "/absolute/path/to/garuda/bin/garuda-mcp",
+      "env": {
+        "DATABASE_URL": "postgres://user:pass@localhost:5432/garuda?sslmode=disable",
+        "GARUDA_WORKSPACE": "my-workspace"
+      }
+    }
+  }
+}
 ```
+Now ask your agent: *"Query Garuda to find all downstream callers of ProcessOrder before editing this package."*
 
-```bash
-export DATABASE_URL="postgres://garuda:garuda@localhost:5432/garuda?sslmode=disable"
-```
+### 3. Enforce in CI/CD
+Add a blocking check to your GitHub Actions workflow:
 
-Apply migrations:
-
-```bash
-for f in migrations/[0-9]*.sql; do
-  psql "$DATABASE_URL" -f "$f"
-done
-```
-
-If duplicate migration prefixes exist in a working tree, verify ordering before applying them.
-
-### Create and analyze a workspace
-
-```bash
-export GARUDA_WORKSPACE=my-workspace
-./bin/garuda workspace create my-workspace
-./bin/garuda analyze /path/to/repo --save
-```
-
-Analyze each repository against the same workspace to build a multi-repository model.
-
-### Run Hygiene
-
-```bash
-./bin/garuda hygiene .
-./bin/garuda hygiene . --json -o hygiene.json
-```
-
-The command reads the indexed workspace graph and reports advisory findings. It does not refresh the semantic graph. The old command remains available as a deprecated alias:
-
-```bash
-./bin/garuda ponytail .
-```
-
-### Ingest and verify documentation
-
-```bash
-./bin/garuda docs ingest ./docs
-./bin/garuda docs verify
-```
-
-### Validate and evaluate policies
-
-```bash
-./bin/garuda policy validate ./policies
-./bin/garuda policy evaluate ./policies --workspace my-workspace
-```
-
-Preview mode does not persist or anchor the result. Add `--save` for a recorded governance decision:
-
-```bash
-./bin/garuda policy evaluate ./policies --workspace my-workspace --save
-```
-
-Use `--fail-on-block` in automation when a `BLOCK` policy outcome should make the command exit non-zero.
-
-### Start the workspace service
-
-```bash
-./bin/garuda dev
-```
-
-Open `http://localhost:8080`.
-
-### Verify MCP
-
-```bash
-WORKSPACE=my-workspace python3 scripts/mcp_verify.py
-```
-
-Expected:
-
-```text
-═══ 38/38 checks passed ═══
+```yaml
+- name: Evaluate Architecture Policy
+  env:
+    GARUDA_WORKSPACE: my-workspace
+  run: ./bin/garuda policy evaluate ./policies --fail-on-block
 ```
 
 ---
 
-## Interfaces
+## 🌐 Language Support & Scope
 
-| Interface | Purpose |
-|---|---|
-| **MCP** | Agent-native access to workspace state, governance, evidence, impact, and coordination |
-| **CLI** | Analysis, policies, documentation, verification, impact, CI, Hygiene, and operations |
-| **HTTP / OpenAPI** | Machine-readable programmatic integrations |
-| **Workspace Console** | Human-facing workspace, agents, governance, decisions, and graph views |
-| **VS Code extension** | In-editor architecture, ledger, contradiction, diagnostics, and exploration workflows |
-| **CI integration** | Policy gates, semantic analysis, contradiction checks, and automated engineering checks |
+| Language | Analysis Engine | Status |
+| :--- | :--- | :--- |
+| **Go** | Compiler-backed AST & Type Resolution (Tier 5) | 🟢 Production-ready |
+| **Python** | Structural Abstract Syntax Tree | 🟡 Beta |
+| **TypeScript** | Structural Abstract Syntax Tree | 🟡 Beta |
 
----
-
-## Security and isolation
-
-Garuda includes application-level controls for multi-tenant and workspace-scoped access, including:
-
-- Authenticated sessions and protected API paths.
-- Tenant and workspace membership.
-- Workspace-scoped request resolution.
-- SQL scoping and isolation checks.
-- Idempotent governance writes.
-- Request identifiers.
-- Non-root container support for the API image.
-- Protected operator access.
-- Token and execution budgeting.
-- Audit and Merkle verification paths.
-
-These controls are part of the current product architecture. They should not be interpreted as a claim that Garuda provides the complete OS-level isolation envelope of a hardened multi-user agent execution platform.
-
-See [`SECURITY.md`](SECURITY.md) for the security model and reporting process.
+> **Engineering Note:** A passing check verifies compliance against your configured policies and evidence. `UNVERIFIED` indicates insufficient graph evidence, not a negative assertion. Read our [Trust Invariants](docs/invariants.md) for full formal guarantees.
 
 ---
 
-## The moat we are building
+## 📚 Documentation
 
-Garuda's differentiation is the combination of:
+Don't guess. We keep our documentation explicit and evidence-backed.
 
-### Persistent system state
-
-A durable model of software structure, intent, evidence, runtime observations, and decisions.
-
-### Evidence-aware semantics
-
-Relationships tied to their source and resolution tier, with uncertainty preserved rather than hidden.
-
-### Governance as an executable layer
-
-Policies applied to the same state agents and humans are reading.
-
-### Cryptographically verifiable history
-
-Important decisions committed to records that can be independently checked.
-
-### Agent-native integration
-
-MCP makes the same state directly queryable where AI decisions are made.
-
-The long-term defensibility comes from the state model, evidence model, governance model, and integration surface becoming deeply embedded in engineering workflows.
+- 📘 **[Playbook & Setup](PLAYBOOK.md)** — Step-by-step database setup, workspace commands, and daily workflows.
+- 📙 **[System Specifications](docs/SPECS.md)** — Complete MCP surface, CLI reference, and CI/CD policy syntax.
+- 📊 **[Verification Evidence](EVIDENCE.md)** — Benchmarks across 14 production Go repositories and controlled contradiction tests.
+- 🛡️ **[Security Policy](SECURITY.md)** · **[Contributing](CONTRIBUTING.md)**
 
 ---
-
-## Commercial direction
-
-Garuda starts with a focused wedge: **AI-native software engineering**.
-
-```text
-AI-enabled engineering team
-        ↓
-Shared software intelligence
-        ↓
-Engineering governance and verification
-        ↓
-Organization-wide software state
-        ↓
-Business-critical system integrity
-```
-
-The first product solves a concrete engineering problem: agents and people need reliable system context and a way to verify important changes.
-
-Longer-term expansion may include business-critical domains such as payments, billing, bookings, refunds, and other workflows where correctness depends on explicit invariants and state transitions.
-
-These are future expansion areas, not claims about the current release.
-
----
-
-## What we measure
-
-Garuda deliberately avoids presenting proxy metrics as business outcomes.
-
-The product metrics that matter include:
-
-- Time to reach a source-backed answer.
-- Time spent reconstructing unfamiliar system context.
-- Review time for agent-generated changes.
-- Policy and architecture violations detected before merge.
-- Rework caused by system drift.
-- Time to recover context when work moves between agents.
-- Percentage of important claims with explicit verification state.
-- Governance decisions that can be independently reproduced.
-- Controlled agent-task success with and without Garuda.
-
-Token usage, graph size, tool count, and latency remain useful engineering measurements, but they are secondary to whether Garuda reduces real engineering friction.
-
----
-
-## Roadmap direction
-
-The roadmap extends the same system rather than creating unrelated products.
-
-### Near term
-
-- Deeper runtime verification.
-- Stronger cross-repository and cross-language analysis.
-- Autonomous verification workflows.
-- Broader dashboard and IDE integration.
-- Stale-session lifecycle handling.
-- Deeper policy and contract analysis.
-- Hygiene persistence, suppression, baselines, and additional finding types after their contracts are defined.
-
-### Agent intelligence layer
-
-- Durable shared memory across agent contexts.
-- Context compression for long-running work.
-- Richer handoff semantics.
-- More complete agent attribution and cost accounting.
-
-### Execution harness layer
-
-- Read-only MCP controller and replay mode.
-- Workspace reanalysis with explicit revision freshness.
-- Patch artifacts and disposable worktrees.
-- Sandboxed single-agent execution.
-- Durable controller state and recovery.
-- Human review and explicit merge authorization.
-- Multi-agent orchestration after the single-agent path is reliable.
-
-Planned capabilities are not current shipped capabilities.
-
----
-
-## Documentation and verification
-
-| Document | Purpose |
-|---|---|
-| [`docs/SPECS.md`](docs/SPECS.md) | Detailed public system and product specification |
-| [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) | Capability maturity and analyzer verification status |
-| [`docs/hygiene.md`](docs/hygiene.md) | Report-only Hygiene command and finding contract |
-| [`EVIDENCE.md`](EVIDENCE.md) | Evidence methodology and current validation record |
-| [`BENCHMARKS_AND_VERIFICATION_v1.0.0.md`](BENCHMARKS_AND_VERIFICATION_v1.0.0.md) | Detailed benchmark and verification report |
-| [`PLAYBOOK.md`](PLAYBOOK.md) | Installation, workflows, and operational reference |
-| [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) | Document normalization and claim-extraction contract |
-| [`docs/invariants.md`](docs/invariants.md) | Trust-substrate invariant contract |
-| [`docs/adr/`](docs/adr/) | Architecture decisions |
-| [`openapi.yaml`](openapi.yaml) | Machine-readable HTTP API contract |
-| [`scripts/mcp_verify.py`](scripts/mcp_verify.py) | Dependency-free MCP reference verifier |
-| [`SECURITY.md`](SECURITY.md) | Security model and vulnerability reporting |
-
----
-
-## Contributing
-
-Garuda is built in the open. Contributions are welcome across analyzers, semantic resolution, policy evaluation, runtime evidence, MCP integrations, dashboards, IDE tooling, verification, security, documentation, and testing.
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) to get started.
-
----
-
-## License
-
-Apache License 2.0. See [`LICENSE`](LICENSE).
-
----
-
 <p align="center">
-  <strong>Garuda</strong><br>
-  Understand the system. Verify the change. Keep AI aligned.
+  <strong>Understand the system. Verify the change. Keep AI aligned.</strong>
 </p>
+
+
