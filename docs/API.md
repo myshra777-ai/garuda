@@ -1,13 +1,11 @@
-# Garuda CLI API Reference
+# Garuda CLI API Documentation
 
-This document provides the API reference and command-line usage for the Garuda CLI.
+Welcome to the Garuda CLI API reference. 
 
 ## Overview
 
-Currently, there are no stable or planned commands registered in the specification. 
-
----
+Garuda CLI provides command-line interfaces for interacting with Garuda services and workflows.
 
 ## Commands
 
-*(No commands are currently available or documented.)*
+*There are currently no stable or planned commands available in the documentation context.*
