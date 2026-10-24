@@ -7,125 +7,142 @@ package policy
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
+// ParsedPolicy is the result of parsing one YAML file. The three
+// values travel together so callers cannot lose the association
+// between a policy and its source.
+type ParsedPolicy struct {
+	Policy     *Policy
+	SourcePath string
+	SourceHash string
+}
+
+// ParseFile loads a single .yaml or .yml policy file.
 func ParseFile(path string) (*Policy, string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to read policy file %s: %w", path, err)
+		return nil, "", fmt.Errorf("read policy: %w", err)
 	}
 
 	var p Policy
 	if err := yaml.Unmarshal(data, &p); err != nil {
-		return nil, "", fmt.Errorf("invalid yaml in %s: %w", path, err)
+		return nil, "", fmt.Errorf("parse policy %s: %w", path, err)
 	}
 
-	if err := ValidatePolicy(&p); err != nil {
-		return nil, "", fmt.Errorf("validation failed in %s: %w", path, err)
+	if err := validate(&p); err != nil {
+		return nil, "", fmt.Errorf("validate policy %s: %w", path, err)
 	}
 
-	hash := sha256.Sum256(data)
-	return &p, hex.EncodeToString(hash[:]), nil
+	sum := sha256.Sum256(data)
+	return &p, fmt.Sprintf("%x", sum), nil
 }
 
-type LoadedPolicy struct {
-	Policy  *Policy
-	Content string
-	Hash    string
-	Path    string
-}
-
-// ParseDirectory loads and validates all .yaml/.yml policies in dir.
-//
-// Fail-Closed Invariant: If any .yaml or .yml file in the policy directory is
-// unreadable, contains invalid YAML, or fails schema/predicate validation,
-// ParseDirectory returns an error immediately instead of silently skipping the
-// broken policy.
-func ParseDirectory(dir string) ([]LoadedPolicy, error) {
-	info, err := os.Stat(dir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to access policy directory %s: %w", dir, err)
+// ParseDirectory walks a directory and loads every .yaml/.yml policy it finds.
+// Fail-Closed Invariant: If any .yaml/.yml file in the policy directory fails
+// to parse or validate, ParseDirectory returns an error immediately instead of
+// silently skipping the malformed policy.
+func ParseDirectory(root string) ([]ParsedPolicy, error) {
+	info, statErr := os.Stat(root)
+	if statErr != nil {
+		return nil, fmt.Errorf("access policy path %s: %w", root, statErr)
 	}
 	if !info.IsDir() {
-		p, h, err := ParseFile(dir)
+		p, h, err := ParseFile(root)
 		if err != nil {
 			return nil, err
 		}
-		raw, _ := os.ReadFile(dir)
-		return []LoadedPolicy{{Policy: p, Content: string(raw), Hash: h, Path: dir}}, nil
+		return []ParsedPolicy{{Policy: p, SourcePath: root, SourceHash: h}}, nil
 	}
 
-	var loaded []LoadedPolicy
-	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+	var parsed []ParsedPolicy
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
+		if info.IsDir() {
+			base := info.Name()
+			if (strings.HasPrefix(base, ".") && path != root) || base == "vendor" || base == "node_modules" {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
 		if ext != ".yaml" && ext != ".yml" {
 			return nil
 		}
-
-		p, h, parseErr := ParseFile(path)
-		if parseErr != nil {
-			return fmt.Errorf("fail-closed policy load error in %s: %w", path, parseErr)
+		p, h, err := ParseFile(path)
+		if err != nil {
+			return fmt.Errorf("fail-closed policy load error in %s: %w", path, err)
 		}
-		raw, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return fmt.Errorf("failed to read policy file %s: %w", path, readErr)
-		}
-		loaded = append(loaded, LoadedPolicy{
-			Policy:  p,
-			Content: string(raw),
-			Hash:    h,
-			Path:    path,
+		parsed = append(parsed, ParsedPolicy{
+			Policy:     p,
+			SourcePath: path,
+			SourceHash: h,
 		})
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
 
-	// Deterministic lexical ordering by policy name
-	sort.Slice(loaded, func(i, j int) bool {
-		return loaded[i].Policy.Name < loaded[j].Policy.Name
-	})
-
-	return loaded, nil
+	return parsed, err
 }
 
-func ValidatePolicy(p *Policy) error {
-	if p.APIVersion == "" {
-		return fmt.Errorf("missing apiVersion")
+func validate(p *Policy) error {
+	if p.ID == "" {
+		return fmt.Errorf("policy id is required")
 	}
-	if p.Kind != "GarudaPolicy" {
-		return fmt.Errorf("invalid kind %q, expected GarudaPolicy", p.Kind)
+	if p.Version == "" {
+		p.Version = "v1"
 	}
-	if p.Name == "" {
-		return fmt.Errorf("missing policy name")
+	if p.Title == "" {
+		return fmt.Errorf("policy title is required")
 	}
-	switch p.Severity {
-	case SeverityInfo, SeverityWarn, SeverityError, SeverityCritical:
+	if len(p.When) == 0 {
+		return fmt.Errorf("policy must have at least one 'when' predicate")
+	}
+	switch p.Then.Decision {
+	case DecisionAllow, DecisionWarn, DecisionReview, DecisionBlock:
 	default:
-		return fmt.Errorf("invalid severity %q", p.Severity)
+		return fmt.Errorf("invalid decision %q (must be ALLOW, WARN, REVIEW, or BLOCK)", p.Then.Decision)
 	}
-	switch p.Action {
-	case ActionAllow, ActionWarn, ActionBlock, ActionRequireApproval:
-	default:
-		return fmt.Errorf("invalid action %q", p.Action)
+	if p.Then.Reason == "" {
+		return fmt.Errorf("policy must provide a reason")
 	}
-	if p.Rule.Predicate == "" {
-		return fmt.Errorf("missing rule.predicate")
+	if p.Priority == 0 {
+		p.Priority = 100
+	}
+	if p.Language == "" {
+		p.Language = "any"
+	}
+	for i, pred := range p.When {
+		if pred.Type == "" {
+			return fmt.Errorf("when[%d]: predicate type is required", i)
+		}
+		if !isSupportedPredicate(pred.Type) {
+			return fmt.Errorf("when[%d]: unsupported predicate %q", i, pred.Type)
+		}
 	}
 	return nil
+}
+
+func isSupportedPredicate(t string) bool {
+	switch t {
+	case "entity_exists",
+		"claim_exists",
+		"contradiction_exists",
+		"verification_missing",
+		"language_matches",
+		"transitive_claim_exists",
+		"layer_violation",
+		"cycle_exists",
+		"blast_radius_exceeds":
+		return true
+	}
+	return false
 }

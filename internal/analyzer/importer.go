@@ -18,165 +18,148 @@ import (
 	"sync"
 )
 
-// MultiModuleImporter resolves imports across multiple modules in a workspace
-// (including vendor/ directories) and falls back to the standard library
-// importer for external packages.
+// MultiModuleImporter implements types.Importer and types.ImporterFrom.
+// It resolves package imports across multiple modules indexed in WorkspaceContext
+// (including module-local vendor/ directories), falling back to stdlib/installed
+// packages via default toolchain importer.
 type MultiModuleImporter struct {
-	fset        *token.FileSet
-	modules     []ModuleInfo
-	cache       map[string]*types.Package
-	inProgress  map[string]bool
-	defaultImp  types.Importer
-	mu          sync.Mutex
-	Unresolved  []string
+	mu         sync.RWMutex
+	fset       *token.FileSet
+	ws         *WorkspaceContext
+	packages   map[string]*types.Package
+	inProgress map[string]bool
+	fallback   types.Importer
 }
 
-// NewMultiModuleImporter creates a new importer for the given workspace modules.
-func NewMultiModuleImporter(fset *token.FileSet, modules []ModuleInfo) *MultiModuleImporter {
+// NewMultiModuleImporter creates an authoritative cross-module type importer.
+func NewMultiModuleImporter(fset *token.FileSet, ws *WorkspaceContext) *MultiModuleImporter {
 	return &MultiModuleImporter{
 		fset:       fset,
-		modules:    modules,
-		cache:      make(map[string]*types.Package),
+		ws:         ws,
+		packages:   make(map[string]*types.Package),
 		inProgress: make(map[string]bool),
-		defaultImp: importer.Default(),
+		fallback:   importer.Default(),
 	}
 }
 
-// Import implements types.Importer.
-func (m *MultiModuleImporter) Import(path string) (*types.Package, error) {
-	return m.ImportFrom(path, "", 0)
+// Import resolves a package import path.
+func (imp *MultiModuleImporter) Import(path string) (*types.Package, error) {
+	return imp.ImportFrom(path, "", 0)
 }
 
-// ImportFrom implements types.ImporterFrom.
-func (m *MultiModuleImporter) ImportFrom(path, dir string, mode types.ImportMode) (*types.Package, error) {
-	m.mu.Lock()
-	if pkg, ok := m.cache[path]; ok {
-		m.mu.Unlock()
+// ImportFrom resolves a package import path with contextual directory awareness.
+func (imp *MultiModuleImporter) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.Package, error) {
+	imp.mu.Lock()
+
+	// 1. Check if package is already fully resolved in cache
+	if pkg, ok := imp.packages[path]; ok && pkg.Complete() {
+		imp.mu.Unlock()
 		return pkg, nil
 	}
-	if m.inProgress[path] {
-		m.mu.Unlock()
-		return nil, fmt.Errorf("import cycle detected on %s", path)
+
+	// 2. Cycle detection guard
+	if imp.inProgress[path] {
+		imp.mu.Unlock()
+		return nil, fmt.Errorf("import cycle detected while loading package: %s", path)
 	}
-	m.inProgress[path] = true
-	m.mu.Unlock()
+
+	// 3. Locate physical directory across workspace modules (or module-local vendor/)
+	dirPath, found := imp.ws.PackageRoots[path]
+	if !found && imp.ws != nil {
+		for _, mod := range imp.ws.Modules {
+			vendorCandidate := filepath.Join(mod.RootPath, "vendor", filepath.FromSlash(path))
+			if info, err := os.Stat(vendorCandidate); err == nil && info.IsDir() {
+				dirPath = vendorCandidate
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		imp.mu.Unlock()
+		// Fallback to stdlib / installed packages
+		return imp.fallback.Import(path)
+	}
+
+	imp.inProgress[path] = true
+	imp.mu.Unlock()
 
 	defer func() {
-		m.mu.Lock()
-		delete(m.inProgress, path)
-		m.mu.Unlock()
+		imp.mu.Lock()
+		delete(imp.inProgress, path)
+		imp.mu.Unlock()
 	}()
 
-	// 1. Check if the import path belongs to one of the workspace modules
-	for _, mod := range m.modules {
-		if path == mod.ModulePath || strings.HasPrefix(path, mod.ModulePath+"/") {
-			relPath := strings.TrimPrefix(path, mod.ModulePath)
-			relPath = strings.TrimPrefix(relPath, "/")
-			targetDir := filepath.Join(mod.RootDir, filepath.FromSlash(relPath))
-
-			if info, err := os.Stat(targetDir); err == nil && info.IsDir() {
-				pkg, err := m.loadPackageFromDir(path, targetDir)
-				if err == nil && pkg != nil {
-					m.mu.Lock()
-					m.cache[path] = pkg
-					m.mu.Unlock()
-					return pkg, nil
-				}
-			}
-		}
-
-		// 2. Check module-local vendor/ directory if present
-		vendorDir := filepath.Join(mod.RootDir, "vendor", filepath.FromSlash(path))
-		if info, err := os.Stat(vendorDir); err == nil && info.IsDir() {
-			pkg, err := m.loadPackageFromDir(path, vendorDir)
-			if err == nil && pkg != nil {
-				m.mu.Lock()
-				m.cache[path] = pkg
-				m.mu.Unlock()
-				return pkg, nil
-			}
-		}
-	}
-
-	// 3. Fallback to standard library / default Go importer
-	if impFrom, ok := m.defaultImp.(types.ImporterFrom); ok {
-		pkg, err := impFrom.ImportFrom(path, dir, mode)
-		if err == nil {
-			m.mu.Lock()
-			m.cache[path] = pkg
-			m.mu.Unlock()
-			return pkg, nil
-		}
-	}
-
-	pkg, err := m.defaultImp.Import(path)
-	if err == nil {
-		m.mu.Lock()
-		m.cache[path] = pkg
-		m.mu.Unlock()
-		return pkg, nil
-	}
-
-	m.mu.Lock()
-	m.Unresolved = append(m.Unresolved, path)
-	m.mu.Unlock()
-	return nil, err
-}
-
-func (m *MultiModuleImporter) loadPackageFromDir(importPath, dir string) (*types.Package, error) {
-	entries, err := os.ReadDir(dir)
+	// 4. Parse non-test Go source files in the target workspace directory
+	files, pkgName, err := imp.parseWorkspacePackageFiles(dirPath)
 	if err != nil {
-		return nil, err
-	}
-
-	var files []*ast.File
-	var pkgName string
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-
-		fullPath := filepath.Join(dir, name)
-		f, err := parser.ParseFile(m.fset, fullPath, nil, parser.ParseComments)
-		if err != nil {
-			continue
-		}
-
-		if pkgName == "" {
-			pkgName = f.Name.Name
-		} else if f.Name.Name != pkgName {
-			continue
-		}
-
-		files = append(files, f)
+		return nil, fmt.Errorf("failed to parse workspace package %s at %s: %w", path, dirPath, err)
 	}
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no buildable Go files in %s", dir)
+		return nil, fmt.Errorf("package %s at %s contains no buildable Go source files", path, dirPath)
 	}
 
+	// 5. Type-check package with multi-module importer
+	pkg := types.NewPackage(path, pkgName)
 	conf := types.Config{
-		Importer:                 m,
-		DisableUnusedImportCheck: true,
-		Error:                    func(err error) {},
+		Importer: imp,
+		Error:    func(err error) {}, // Non-fatal collector for robust AST resolution
 	}
 
 	info := &types.Info{
-		Types:      make(map[ast.Expr]types.TypeAndValue),
-		Defs:       make(map[*ast.Ident]types.Object),
-		Uses:       make(map[*ast.Ident]types.Object),
-		Selections: make(map[*ast.SelectorExpr]*types.Selection),
+		Types: make(map[ast.Expr]types.TypeAndValue),
+		Defs:  make(map[*ast.Ident]types.Object),
+		Uses:  make(map[*ast.Ident]types.Object),
 	}
 
-	pkg, _ := conf.Check(importPath, m.fset, files, info)
-	if pkg == nil {
-		return nil, fmt.Errorf("failed to type-check package %s", importPath)
+	checker := types.NewChecker(&conf, imp.fset, pkg, info)
+	if err := checker.Files(files); err != nil {
+		// Non-fatal: type errors during cross-module checking still produce partial types.Package
 	}
+
+	imp.mu.Lock()
+	imp.packages[path] = pkg
+	imp.mu.Unlock()
 
 	return pkg, nil
+}
+
+// parseWorkspacePackageFiles reads and parses all non-test .go files in the directory.
+func (imp *MultiModuleImporter) parseWorkspacePackageFiles(dirPath string) ([]*ast.File, string, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var files []*ast.File
+	var detectedPkgName string
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+
+		filePath := filepath.Join(dirPath, entry.Name())
+		src, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, "", err
+		}
+
+		fileAst, err := parser.ParseFile(imp.fset, filePath, src, parser.ParseComments)
+		if err != nil {
+			return nil, "", err
+		}
+
+		if detectedPkgName == "" {
+			detectedPkgName = fileAst.Name.Name
+		} else if fileAst.Name.Name != detectedPkgName {
+			// Skip documentation or mismatching package names in the same directory
+			continue
+		}
+
+		files = append(files, fileAst)
+	}
+
+	return files, detectedPkgName, nil
 }

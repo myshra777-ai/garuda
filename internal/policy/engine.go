@@ -9,203 +9,298 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/myshra777-ai/garuda/internal/merkle"
 )
 
+// Engine coordinates policy loading, evaluation, and persistence.
 type Engine struct {
 	pool      *pgxpool.Pool
 	evaluator *Evaluator
-	anchors   *merkle.AnchorChain
+	anchors   *Anchor
 }
 
 func NewEngine(pool *pgxpool.Pool) *Engine {
 	return &Engine{
 		pool:      pool,
 		evaluator: NewEvaluator(pool),
-		anchors:   merkle.NewAnchorChain(pool),
+		anchors:   NewAnchor(pool),
 	}
 }
 
+// RunResult is the aggregate outcome of one policy pass.
 type RunResult struct {
-	WorkspaceID   uuid.UUID          `json:"workspace_id"`
-	WorkspaceName string             `json:"workspace_name"`
-	EvaluatedAt   time.Time          `json:"evaluated_at"`
-	FinalDecision DecisionStatus     `json:"final_decision"`
-	TotalPolicies int                `json:"total_policies"`
-	PassedCount   int                `json:"passed_count"`
-	WarnCount     int                `json:"warn_count"`
-	BlockedCount  int                `json:"blocked_count"`
-	Evaluations   []PolicyEvaluation `json:"evaluations"`
-	BlockedBy     *uuid.UUID         `json:"blocked_by,omitempty"`
+	WorkspaceID    uuid.UUID     `json:"workspace_id"`
+	Evaluations    []*Evaluation `json:"evaluations"`
+	FinalDecision  Decision      `json:"final_decision"` // highest-severity across all
+	BlockedBy      *uuid.UUID    `json:"blocked_by,omitempty"`
+	Summary        string        `json:"summary"`
+	ReconcileCount int           `json:"reconcile_count"`
+	Preview        bool          `json:"preview"`
 }
 
-func resolveDecisionOverride(ctx context.Context, pool *pgxpool.Pool, tenantID, workspaceID uuid.UUID, policyName string, now time.Time) (*uuid.UUID, bool) {
-	if pool == nil {
-		return nil, false
-	}
-
-	var id uuid.UUID
-	err := pool.QueryRow(ctx, `
-		SELECT id FROM decisions
-		WHERE tenant_id = $1
-		  AND workspace_id = $2
-		  AND status = 'ACCEPTED'
-		  AND (valid_until IS NULL OR valid_until > $3)
-		  AND overridden_policies @> to_jsonb($4::text)
-		ORDER BY created_at DESC
-		LIMIT 1
-	`, tenantID, workspaceID, now, policyName).Scan(&id)
-
-	if err == nil && id != uuid.Nil {
-		return &id, true
-	}
-	return nil, false
+// RunOptions tunes the behavior of one policy pass.
+type RunOptions struct {
+	DryRun    bool
+	Reconcile bool
 }
 
-type overrideLookupFunc func(ctx context.Context, policyName string, now time.Time) (*uuid.UUID, bool)
-
-// Run evaluates all loaded policies against the target workspace.
+// Run loads all policies under policyDir, evaluates them against the
+// workspace, persists the evaluations, and anchors them to the Merkle
+// ledger.
 //
-// Fail-Closed Invariant:
-//   - Any predicate evaluation error aborts the run and returns an error (never
-//     defaulting to ALLOW on a failed query).
-//   - When dryRun is false, policy registration, Merkle anchor chain appending,
-//     and evaluation audit persistence must succeed; any persistence or anchoring
-//     failure returns an error rather than silently dropping the audit trail.
-func (e *Engine) Run(ctx context.Context, tenantID, workspaceID uuid.UUID, workspaceName string, policies []LoadedPolicy, dryRun bool) (*RunResult, error) {
-	var snapshotHash string
-	_ = e.pool.QueryRow(ctx, `
-		SELECT COALESCE(snapshot_hash, 'unanchored-snapshot') 
-		FROM canonical_revisions 
-		WHERE workspace_id = $1 
-		ORDER BY created_at DESC LIMIT 1
-	`, workspaceID).Scan(&snapshotHash)
-	if snapshotHash == "" {
-		snapshotHash = "genesis-snapshot"
+// Fail-Closed Invariant: Any policy parse error, predicate evaluation error,
+// or non-dry-run persistence/Merkle anchoring error aborts the pass and returns
+// an error rather than silently continuing with ALLOW.
+func (e *Engine) Run(
+	ctx context.Context,
+	tenantID, workspaceID uuid.UUID,
+	policyDir string,
+	subjectKind, subjectID, actor string,
+	opts RunOptions,
+) (*RunResult, error) {
+	dryRun := opts.DryRun
+
+	parsed, err := ParseDirectory(policyDir)
+	if err != nil {
+		return nil, fmt.Errorf("load policies: %w", err)
 	}
 
-	res := &RunResult{
+	// Sort by priority descending (higher = evaluated first)
+	sort.SliceStable(parsed, func(i, j int) bool {
+		return parsed[i].Policy.Priority > parsed[j].Policy.Priority
+	})
+
+	result := &RunResult{
 		WorkspaceID:   workspaceID,
-		WorkspaceName: workspaceName,
-		EvaluatedAt:   time.Now().UTC(),
 		FinalDecision: DecisionAllow,
-		TotalPolicies: len(policies),
 	}
+	result.Preview = dryRun
 
-	lookupOverride := func(ctx context.Context, policyName string, now time.Time) (*uuid.UUID, bool) {
-		return resolveDecisionOverride(ctx, e.pool, tenantID, workspaceID, policyName, now)
-	}
+	seenStatements := make(map[string]bool, len(parsed))
 
-	for _, p := range policies {
-		var policyID uuid.UUID
-		if !dryRun {
-			var err error
-			policyID, err = e.upsertPolicy(ctx, tenantID, workspaceID, p)
-			if err != nil {
-				return nil, fmt.Errorf("fail-closed: failed to persist policy %q: %w", p.Policy.Name, err)
-			}
-		} else {
-			policyID = uuid.New()
+	for _, pp := range parsed {
+		p := pp.Policy
+		seenStatements["POLICY:"+p.ID] = true
+
+		// Skip expired policies
+		if p.ExpiresAt != nil && time.Now().After(*p.ExpiresAt) {
+			slog.Debug("policy expired, skipping", "policy_id", p.ID)
+			continue
 		}
 
-		ev, err := e.evaluator.Evaluate(ctx, tenantID, workspaceID, policyID, p.Policy, snapshotHash)
-		if err != nil {
-			return nil, fmt.Errorf("fail-closed: policy %q evaluation failed: %w", p.Policy.Name, err)
-		}
-
-		applyEvaluationOutcome(res, ev, lookupOverride, ctx)
-
-		if !dryRun {
-			leafHash := merkle.ComputeEvaluationLeafHash(
-				ev.ID,
-				ev.PolicyID,
-				ev.WorkspaceID,
-				ev.SnapshotHash,
-				string(ev.Decision),
-				string(ev.EvidencePayload),
-				ev.EvaluatedAt,
+		// Filter by language if the policy targets a specific one
+		if p.Language != "" && p.Language != "any" {
+			hasLang, _, _ := e.evaluator.evalLanguageMatches(
+				ctx, p, &Predicate{Type: "language_matches", Params: map[string]any{"language": p.Language}},
+				tenantID, workspaceID,
 			)
-			anchorID, err := e.anchors.AppendEvaluation(ctx, tenantID, workspaceID, leafHash)
-			if err != nil {
-				return nil, fmt.Errorf("fail-closed: failed to append Merkle anchor for policy %q: %w", p.Policy.Name, err)
-			}
-			ev.MerkleAnchorID = &anchorID
-
-			if err := e.persistEvaluation(ctx, ev); err != nil {
-				return nil, fmt.Errorf("fail-closed: failed to persist evaluation audit record for policy %q: %w", p.Policy.Name, err)
+			if !hasLang {
+				continue
 			}
 		}
 
-		res.Evaluations = append(res.Evaluations, *ev)
+		ev, err := e.evaluator.Evaluate(ctx, p, tenantID, workspaceID, subjectKind, subjectID, actor)
+		if err != nil {
+			slog.Error("policy evaluation failed (fail-closed)",
+				"policy_id", p.ID, "workspace_id", workspaceID, "error", err)
+			return nil, fmt.Errorf("fail-closed: policy %s evaluation failed: %w", p.ID, err)
+		}
+		ev.EvaluatedAt = time.Now().UTC()
+
+		if dryRun {
+			if ev.PolicyID == uuid.Nil {
+				ev.PolicyID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(p.ID))
+			}
+			result.Evaluations = append(result.Evaluations, ev)
+			if ev.Decision.Severity() > result.FinalDecision.Severity() {
+				result.FinalDecision = ev.Decision
+				id := ev.PolicyID
+				result.BlockedBy = &id
+			}
+			continue
+		}
+
+		// Persist the policy row (idempotent upsert by policy_id)
+		policyUUID, err := e.upsertPolicy(ctx, tenantID, pp)
+		if err != nil {
+			slog.Error("failed to upsert policy (fail-closed)", "policy_id", p.ID, "error", err)
+			return nil, fmt.Errorf("fail-closed: failed to persist policy %s: %w", p.ID, err)
+		}
+		ev.PolicyID = policyUUID
+
+		// Anchor to Merkle BEFORE persisting the evaluation, so we can store the block height
+		blockHeight, proof, err := e.anchors.AppendEvaluation(ctx, ev)
+		if err != nil {
+			slog.Error("failed to anchor evaluation (fail-closed)", "policy_id", p.ID, "error", err)
+			return nil, fmt.Errorf("fail-closed: failed to anchor evaluation for policy %s: %w", p.ID, err)
+		}
+		ev.MerkleBlockHeight = &blockHeight
+
+		if err := e.persistEvaluation(ctx, ev, proof); err != nil {
+			slog.Error("failed to persist evaluation (fail-closed)", "policy_id", p.ID, "error", err)
+			return nil, fmt.Errorf("fail-closed: failed to persist evaluation for policy %s: %w", p.ID, err)
+		}
+
+		result.Evaluations = append(result.Evaluations, ev)
+
+		// Update final decision
+		if ev.Decision.Severity() > result.FinalDecision.Severity() {
+			result.FinalDecision = ev.Decision
+			id := ev.PolicyID
+			result.BlockedBy = &id
+		}
 	}
 
-	return res, nil
+	reconcile := opts.Reconcile
+	if !dryRun && reconcile {
+		seenList := make([]string, 0, len(seenStatements))
+		for s := range seenStatements {
+			seenList = append(seenList, s)
+		}
+
+		orphaned, err := e.pool.Exec(ctx, `
+			UPDATE policies
+			   SET status = 'superseded',
+			       updated_at = NOW()
+			 WHERE tenant_id = $1
+			   AND status = 'active'
+			   AND NOT (statement = ANY($2::text[]))
+		`, tenantID, seenList)
+		if err != nil {
+			slog.Error("policy reconcile failed", "error", err, "tenant_id", tenantID)
+		} else {
+			n := orphaned.RowsAffected()
+			result.ReconcileCount = int(n)
+			if n > 0 {
+				slog.Debug("policy reconcile: marked orphaned policies superseded",
+					"tenant_id", tenantID, "count", n)
+			}
+		}
+	}
+
+	result.Summary = fmt.Sprintf(
+		"workspace=%s policies=%d evaluations=%d final=%s",
+		workspaceID, len(parsed), len(result.Evaluations), result.FinalDecision,
+	)
+	return result, nil
 }
 
-func applyEvaluationOutcome(res *RunResult, ev *PolicyEvaluation, lookup overrideLookupFunc, ctx context.Context) {
-	if ev.Decision == DecisionBlock || ev.Decision == DecisionRequireApproval {
-		if lookup != nil {
-			if decID, ok := lookup(ctx, ev.PolicyName, res.EvaluatedAt); ok {
-				ev.Decision = DecisionOverridden
-				ev.OverriddenByDecisionID = decID
+// ─────────────────────────────────────────────────────────────────────────────
+// Persistence
+// ─────────────────────────────────────────────────────────────────────────────
 
-				var payload map[string]any
-				_ = json.Unmarshal(ev.EvidencePayload, &payload)
-				if payload == nil {
-					payload = make(map[string]any)
-				}
-				payload["overridden_by_decision_id"] = decID.String()
-				ev.EvidencePayload, _ = json.Marshal(payload)
-			}
+func (e *Engine) upsertPolicy(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	pp ParsedPolicy,
+) (uuid.UUID, error) {
+	p := pp.Policy
+
+	statement := "POLICY:" + p.ID
+	metadataJSON := policyMetadataJSON(p)
+
+	var previousID *uuid.UUID
+	{
+		var prev uuid.UUID
+		err := e.pool.QueryRow(ctx, `
+			SELECT id FROM policies
+			 WHERE tenant_id = $1
+			   AND scope_domain = $2
+			   AND scope_system = $3
+			   AND metadata->>'title' = $4
+			   AND statement <> $5
+			   AND status = 'active'
+			 ORDER BY created_at DESC
+			 LIMIT 1
+		`, tenantID, p.Scope.Domain, p.Scope.System, p.Title, statement).Scan(&prev)
+		if err == nil {
+			previousID = &prev
 		}
 	}
 
-	switch ev.Decision {
-	case DecisionAllow:
-		res.PassedCount++
-	case DecisionOverridden:
-		res.PassedCount++
-	case DecisionWarn:
-		res.WarnCount++
-		if res.FinalDecision == DecisionAllow {
-			res.FinalDecision = DecisionWarn
-		}
-	case DecisionRequireApproval:
-		res.WarnCount++
-		if res.FinalDecision == DecisionAllow || res.FinalDecision == DecisionWarn {
-			res.FinalDecision = DecisionRequireApproval
-		}
-	case DecisionBlock:
-		res.BlockedCount++
-		res.FinalDecision = DecisionBlock
-		if res.BlockedBy == nil {
-			id := ev.ID
-			res.BlockedBy = &id
-		}
-	}
-}
-
-func (e *Engine) upsertPolicy(ctx context.Context, tenantID, workspaceID uuid.UUID, lp LoadedPolicy) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := e.pool.QueryRow(ctx, `
-		INSERT INTO policies (id, tenant_id, workspace_id, name, version, severity, action, yaml_content, content_hash, active, created_at)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, true, NOW())
-		ON CONFLICT (workspace_id, name, content_hash) 
-		DO UPDATE SET active = true
+		INSERT INTO policies (
+			tenant_id, statement, scope_domain, scope_system,
+			actor, status, metadata, source_path, source_hash,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, 'active', $6, $7, $8, NOW(), NOW()
+		)
+		ON CONFLICT (tenant_id, statement) DO UPDATE SET
+			scope_domain = EXCLUDED.scope_domain,
+			scope_system = EXCLUDED.scope_system,
+			actor        = EXCLUDED.actor,
+			metadata     = EXCLUDED.metadata,
+			source_path  = EXCLUDED.source_path,
+			source_hash  = EXCLUDED.source_hash,
+			updated_at   = NOW()
 		RETURNING id
-	`, tenantID, workspaceID, lp.Policy.Name, lp.Policy.Version, string(lp.Policy.Severity), string(lp.Policy.Action), lp.Content, lp.Hash).Scan(&id)
-	return id, err
+	`, tenantID, statement,
+		p.Scope.Domain, p.Scope.System,
+		p.Authority, metadataJSON,
+		pp.SourcePath, pp.SourceHash,
+	).Scan(&id)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("upsert policy %s: %w", p.ID, err)
+	}
+
+	if previousID != nil && *previousID != id {
+		_, _ = e.pool.Exec(ctx, `
+			UPDATE policies
+			   SET status = 'superseded',
+			       superseded_by = $1,
+			       updated_at = NOW()
+			 WHERE id = $2 AND tenant_id = $3
+		`, id, *previousID, tenantID)
+	}
+
+	return id, nil
 }
 
-func (e *Engine) persistEvaluation(ctx context.Context, ev *PolicyEvaluation) error {
-	_, err := e.pool.Exec(ctx, `
-		INSERT INTO policy_evaluations 
-		(id, tenant_id, workspace_id, policy_id, snapshot_hash, decision, violation_count, evidence_payload, merkle_anchor_id, overridden_by_decision_id, evaluated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, ev.ID, ev.TenantID, ev.WorkspaceID, ev.PolicyID, ev.SnapshotHash, string(ev.Decision), ev.ViolationCount, ev.EvidencePayload, ev.MerkleAnchorID, ev.OverriddenByDecisionID, ev.EvaluatedAt)
-	return err
+func (e *Engine) persistEvaluation(ctx context.Context, ev *Evaluation, proof []byte) error {
+	evidenceJSON, err := json.Marshal(ev.Evidence)
+	if err != nil {
+		return fmt.Errorf("marshal evidence: %w", err)
+	}
+	_, err = e.pool.Exec(ctx, `
+		INSERT INTO policy_evaluations (
+			id, tenant_id, workspace_id, policy_id, policy_version,
+			decision, reason, evidence, evaluated_at,
+			merkle_block_height, merkle_proof, verification_version,
+			subject_kind, subject_id, actor
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1,$12,$13,$14)
+	`,
+		ev.ID, ev.TenantID, ev.WorkspaceID, ev.PolicyID, ev.PolicyVersion,
+		string(ev.Decision), ev.Reason, evidenceJSON, ev.EvaluatedAt,
+		ev.MerkleBlockHeight, proof,
+		ev.SubjectKind, ev.SubjectID, ev.Actor,
+	)
+	if err != nil {
+		return fmt.Errorf("insert evaluation: %w", err)
+	}
+	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+func policyMetadataJSON(p *Policy) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"external_id": p.ID,
+		"title":       p.Title,
+		"description": p.Description,
+		"priority":    p.Priority,
+		"language":    p.Language,
+		"version":     p.Version,
+		"when":        p.When,
+		"then":        p.Then,
+	})
+	return b
 }

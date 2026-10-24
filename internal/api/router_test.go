@@ -3,7 +3,7 @@
 //
 // Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
-package api_test
+package api
 
 import (
 	"net/http"
@@ -13,63 +13,48 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/myshra777-ai/garuda/internal/api"
 	"github.com/myshra777-ai/garuda/internal/auth"
 )
 
-func TestSetupRouter_OrchestrationRoutesRegistered(t *testing.T) {
-	srv := api.NewServer(nil, nil, nil, nil, nil, nil, nil)
-	router := api.SetupRouter(srv, srv.RateLimiter(), nil, nil)
+func TestRouterRegistersBrowserRoutes(t *testing.T) {
+	s := &Server{
+		rateLimiter: NewIPRateLimiter(100, 100),
+		sessions:    NewSessionStore(0),
+	}
+	router := mux.NewRouter()
+	s.RegisterRoutes(router)
 
 	cases := []struct {
 		method string
 		path   string
 	}{
-		{http.MethodPost, "/api/v1/agent/checkpoint"},
-		{http.MethodPost, "/api/v1/agent/handoff"},
-		{http.MethodGet, "/api/v1/agent/handoff/test-session-id"},
-		{http.MethodPost, "/api/v1/agent/resume"},
-		{http.MethodGet, "/api/v1/lineage/status"},
-		{http.MethodGet, "/api/v1/system/health"},
+		{http.MethodGet, "/login"},
+		{http.MethodPost, "/login"},
+		{http.MethodGet, "/signup"},
+		{http.MethodPost, "/signup"},
+		{http.MethodPost, "/logout"},
+		{http.MethodGet, "/dashboard"},
+		{http.MethodGet, "/admin"},
+		{http.MethodGet, "/api/v1/workspaces"},
+		{http.MethodGet, "/api/v1/dashboard/stats"},
+		{http.MethodGet, "/api/v1/dashboard/search"},
+		{http.MethodGet, "/api/v1/dashboard/policies"},
+		{http.MethodGet, "/api/v1/graph"},
+		{http.MethodGet, "/health"},
 		{http.MethodGet, "/healthz"},
 		{http.MethodGet, "/readyz"},
+		{http.MethodGet, "/api/v1/system/health"},
+		{http.MethodPost, "/api/v1/telemetry/spans"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			var match mux.RouteMatch
-			if !router.Match(req, &match) {
-				t.Fatalf("route %s %s is not registered on the router", tc.method, tc.path)
-			}
-			if match.MatchErr == mux.ErrMethodMismatch {
-				t.Fatalf("route %s %s matched path but rejected method", tc.method, tc.path)
+			match := &mux.RouteMatch{}
+			if !router.Match(req, match) {
+				t.Errorf("%s %s not registered on the router", tc.method, tc.path)
 			}
 		})
-	}
-}
-
-func TestSetupRouter_OverrideReplacesDefault(t *testing.T) {
-	srv := api.NewServer(nil, nil, nil, nil, nil, nil, nil)
-
-	overrideCalled := false
-	router := api.SetupRouter(srv, srv.RateLimiter(), nil, func(r *mux.Router) {
-		r.HandleFunc("/api/v1/graph", func(w http.ResponseWriter, r *http.Request) {
-			overrideCalled = true
-			w.WriteHeader(http.StatusTeapot)
-		}).Methods(http.MethodGet)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/graph", nil)
-	req.Header.Set("Authorization", "Bearer test-token")
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	if !overrideCalled {
-		t.Fatalf("expected override handler to be called for /api/v1/graph, got status %d", rec.Code)
-	}
-	if rec.Code != http.StatusTeapot {
-		t.Fatalf("expected status %d from override, got %d", http.StatusTeapot, rec.Code)
 	}
 }
 
@@ -79,18 +64,23 @@ func TestAuthMiddleware_EnforcesRealEd25519JWTValidation(t *testing.T) {
 		t.Fatalf("failed to create JWTConfig: %v", err)
 	}
 
-	srv := api.NewServer(nil, nil, jwtCfg, nil, nil, nil, nil)
+	s := &Server{
+		jwtConfig:   jwtCfg,
+		rateLimiter: NewIPRateLimiter(100, 100),
+		sessions:    NewSessionStore(0),
+	}
+
 	var capturedActor string
 	var capturedTenant uuid.UUID
 
-	protected := srv.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	protected := s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedActor, _ = auth.ActorFromContext(r.Context())
 		capturedTenant, _ = auth.TenantFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	// 1. Arbitrary non-empty Bearer string MUST be rejected with 401
-	badReq := httptest.NewRequest(http.MethodGet, "/api/v1/decisions", nil)
+	// 1. Forged / arbitrary non-empty Bearer string MUST be rejected with 401
+	badReq := httptest.NewRequest(http.MethodPost, "/api/v1/decisions/propose", nil)
 	badReq.Header.Set("Authorization", "Bearer arbitrary-forged-token")
 	badRec := httptest.NewRecorder()
 	protected.ServeHTTP(badRec, badReq)
@@ -105,7 +95,7 @@ func TestAuthMiddleware_EnforcesRealEd25519JWTValidation(t *testing.T) {
 		t.Fatalf("failed to generate token: %v", err)
 	}
 
-	goodReq := httptest.NewRequest(http.MethodGet, "/api/v1/decisions", nil)
+	goodReq := httptest.NewRequest(http.MethodPost, "/api/v1/decisions/propose", nil)
 	goodReq.Header.Set("Authorization", "Bearer "+validToken)
 	goodRec := httptest.NewRecorder()
 	protected.ServeHTTP(goodRec, goodReq)
