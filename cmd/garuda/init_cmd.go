@@ -33,6 +33,53 @@ var (
 	initSkipScanFlag  bool
 )
 
+// resolveSmartEmail discovers the developer's email from flags, env, git config, or OS user.
+func resolveSmartEmail(flagVal string) string {
+	if v := strings.TrimSpace(flagVal); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("GARUDA_EMAIL")); v != "" {
+		return v
+	}
+	if out, err := exec.Command("git", "config", "user.email").Output(); err == nil {
+		if email := strings.TrimSpace(string(out)); email != "" && strings.Contains(email, "@") {
+			return email
+		}
+	}
+	if u := strings.TrimSpace(os.Getenv("USER")); u != "" {
+		return u + "@garuda.local"
+	}
+	return "admin@garuda.local"
+}
+
+// resolveSmartWorkspace discovers the workspace name from flags, env, existing DB state, or target directory.
+func resolveSmartWorkspace(ctx context.Context, pool *pgxpool.Pool, flagVal, targetPath string) string {
+	if v := strings.TrimSpace(flagVal); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("GARUDA_WORKSPACE")); v != "" {
+		return v
+	}
+	if pool != nil {
+		var existing string
+		err := pool.QueryRow(ctx, `
+			SELECT name FROM workspaces
+			 WHERE tenant_id = $1 AND name != 'default'
+			 ORDER BY updated_at DESC LIMIT 1
+		`, tenant.CanonicalID).Scan(&existing)
+		if err == nil && existing != "" {
+			return existing
+		}
+	}
+	if abs, err := filepath.Abs(targetPath); err == nil {
+		base := filepath.Base(abs)
+		if base != "" && base != "." && base != "/" {
+			return base
+		}
+	}
+	return "default"
+}
+
 var initCmd = &cobra.Command{
 	Use:   "init [target_repo_path]",
 	Short: "Initialize Garuda in 1 command: start Postgres, run migrations, seed user & workspace, configure MCP, and index code",
@@ -40,12 +87,17 @@ var initCmd = &cobra.Command{
 		ctx := context.Background()
 		config.LoadDotEnv()
 
-		fmt.Println("🦅 Initializing Garuda Epistemic Intelligence Engine (1-Click Setup)...")
+		fmt.Println("🦅 Initializing Garuda Epistemic Intelligence Engine (1-Click Smart Setup)...")
+
+		targetPath := initTargetFlag
+		if len(args) > 0 && args[0] != "" {
+			targetPath = args[0]
+		}
 
 		// 1. Resolve & Ensure PostgreSQL is running
 		dbURL := config.ResolveDBURL()
 		if !isPostgresReachable(ctx, dbURL) {
-			fmt.Println("  ⏳ PostgreSQL not yet reachable — attempting to start Docker container 'garuda-postgres'...")
+			fmt.Println("  ⏳ PostgreSQL not yet reachable — starting Docker container 'garuda-postgres'...")
 			ensureDockerPostgres()
 		}
 
@@ -62,13 +114,15 @@ var initCmd = &cobra.Command{
 		}
 		fmt.Println("  ✓ Database schema & migrations verified (100% up-to-date)")
 
-		// 3. Resolve Workspace Name & Persist .env
-		workspaceName := initWorkspaceFlag
-		if workspaceName == "" {
-			workspaceName = os.Getenv("GARUDA_WORKSPACE")
+		// 3. Dynamically Resolve Workspace Name, Email & Persist .env
+		workspaceName := resolveSmartWorkspace(ctx, pool, initWorkspaceFlag, targetPath)
+		email := resolveSmartEmail(initEmailFlag)
+		password := initPasswordFlag
+		if password == "" {
+			password = os.Getenv("GARUDA_PASSWORD")
 		}
-		if workspaceName == "" {
-			workspaceName = "go-validation-10"
+		if password == "" {
+			password = "garuda2026"
 		}
 		port := os.Getenv("PORT")
 		if port == "" {
@@ -80,17 +134,17 @@ var initCmd = &cobra.Command{
 		}
 
 		_ = config.UpsertDotEnv(map[string]string{
-			"DATABASE_URL":          dbURL,
-			"CONTROL_DATABASE_URL":  dbURL,
-			"GARUDA_CONTROL_TOKEN":  controlToken,
-			"GARUDA_WORKSPACE":      workspaceName,
-			"PORT":                  port,
+			"DATABASE_URL":         dbURL,
+			"CONTROL_DATABASE_URL": dbURL,
+			"GARUDA_CONTROL_TOKEN": controlToken,
+			"GARUDA_WORKSPACE":     workspaceName,
+			"PORT":                 port,
 		})
 		// Ensure JWT keys are generated and persisted in .env
 		_, _ = auth.NewJWTConfig("garuda", "garuda-api", 15*time.Minute)
 		fmt.Println("  ✓ Persisted environment configuration to .env")
 
-		// 4. Seed Canonical Tenant & Default Workspace
+		// 4. Seed Canonical Tenant & Workspace
 		tenantID := getTenantID()
 		pgStore, err := store.NewPostgresStore(dbURL)
 		if err != nil {
@@ -104,13 +158,15 @@ var initCmd = &cobra.Command{
 		}
 		fmt.Printf("  ✓ Workspace ready: %s (%s)\n", workspaceName, ws.ID.String())
 
-		// 5. Seed Owner Account (so /login and /signup work out of the box)
-		email := strings.TrimSpace(initEmailFlag)
-		password := initPasswordFlag
+		// 5. Seed Owner Account dynamically
 		if email != "" && len(password) >= 8 {
 			if hash, hErr := auth.HashPassword(password); hErr == nil {
 				fullName := email
-				if at := strings.IndexByte(email, '@'); at > 0 {
+				if out, gErr := exec.Command("git", "config", "user.name").Output(); gErr == nil {
+					if gn := strings.TrimSpace(string(out)); gn != "" {
+						fullName = gn
+					}
+				} else if at := strings.IndexByte(email, '@'); at > 0 {
 					fullName = email[:at]
 				}
 				user, _, sErr := pgStore.SignupUser(ctx, email, hash, fullName)
@@ -201,10 +257,6 @@ var initCmd = &cobra.Command{
 		fmt.Printf("  ✓ Configured Claude Desktop MCP (%s)\n", claudeConfigPath)
 
 		// 8. Optional initial repository analysis
-		targetPath := initTargetFlag
-		if len(args) > 0 && args[0] != "" {
-			targetPath = args[0]
-		}
 		if !initSkipScanFlag && targetPath != "" {
 			fmt.Printf("\n🔍 Performing AST & call-graph scan on '%s'...\n", targetPath)
 			rootCmd.SetArgs([]string{"analyze", targetPath, "--workspace", workspaceName, "--save"})
@@ -237,7 +289,6 @@ func isPostgresReachable(ctx context.Context, dbURL string) bool {
 }
 
 func ensureDockerPostgres() {
-	// Try starting existing container first, otherwise create it
 	if err := exec.Command("docker", "start", "garuda-postgres").Run(); err != nil {
 		_ = exec.Command(
 			"docker", "run", "-d",
@@ -260,9 +311,9 @@ func ensureDockerPostgres() {
 }
 
 func init() {
-	initCmd.Flags().StringVar(&initEmailFlag, "email", "myshra777@gmail.com", "Owner email to provision")
-	initCmd.Flags().StringVar(&initPasswordFlag, "password", "garuda2026", "Owner password to provision")
-	initCmd.Flags().StringVar(&initWorkspaceFlag, "workspace", "", "Workspace name to initialize")
+	initCmd.Flags().StringVar(&initEmailFlag, "email", "", "Owner email to provision (auto-detected from git config if omitted)")
+	initCmd.Flags().StringVar(&initPasswordFlag, "password", "", "Owner password to provision (defaults to GARUDA_PASSWORD or garuda2026)")
+	initCmd.Flags().StringVar(&initWorkspaceFlag, "workspace", "", "Workspace name to initialize (auto-detected if omitted)")
 	initCmd.Flags().StringVar(&initTargetFlag, "target", ".", "Repository path to index")
 	initCmd.Flags().BoolVar(&initSkipScanFlag, "skip-scan", false, "Skip initial repository AST scan")
 	rootCmd.AddCommand(initCmd)

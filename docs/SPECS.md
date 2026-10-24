@@ -1,9 +1,9 @@
 # Garuda Specifications
 
-**Version:** 0.1.x  
+**Version:** 1.2.0  
 **Document status:** Current-state reference draft
 
-**Updated:** 2026-09-20
+**Updated:** 2026-10-24
 **Scope:** Verified repository capabilities, validation boundaries, and explicitly marked future work.
 
 > This document describes Garuda as implemented and verified in the current repository state. A capability is not considered current merely because it appears in a roadmap, design document, dashboard label, or generated artifact.
@@ -160,11 +160,11 @@ Go call relationships can be resolved through `go/types` and carry resolution me
 
 ### Python
 
-Python support is structural. It can provide useful source and relationship information, but dynamic dispatch, imports generated at runtime, and other runtime behavior are outside the authority of purely structural analysis.
+Python support extracts modules, classes, functions, methods, `IMPORTS`, `INHERITS`, and intra/cross-module function and method body `CALLS` (`self.method()`, local functions, and imported symbols). Dynamic dispatch and `eval`/`importlib` runtime imports remain outside the authority of static AST analysis and are covered by runtime OpenTelemetry correlation.
 
 ### TypeScript
 
-TypeScript support is structural and uses the repository’s documented build requirements, including CGO and a C compiler where required. The capability is not equivalent to complete runtime or dynamic call-graph knowledge.
+TypeScript support uses Tree-sitter AST parsing (`internal/ast/typescript`) to extract modules (with `package.json` module path discovery), classes, interfaces, functions, arrow functions, methods, `IMPORTS`, `INHERITS`, `IMPLEMENTS`, and `call_expression` `CALLS` (`this.method()` and module functions).
 
 ### Language status
 
@@ -250,13 +250,17 @@ Policies express organizational intent as declarative rules over a tenant and wo
 
 ### Predicate families
 
-Current policy predicates include:
+Current policy predicates include all 9 deterministic SQL and recursive CTE evaluators (with `scope.package` and `scope.pattern` filtering enforced):
 
-- `entity_exists`.
-- `claim_exists`.
-- `contradiction_exists`.
-- `verification_missing`.
-- `language_matches`.
+- `entity_exists` — entity kind, name regex, and export filter.
+- `claim_exists` — direct relationship filter (`CALLS`, `IMPORTS`, `IMPLEMENTS`, `INHERITS`, `EMBEDS`).
+- `transitive_claim_exists` — multi-hop recursive CTE (`WITH RECURSIVE call_path`) up to `max_depth` hops.
+- `layer_violation` — architectural boundary enforcement between `from_layer` and `to_layer` package regexes.
+- `cycle_exists` — circular package dependency detection (`WITH RECURSIVE cycle_search`).
+- `blast_radius_exceeds` — inbound caller fan-in threshold gate (`max_callers`).
+- `contradiction_exists` — unresolved runtime or decision contradiction gate.
+- `verification_missing` — flags exported functions/methods lacking `SUPPORTED` runtime evidence.
+- `language_matches` — scopes rules to `go`, `python`, or `typescript`.
 
 ### Outcomes
 
@@ -454,6 +458,7 @@ Current CI-oriented capabilities include semantic analysis, policy gating, contr
 
 | Capability | Current interface |
 |---|---|
+| Unified change-control gate | `garuda check` with `--save --fail-on-block` (and `--json`) |
 | Breaking-change gate | `garuda ci` with `--block-on-break` |
 | Policy threshold gate | `garuda policy evaluate` with `--fail-on-block` |
 | Contradiction gate | `garuda ci check` with `--fail-on-contradiction` |

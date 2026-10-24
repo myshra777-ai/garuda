@@ -171,6 +171,12 @@ var checkCmd = &cobra.Command{
 			}
 		}
 
+		var blockedByStr *string
+		if runRes.BlockedBy != nil {
+			s := runRes.BlockedBy.String()
+			blockedByStr = &s
+		}
+
 		decision := ChangeControlDecision{
 			Workspace:         wsName,
 			TargetSymbol:      targetDisplay,
@@ -178,7 +184,7 @@ var checkCmd = &cobra.Command{
 			BySeverity:        sevMap,
 			EvidenceState:     evState,
 			PoliciesEvaluated: len(runRes.Evaluations),
-			BlockedBy:         runRes.BlockedBy,
+			BlockedBy:         blockedByStr,
 			GovernanceOutcome: outcome,
 			MerkleBlockHeight: latestBlock,
 			DurationMs:        time.Since(start).Milliseconds(),
