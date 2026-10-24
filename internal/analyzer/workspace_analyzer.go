@@ -159,6 +159,8 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		}
 	}
 
+	result.Relationships = append(result.Relationships, deriveWorkspaceInterfaceImplementations(result.Entities, result.Relationships)...)
+
 	result.Stats.Packages = len(sortedPkgPaths)
 	for _, e := range result.Entities {
 		switch e.Kind {
@@ -172,6 +174,108 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 	}
 
 	return result, nil
+}
+
+// deriveWorkspaceInterfaceImplementations performs a cross-package structural
+// method-set pass over all extracted workspace entities so structs that satisfy
+// interfaces (even when external stdlib parameter types are unloaded) emit
+// deterministic IMPLEMENTS edges with declaration evidence.
+func deriveWorkspaceInterfaceImplementations(entities []Entity, existing []Relationship) []Relationship {
+	existingSet := make(map[string]bool, len(existing))
+	for _, r := range existing {
+		if r.Type == string(RelImplements) {
+			existingSet[r.From+"->"+r.To] = true
+		}
+	}
+
+	var interfaces []Entity
+	var structs []Entity
+	structMethods := make(map[string]map[string]bool)
+
+	for _, e := range entities {
+		switch e.Kind {
+		case KindInterface:
+			if len(e.Methods) > 0 {
+				interfaces = append(interfaces, e)
+			}
+		case KindStruct:
+			structs = append(structs, e)
+		case KindMethod:
+			recv := strings.TrimSpace(e.Receiver)
+			recv = strings.TrimPrefix(recv, "*")
+			if idx := strings.LastIndex(recv, "."); idx >= 0 {
+				recv = recv[idx+1:]
+			}
+			if idx := strings.Index(recv, "["); idx >= 0 {
+				recv = recv[:idx]
+			}
+			if recv != "" && e.Package != "" {
+				key := e.Package + "." + recv
+				if structMethods[key] == nil {
+					structMethods[key] = make(map[string]bool)
+				}
+				structMethods[key][e.Name] = true
+			}
+		}
+	}
+
+	var added []Relationship
+	for _, st := range structs {
+		stKey := st.Package + "." + st.Name
+		mset := structMethods[stKey]
+		if len(mset) == 0 {
+			continue
+		}
+		for _, iface := range interfaces {
+			if st.Package == iface.Package && st.Name == iface.Name {
+				continue
+			}
+			if len(mset) < len(iface.Methods) {
+				continue
+			}
+			allMatch := true
+			for _, im := range iface.Methods {
+				if !mset[im.Name] {
+					allMatch = false
+					break
+				}
+			}
+			if !allMatch {
+				continue
+			}
+			toKey := iface.Package + "." + iface.Name
+			edgeKey := stKey + "->" + toKey
+			if existingSet[edgeKey] {
+				continue
+			}
+			existingSet[edgeKey] = true
+			evLine := st.LineStart
+			if evLine == 0 {
+				evLine = st.Line
+			}
+			evEnd := st.LineEnd
+			if evEnd == 0 {
+				evEnd = evLine
+			}
+			added = append(added, Relationship{
+				From:             stKey,
+				To:               toKey,
+				Type:             string(RelImplements),
+				Confidence:       0.95,
+				ResolutionStatus: "RESOLVED",
+				ResolutionMethod: "AST_STRUCTURAL",
+				EpistemicClass:   "OBSERVATION",
+				Evidence: Evidence{
+					File:      st.File,
+					Line:      evLine,
+					LineStart: evLine,
+					LineEnd:   evEnd,
+					Analyzer:  "workspace_analyzer",
+				},
+			})
+		}
+	}
+	return added
 }
 
 // evidenceIndex maps every declared types.Object to the source position
@@ -426,12 +530,19 @@ func extractWorkspaceRelationships(fset *token.FileSet, pkgPath string, files []
 				if currentCaller == "" {
 					return true
 				}
-				sel, ok := node.Fun.(*ast.SelectorExpr)
-				if !ok {
+				var obj types.Object
+				switch fun := node.Fun.(type) {
+				case *ast.SelectorExpr:
+					obj = info.Uses[fun.Sel]
+				case *ast.Ident:
+					obj = info.Uses[fun]
+				default:
 					return true
 				}
-				obj, exists := info.Uses[sel.Sel]
-				if !exists || obj == nil || obj.Pkg() == nil {
+				if obj == nil || obj.Pkg() == nil {
+					return true
+				}
+				if _, isFunc := obj.(*types.Func); !isFunc {
 					return true
 				}
 				rels = append(rels, Relationship{

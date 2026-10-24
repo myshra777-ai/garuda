@@ -44,6 +44,7 @@ type Function struct {
 	LineStart  int
 	LineEnd    int
 	IsExported bool
+	Calls      []string
 }
 
 type Import struct {
@@ -72,6 +73,7 @@ var (
 	reFromImpt  = regexp.MustCompile(`^from\s+([A-Za-z0-9_.]+)\s+import\s+(.+)$`)
 	reDecor     = regexp.MustCompile(`^@([A-Za-z_][A-Za-z0-9_.]*(?:\([^)]*\))?)`)
 	reDocstring = regexp.MustCompile(`^\s*(?:"""|''')`)
+	rePyCall    = regexp.MustCompile(`\b((?:self\.)?[A-Za-z_][A-Za-z0-9_]*)\s*\(`)
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -156,7 +158,25 @@ func Parse(src, path, moduleName string) (*Module, error) {
 		}
 
 		// Imports — only at module level (indent == 0)
-		if indent == 0 {
+		// Extract function/method body calls when inside an open def block
+			if len(stack) > 0 && stack[len(stack)-1].kind == "def" {
+				top := stack[len(stack)-1]
+				for _, mcall := range rePyCall.FindAllStringSubmatch(text, -1) {
+					callee := mcall[1]
+					switch callee {
+					case "if", "for", "while", "return", "yield", "with", "except", "elif", "assert", "print", "len", "range", "isinstance", "super":
+						continue
+					}
+					if top.classIdx >= 0 && top.classIdx < len(m.Classes) && top.funcIdx >= 0 {
+						m.Classes[top.classIdx].Methods[top.funcIdx].Calls = append(
+							m.Classes[top.classIdx].Methods[top.funcIdx].Calls, callee)
+					} else if top.classIdx == -1 && top.funcIdx >= 0 && top.funcIdx < len(m.Functions) {
+						m.Functions[top.funcIdx].Calls = append(
+							m.Functions[top.funcIdx].Calls, callee)
+					}
+				}
+			}
+			if indent == 0 {
 			if im := reImport.FindStringSubmatch(text); im != nil {
 				for _, spec := range splitTopLevel(im[1], ',') {
 					spec = strings.TrimSpace(spec)

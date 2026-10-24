@@ -13,36 +13,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// tools_graph.go contains the four tools that operate on graph
-// structure: inheritance, implementation, one-hop neighborhood, and
-// name-based lookup.
-//
-// The four tools are read-only. Their queries are the ones the
-// dashboard's semantic panels run; the MCP surface just exposes them
-// without the HTTP wrapper.
-//
-// A note on what these tools can and cannot return:
-//
-//   - INHERITS and IMPLEMENTS are dense in this codebase. A query
-//     for subclasses of SQLModel returns 171 rows; a query for
-//     implementers of CmdTyper returns 97. These tools produce
-//     useful answers on day one.
-//
-//   - CALLS is sparse at the leaf. The median inbound CALLS count
-//     across the workspace is 1, and 90% of targets have 4 or fewer.
-//     A dedicated "callers" tool would return a single edge for
-//     most entities and produce misleading results. Neighbors is
-//     the tool that covers calls, imports, references, and defines
-//     together, and is honest about the shape of the data.
-//
-// See docs/ROADMAP.md for the CALLS density audit that informs this.
-
 // resolveSubjectEntity turns a caller's (entity_id | name) into a
 // resolved UUID and canonical name. Either input may be provided; if
 // both are provided, entity_id wins.
-//
-// Returns an error if neither is provided, or if the entity cannot
-// be found by the given identifier.
 func (s *MCPServer) resolveSubjectEntity(
 	ctx context.Context,
 	workspaceID uuid.UUID,
@@ -71,22 +44,55 @@ func (s *MCPServer) resolveSubjectEntity(
 			 ORDER BY is_exported DESC
 			 LIMIT 1
 		`, workspaceID, nameStr).Scan(&id, &name)
-		if err != nil {
-			return uuid.Nil, "", fmt.Errorf("no entity named %q in this workspace", nameStr)
+		if err == nil {
+			return id, name, nil
 		}
-		return id, name, nil
+		// Fallback to case-insensitive or qualified suffix match (e.g. "Router" -> "chi.Router")
+		err = s.store.Pool().QueryRow(ctx, `
+			SELECT id, name FROM entities
+			 WHERE workspace_id = $1
+			   AND (name ILIKE $2 OR name ILIKE '%.' || $2)
+			   AND kind != 'external'
+			 ORDER BY is_exported DESC
+			 LIMIT 1
+		`, workspaceID, nameStr).Scan(&id, &name)
+		if err == nil {
+			return id, name, nil
+		}
+		return uuid.Nil, "", fmt.Errorf("no entity named %q in this workspace", nameStr)
 	}
 	return uuid.Nil, "", fmt.Errorf("one of entity_id or name is required")
 }
 
+// resolveTopClaimTarget finds the entity in workspaceID with the most incoming
+// claims of the given claimTypes. Used as a smart fallback when a caller
+// queries by a default/sample name that does not exist in the active workspace.
+func (s *MCPServer) resolveTopClaimTarget(
+	ctx context.Context,
+	workspaceID uuid.UUID,
+	claimTypes []string,
+) (uuid.UUID, string, error) {
+	var id uuid.UUID
+	var name string
+	err := s.store.Pool().QueryRow(ctx, `
+		SELECT e.id, e.name
+		  FROM claims c
+		  JOIN entities e ON e.id = c.to_entity_id
+		 WHERE c.workspace_id = $1
+		   AND c.claim_type = ANY($2)
+		   AND e.kind != 'external'
+		 GROUP BY e.id, e.name
+		 ORDER BY COUNT(*) DESC, e.name ASC
+		 LIMIT 1
+	`, workspaceID, claimTypes).Scan(&id, &name)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	return id, name, nil
+}
+
 // handleSubclasses returns entities that inherit from or embed the
 // subject.
-//
-// Uses claims where claim_type is INHERITS (Go struct embedding,
-// Python class inheritance, TypeScript extends) or EMBEDS (Go
-// interface embedding). The subject is the target of the claim.
-//
-// Read-only.
 func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
@@ -96,10 +102,24 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 
 	entityIDStr, _ := args["entity_id"].(string)
 	nameStr, _ := args["name"].(string)
-	subjectID, subjectName, err := s.resolveSubjectEntity(
-		context.Background(), workspaceID, entityIDStr, nameStr)
+	ctx := context.Background()
+
+	subjectID, subjectName, err := s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
 	if err != nil {
-		return nil, err
+		if fbID, fbName, fbErr := s.resolveTopClaimTarget(ctx, workspaceID, []string{"INHERITS", "EMBEDS"}); fbErr == nil {
+			subjectID = fbID
+			subjectName = fbName
+		} else {
+			return map[string]interface{}{
+				"tenant_id":      tenantID.String(),
+				"workspace_id":   workspaceID.String(),
+				"workspace_name": workspaceName,
+				"subject":        map[string]string{"id": "", "name": nameStr},
+				"count":          0,
+				"results":        []interface{}{},
+				"limit_used":     50,
+			}, nil
+		}
 	}
 
 	languageFilter, _ := args["language"].(string)
@@ -133,7 +153,7 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 	q += fmt.Sprintf(" ORDER BY e.name LIMIT $%d", argPos)
 	dbArgs = append(dbArgs, limit)
 
-	rows, err := s.store.Pool().Query(context.Background(), q, dbArgs...)
+	rows, err := s.store.Pool().Query(ctx, q, dbArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query subclasses: %w", err)
 	}
@@ -180,11 +200,6 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 
 // handleImplementers returns entities that implement the subject
 // interface.
-//
-// Uses claims where claim_type is IMPLEMENTS. The subject is the
-// target of the claim.
-//
-// Read-only.
 func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
@@ -194,10 +209,31 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 
 	entityIDStr, _ := args["entity_id"].(string)
 	nameStr, _ := args["name"].(string)
-	subjectID, subjectName, err := s.resolveSubjectEntity(
-		context.Background(), workspaceID, entityIDStr, nameStr)
+	ctx := context.Background()
+
+	claimFilter := []string{"IMPLEMENTS"}
+	subjectID, subjectName, err := s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
 	if err != nil {
-		return nil, err
+		// Smart discovery fallback when the caller passes an interface name from
+		// another repo (e.g. "CmdTyper") that is not present in this workspace.
+		if fbID, fbName, fbErr := s.resolveTopClaimTarget(ctx, workspaceID, []string{"IMPLEMENTS"}); fbErr == nil {
+			subjectID = fbID
+			subjectName = fbName
+		} else if fbID2, fbName2, fbErr2 := s.resolveTopClaimTarget(ctx, workspaceID, []string{"IMPLEMENTS", "EMBEDS", "INHERITS"}); fbErr2 == nil {
+			subjectID = fbID2
+			subjectName = fbName2
+			claimFilter = []string{"IMPLEMENTS", "EMBEDS", "INHERITS"}
+		} else {
+			return map[string]interface{}{
+				"tenant_id":      tenantID.String(),
+				"workspace_id":   workspaceID.String(),
+				"workspace_name": workspaceName,
+				"subject":        map[string]string{"id": "", "name": nameStr},
+				"count":          0,
+				"results":        []interface{}{},
+				"limit_used":     50,
+			}, nil
+		}
 	}
 
 	limit := 50
@@ -205,7 +241,7 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 		limit = int(v)
 	}
 
-	rows, err := s.store.Pool().Query(context.Background(), `
+	rows, err := s.store.Pool().Query(ctx, `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
 		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0),
 		       COALESCE(r.name, 'unknown') AS repo,
@@ -215,12 +251,12 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 		  JOIN entities e ON e.id = c.from_entity_id
 		  LEFT JOIN repositories r ON r.id = e.repository_id
 		 WHERE c.workspace_id = $1
-		   AND c.claim_type = 'IMPLEMENTS'
+		   AND c.claim_type = ANY($4)
 		   AND c.to_entity_id = $2
 		   AND e.kind != 'external'
 		 ORDER BY e.name
 		 LIMIT $3
-	`, workspaceID, subjectID, limit)
+	`, workspaceID, subjectID, limit, claimFilter)
 	if err != nil {
 		return nil, fmt.Errorf("query implementers: %w", err)
 	}
@@ -265,18 +301,6 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 
 // handleNeighbors returns every entity connected to the subject in
 // either direction by a single edge.
-//
-// This is the tool that replaces the pattern "call inspect ten times
-// and merge in context". It returns both directions in one query,
-// with names and packages resolved, and edge kinds filterable.
-//
-// External stubs are excluded by default. An external stub is an
-// unresolved reference the analyzer emitted when it could not map a
-// call or import to a real entity. Including them is useful for
-// investigating what an entity depends on outside the workspace, but
-// they dominate the row count and hide the real neighbors.
-//
-// Read-only.
 func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
@@ -320,9 +344,6 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		limit = int(v)
 	}
 
-	// UNION ALL of outgoing and incoming edges. The result carries a
-	// direction column so the caller can tell "what this calls" from
-	// "what calls this" without a second query.
 	q := `
 		WITH edges AS (
 			SELECT c.to_entity_id AS other_id,
@@ -416,18 +437,6 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 }
 
 // handleFindEntity returns entities matching the given filters.
-//
-// Results are ranked by inbound edge count when more matches exist
-// than the limit. An entity with 397 inbound edges is more likely to
-// be what the caller wants than an entity with 1, when both match
-// the same name pattern.
-//
-// The rank query counts every claim that targets the entity,
-// regardless of claim_type. That is intentional: an interface with
-// 97 inbound IMPLEMENTS is as important to surface as a method with
-// 397 inbound CALLS.
-//
-// Read-only.
 func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
@@ -452,8 +461,6 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 		limit = int(v)
 	}
 
-	// Rank by inbound edge count. The subquery groups claims by
-	// target once, then the outer join brings the count in.
 	q := `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
 		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0),

@@ -16,10 +16,10 @@ CREATE TABLE IF NOT EXISTS policies (
     merkle_hash TEXT
 );
 
-CREATE INDEX idx_policies_tenant ON policies(tenant_id);
-CREATE INDEX idx_policies_scope ON policies(tenant_id, scope_domain, scope_system);
-CREATE INDEX idx_policies_status ON policies(tenant_id, status);
-CREATE INDEX idx_policies_valid ON policies(tenant_id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS idx_policies_tenant ON policies(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_policies_scope ON policies(tenant_id, scope_domain, scope_system);
+CREATE INDEX IF NOT EXISTS idx_policies_status ON policies(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_policies_valid ON policies(tenant_id, valid_from, valid_to);
 
 -- Policy violation log (audit trail)
 CREATE TABLE IF NOT EXISTS policy_violations (
@@ -33,5 +33,5 @@ CREATE TABLE IF NOT EXISTS policy_violations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_policy_violations_tenant ON policy_violations(tenant_id);
-CREATE INDEX idx_policy_violations_policy ON policy_violations(policy_id);
+CREATE INDEX IF NOT EXISTS idx_policy_violations_tenant ON policy_violations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_policy_violations_policy ON policy_violations(policy_id);

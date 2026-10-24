@@ -240,7 +240,53 @@ func AnalyzeDirectory(rootPath, repoID, workspaceID string) (*Result, error) {
 			}
 		}
 
-		_ = filePath
+		resolvePyTarget := func(callerClass, rawCallee string) string {
+				if strings.HasPrefix(rawCallee, "self.") && callerClass != "" {
+					mName := strings.TrimPrefix(rawCallee, "self.")
+					if tid, ok := qualifiedIDs[moduleName+"."+callerClass+"."+mName]; ok {
+						return tid
+					}
+				}
+				if tid, ok := qualifiedIDs[moduleName+"."+rawCallee]; ok {
+					return tid
+				}
+				if tid, ok := qualifiedIDs[rawCallee]; ok {
+					return tid
+				}
+				for _, imp := range m.Imports {
+					if tid, ok := qualifiedIDs[imp.Module+"."+rawCallee]; ok {
+						return tid
+					}
+				}
+				return ""
+			}
+			for _, fn := range m.Functions {
+				fromID := qualifiedIDs[moduleName+"."+fn.Name]
+				seenCalls := make(map[string]bool)
+				for _, callee := range fn.Calls {
+					if targetID := resolvePyTarget("", callee); targetID != "" && !seenCalls[targetID] {
+						seenCalls[targetID] = true
+						result.Relationships = append(result.Relationships, RelationRecord{
+							FromID: fromID, ToID: targetID, ClaimType: "CALLS", Confidence: 0.90,
+						})
+					}
+				}
+			}
+			for _, cls := range m.Classes {
+				for _, mth := range cls.Methods {
+					fromID := qualifiedIDs[moduleName+"."+cls.Name+"."+mth.Name]
+					seenCalls := make(map[string]bool)
+					for _, callee := range mth.Calls {
+						if targetID := resolvePyTarget(cls.Name, callee); targetID != "" && !seenCalls[targetID] {
+							seenCalls[targetID] = true
+							result.Relationships = append(result.Relationships, RelationRecord{
+								FromID: fromID, ToID: targetID, ClaimType: "CALLS", Confidence: 0.90,
+							})
+						}
+					}
+				}
+			}
+			_ = filePath
 	}
 
 	// Determinism: sort by stable keys

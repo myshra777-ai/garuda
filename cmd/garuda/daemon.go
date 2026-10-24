@@ -150,7 +150,7 @@ func handleUp() {
 	fmt.Println("📡 Waiting for API to come online...")
 	apiReady := false
 	for i := 0; i < 20; i++ {
-		resp, err := http.Get(defaultAPIAddr + "/health")
+		resp, err := http.Get(getAPIAddr() + "/health")
 		if err == nil && resp.StatusCode == http.StatusOK {
 			resp.Body.Close()
 			apiReady = true
@@ -192,7 +192,7 @@ func handleDown() {
 
 func handleStatus() {
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(defaultAPIAddr + "/health")
+	resp, err := client.Get(getAPIAddr() + "/health")
 	if err != nil {
 		fmt.Println("❌ Garuda Gateway OFFLINE. Run 'garuda up' to boot services.")
 		return
@@ -207,7 +207,7 @@ func handleStatus() {
 }
 
 func openDashboard() {
-	url := defaultAPIAddr + "/dashboard"
+	url := getAPIAddr() + "/dashboard"
 	fmt.Printf("🌐 Opening %s...\n", url)
 	var err error
 

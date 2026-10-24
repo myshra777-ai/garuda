@@ -76,6 +76,16 @@ func (s *PostgresStore) CreateWorkspace(ctx context.Context, tenantIDStr, name, 
 		return nil, fmt.Errorf("failed to execute create workspace query: %w", err)
 	}
 
+	// Automatically grant existing tenant owners/members access to this workspace
+	// so CLI-created workspaces are immediately visible in the web dashboard.
+	_, _ = s.pool.Exec(ctx, `
+		INSERT INTO workspace_members (user_id, workspace_id, role, created_at)
+		SELECT tm.user_id, $1, CASE WHEN tm.role IN ('owner', 'admin') THEN tm.role ELSE 'member' END, NOW()
+		  FROM tenant_members tm
+		 WHERE tm.tenant_id = $2
+		ON CONFLICT (user_id, workspace_id) DO NOTHING
+	`, id, tenantID)
+
 	ws := &Workspace{
 		ID:          id,
 		TenantID:    tenantID,

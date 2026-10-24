@@ -1,0 +1,28 @@
+# Copyright 2026 Rohit Mishra
+# SPDX-License-Identifier: Apache-2.0
+
+id: architecture-no-api-to-store-bypass
+version: v1
+title: "API handlers must not bypass service layer to access store directly or transitively"
+description: |
+  Enforces clean layered architecture using Garuda's graph-native layer_violation
+  and transitive_claim_exists predicates.
+priority: 150
+language: any
+authority: "Architecture Review Board"
+
+scope:
+  domain: platform
+  package: "internal/api"
+
+when:
+  - type: layer_violation
+    params:
+      from_layer: "internal/api"
+      to_layer: "internal/store|database/sql"
+
+then:
+  decision: BLOCK
+  reason: |
+    API layer must route state mutations through domain/service interfaces
+    rather than calling persistence packages directly.

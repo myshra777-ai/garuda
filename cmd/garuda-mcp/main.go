@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/budget"
+	"github.com/myshra777-ai/garuda/internal/config"
 	"github.com/myshra777-ai/garuda/internal/engine"
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/tenant"
@@ -87,7 +88,11 @@ func main() {
 	// DATABASE_URL is required. There is no fallback: a missing value
 	// in production should fail loudly, not connect to a local test
 	// database.
+	config.LoadDotEnv()
 	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" && os.Getenv("GARUDA_ENV") != "production" {
+		dbURL = config.ResolveDBURL()
+	}
 	if dbURL == "" {
 		_ = enc.Encode(MCPResponse{
 			JSONRPC: "2.0",

@@ -62,6 +62,7 @@ type Function struct {
 	LineStart  int
 	LineEnd    int
 	IsExported bool
+	Calls      []string
 }
 
 type Property struct {
@@ -269,6 +270,7 @@ func extractFunction(n *sitter.Node, f *treesitter.ParsedFile, receiver string) 
 		fn.ReturnType = strings.TrimSpace(f.NodeText(rt))
 	}
 	fn.IsAsync = hasChildOfType(n, "async")
+	fn.Calls = extractCallTargets(n, f)
 	return fn
 }
 
@@ -288,7 +290,31 @@ func extractMethod(n *sitter.Node, f *treesitter.ParsedFile, receiver string) Fu
 		fn.ReturnType = strings.TrimSpace(f.NodeText(rt))
 	}
 	fn.IsAsync = hasChildOfType(n, "async")
+	fn.Calls = extractCallTargets(n, f)
 	return fn
+}
+
+func extractCallTargets(root *sitter.Node, f *treesitter.ParsedFile) []string {
+	var calls []string
+	var walk func(node *sitter.Node)
+	walk = func(node *sitter.Node) {
+		if node == nil {
+			return
+		}
+		if node.Type() == "call_expression" {
+			if fnNode := treesitter.ChildByField(node, "function"); fnNode != nil {
+				txt := strings.TrimSpace(f.NodeText(fnNode))
+				if txt != "" {
+					calls = append(calls, txt)
+				}
+			}
+		}
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			walk(node.NamedChild(i))
+		}
+	}
+	walk(root)
+	return calls
 }
 
 func extractProperty(n *sitter.Node, f *treesitter.ParsedFile) Property {

@@ -523,8 +523,24 @@ func (s *MCPServer) handleBlastRadius(args map[string]interface{}) (interface{},
 	}
 
 	entityID, _ := args["entity_id"].(string)
+	nameStr, _ := args["name"].(string)
+	if nameStr == "" {
+		nameStr, _ = args["symbol"].(string)
+	}
+	if entityID == "" && nameStr != "" {
+		resolvedID, _, err := s.resolveSubjectEntity(context.Background(), workspaceID, "", nameStr)
+		if err != nil {
+			return map[string]interface{}{
+				"target_symbol":  nameStr,
+				"target_found":   false,
+				"reason":         err.Error(),
+				"total_affected": 0,
+			}, nil
+		}
+		entityID = resolvedID.String()
+	}
 	if entityID == "" {
-		return nil, fmt.Errorf("entity_id is required")
+		return nil, fmt.Errorf("one of entity_id or name is required")
 	}
 
 	depth := 3

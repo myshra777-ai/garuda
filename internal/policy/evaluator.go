@@ -97,6 +97,14 @@ func (e *Evaluator) evaluatePredicate(
 		return e.evalVerificationMissing(ctx, p, pred, tenantID, workspaceID)
 	case "language_matches":
 		return e.evalLanguageMatches(ctx, p, pred, tenantID, workspaceID)
+	case "transitive_claim_exists":
+		return e.evalTransitiveClaimExists(ctx, p, pred, tenantID, workspaceID)
+	case "layer_violation":
+		return e.evalLayerViolation(ctx, p, pred, tenantID, workspaceID)
+	case "cycle_exists":
+		return e.evalCycleExists(ctx, p, pred, tenantID, workspaceID)
+	case "blast_radius_exceeds":
+		return e.evalBlastRadiusExceeds(ctx, p, pred, tenantID, workspaceID)
 	default:
 		return false, Evidence{}, fmt.Errorf("unsupported predicate type: %s", pred.Type)
 	}
@@ -152,6 +160,14 @@ func (e *Evaluator) evalEntityExists(
 	if p.Scope.Package != "" {
 		q += fmt.Sprintf(" AND package LIKE '%%' || $%d || '%%'", argPos)
 		args = append(args, p.Scope.Package)
+		argPos++
+	}
+	if p.Scope.Pattern != "" {
+		if _, err := regexp.Compile(p.Scope.Pattern); err != nil {
+			return false, Evidence{}, fmt.Errorf("invalid scope.pattern %q: %w", p.Scope.Pattern, err)
+		}
+		q += fmt.Sprintf(" AND (COALESCE(package, '') ~ $%d OR name ~ $%d)", argPos, argPos)
+		args = append(args, p.Scope.Pattern)
 		argPos++
 	}
 	if namePat != "" {
@@ -223,6 +239,19 @@ func (e *Evaluator) evalClaimExists(
 	if claimType != "" {
 		q += fmt.Sprintf(" AND UPPER(c.claim_type) = UPPER($%d)", argPos)
 		args = append(args, claimType)
+		argPos++
+	}
+	if p.Scope.Package != "" {
+		q += fmt.Sprintf(" AND e1.package LIKE '%%' || $%d || '%%'", argPos)
+		args = append(args, p.Scope.Package)
+		argPos++
+	}
+	if p.Scope.Pattern != "" {
+		if _, err := regexp.Compile(p.Scope.Pattern); err != nil {
+			return false, Evidence{}, fmt.Errorf("invalid scope.pattern %q: %w", p.Scope.Pattern, err)
+		}
+		q += fmt.Sprintf(" AND (COALESCE(e1.package, '') ~ $%d OR e1.name ~ $%d)", argPos, argPos)
+		args = append(args, p.Scope.Pattern)
 		argPos++
 	}
 	if fromPat != "" {
@@ -494,4 +523,336 @@ func paramInt(m map[string]any, key string, def int) int {
 		return int(n)
 	}
 	return def
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Predicate: transitive_claim_exists
+//
+// Fires when a multi-hop path of claims (e.g., CALLS/IMPORTS) connects an
+// entity matching from_name_pattern to an entity matching to_name_pattern
+// within max_depth hops (default 5, max 10).
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (e *Evaluator) evalTransitiveClaimExists(
+	ctx context.Context,
+	p *Policy,
+	pred *Predicate,
+	tenantID, workspaceID uuid.UUID,
+) (bool, Evidence, error) {
+	claimType := paramString(pred.Params, "claim_type")
+	if claimType == "" {
+		claimType = "CALLS"
+	}
+	fromPat := paramString(pred.Params, "from_name_pattern")
+	toPat := paramString(pred.Params, "to_name_pattern")
+	maxDepth := paramInt(pred.Params, "max_depth", 5)
+	if maxDepth <= 0 || maxDepth > 10 {
+		maxDepth = 5
+	}
+	limit := paramInt(pred.Params, "limit", 10)
+
+	if fromPat != "" {
+		if _, err := regexp.Compile(fromPat); err != nil {
+			return false, Evidence{}, fmt.Errorf("invalid from_name_pattern: %w", err)
+		}
+	}
+	if toPat != "" {
+		if _, err := regexp.Compile(toPat); err != nil {
+			return false, Evidence{}, fmt.Errorf("invalid to_name_pattern: %w", err)
+		}
+	}
+
+	q := `
+		WITH RECURSIVE call_path AS (
+			SELECT
+				c.id AS first_claim_id,
+				c.from_entity_id AS root_id,
+				e1.name AS root_name,
+				c.to_entity_id AS current_id,
+				COALESCE(e2.name, '') AS current_name,
+				1 AS depth,
+				ARRAY[c.from_entity_id, c.to_entity_id] AS visited,
+				e1.name || ' -> ' || COALESCE(e2.name, '') AS trace_path
+			FROM claims c
+			JOIN entities e1 ON e1.id = c.from_entity_id
+			LEFT JOIN entities e2 ON e2.id = c.to_entity_id
+			WHERE c.tenant_id = $1
+			  AND c.workspace_id = $2
+			  AND UPPER(c.claim_type) = UPPER($3)
+			  AND ($4 = '' OR e1.name ~ $4)
+			  AND ($5 = '' OR COALESCE(e1.package, '') LIKE '%' || $5 || '%')
+
+			UNION ALL
+
+			SELECT
+				cp.first_claim_id,
+				cp.root_id,
+				cp.root_name,
+				c.to_entity_id,
+				COALESCE(e_next.name, ''),
+				cp.depth + 1,
+				cp.visited || c.to_entity_id,
+				cp.trace_path || ' -> ' || COALESCE(e_next.name, '')
+			FROM call_path cp
+			JOIN claims c ON c.from_entity_id = cp.current_id
+			LEFT JOIN entities e_next ON e_next.id = c.to_entity_id
+			WHERE c.tenant_id = $1
+			  AND c.workspace_id = $2
+			  AND UPPER(c.claim_type) = UPPER($3)
+			  AND cp.depth < $6
+			  AND NOT (c.to_entity_id = ANY(cp.visited))
+		)
+		SELECT first_claim_id, root_id, current_id, depth, trace_path
+		FROM call_path
+		WHERE ($7 = '' OR current_name ~ $7)
+		ORDER BY depth ASC
+		LIMIT $8
+	`
+
+	rows, err := e.pool.Query(ctx, q,
+		tenantID, workspaceID, claimType, fromPat, p.Scope.Package, maxDepth, toPat, limit,
+	)
+	if err != nil {
+		return false, Evidence{}, fmt.Errorf("transitive_claim_exists query: %w", err)
+	}
+	defer rows.Close()
+
+	var ev Evidence
+	for rows.Next() {
+		var claimID, rootID uuid.UUID
+		var targetID *uuid.UUID
+		var depth int
+		var tracePath string
+		if err := rows.Scan(&claimID, &rootID, &targetID, &depth, &tracePath); err != nil {
+			continue
+		}
+		ev.ClaimIDs = append(ev.ClaimIDs, claimID)
+		ev.EntityIDs = append(ev.EntityIDs, rootID)
+		if targetID != nil {
+			ev.EntityIDs = append(ev.EntityIDs, *targetID)
+		}
+		ev.ReasoningNotes = append(ev.ReasoningNotes,
+			fmt.Sprintf("transitive %s (%d hops): %s", claimType, depth, tracePath))
+	}
+
+	if len(ev.ClaimIDs) == 0 {
+		return false, Evidence{}, nil
+	}
+	return true, ev, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Predicate: layer_violation
+//
+// Enforces architectural layering by firing when any entity in from_layer
+// (package regex) directly CALLS or IMPORTS an entity in to_layer (package regex).
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (e *Evaluator) evalLayerViolation(
+	ctx context.Context,
+	_ *Policy,
+	pred *Predicate,
+	tenantID, workspaceID uuid.UUID,
+) (bool, Evidence, error) {
+	fromLayer := paramString(pred.Params, "from_layer")
+	toLayer := paramString(pred.Params, "to_layer")
+	limit := paramInt(pred.Params, "limit", 10)
+
+	if fromLayer == "" || toLayer == "" {
+		return false, Evidence{}, fmt.Errorf("layer_violation requires both from_layer and to_layer")
+	}
+	if _, err := regexp.Compile(fromLayer); err != nil {
+		return false, Evidence{}, fmt.Errorf("invalid from_layer: %w", err)
+	}
+	if _, err := regexp.Compile(toLayer); err != nil {
+		return false, Evidence{}, fmt.Errorf("invalid to_layer: %w", err)
+	}
+
+	q := `
+		SELECT c.id, e1.id, e2.id, c.claim_type,
+		       COALESCE(e1.package, ''), e1.name,
+		       COALESCE(e2.package, ''), e2.name
+		FROM claims c
+		JOIN entities e1 ON e1.id = c.from_entity_id
+		JOIN entities e2 ON e2.id = c.to_entity_id
+		WHERE c.tenant_id = $1
+		  AND c.workspace_id = $2
+		  AND COALESCE(e1.package, '') ~ $3
+		  AND COALESCE(e2.package, '') ~ $4
+		  AND COALESCE(e1.package, '') != COALESCE(e2.package, '')
+		LIMIT $5
+	`
+	rows, err := e.pool.Query(ctx, q, tenantID, workspaceID, fromLayer, toLayer, limit)
+	if err != nil {
+		return false, Evidence{}, fmt.Errorf("layer_violation query: %w", err)
+	}
+	defer rows.Close()
+
+	var ev Evidence
+	for rows.Next() {
+		var claimID, fromID, toID uuid.UUID
+		var cType, fromPkg, fromName, toPkg, toName string
+		if err := rows.Scan(&claimID, &fromID, &toID, &cType, &fromPkg, &fromName, &toPkg, &toName); err != nil {
+			continue
+		}
+		ev.ClaimIDs = append(ev.ClaimIDs, claimID)
+		ev.EntityIDs = append(ev.EntityIDs, fromID, toID)
+		ev.ReasoningNotes = append(ev.ReasoningNotes,
+			fmt.Sprintf("layer violation (%s): %s.%s -> %s.%s", cType, fromPkg, fromName, toPkg, toName))
+	}
+
+	if len(ev.ClaimIDs) == 0 {
+		return false, Evidence{}, nil
+	}
+	return true, ev, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Predicate: cycle_exists
+//
+// Detects circular package dependencies across IMPORTS or CALLS edges.
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (e *Evaluator) evalCycleExists(
+	ctx context.Context,
+	_ *Policy,
+	pred *Predicate,
+	tenantID, workspaceID uuid.UUID,
+) (bool, Evidence, error) {
+	maxDepth := paramInt(pred.Params, "max_depth", 5)
+	if maxDepth <= 1 || maxDepth > 8 {
+		maxDepth = 5
+	}
+	limit := paramInt(pred.Params, "limit", 5)
+
+	q := `
+		WITH pkg_edges AS (
+			SELECT DISTINCT
+				COALESCE(e1.package, '') AS from_pkg,
+				COALESCE(e2.package, '') AS to_pkg,
+				MIN(e1.id::text)::uuid AS sample_entity_id
+			FROM claims c
+			JOIN entities e1 ON e1.id = c.from_entity_id
+			JOIN entities e2 ON e2.id = c.to_entity_id
+			WHERE c.tenant_id = $1
+			  AND c.workspace_id = $2
+			  AND COALESCE(e1.package, '') != ''
+			  AND COALESCE(e2.package, '') != ''
+			  AND COALESCE(e1.package, '') != COALESCE(e2.package, '')
+			GROUP BY COALESCE(e1.package, ''), COALESCE(e2.package, '')
+		),
+		RECURSIVE cycle_search AS (
+			SELECT
+				from_pkg AS start_pkg,
+				to_pkg AS current_pkg,
+				1 AS depth,
+				ARRAY[from_pkg, to_pkg] AS path,
+				from_pkg || ' -> ' || to_pkg AS cycle_str,
+				sample_entity_id
+			FROM pkg_edges
+
+			UNION ALL
+
+			SELECT
+				cs.start_pkg,
+				pe.to_pkg,
+				cs.depth + 1,
+				cs.path || pe.to_pkg,
+				cs.cycle_str || ' -> ' || pe.to_pkg,
+				cs.sample_entity_id
+			FROM cycle_search cs
+			JOIN pkg_edges pe ON pe.from_pkg = cs.current_pkg
+			WHERE cs.depth < $3
+			  AND (pe.to_pkg = cs.start_pkg OR NOT (pe.to_pkg = ANY(cs.path)))
+		)
+		SELECT sample_entity_id, cycle_str, depth
+		FROM cycle_search
+		WHERE current_pkg = start_pkg AND depth >= 2
+		ORDER BY depth ASC
+		LIMIT $4
+	`
+	rows, err := e.pool.Query(ctx, q, tenantID, workspaceID, maxDepth, limit)
+	if err != nil {
+		return false, Evidence{}, fmt.Errorf("cycle_exists query: %w", err)
+	}
+	defer rows.Close()
+
+	var ev Evidence
+	for rows.Next() {
+		var entID uuid.UUID
+		var cycleStr string
+		var depth int
+		if err := rows.Scan(&entID, &cycleStr, &depth); err != nil {
+			continue
+		}
+		ev.EntityIDs = append(ev.EntityIDs, entID)
+		ev.ReasoningNotes = append(ev.ReasoningNotes,
+			fmt.Sprintf("dependency cycle (%d packages): %s", depth, cycleStr))
+	}
+
+	if len(ev.EntityIDs) == 0 {
+		return false, Evidence{}, nil
+	}
+	return true, ev, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Predicate: blast_radius_exceeds
+//
+// Fires when an entity matching optional name_pattern has more than
+// max_callers transitive inbound callers/dependents.
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (e *Evaluator) evalBlastRadiusExceeds(
+	ctx context.Context,
+	p *Policy,
+	pred *Predicate,
+	tenantID, workspaceID uuid.UUID,
+) (bool, Evidence, error) {
+	maxCallers := paramInt(pred.Params, "max_callers", 10)
+	namePat := paramString(pred.Params, "name_pattern")
+	limit := paramInt(pred.Params, "limit", 10)
+
+	if namePat != "" {
+		if _, err := regexp.Compile(namePat); err != nil {
+			return false, Evidence{}, fmt.Errorf("invalid name_pattern: %w", err)
+		}
+	}
+
+	q := `
+		SELECT e.id, e.name, COALESCE(e.package, ''), COUNT(DISTINCT c.from_entity_id) AS caller_count
+		FROM entities e
+		JOIN claims c ON c.to_entity_id = e.id
+		WHERE e.tenant_id = $1
+		  AND e.workspace_id = $2
+		  AND ($3 = '' OR e.name ~ $3)
+		  AND ($4 = '' OR COALESCE(e.package, '') LIKE '%' || $4 || '%')
+		GROUP BY e.id, e.name, e.package
+		HAVING COUNT(DISTINCT c.from_entity_id) > $5
+		ORDER BY caller_count DESC
+		LIMIT $6
+	`
+	rows, err := e.pool.Query(ctx, q, tenantID, workspaceID, namePat, p.Scope.Package, maxCallers, limit)
+	if err != nil {
+		return false, Evidence{}, fmt.Errorf("blast_radius_exceeds query: %w", err)
+	}
+	defer rows.Close()
+
+	var ev Evidence
+	for rows.Next() {
+		var id uuid.UUID
+		var name, pkg string
+		var count int
+		if err := rows.Scan(&id, &name, &pkg, &count); err != nil {
+			continue
+		}
+		ev.EntityIDs = append(ev.EntityIDs, id)
+		ev.ReasoningNotes = append(ev.ReasoningNotes,
+			fmt.Sprintf("high blast radius: %s.%s has %d inbound dependents (threshold=%d)", pkg, name, count, maxCallers))
+	}
+
+	if len(ev.EntityIDs) == 0 {
+		return false, Evidence{}, nil
+	}
+	return true, ev, nil
 }

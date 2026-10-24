@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS telemetry_events (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_telemetry_created ON telemetry_events(created_at DESC);
-CREATE INDEX idx_telemetry_model ON telemetry_events(model_name);
-CREATE INDEX idx_telemetry_mode ON telemetry_events(mode);
-CREATE INDEX idx_telemetry_instance ON telemetry_events(instance_hash);
+CREATE INDEX IF NOT EXISTS idx_telemetry_created ON telemetry_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_telemetry_model ON telemetry_events(model_name);
+CREATE INDEX IF NOT EXISTS idx_telemetry_mode ON telemetry_events(mode);
+CREATE INDEX IF NOT EXISTS idx_telemetry_instance ON telemetry_events(instance_hash);

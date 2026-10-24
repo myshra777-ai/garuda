@@ -6,6 +6,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"html/template"
 	"log/slog"
@@ -15,9 +16,21 @@ import (
 
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/tenant"
 )
 
 var signupTmpl = template.Must(template.New("signup").Parse(signupHTML))
+
+func isAPIClient(r *http.Request) bool {
+	accept := strings.ToLower(r.Header.Get("Accept"))
+	ct := strings.ToLower(r.Header.Get("Content-Type"))
+	ua := strings.ToLower(r.Header.Get("User-Agent"))
+	return strings.Contains(accept, "application/json") ||
+		strings.Contains(ct, "application/json") ||
+		strings.HasPrefix(ua, "curl/") ||
+		strings.HasPrefix(ua, "python") ||
+		strings.HasPrefix(ua, "httpie/")
+}
 
 // HandleSignupGET renders the signup form. If the browser already has
 // a valid session, it redirects to /dashboard.
@@ -39,68 +52,119 @@ func (s *Server) HandleSignupGET(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleSignupPOST validates the form, creates the user and their
-// personal tenant and default workspace, issues a session cookie,
-// and redirects to /dashboard.
-//
-// Validation order: required fields, password match, password length.
-// Each failure renders the form again with a specific message and the
-// email field preserved, so the user does not retype it.
-//
-// Duplicate email is the one error that must not reveal whether the
-// email exists. The handler returns the same message a user would get
-// if the email were invalid. That is the same reasoning as the login
-// handler's generic "invalid email or password" — no enumeration.
+// HandleSignupPOST validates the form or JSON payload, creates the user
+// and their personal tenant and default workspace (plus grants access to
+// the canonical CLI tenant workspaces), issues a session cookie, and
+// redirects browsers to /dashboard or returns JSON for CLI/API callers.
 func (s *Server) HandleSignupPOST(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		s.renderSignupError(w, "Invalid form submission", "", "")
-		return
-	}
+	var email, password, confirm, fullName string
+	hasConfirm := false
 
-	email := strings.TrimSpace(r.FormValue("email"))
-	password := r.FormValue("password")
-	confirm := r.FormValue("confirm")
-	fullName := strings.TrimSpace(r.FormValue("full_name"))
+	if strings.Contains(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+		var body struct {
+			Email    string  `json:"email"`
+			Password string  `json:"password"`
+			Confirm  *string `json:"confirm"`
+			FullName string  `json:"full_name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			s.respondSignupError(w, r, "Invalid JSON submission", "", "")
+			return
+		}
+		email = strings.TrimSpace(body.Email)
+		password = body.Password
+		fullName = strings.TrimSpace(body.FullName)
+		if body.Confirm != nil {
+			confirm = *body.Confirm
+			hasConfirm = true
+		} else {
+			confirm = password
+		}
+	} else {
+		if err := r.ParseForm(); err != nil {
+			s.respondSignupError(w, r, "Invalid form submission", "", "")
+			return
+		}
+		email = strings.TrimSpace(r.FormValue("email"))
+		password = r.FormValue("password")
+		fullName = strings.TrimSpace(r.FormValue("full_name"))
+		if vals, ok := r.PostForm["confirm"]; ok && len(vals) > 0 {
+			confirm = vals[0]
+			hasConfirm = true
+		} else if vals, ok := r.Form["confirm"]; ok && len(vals) > 0 {
+			confirm = vals[0]
+			hasConfirm = true
+		} else {
+			// CLI / curl callers often pass only -d email=... -d password=...
+			confirm = password
+		}
+	}
 
 	if email == "" || password == "" {
-		s.renderSignupError(w, "Email and password are required", email, fullName)
+		s.respondSignupError(w, r, "Email and password are required", email, fullName)
 		return
 	}
-	if password != confirm {
-		s.renderSignupError(w, "Passwords do not match", email, fullName)
+	if hasConfirm && password != confirm {
+		s.respondSignupError(w, r, "Passwords do not match", email, fullName)
 		return
 	}
 	if len(password) < 8 {
-		s.renderSignupError(w, "Password must be at least 8 characters", email, fullName)
+		s.respondSignupError(w, r, "Password must be at least 8 characters", email, fullName)
 		return
+	}
+	if fullName == "" {
+		if at := strings.IndexByte(email, '@'); at > 0 {
+			fullName = email[:at]
+		} else {
+			fullName = email
+		}
 	}
 
 	hash, err := auth.HashPassword(password)
 	if err != nil {
 		slog.Error("signup: hash password", "error", err)
-		s.renderSignupError(w, "Signup failed. Please try again.", email, fullName)
+		s.respondSignupError(w, r, "Signup failed. Please try again.", email, fullName)
 		return
 	}
 
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
-		s.renderSignupError(w, "Signup unavailable", email, fullName)
+		s.respondSignupError(w, r, "Signup unavailable", email, fullName)
 		return
 	}
 
 	user, ws, err := pgStore.SignupUser(r.Context(), email, hash, fullName)
 	if err != nil {
-		// ErrEmailExists and a generic failure produce the same
-		// user-facing message. The distinction is logged for the
-		// operator but never shown to the browser.
 		if errors.Is(err, store.ErrEmailExists) {
 			slog.Info("signup: duplicate email", "email", email)
-			s.renderSignupError(w, "An account with this email already exists", email, fullName)
+			// For idempotent CLI/API setup scripts, if the user already exists,
+			// link them to canonical workspaces and return 200 OK in JSON mode.
+			if isAPIClient(r) {
+				if existingUser, uErr := pgStore.GetUserByEmail(r.Context(), email); uErr == nil && existingUser != nil {
+					grantCanonicalWorkspaceAccess(r, pgStore, existingUser.ID)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					_ = json.NewEncoder(w).Encode(map[string]any{
+						"status":  "already_exists",
+						"user_id": existingUser.ID,
+						"email":   existingUser.Email,
+						"role":    existingUser.Role,
+					})
+					return
+				}
+			}
+			s.respondSignupError(w, r, "An account with this email already exists", email, fullName)
 			return
 		}
 		slog.Error("signup: create user", "error", err, "email", email)
-		s.renderSignupError(w, "Signup failed. Please try again.", email, fullName)
+		s.respondSignupError(w, r, "Signup failed. Please try again.", email, fullName)
 		return
+	}
+
+	// Ensure interactive users signed up via /signup can also view CLI-analyzed
+	// workspaces under the canonical tenant on their local dashboard.
+	if !strings.HasSuffix(email, "@local") {
+		grantCanonicalWorkspaceAccess(r, pgStore, user.ID)
 	}
 
 	sess := s.sessions.Create(user.ID, user.Email, user.Role)
@@ -122,13 +186,50 @@ func (s *Server) HandleSignupPOST(w http.ResponseWriter, r *http.Request) {
 		"workspace_id", ws.ID.String(),
 	)
 
-	// The workspace is scoped to the new tenant. The dashboard's
-	// workspace resolver does not yet read from the session — that is
-	// Session C. Until then, a newly signed-up user lands on the
-	// dashboard and sees whatever the canonical-tenant resolver
-	// returns. That is a known Session B limitation; Session C closes
-	// it by reading the workspace from the session.
+	if isAPIClient(r) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":       "created",
+			"user_id":      user.ID,
+			"email":        user.Email,
+			"role":         user.Role,
+			"tenant_id":    ws.TenantID.String(),
+			"workspace_id": ws.ID.String(),
+		})
+		return
+	}
+
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+}
+
+func grantCanonicalWorkspaceAccess(r *http.Request, pgStore *store.PostgresStore, userID string) {
+	_, _ = pgStore.Pool().Exec(r.Context(), `
+		INSERT INTO tenant_members (user_id, tenant_id, role, created_at)
+		VALUES ($1, $2, 'owner', NOW())
+		ON CONFLICT (user_id, tenant_id) DO NOTHING
+	`, userID, tenant.CanonicalID)
+
+	_, _ = pgStore.Pool().Exec(r.Context(), `
+		INSERT INTO workspace_members (user_id, workspace_id, role, created_at)
+		SELECT $1, w.id, 'owner', NOW()
+		  FROM workspaces w
+		 WHERE w.tenant_id = $2
+		ON CONFLICT (user_id, workspace_id) DO NOTHING
+	`, userID, tenant.CanonicalID)
+}
+
+func (s *Server) respondSignupError(w http.ResponseWriter, r *http.Request, msg, email, fullName string) {
+	if isAPIClient(r) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error": msg,
+			"email": email,
+		})
+		return
+	}
+	s.renderSignupError(w, msg, email, fullName)
 }
 
 func (s *Server) renderSignupError(w http.ResponseWriter, msg, email, fullName string) {

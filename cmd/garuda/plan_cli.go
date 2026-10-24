@@ -27,7 +27,7 @@ var planCmd = &cobra.Command{
 		at, _ := cmd.Flags().GetString("at")
 		statuses, _ := cmd.Flags().GetStringSlice("status")
 
-		endpoint := fmt.Sprintf("%s/api/v1/plan?domain=%s&system=%s&format=%s", defaultAPIAddr, scopeDomain, scopeSystem, format)
+		endpoint := fmt.Sprintf("%s/api/v1/plan?domain=%s&system=%s&format=%s", getAPIAddr(), scopeDomain, scopeSystem, format)
 		if at != "" {
 			endpoint += "&at=" + at
 		}

@@ -44,9 +44,9 @@ var devCmd = &cobra.Command{
 			cancel()
 		}()
 
-		dbURL := os.Getenv("DATABASE_URL")
-		if dbURL == "" {
-			dbURL = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+		dbURL := getDBURL()
+		if err := store.Migrate(dbURL, "migrations"); err != nil {
+			return fmt.Errorf("database migration failed: %w", err)
 		}
 
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -315,6 +315,9 @@ func init() {
 func getBindAddr() string {
 	if v := strings.TrimSpace(os.Getenv("GARUDA_BIND")); v != "" {
 		return v
+	}
+	if p := strings.TrimSpace(os.Getenv("PORT")); p != "" {
+		return "127.0.0.1:" + p
 	}
 	return "127.0.0.1:8080"
 }

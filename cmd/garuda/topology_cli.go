@@ -36,7 +36,7 @@ var topologyRecommendCmd = &cobra.Command{
 		body, _ := json.Marshal(payload)
 
 		authToken := getAuthToken()
-		req, _ := http.NewRequest("POST", defaultAPIAddr+"/api/v1/topology/recommend", strings.NewReader(string(body)))
+		req, _ := http.NewRequest("POST", getAPIAddr()+"/api/v1/topology/recommend", strings.NewReader(string(body)))
 		req.Header.Set("Content-Type", "application/json")
 		if authToken != "" {
 			req.Header.Set("Authorization", "Bearer "+authToken)
@@ -63,7 +63,7 @@ var topologyExecuteCmd = &cobra.Command{
 			return
 		}
 		authToken := getAuthToken()
-		req, _ := http.NewRequest("POST", defaultAPIAddr+"/api/v1/topology/"+topologyID+"/execute", nil)
+		req, _ := http.NewRequest("POST", getAPIAddr()+"/api/v1/topology/"+topologyID+"/execute", nil)
 		if authToken != "" {
 			req.Header.Set("Authorization", "Bearer "+authToken)
 		}

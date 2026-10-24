@@ -221,6 +221,7 @@ func handleAnalyze(path string) {
 		persistCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
+		_ = store.Migrate(dbURL, "migrations")
 		st, err := store.NewPostgresStore(dbURL)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "❌ Failed to connect to DB: %v\n", err)
@@ -292,6 +293,19 @@ func handleAnalyze(path string) {
 				}
 				if modulePath == "" {
 					// Fall back to directory name
+					modulePath = filepath.Base(absPath)
+				}
+			case "typescript":
+				pkgJSONPath := filepath.Join(path, "package.json")
+				if data, err := os.ReadFile(pkgJSONPath); err == nil {
+					var pkgMeta struct {
+						Name string `json:"name"`
+					}
+					if json.Unmarshal(data, &pkgMeta) == nil && pkgMeta.Name != "" {
+						modulePath = pkgMeta.Name
+					}
+				}
+				if modulePath == "" {
 					modulePath = filepath.Base(absPath)
 				}
 			}

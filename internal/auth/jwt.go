@@ -17,6 +17,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/config"
 )
 
 // CustomClaims extends standard JWT claims with multi-tenant and actor fields.
@@ -26,10 +27,6 @@ type CustomClaims struct {
 }
 
 // JWTConfig holds the configuration and key pairs for JWT signing and verification.
-//
-// Fields are unexported deliberately. The only legitimate consumer of the
-// public key is GetPublicKeyHex, used at daemon startup for logging. The
-// private key never leaves this type.
 type JWTConfig struct {
 	privateKey ed25519.PrivateKey
 	publicKey  ed25519.PublicKey
@@ -38,23 +35,10 @@ type JWTConfig struct {
 	expiry     time.Duration
 }
 
-// NewJWTConfig loads the Ed25519 key pair from environment variables if
-// both are set, or generates a fresh pair otherwise.
-//
-// Environment:
-//
-//	JWT_PRIVATE_KEY_HEX — 64-byte Ed25519 private key, hex encoded
-//	JWT_PUBLIC_KEY_HEX  — 32-byte Ed25519 public key, hex encoded
-//
-// If both are set, they are used and every process with the same values
-// can validate every other process's tokens.
-//
-// If neither is set:
-//   - In production (GARUDA_ENV=production), refuse to start. A
-//     regenerated key on every restart invalidates every issued token.
-//   - In development, generate a fresh pair, print the hex to stderr
-//     once, and continue. Copy the output into .env to persist.
+// NewJWTConfig loads the Ed25519 key pair from environment variables or .env if
+// set, or generates a fresh pair and automatically persists it to .env.
 func NewJWTConfig(issuer, audience string, expiry time.Duration) (*JWTConfig, error) {
+	config.LoadDotEnv()
 	privHex := strings.TrimSpace(os.Getenv("JWT_PRIVATE_KEY_HEX"))
 	pubHex := strings.TrimSpace(os.Getenv("JWT_PUBLIC_KEY_HEX"))
 
@@ -74,21 +58,17 @@ func NewJWTConfig(issuer, audience string, expiry time.Duration) (*JWTConfig, er
 		return nil, fmt.Errorf("failed to generate Ed25519 key pair: %w", err)
 	}
 
-	// The banner is written to stderr. That is correct for every
-	// command except the MCP server, where some clients treat every
-	// line from the child as protocol. GARUDA_MCP_DEBUG=1 restores
-	// the banner for interactive MCP debugging; unset, it is silent.
-	if os.Getenv("GARUDA_MCP_DEBUG") != "" || os.Getenv("GARUDA_MCP_QUIET") == "" {
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "═══════════════════════════════════════════════════════════════")
-		fmt.Fprintln(os.Stderr, "  GARUDA DEVELOPMENT JWT KEY PAIR GENERATED")
-		fmt.Fprintln(os.Stderr, "  Tokens issued by this process are valid only for this process.")
-		fmt.Fprintln(os.Stderr, "  Copy the two values below into .env to persist across restarts:")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "  JWT_PRIVATE_KEY_HEX="+hex.EncodeToString(priv))
-		fmt.Fprintln(os.Stderr, "  JWT_PUBLIC_KEY_HEX="+hex.EncodeToString(pub))
-		fmt.Fprintln(os.Stderr, "═══════════════════════════════════════════════════════════════")
-		fmt.Fprintln(os.Stderr, "")
+	privStr := hex.EncodeToString(priv)
+	pubStr := hex.EncodeToString(pub)
+
+	// Automatically persist generated keys into .env when running outside `go test`
+	if !strings.HasSuffix(os.Args[0], ".test") && os.Getenv("GARUDA_MCP_QUIET") == "" {
+		if err := config.UpsertDotEnv(map[string]string{
+			"JWT_PRIVATE_KEY_HEX": privStr,
+			"JWT_PUBLIC_KEY_HEX":  pubStr,
+		}); err == nil {
+			fmt.Fprintln(os.Stderr, "  ✓ Generated and persisted JWT Ed25519 key pair to .env")
+		}
 	}
 
 	return &JWTConfig{

@@ -103,7 +103,18 @@ func (e *VerificationEngine) RecomputeWorkspaceVerification(ctx context.Context,
 			jsonb_build_object('raw_target', re.raw_target, 'last_trace_id', re.last_trace_id)
 		FROM runtime_edges re
 		WHERE re.workspace_id = $1 
-		  AND `+ContradictionMarkerClause("re.raw_target")+`
+		  AND (
+			    `+ContradictionMarkerClause("re.raw_target")+`
+			    OR (
+			      re.target_entity_id IS NOT NULL
+			      AND NOT EXISTS (
+			        SELECT 1 FROM claims c
+			        WHERE c.workspace_id = re.workspace_id
+			          AND c.from_entity_id = re.source_entity_id
+			          AND c.to_entity_id = re.target_entity_id
+			      )
+			    )
+			  )
 		ON CONFLICT (workspace_id, tenant_id, source_entity_id, target_entity_id)
 		DO UPDATE SET
 			status = 'CONTRADICTED',

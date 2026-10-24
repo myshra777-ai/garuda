@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/api"
 	"github.com/myshra777-ai/garuda/internal/auth"
+	"github.com/myshra777-ai/garuda/internal/config"
 	"github.com/myshra777-ai/garuda/internal/engine"
 	"github.com/myshra777-ai/garuda/internal/lineage"
 	"github.com/myshra777-ai/garuda/internal/mcp"
@@ -25,6 +26,9 @@ import (
 )
 
 func main() {
+	// 0. Automatically load .env configuration
+	config.LoadDotEnv()
+
 	// 1. Initialize Telemetry
 	telConfig := telemetry.LoadConfigFromEnv()
 	if os.Getenv("GARUDA_MODE") == "passive" {
@@ -36,12 +40,9 @@ func main() {
 	slog.Info("Telemetry engine initialized", "enabled", telConfig.Enabled, "mode", telConfig.Mode)
 
 	// 2. Load Configuration
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
-	}
+	dbURL := config.ResolveDBURL()
 
-	// 3. Database Migrations
+	// 3. Database Migrations (100% idempotent)
 	slog.Info("Running migrations...")
 	if err := store.Migrate(dbURL, "migrations"); err != nil {
 		slog.Error("Migration failed", "error", err)
@@ -49,7 +50,7 @@ func main() {
 	}
 	slog.Info("Migrations completed successfully")
 
-	// 4. JWT Config
+	// 4. JWT Config (auto-loads or persists to .env)
 	jwtIssuer := os.Getenv("JWT_ISSUER")
 	if jwtIssuer == "" {
 		jwtIssuer = "garuda"
@@ -75,10 +76,7 @@ func main() {
 	}
 	defer dbStore.Close()
 
-	// 5b. Error log — wrap the default slog handler so every Warn and
-	// Error record is also persisted to errors_log. Must run after
-	// the store pool exists (the writer needs it) and before any
-	// request is served.
+	// 5b. Error log
 	innerHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	errHandler := api.NewErrorLogHandler(innerHandler, 1024)
 	slog.SetDefault(slog.New(errHandler))
@@ -95,11 +93,6 @@ func main() {
 	authService := auth.NewAuthService(dbStore, jwtConfig)
 
 	// 6. API Server
-	//
-	// NewServer constructs the rate limiter internally when none is
-	// passed. The Control Plane pool is attached after construction,
-	// via SetControlPool, because it depends on an optional env var
-	// that NewServer should not read.
 	server := api.NewServer(
 		dbStore,
 		authService,
@@ -110,10 +103,17 @@ func main() {
 		topologyExecutor,
 	)
 
-	// Control Plane read-only pool. Optional: if CONTROL_DATABASE_URL
-	// is unset, the Control Plane returns 404 for every request and
-	// the tenant dashboard is unaffected.
-	if controlURL := os.Getenv("CONTROL_DATABASE_URL"); controlURL != "" {
+	// Bootstrap default admin account on first boot so /login always has an account ready
+	if err := server.BootstrapAdminIfEmpty(context.Background()); err != nil {
+		slog.Warn("Bootstrap admin skipped", "error", err)
+	}
+
+	// Control Plane read-only pool: defaults to dbURL when GARUDA_CONTROL_TOKEN is set
+	controlURL := os.Getenv("CONTROL_DATABASE_URL")
+	if controlURL == "" && os.Getenv("GARUDA_CONTROL_TOKEN") != "" {
+		controlURL = dbURL
+	}
+	if controlURL != "" {
 		controlConfig, err := pgxpool.ParseConfig(controlURL)
 		if err != nil {
 			slog.Warn("Control Plane pool config parse failed; Control Plane will return 404", "error", err)
@@ -133,15 +133,14 @@ func main() {
 	rateLimiter := server.RateLimiter()
 
 	// 8. Build Router
-	handler := api.SetupRouter(server, rateLimiter, mcp.BridgeHandler("http://localhost:8080"), nil)
-
-	// 9. HTTP Server
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 	addr := ":" + port
+	handler := api.SetupRouter(server, rateLimiter, mcp.BridgeHandler("http://localhost:"+port), nil)
 
+	// 9. HTTP Server
 	httpServer := &http.Server{
 		Addr:         addr,
 		Handler:      handler,

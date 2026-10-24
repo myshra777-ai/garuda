@@ -64,7 +64,7 @@ flowchart LR
 
 ### 1. Build from Source
 ```bash
-git clone https://github.com.myshra777-ai/garuda.git
+git clone https://github.com/myshra777-ai/garuda.git
 cd garuda
 mkdir -p bin
 go build -o bin/garuda ./cmd/garuda
@@ -96,8 +96,9 @@ Add a blocking check to your GitHub Actions workflow:
 ```yaml
 - name: Evaluate Architecture Policy
   env:
+    DATABASE_URL: ${{ secrets.DATABASE_URL }}
     GARUDA_WORKSPACE: my-workspace
-  run: ./bin/garuda policy evaluate ./policies --fail-on-block
+  run: ./bin/garuda policy evaluate . --policies ./policies --save --fail-on-block
 ```
 
 ---

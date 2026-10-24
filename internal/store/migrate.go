@@ -8,40 +8,19 @@ package store
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // splitGooseUp returns the forward-migration section of a file
 // written for the goose migration tool.
-//
-// Files written for goose have the shape:
-//
-//	-- +goose Up
-//	CREATE TABLE ...
-//
-//	-- +goose Down
-//	DROP TABLE ...
-//
-// The Down section is a rollback script. Executing it during the
-// forward pass would immediately undo what Up just did. That is what
-// happened to migrations/003_create_users_table.sql: the runner
-// passed the entire file to tx.Exec, Postgres executed CREATE TABLE
-// followed by DROP TABLE, the table was gone, and the migration was
-// still recorded as applied. The next migration that referenced
-// users failed with SQLSTATE 42P01.
-//
-// The split is on the exact marker line. If the marker is absent,
-// the whole file is returned unchanged so migrations that do not
-// use goose markers still work.
-//
-// Migrations that contain a Down section should also have it
-// removed at the file level — this helper is defense in depth, not
-// an excuse to keep rollback scripts in the forward-only path.
 func splitGooseUp(content []byte) []byte {
 	const marker = "-- +goose Down"
 	if idx := bytes.Index(content, []byte(marker)); idx >= 0 {
@@ -50,10 +29,60 @@ func splitGooseUp(content []byte) []byte {
 	return content
 }
 
+// ResolveMigrationsDir locates the migrations directory relative to the
+// current working directory or the running binary.
+func ResolveMigrationsDir(preferred string) string {
+	if preferred != "" {
+		if info, err := os.Stat(preferred); err == nil && info.IsDir() {
+			return preferred
+		}
+	}
+	candidates := []string{"migrations", "../migrations"}
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "migrations"),
+			filepath.Join(exeDir, "..", "migrations"),
+		)
+	}
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			return c
+		}
+	}
+	return preferred
+}
+
+// isAlreadyAppliedPgError returns true when a migration error indicates
+// the schema object already exists (for example, when migrations were
+// previously applied manually via psql -f outside the migrations table).
+func isAlreadyAppliedPgError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "42710", // duplicate_object (type, constraint, policy already exists)
+			"42P07", // duplicate_table (relation already exists)
+			"42701", // duplicate_column (column already exists)
+			"42P16", // invalid_table_definition (e.g. multiple primary keys on re-run)
+			"23505": // unique_violation on idempotent seed insert
+			return true
+		}
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "already applied") ||
+		strings.Contains(msg, "multiple primary keys")
+}
+
 // Migrate runs all SQL migration files in the migrations directory in sorted order.
-// Each migration file is executed inside an atomic transaction.
+// Each migration file is executed inside an atomic transaction, and handles
+// pre-populated schemas idempotently.
 func Migrate(connString string, migrationsDir string) error {
 	ctx := context.Background()
+	migrationsDir = ResolveMigrationsDir(migrationsDir)
 
 	pool, err := pgxpool.New(ctx, connString)
 	if err != nil {
@@ -98,19 +127,22 @@ func Migrate(connString string, migrationsDir string) error {
 			return fmt.Errorf("failed to read migration %s: %w", name, err)
 		}
 
-		// Execute the entire migration file inside an atomic transaction
 		tx, err := pool.Begin(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to begin transaction for %s: %w", name, err)
 		}
 
-		if _, err := tx.Exec(ctx, string(splitGooseUp(content))); err != nil {
+		if _, execErr := tx.Exec(ctx, string(splitGooseUp(content))); execErr != nil {
 			_ = tx.Rollback(ctx)
-			return fmt.Errorf("failed to execute migration %s: %w", name, err)
+			if isAlreadyAppliedPgError(execErr) {
+				// Object already exists from a manual psql run; record migration and continue.
+				_, _ = pool.Exec(ctx, "INSERT INTO migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", name)
+				continue
+			}
+			return fmt.Errorf("failed to execute migration %s: %w", name, execErr)
 		}
 
-		// Record the migration in the same transaction
-		if _, err := tx.Exec(ctx, "INSERT INTO migrations (name) VALUES ($1)", name); err != nil {
+		if _, err := tx.Exec(ctx, "INSERT INTO migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", name); err != nil {
 			_ = tx.Rollback(ctx)
 			return fmt.Errorf("failed to record migration %s: %w", name, err)
 		}

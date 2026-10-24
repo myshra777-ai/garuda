@@ -2,7 +2,7 @@
 -- Drop and recreate contradictions table with correct foreign keys
 DROP TABLE IF EXISTS contradictions CASCADE;
 
-CREATE TABLE contradictions (
+CREATE TABLE IF NOT EXISTS contradictions (
     id UUID PRIMARY KEY,
     tenant_id UUID NOT NULL,
     decision_a UUID NOT NULL,
@@ -18,5 +18,5 @@ CREATE TABLE contradictions (
         FOREIGN KEY (tenant_id, decision_b) REFERENCES decisions(tenant_id, id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_contradictions_tenant ON contradictions(tenant_id);
-CREATE INDEX idx_contradictions_resolved ON contradictions(tenant_id, resolved);
+CREATE INDEX IF NOT EXISTS idx_contradictions_tenant ON contradictions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_contradictions_resolved ON contradictions(tenant_id, resolved);

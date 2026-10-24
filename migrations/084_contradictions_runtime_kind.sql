@@ -90,10 +90,10 @@ ALTER TABLE contradictions
   FOREIGN KEY (source_entity_id) REFERENCES entities(id) ON DELETE CASCADE;
 
 -- 6. Indexes for the runtime query path.
-CREATE INDEX idx_contradictions_kind
+CREATE INDEX IF NOT EXISTS idx_contradictions_kind
   ON contradictions (kind);
 
-CREATE INDEX idx_contradictions_runtime_lookup
+CREATE INDEX IF NOT EXISTS idx_contradictions_runtime_lookup
   ON contradictions (workspace_id, raw_target)
   WHERE kind = 'runtime_vs_static';
 

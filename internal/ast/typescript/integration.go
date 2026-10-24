@@ -161,7 +161,7 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 			}
 		}
 
-		for _, iface := range m.Interfaces {
+			for _, iface := range m.Interfaces {
 			ifaceID := deterministicID("typescript", "interface", moduleName+"."+iface.Name, filePath, iface.LineStart)
 			qualifiedIDs[moduleName+"."+iface.Name] = ifaceID
 			ifaceIDs[iface.Name] = ifaceID
@@ -268,6 +268,47 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 				}
 			}
 		}
+		resolveTSTarget := func(callerClass, rawCallee string) string {
+				if strings.HasPrefix(rawCallee, "this.") && callerClass != "" {
+					mName := strings.TrimPrefix(rawCallee, "this.")
+					if tid, ok := qualifiedIDs[moduleName+"."+callerClass+"."+mName]; ok {
+						return tid
+					}
+				}
+				if tid, ok := qualifiedIDs[moduleName+"."+rawCallee]; ok {
+					return tid
+				}
+				if tid, ok := qualifiedIDs[rawCallee]; ok {
+					return tid
+				}
+				return ""
+			}
+			for _, fn := range m.Functions {
+				fromID := qualifiedIDs[moduleName+"."+fn.Name]
+				seen := make(map[string]bool)
+				for _, callee := range fn.Calls {
+					if tid := resolveTSTarget("", callee); tid != "" && !seen[tid] {
+						seen[tid] = true
+						result.Relationships = append(result.Relationships, RelationRecord{
+							FromID: fromID, ToID: tid, ClaimType: "CALLS", Confidence: 0.90,
+						})
+					}
+				}
+			}
+			for _, cls := range m.Classes {
+				for _, mth := range cls.Methods {
+					fromID := qualifiedIDs[moduleName+"."+cls.Name+"."+mth.Name]
+					seen := make(map[string]bool)
+					for _, callee := range mth.Calls {
+						if tid := resolveTSTarget(cls.Name, callee); tid != "" && !seen[tid] {
+							seen[tid] = true
+							result.Relationships = append(result.Relationships, RelationRecord{
+								FromID: fromID, ToID: tid, ClaimType: "CALLS", Confidence: 0.90,
+							})
+						}
+					}
+				}
+			}
 	}
 
 	// Determinism

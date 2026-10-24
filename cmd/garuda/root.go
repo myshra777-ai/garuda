@@ -19,12 +19,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/config"
 	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/spf13/cobra"
 )
 
-const version = "v0.4.0-multi-repo"
-const defaultAPIAddr = "http://localhost:8080"
+const version = "v1.2.0-multi-repo"
 
 var (
 	summaryFlag    bool
@@ -36,9 +36,10 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "garuda",
-	Short: "Garuda Organizational Intelligence & Governance Runtime",
-	Long: `Garuda is a multi-repository intelligence platform that builds a semantic Company Brain.
-It analyzes code, extracts schemas, detects dependencies, and maintains cryptographic audit trails.`,
+	Short: "Garuda Organizational Intelligence & Change-Control Runtime",
+	Long: `Garuda is the Change-Control Layer for AI-generated software.
+It analyzes multi-language codebases (Go, Python, TypeScript), verifies runtime drift,
+evaluates architectural policies, and seals governance verdicts in an RFC 6962 Merkle ledger.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if versionFlag {
 			fmt.Printf("Garuda Runtime Engine %s (%s/%s)\n", version, runtime.GOOS, runtime.GOARCH)
@@ -78,6 +79,7 @@ It analyzes code, extracts schemas, detects dependencies, and maintains cryptogr
 }
 
 func init() {
+	config.LoadDotEnv()
 	rootCmd.Flags().BoolVar(&summaryFlag, "summary", false, "Fetch executive metrics")
 	rootCmd.Flags().BoolVar(&progressFlag, "progress", false, "Fetch active decisions")
 	rootCmd.Flags().StringVar(&checkpointFlag, "checkpoint", "", "Create checkpoint")
@@ -89,25 +91,14 @@ func init() {
 	}
 }
 
-func getDBURL() string {
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		fmt.Fprintln(os.Stderr, "⚠️ WARNING: DATABASE_URL not set. Using default local dev string.")
-		url = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
-	}
-	return url
+func getAPIAddr() string {
+	return config.ResolveAPIAddr()
 }
 
-// getTenantIDString resolves the tenant for CLI commands.
-//
-// Behavior change from the previous implementation: an unset
-// GARUDA_TENANT_ID no longer aborts the process. It resolves to the
-// canonical tenant, matching the behavior of the API, the MCP server,
-// and the twelve CLI commands that already hardcoded the canonical
-// value. A malformed GARUDA_TENANT_ID still aborts — that is a
-// configuration error, not a default.
-//
-// See internal/tenant for the resolution contract.
+func getDBURL() string {
+	return config.ResolveDBURL()
+}
+
 func getTenantIDString() string {
 	id, err := tenant.Resolve()
 	if err != nil {
@@ -126,30 +117,18 @@ func getTenantID() uuid.UUID {
 	return id
 }
 
-// getWorkspaceName returns the workspace name for the current process.
-//
-// Precedence:
-//
-//	GARUDA_WORKSPACE environment variable  →  empty string
-//
-// An empty string is not "default" and not "no workspace". It means
-// the caller has not selected one, and the store layer will resolve it
-// to the most recently updated workspace for the tenant. The previous
-// behavior of defaulting to the literal "default" pointed every
-// caller at a workspace that only exists if `garuda init` was run;
-// on any other database, every downstream query silently returned
-// zero rows.
 func getWorkspaceName() string {
+	config.LoadDotEnv()
 	return os.Getenv("GARUDA_WORKSPACE")
 }
 
 func getAuthToken() string {
+	config.LoadDotEnv()
 	if token := os.Getenv("GARUDA_API_KEY"); token != "" {
 		return token
 	}
 
-	fmt.Fprintln(os.Stderr, "⚠️ WARNING: GARUDA_API_KEY not set. Using debug token endpoint (insecure).")
-	req, err := http.NewRequest("GET", defaultAPIAddr+"/debug/token?actor=cli-operator&tenant_id=00000000-0000-0000-0000-000000000001", nil)
+	req, err := http.NewRequest("GET", getAPIAddr()+"/debug/token?actor=cli-operator&tenant_id=00000000-0000-0000-0000-000000000001", nil)
 	if err != nil {
 		return ""
 	}
@@ -208,7 +187,7 @@ func openFile(filename string) {
 
 func fetchEndpoint(path string) {
 	authToken := getAuthToken()
-	req, err := http.NewRequest("GET", defaultAPIAddr+path, nil)
+	req, err := http.NewRequest("GET", getAPIAddr()+path, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Request construction failed: %v\n", err)
 		os.Exit(1)
@@ -242,7 +221,7 @@ func postEndpoint(path string, payload interface{}) {
 	}
 
 	authToken := getAuthToken()
-	req, err := http.NewRequest("POST", defaultAPIAddr+path, bytes.NewBuffer(data))
+	req, err := http.NewRequest("POST", getAPIAddr()+path, bytes.NewBuffer(data))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Request construction failed: %v\n", err)
 		os.Exit(1)

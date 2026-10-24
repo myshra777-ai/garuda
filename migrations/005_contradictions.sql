@@ -1,4 +1,4 @@
-CREATE TABLE contradictions (
+CREATE TABLE IF NOT EXISTS contradictions (
     id UUID PRIMARY KEY,
     fact_a_id UUID REFERENCES facts(id),
     fact_b_id UUID REFERENCES facts(id),

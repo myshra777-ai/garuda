@@ -123,7 +123,11 @@ func isSupportedPredicate(t string) bool {
 		"claim_exists",
 		"contradiction_exists",
 		"verification_missing",
-		"language_matches":
+		"language_matches",
+		"transitive_claim_exists",
+		"layer_violation",
+		"cycle_exists",
+		"blast_radius_exceeds":
 		return true
 	}
 	return false

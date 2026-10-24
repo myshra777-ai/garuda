@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/types"
 )
 
@@ -51,6 +52,13 @@ func (s *Server) HandleVerifyDecision(w http.ResponseWriter, r *http.Request) {
 
 	// Verify cryptographic linkage
 	isValid := decision.MerkleHash != "" && root.RootHash != ""
+	if pgStore, ok := s.store.(*store.PostgresStore); ok && pgStore != nil && isValid {
+		if verified, verifyErr := pgStore.VerifyDecisionCryptographic(r.Context(), tenantID, decisionID); verifyErr == nil {
+			isValid = verified
+		} else {
+			isValid = false
+		}
+	}
 
 	proof := types.MerkleProof{
 		DecisionID:  decision.ID,

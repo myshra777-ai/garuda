@@ -15,13 +15,14 @@ CREATE TABLE IF NOT EXISTS harvested_decisions (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_harvested_source ON harvested_decisions(tenant_id, source_type, source_id);
-CREATE INDEX idx_harvested_confidence ON harvested_decisions(tenant_id, confidence);
-CREATE INDEX idx_harvested_validated ON harvested_decisions(tenant_id, human_validated);
-CREATE INDEX idx_harvested_created ON harvested_decisions(tenant_id, created_at DESC);
-CREATE INDEX idx_harvested_decision ON harvested_decisions(tenant_id, decision_id);
+CREATE INDEX IF NOT EXISTS idx_harvested_source ON harvested_decisions(tenant_id, source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_harvested_confidence ON harvested_decisions(tenant_id, confidence);
+CREATE INDEX IF NOT EXISTS idx_harvested_validated ON harvested_decisions(tenant_id, human_validated);
+CREATE INDEX IF NOT EXISTS idx_harvested_created ON harvested_decisions(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_harvested_decision ON harvested_decisions(tenant_id, decision_id);
 
 -- RLS (Row Level Security) for multi-tenant isolation
 ALTER TABLE harvested_decisions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS harvest_tenant_isolation ON harvested_decisions;
 CREATE POLICY harvest_tenant_isolation ON harvested_decisions
     USING (tenant_id = current_setting('app.current_tenant_id')::UUID);

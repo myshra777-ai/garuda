@@ -2,7 +2,7 @@
 DROP TABLE IF EXISTS decisions CASCADE;
 
 -- Create new decisions table with composite primary key (tenant_id, id)
-CREATE TABLE decisions (
+CREATE TABLE IF NOT EXISTS decisions (
     tenant_id UUID NOT NULL,
     id UUID NOT NULL,
     title TEXT NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE decisions (
 );
 
 -- Add indexes for efficient queries
-CREATE INDEX idx_decisions_tenant_status ON decisions(tenant_id, status);
-CREATE INDEX idx_decisions_tenant_created ON decisions(tenant_id, created_at DESC);
-CREATE INDEX idx_decisions_scope ON decisions USING GIN (scope);
-CREATE INDEX idx_decisions_parent ON decisions(parent_id);
+CREATE INDEX IF NOT EXISTS idx_decisions_tenant_status ON decisions(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_decisions_tenant_created ON decisions(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_decisions_scope ON decisions USING GIN (scope);
+CREATE INDEX IF NOT EXISTS idx_decisions_parent ON decisions(parent_id);

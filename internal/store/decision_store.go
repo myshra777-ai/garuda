@@ -327,3 +327,47 @@ func parseStatus(s string) types.DecisionStatus {
 		return types.StatusDraft
 	}
 }
+
+// VerifyDecisionCryptographic recomputes the canonical v1 leaf hash for a
+// decision and verifies its stored V1Proof inclusion receipt. Falls back to
+// checking non-empty chain linkage only for legacy v0 rows.
+func (s *PostgresStore) VerifyDecisionCryptographic(ctx context.Context, tenantID, decisionID uuid.UUID) (bool, error) {
+	d, err := s.GetDecision(ctx, tenantID, decisionID)
+	if err != nil {
+		return false, err
+	}
+
+	var storedProof []byte
+	var verVersion int
+	err = s.pool.QueryRow(ctx, `
+		SELECT merkle_proof, COALESCE(verification_version, 0)
+		FROM decisions
+		WHERE tenant_id = $1 AND id = $2
+	`, tenantID, decisionID).Scan(&storedProof, &verVersion)
+	if err != nil {
+		return false, fmt.Errorf("fetch decision merkle_proof: %w", err)
+	}
+
+	if verVersion >= 1 && len(storedProof) > 0 {
+		v1, err := UnmarshalV1Proof(storedProof)
+		if err != nil {
+			return false, fmt.Errorf("unmarshal v1 decision proof: %w", err)
+		}
+		evidenceIDs := make([]string, len(d.EvidenceIDs))
+		for i, h := range d.EvidenceIDs {
+			evidenceIDs[i] = hex.EncodeToString(h[:])
+		}
+		leafHash := merkle.CanonicalDecision(
+			d.ID,
+			d.Title,
+			string(d.Status),
+			d.ScopeDomain,
+			d.ScopeSystem,
+			d.Owner,
+			evidenceIDs,
+		)
+		return VerifyV1Proof(leafHash, v1)
+	}
+
+	return d.MerkleHash != "", nil
+}

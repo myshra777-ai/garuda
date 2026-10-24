@@ -1,8 +1,23 @@
 -- Phase 2: Topology Synthesis & Role Boundary Engine
 
-CREATE TYPE agent_role_enum AS ENUM ('ARCHITECT', 'ENGINEER', 'AUDITOR', 'CUSTOM');
-CREATE TYPE topology_status_enum AS ENUM ('PENDING', 'ACTIVE', 'PAUSED', 'COMPLETED', 'FAILED', 'VETOED');
-CREATE TYPE task_status_enum AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'QUARANTINED', 'FAILED');
+DO $$
+BEGIN
+    CREATE TYPE agent_role_enum AS ENUM ('ARCHITECT', 'ENGINEER', 'AUDITOR', 'CUSTOM');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+    CREATE TYPE topology_status_enum AS ENUM ('PENDING', 'ACTIVE', 'PAUSED', 'COMPLETED', 'FAILED', 'VETOED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$
+BEGIN
+    CREATE TYPE task_status_enum AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'QUARANTINED', 'FAILED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS topologies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -59,6 +74,6 @@ CREATE TABLE IF NOT EXISTS topology_audit (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_topologies_tenant_status ON topologies(tenant_id, status);
-CREATE INDEX idx_tasks_topology_sequence ON topology_tasks(topology_id, sequence_no);
-CREATE INDEX idx_handoffs_topology ON topology_handoffs(topology_id);
+CREATE INDEX IF NOT EXISTS idx_topologies_tenant_status ON topologies(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_topology_sequence ON topology_tasks(topology_id, sequence_no);
+CREATE INDEX IF NOT EXISTS idx_handoffs_topology ON topology_handoffs(topology_id);

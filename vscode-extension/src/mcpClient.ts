@@ -46,21 +46,21 @@ export class GarudaMCPClient {
             return configuredPath;
         }
 
-        // Auto-detect ./bin/garuda in open workspace folder
+        // Auto-detect ./bin/garuda-mcp in open workspace folder
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (workspaceFolders && workspaceFolders.length > 0) {
-            const localBin = path.join(workspaceFolders[0].uri.fsPath, 'bin', 'garuda');
-            if (fs.existsSync(localBin)) {
-                return localBin;
+            const localMcpBin = path.join(workspaceFolders[0].uri.fsPath, 'bin', 'garuda-mcp');
+            if (fs.existsSync(localMcpBin)) {
+                return localMcpBin;
             }
         }
 
-        // Fallback to /usr/local/bin/garuda or system PATH
-        if (fs.existsSync('/usr/local/bin/garuda')) {
-            return '/usr/local/bin/garuda';
+        // Fallback to /usr/local/bin/garuda-mcp or system PATH
+        if (fs.existsSync('/usr/local/bin/garuda-mcp')) {
+            return '/usr/local/bin/garuda-mcp';
         }
 
-        return 'garuda';
+        return 'garuda-mcp';
     }
 
     private getDatabaseUrl(): string {
@@ -83,10 +83,12 @@ export class GarudaMCPClient {
                 }
             };
 
-            const proc = cp.spawn(execPath, ['mcp'], {
+            const spawnArgs = execPath.endsWith('garuda') ? ['mcp'] : [];
+            const proc = cp.spawn(execPath, spawnArgs, {
                 env: {
                     ...process.env,
-                    DATABASE_URL: dbUrl
+                    DATABASE_URL: dbUrl,
+                    GARUDA_MCP_QUIET: '1'
                 }
             });
 
@@ -132,14 +134,14 @@ export class GarudaMCPClient {
     }
 
     public async getContradictions(limit: number = 50): Promise<Contradiction[]> {
-        return this.executeRpc<Contradiction[]>('get_contradictions', { limit });
+        return this.executeRpc<Contradiction[]>('garuda.detect_contradictions', { limit });
     }
 
     public async getBlastRadius(symbol: string, maxDepth: number = 3): Promise<BlastRadiusResult> {
-        return this.executeRpc<BlastRadiusResult>('get_blast_radius', { symbol, max_depth: maxDepth });
+        return this.executeRpc<BlastRadiusResult>('garuda.blast_radius', { name: symbol, depth: maxDepth });
     }
 
     public async getRuntimeState(): Promise<RuntimeState> {
-        return this.executeRpc<RuntimeState>('get_runtime_state', {});
+        return this.executeRpc<RuntimeState>('garuda.governance.status', {});
     }
 }
