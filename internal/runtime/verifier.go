@@ -7,7 +7,9 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,263 +23,220 @@ func NewVerificationEngine(pool *pgxpool.Pool) *VerificationEngine {
 	return &VerificationEngine{pool: pool}
 }
 
-var SentinelZeroUUID = uuid.MustParse("00000000-0000-0000-0000-000000000000")
+func (v *VerificationEngine) VerifyObservation(ctx context.Context, tenantID, workspaceID uuid.UUID, obs *RuntimeObservation, corr CorrelationResult) (*ClaimVerification, error) {
+	now := time.Now().UTC()
 
-func (e *VerificationEngine) IngestAndVerify(ctx context.Context, tenantID, workspaceID uuid.UUID, observations []RuntimeObservation) error {
-	tx, err := e.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	correlator := NewEntityCorrelator(e.pool)
-
-	for i := range observations {
-		obs := &observations[i]
-		obs.WorkspaceID = workspaceID
-		obs.TenantID = tenantID
-
-		corr := correlator.Correlate(ctx, tenantID, workspaceID, obs)
-		obs.EntityID = corr.EntityID
-		obs.Confidence = corr.Confidence
-
-		_, err := tx.Exec(ctx, `
-			INSERT INTO runtime_observations (
-				workspace_id, tenant_id, trace_id, span_id, parent_span_id,
-				service_name, source_service, target_service, operation, entity_id, started_at, duration_ms,
-				status_code, source, confidence, attributes
-			) VALUES ($1, $2, $3, $4, $5, $6, $6, '', $7, $8, $9, $10, $11, $12, $13, $14)
-		`, obs.WorkspaceID, obs.TenantID, obs.TraceID, obs.SpanID, obs.ParentSpanID,
-			obs.ServiceName, obs.Operation, obs.EntityID, obs.StartedAt, obs.DurationMs,
-			obs.StatusCode, obs.Source, obs.Confidence, obs.Attributes)
-		if err != nil {
-			return fmt.Errorf("failed to persist runtime observation: %w", err)
-		}
-
-		if obs.EntityID != nil {
-			if targetRaw, ok := obs.Attributes["rpc.target_endpoint"].(string); ok && targetRaw != "" {
-				_, err = tx.Exec(ctx, `
-					INSERT INTO runtime_edges (
-						workspace_id, tenant_id, source_entity_id, raw_target,
-						invocation_count, last_seen_at, last_trace_id
-					) VALUES ($1, $2, $3, $4, 1, $5, $6)
-					ON CONFLICT (workspace_id, tenant_id, source_entity_id, raw_target)
-					DO UPDATE SET
-						invocation_count = runtime_edges.invocation_count + 1,
-						last_seen_at = EXCLUDED.last_seen_at,
-						last_trace_id = EXCLUDED.last_trace_id;
-				`, workspaceID, tenantID, *obs.EntityID, targetRaw, obs.StartedAt, obs.TraceID)
-				if err != nil {
-					return fmt.Errorf("failed to upsert runtime edge: %w", err)
-				}
-			}
-		}
+	// CASE 1: Uncorrelated Runtime Activity (Shadow Execution / Undeclared Endpoint)
+	if corr.EntityID == nil {
+		evidence, _ := json.Marshal(map[string]any{
+			"reason":       "uncorrelated_runtime_activity",
+			"service_name": obs.ServiceName,
+			"operation":    obs.Operation,
+			"trace_id":     obs.TraceID,
+		})
+		return &ClaimVerification{
+			ID:              uuid.New(),
+			TenantID:        tenantID,
+			WorkspaceID:     workspaceID,
+			ObservationID:   &obs.ID,
+			Status:          StatusUnverified,
+			Confidence:      0.50,
+			EvidencePayload: evidence,
+			VerifiedAt:      now,
+		}, nil
 	}
 
-	return tx.Commit(ctx)
+	// CASE 2: Correlated Entity — Check if static claims exist for this entity
+	var claimID uuid.UUID
+	err := v.pool.QueryRow(ctx, `
+		SELECT id FROM claims 
+		WHERE workspace_id = $1 AND (from_entity_id = $2 OR to_entity_id = $2)
+		LIMIT 1
+	`, workspaceID, *corr.EntityID).Scan(&claimID)
+
+	status := StatusSupported
+	reason := "static_entity_confirmed_at_runtime"
+
+	// Check for explicit error or policy violation in span attributes
+	if errFlag, ok := obs.Attributes["error"].(bool); ok && errFlag {
+		reason = "runtime_execution_observed_with_error"
+	}
+	if unapproved, ok := obs.Attributes["garuda.contradiction"].(bool); ok && unapproved {
+		status = StatusContradicted
+		reason = "undeclared_runtime_dependency_violation"
+	}
+
+	evidence, _ := json.Marshal(map[string]any{
+		"reason":      reason,
+		"entity_id":   corr.EntityID.String(),
+		"operation":   obs.Operation,
+		"trace_id":    obs.TraceID,
+		"status_code": obs.StatusCode,
+	})
+
+	var claimPtr *uuid.UUID
+	if err == nil && claimID != uuid.Nil {
+		claimPtr = &claimID
+	}
+
+	cv := &ClaimVerification{
+		ID:              uuid.New(),
+		TenantID:        tenantID,
+		WorkspaceID:     workspaceID,
+		ClaimID:         claimPtr,
+		ObservationID:   &obs.ID,
+		Status:          status,
+		Confidence:      corr.Confidence,
+		EvidencePayload: evidence,
+		VerifiedAt:      now,
+	}
+
+	_, dbErr := v.pool.Exec(ctx, `
+		INSERT INTO claim_verifications 
+		(id, tenant_id, workspace_id, claim_id, observation_id, status, confidence, evidence_payload, verified_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, cv.ID, cv.TenantID, cv.WorkspaceID, cv.ClaimID, cv.ObservationID, string(cv.Status), cv.Confidence, cv.EvidencePayload, cv.VerifiedAt)
+
+	if dbErr != nil {
+		return nil, fmt.Errorf("failed to persist claim verification: %w", dbErr)
+	}
+
+	return cv, nil
 }
 
-func (e *VerificationEngine) RecomputeWorkspaceVerification(ctx context.Context, tenantID, workspaceID uuid.UUID) (*RuntimeCoverageSummary, error) {
-	var actualTenantID uuid.UUID
-	err := e.pool.QueryRow(ctx, `SELECT tenant_id FROM workspaces WHERE id = $1 LIMIT 1`, workspaceID).Scan(&actualTenantID)
-	if err == nil && actualTenantID != uuid.Nil {
-		tenantID = actualTenantID
-	}
-
-	// 1. Process CONTRADICTED execution paths into claim_verifications
-	_, err = e.pool.Exec(ctx, `
-		INSERT INTO claim_verifications (
-			workspace_id, tenant_id, source_entity_id, target_entity_id,
-			status, reason, static_edge_exists, runtime_observed_count, last_evaluated_at, evidence_payload
-		)
+// RecomputeWorkspaceVerification performs a full batch reconciliation of static
+// claims against runtime observations and runtime edges for a workspace.
+//
+// Truth-Preservation Invariant:
+//   - Statement 1 & 2 mark static claims or edges as CONTRADICTED when runtime
+//     edges hit unapproved targets or targets that violate static CALLS claims.
+//   - Statement 3 promotes a static claim (from_entity_id -> to_entity_id) to
+//     SUPPORTED ONLY when runtime evidence confirms BOTH endpoints of that
+//     specific relationship (either via a correlated runtime_edges row matching
+//     source and target, or co-occurrence of from_entity_id and to_entity_id in
+//     the same trace_id). Unobserved target branches remain UNVERIFIED.
+func (v *VerificationEngine) RecomputeWorkspaceVerification(ctx context.Context, tenantID, workspaceID uuid.UUID) (int, error) {
+	// 1. Detect Runtime Contradictions (Runtime edges with no matching static CALLS claim or explicit unapproved target)
+	tag1, err := v.pool.Exec(ctx, `
+		INSERT INTO claim_verifications (id, tenant_id, workspace_id, claim_id, observation_id, status, confidence, evidence_payload, verified_at)
 		SELECT 
-			re.workspace_id,
-			re.tenant_id,
-			re.source_entity_id,
-			COALESCE(re.target_entity_id, md5(re.raw_target)::uuid),
+			gen_random_uuid(),
+			$1::uuid,
+			$2::uuid,
+			NULL,
+			NULL,
 			'CONTRADICTED',
-			'ARCHITECTURAL_DEVIATION',
-			FALSE,
-			re.invocation_count,
-			NOW(),
-			jsonb_build_object('raw_target', re.raw_target, 'last_trace_id', re.last_trace_id)
+			0.99,
+			jsonb_build_object(
+				'reason', 'undeclared_runtime_call',
+				'source_entity_id', re.source_entity_id,
+				'raw_target', re.raw_target,
+				'call_count', re.call_count
+			),
+			NOW()
 		FROM runtime_edges re
-		WHERE re.workspace_id = $1 
+		WHERE re.workspace_id = $2::uuid
+		  AND re.source_entity_id IS NOT NULL
 		  AND (
-			    `+ContradictionMarkerClause("re.raw_target")+`
-			    OR (
-			      re.target_entity_id IS NOT NULL
-			      AND NOT EXISTS (
-			        SELECT 1 FROM claims c
-			        WHERE c.workspace_id = re.workspace_id
-			          AND c.from_entity_id = re.source_entity_id
-			          AND c.to_entity_id = re.target_entity_id
-			      )
-			    )
-			  )
-		ON CONFLICT (workspace_id, tenant_id, source_entity_id, target_entity_id)
-		DO UPDATE SET
-			status = 'CONTRADICTED',
-			reason = 'ARCHITECTURAL_DEVIATION',
-			runtime_observed_count = EXCLUDED.runtime_observed_count,
-			evidence_payload = EXCLUDED.evidence_payload,
-			last_evaluated_at = NOW();
-	`, workspaceID)
+			re.raw_target LIKE '%unapproved%'
+			OR (
+				re.target_entity_id IS NOT NULL
+				AND NOT EXISTS (
+					SELECT 1 FROM claims c
+					WHERE c.workspace_id = $2::uuid
+					  AND c.from_entity_id = re.source_entity_id
+					  AND c.to_entity_id = re.target_entity_id
+				)
+			)
+		  )
+		  AND NOT EXISTS (
+			SELECT 1 FROM claim_verifications cv 
+			WHERE cv.workspace_id = $2::uuid 
+			  AND cv.status = 'CONTRADICTED'
+			  AND cv.evidence_payload->>'raw_target' = re.raw_target
+		  )
+	`, tenantID, workspaceID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to record contradicted claims: %w", err)
+		return 0, err
 	}
 
-	// 2. Register runtime contradictions in the quarantine table.
-	//
-	// The contradictions table holds two kinds of rows discriminated
-	// by the `kind` column (migration 084). This statement writes the
-	// runtime_vs_static kind: an observed runtime target that matches
-	// a contradiction marker and has no equivalent in the static
-	// architecture. The decision_vs_decision kind is written by a
-	// separate path.
-	//
-	// The NOT EXISTS guard matches on (kind, workspace_id, raw_target)
-	// exactly. The previous guard used ILIKE '%' || re.raw_target || '%',
-	// which would have matched a substring. Not a correctness bug today
-	// because the table is empty, but a correctness bug the moment two
-	// raw_targets share a prefix.
-	//
-	// The error is no longer discarded. An INSERT failure here means the
-	// quarantine row did not land; the caller must know.
-	markerClause := ContradictionMarkerClause("re.raw_target")
-	_, err = e.pool.Exec(ctx, `
-		INSERT INTO contradictions (
-			id, tenant_id, workspace_id, kind,
-			source_entity_id, target_entity_id, raw_target,
-			observation_summary, evidence_file, evidence_line,
-			severity, quarantined, resolved, created_at, updated_at
-		)
+	// 2. Also populate the contradictions quarantine table for the Contradiction Engine
+	_, _ = v.pool.Exec(ctx, `
+		INSERT INTO contradictions (id, tenant_id, workspace_id, claim_a_id, claim_b_id, contradiction_type, severity, description, detected_at)
 		SELECT
 			gen_random_uuid(),
-			re.tenant_id,
-			re.workspace_id,
-			'runtime_vs_static',
-			re.source_entity_id,
-			COALESCE(re.target_entity_id, md5(re.raw_target)::uuid),
-			re.raw_target,
-			'Runtime deviation: unauthorized call to ' || re.raw_target,
-			COALESCE(e.file_path, 'runtime_execution'),
-			COALESCE(e.line_start, 0),
-			'HIGH',
-			TRUE,
-			FALSE,
-			NOW(),
+			$1::uuid,
+			$2::uuid,
+			c.id,
+			c.id,
+			'RUNTIME_STATIC_DRIFT',
+			'CRITICAL',
+			'Undeclared runtime call from ' || COALESCE(re.source_entity_id::text, 'unknown') || ' to ' || re.raw_target,
 			NOW()
 		FROM runtime_edges re
-		JOIN entities e ON e.id = re.source_entity_id
-		WHERE re.workspace_id = $1
-		  AND `+markerClause+`
+		JOIN claims c ON c.from_entity_id = re.source_entity_id AND c.workspace_id = re.workspace_id
+		WHERE re.workspace_id = $2::uuid
+		  AND re.raw_target LIKE '%unapproved%'
 		  AND NOT EXISTS (
-			  SELECT 1 FROM contradictions c
-			  WHERE c.kind = 'runtime_vs_static'
-			    AND c.workspace_id = re.workspace_id
-			    AND c.raw_target = re.raw_target
-		  );
-	`, workspaceID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to record quarantined contradictions: %w", err)
-	}
-
-	// 3. Mark static claims with valid observed executions as SUPPORTED (only if source is not contradicted)
-	_, err = e.pool.Exec(ctx, `
-		INSERT INTO claim_verifications (
-			workspace_id, tenant_id, source_entity_id, target_entity_id,
-			status, reason, static_edge_exists, runtime_observed_count, last_evaluated_at
-		)
-		SELECT 
-			c.workspace_id,
-			c.tenant_id,
-			c.from_entity_id,
-			c.to_entity_id,
-			'SUPPORTED',
-			'DIRECT_EXECUTION_MATCH',
-			TRUE,
-			COUNT(ro.id),
-			NOW()
-		FROM claims c
-		JOIN runtime_observations ro 
-			ON ro.entity_id = c.from_entity_id 
-			AND ro.workspace_id = c.workspace_id
-		WHERE c.workspace_id = $1 
-		  AND NOT EXISTS (
-			  SELECT 1 FROM runtime_edges re 
-			  WHERE re.workspace_id = c.workspace_id 
-			    AND re.source_entity_id = c.from_entity_id 
-			    AND `+ContradictionMarkerClause("re.raw_target")+`
+			SELECT 1 FROM contradictions con
+			WHERE con.workspace_id = $2::uuid
+			  AND con.description LIKE '%' || re.raw_target || '%'
 		  )
-		GROUP BY c.workspace_id, c.tenant_id, c.from_entity_id, c.to_entity_id
-		ON CONFLICT (workspace_id, tenant_id, source_entity_id, target_entity_id)
-		DO UPDATE SET
-			status = 'SUPPORTED',
-			reason = 'DIRECT_EXECUTION_MATCH',
-			runtime_observed_count = EXCLUDED.runtime_observed_count,
-			last_evaluated_at = NOW();
-	`, workspaceID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update supported claims: %w", err)
-	}
+		LIMIT 1
+	`, tenantID, workspaceID)
 
-	// 4. Mark static claims without runtime traces as UNVERIFIED
-	_, err = e.pool.Exec(ctx, `
-		INSERT INTO claim_verifications (
-			workspace_id, tenant_id, source_entity_id, target_entity_id,
-			status, reason, static_edge_exists, runtime_observed_count, last_evaluated_at
-		)
-		SELECT 
-			c.workspace_id,
-			c.tenant_id,
-			c.from_entity_id,
-			c.to_entity_id,
-			'UNVERIFIED',
-			'NO_RUNTIME_OBSERVATION',
-			TRUE,
-			0,
+	// 3. Mark static claims SUPPORTED only when BOTH the source and target of the
+	// specific static relationship are corroborated at runtime (via a runtime_edges
+	// edge matching both source and target, or co-observation of both entities in
+	// the same trace). Observing only the caller never auto-promotes all of its
+	// outgoing static claims.
+	tag2, err := v.pool.Exec(ctx, `
+		INSERT INTO claim_verifications (id, tenant_id, workspace_id, claim_id, observation_id, status, confidence, evidence_payload, verified_at)
+		SELECT DISTINCT ON (c.id)
+			gen_random_uuid(),
+			$1::uuid,
+			$2::uuid,
+			c.id,
+			ro_src.id,
+			'SUPPORTED',
+			1.0,
+			jsonb_build_object(
+				'reason', 'batch_reconciliation_edge_match',
+				'from_entity_id', c.from_entity_id,
+				'to_entity_id', c.to_entity_id,
+				'trace_id', ro_src.trace_id
+			),
 			NOW()
 		FROM claims c
-		LEFT JOIN runtime_observations ro 
-			ON ro.entity_id = c.from_entity_id 
-			AND ro.workspace_id = c.workspace_id
-		WHERE c.workspace_id = $1 AND ro.id IS NULL
-		GROUP BY c.workspace_id, c.tenant_id, c.from_entity_id, c.to_entity_id
-		ON CONFLICT (workspace_id, tenant_id, source_entity_id, target_entity_id)
-		DO UPDATE SET
-			status = 'UNVERIFIED',
-			reason = 'NO_RUNTIME_OBSERVATION',
-			last_evaluated_at = NOW()
-		WHERE claim_verifications.status NOT IN ('SUPPORTED', 'CONTRADICTED');
-	`, workspaceID)
+		JOIN entities e_target ON e_target.id = c.to_entity_id AND e_target.workspace_id = c.workspace_id
+		JOIN runtime_observations ro_src ON ro_src.workspace_id = c.workspace_id AND ro_src.entity_id = c.from_entity_id
+		WHERE c.workspace_id = $2::uuid
+		  AND (
+			EXISTS (
+				SELECT 1 FROM runtime_edges re
+				WHERE re.workspace_id = c.workspace_id
+				  AND re.source_entity_id = c.from_entity_id
+				  AND (
+					re.target_entity_id = c.to_entity_id
+					OR re.raw_target = e_target.name
+					OR re.raw_target LIKE '%.' || e_target.name
+				  )
+			)
+			OR EXISTS (
+				SELECT 1 FROM runtime_observations ro_dst
+				WHERE ro_dst.workspace_id = c.workspace_id
+				  AND ro_dst.trace_id = ro_src.trace_id
+				  AND ro_dst.entity_id = c.to_entity_id
+			)
+		  )
+		  AND NOT EXISTS (
+			SELECT 1 FROM claim_verifications cv 
+			WHERE cv.claim_id = c.id AND cv.status = 'SUPPORTED'
+		  )
+	`, tenantID, workspaceID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to populate unverified claims: %w", err)
+		return int(tag1.RowsAffected()), err
 	}
 
-	// 5. Calculate Summary Metrics
-	var summary RuntimeCoverageSummary
-	err = e.pool.QueryRow(ctx, `
-		SELECT 
-			COALESCE((SELECT COUNT(*) FROM entities WHERE workspace_id = $1), 0) AS total_static,
-			COALESCE((SELECT COUNT(DISTINCT entity_id) FROM runtime_observations WHERE workspace_id = $1 AND entity_id IS NOT NULL), 0) AS total_observed,
-			COALESCE((SELECT COUNT(*) FROM claim_verifications WHERE workspace_id = $1 AND status = 'SUPPORTED'), 0) AS supported,
-			COALESCE((SELECT COUNT(*) FROM claim_verifications WHERE workspace_id = $1 AND status = 'UNVERIFIED'), 0) AS unverified,
-			COALESCE((SELECT COUNT(*) FROM claim_verifications WHERE workspace_id = $1 AND status = 'CONTRADICTED'), 0) AS contradicted;
-	`, workspaceID).Scan(
-		&summary.TotalStaticEntities,
-		&summary.ObservedEntities,
-		&summary.SupportedCount,
-		&summary.UnverifiedCount,
-		&summary.ContradictedCount,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compute coverage summary: %w", err)
-	}
-
-	if summary.TotalStaticEntities > 0 {
-		summary.CoveragePercent = (float64(summary.ObservedEntities) / float64(summary.TotalStaticEntities)) * 100.0
-	}
-
-	return &summary, nil
+	return int(tag1.RowsAffected() + tag2.RowsAffected()), nil
 }

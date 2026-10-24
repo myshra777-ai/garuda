@@ -55,7 +55,7 @@ type Entity struct {
 	LineStart    int        `json:"line_start"`
 	LineEnd      int        `json:"line_end"`
 	Exported     bool       `json:"exported"`
-	Language     string     `json:"language,omitempty"` // NEW — "go", "python", etc.
+	Language     string     `json:"language,omitempty"`
 	Fields       []Field    `json:"fields,omitempty"`
 	Methods      []Method   `json:"methods,omitempty"`
 	Signature    string     `json:"signature,omitempty"`
@@ -111,26 +111,29 @@ type Relationship struct {
 	Evidence         Evidence `json:"evidence,omitempty"`
 }
 
-// Stats holds high-level extraction metrics.
+// Stats holds high-level extraction metrics and type-checking completeness metadata.
 type Stats struct {
-	Files       int `json:"files"`
-	Packages    int `json:"packages"`
-	Structs     int `json:"structs"`
-	Interfaces  int `json:"interfaces"`
-	Functions   int `json:"functions"`
-	Imports     int `json:"imports"`
-	TotalFields int `json:"total_fields"`
+	Files            int  `json:"files"`
+	Packages         int  `json:"packages"`
+	Structs          int  `json:"structs"`
+	Interfaces       int  `json:"interfaces"`
+	Functions        int  `json:"functions"`
+	Imports          int  `json:"imports"`
+	TotalFields      int  `json:"total_fields"`
+	TypeErrors       int  `json:"type_errors,omitempty"`
+	AnalysisComplete bool `json:"analysis_complete"`
 }
 
 // Result is the top-level analysis container.
 type Result struct {
-	Entities      []Entity       `json:"entities"`
-	Relationships []Relationship `json:"relationships"`
-	Fingerprint   string         `json:"fingerprint,omitempty"`
-	AnalyzedAt    time.Time      `json:"analyzed_at"`
-	Package       string         `json:"package,omitempty"`
-	Source        string         `json:"source,omitempty"`
-	Stats         Stats          `json:"stats"`
+	Entities        []Entity       `json:"entities"`
+	Relationships   []Relationship `json:"relationships"`
+	Fingerprint     string         `json:"fingerprint,omitempty"`
+	AnalyzedAt      time.Time      `json:"analyzed_at"`
+	Package         string         `json:"package,omitempty"`
+	Source          string         `json:"source,omitempty"`
+	Stats           Stats          `json:"stats"`
+	TypeDiagnostics []string       `json:"type_diagnostics,omitempty"`
 }
 
 // RevisionSummary is the lightweight summary stored in canonical revisions.

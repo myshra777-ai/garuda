@@ -4,53 +4,6 @@ runtime_contradiction_test.py — reproducible CONTRADICTED-path verification.
 
 Purpose: exercise the runtime verification path end to end against a
 known contradiction corpus and produce a number that can be cited.
-
-EVIDENCE.md §1 no longer claims a detection rate because the previous
-figure could not be reproduced. This script produces a reproducible one.
-When it passes, the number goes into EVIDENCE.md §1 with a link to this
-file.
-
-Method:
-
-  1. Pick N real entities in the workspace whose names are unique.
-     Uniqueness matters: the correlator matches on name, and a name
-     that appears on multiple entities resolves to the first match.
-  2. POST one span per entity, with an operation name matching the
-     entity name and an attribute `rpc.target_endpoint` whose value
-     contains "unapproved". The string is the marker both the
-     ingest handler's shortcut and the verifier's tick query accept.
-  3. The ingest handler writes the CONTRADICTED row synchronously.
-     The verifier's RecomputeWorkspaceVerification tick (every 10
-     seconds) then re-derives the same row from runtime_edges and
-     overwrites it. Wait for one tick to let the row stabilize.
-  4. Count rows in claim_verifications with status = 'CONTRADICTED'
-     whose evidence_payload->>'raw_target' contains "unapproved".
-  5. Print N/N and exit 0 if all landed, non-zero otherwise.
-
-Idempotency:
-
-  clear_residue() removes rows from every table the verifier reads
-  from: runtime_edges, runtime_observations, and claim_verifications
-  (plus the contradictions quarantine table populated by the tick's
-  statement 2). Deleting only from claim_verifications is
-  insufficient: the tick's statement 1 re-derives CONTRADICTED rows
-  from runtime_edges on every pass, so the rows return within one
-  tick of the delete.
-
-Prerequisites:
-  - The daemon is running (./bin/garuda dev).
-  - DATABASE_URL is set.
-  - The workspace named by GARUDA_WORKSPACE contains exported functions
-    or methods whose names are unique within the workspace.
-
-Usage:
-  DATABASE_URL=postgres://... python3 scripts/runtime_contradiction_test.py
-
-Environment:
-  GARUDA_API_BASE            default http://localhost:8080
-  GARUDA_WORKSPACE           default go-validation-10
-  CONTRADICTION_CORPUS_SIZE  default 10
-  VERIFIER_WAIT_SECONDS      default 15
 """
 
 import json
@@ -58,6 +11,7 @@ import os
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -72,17 +26,66 @@ WAIT_SECONDS = int(os.environ.get("VERIFIER_WAIT_SECONDS", "15"))
 
 
 def psql(query):
-    """
-    Run one SQL statement and return its trimmed stdout.
-
-    psql -tAc does not accept positional parameters. Values are
-    interpolated by the caller. The workspace name is read from the
-    environment by an operator, not from untrusted input, so the
-    interpolation is safe for a test harness.
-    """
     cmd = ["psql", DATABASE_URL, "-tAc", query]
     out = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return out.stdout.strip()
+
+
+def obtain_auth_headers():
+    """
+    Obtain an authenticated Ed25519 Bearer JWT or session cookie for /api/v1 requests.
+    """
+    token = os.environ.get("GARUDA_TOKEN", "").strip()
+    if token:
+        return {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
+
+    email = os.environ.get("GARUDA_EMAIL", "admin@garuda.local")
+    password = os.environ.get("GARUDA_PASSWORD", "garuda2026")
+
+    # Attempt token login first
+    for endpoint in ("/api/v1/auth/login", "/api/v1/auth/signup"):
+        try:
+            body = json.dumps({"email": email, "password": password}).encode()
+            req = urllib.request.Request(
+                API_BASE + endpoint,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read())
+                if "access_token" in data:
+                    return {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {data['access_token']}",
+                    }
+        except Exception:
+            pass
+
+    # Fallback: form signup/login to obtain garuda_session cookie
+    form_data = urllib.parse.urlencode({"email": email, "password": password}).encode()
+    for endpoint in ("/signup", "/login"):
+        try:
+            req = urllib.request.Request(
+                API_BASE + endpoint,
+                data=form_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                cookie = resp.headers.get("Set-Cookie", "")
+                if "garuda_session=" in cookie:
+                    sess_kv = cookie.split(";", 1)[0]
+                    return {"Content-Type": "application/json", "Cookie": sess_kv}
+        except urllib.error.HTTPError as e:
+            cookie = e.headers.get("Set-Cookie", "") if e.headers else ""
+            if "garuda_session=" in cookie:
+                sess_kv = cookie.split(";", 1)[0]
+                return {"Content-Type": "application/json", "Cookie": sess_kv}
+        except Exception:
+            pass
+
+    return {"Content-Type": "application/json"}
 
 
 def pick_candidates(n):
@@ -101,12 +104,13 @@ def pick_candidates(n):
          ORDER BY random()
          LIMIT {n}
     """
-    rows = psql(query).splitlines()
+    rows = [r for r in psql(query).splitlines() if "|" in r]
     if len(rows) < n:
-        raise SystemExit(...)
+        raise SystemExit(f"Need {n} unique exported functions in workspace {WORKSPACE}, found {len(rows)}")
     return [row.split("|", 1) for row in rows]
 
-def post_span(span_id, entity_name):
+
+def post_span(span_id, entity_name, headers):
     payload = {
         "spans": [
             {
@@ -133,7 +137,7 @@ def post_span(span_id, entity_name):
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=10) as resp:
@@ -154,23 +158,6 @@ def count_contradicted():
 
 
 def clear_residue():
-    """
-    Remove every artifact of a prior run from every table the verifier
-    reads from.
-
-    The verifier's RecomputeWorkspaceVerification tick re-derives
-    CONTRADICTED rows from runtime_edges on every pass
-    (internal/runtime/verifier.go, statement 1). Deleting only from
-    claim_verifications is insufficient — the next tick restores the
-    rows from runtime_edges. This function clears runtime_edges and
-    runtime_observations (the tick's input tables) as well as
-    claim_verifications (its output).
-
-    The `contradictions` quarantine table is intentionally excluded.
-    Its NOT EXISTS guard prevents accumulation across runs, and
-    counting it here would fail if the table is absent — which is a
-    separate schema question, not part of this script's contract.
-    """
     ws = f"(SELECT id FROM workspaces WHERE name = '{WORKSPACE}')"
 
     tables = {
@@ -220,6 +207,8 @@ def main():
     print(f"API base:    {API_BASE}")
     print()
 
+    headers = obtain_auth_headers()
+
     residue = count_contradicted()
     if residue > 0:
         print(f"Clearing {residue} contradicted rows from previous runs...")
@@ -230,7 +219,7 @@ def main():
     print()
 
     for i, (_, name) in enumerate(candidates, 1):
-        result = post_span(f"contradiction-{i:02d}", name)
+        result = post_span(f"contradiction-{i:02d}", name, headers)
         print(f"  [{i:2d}] POST {name:<40} -> {result}")
 
     print()

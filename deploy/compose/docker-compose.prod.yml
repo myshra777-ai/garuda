@@ -1,93 +1,79 @@
+version: '3.9'
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: garuda-postgres-prod
-    restart: unless-stopped
+    restart: always
     environment:
-      POSTGRES_USER: garuda
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-garudapassword}
-      POSTGRES_DB: garuda
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-garuda}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in production}
+      POSTGRES_DB: ${POSTGRES_DB:-garuda_db}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+      - ../../migrations:/docker-entrypoint-initdb.d:ro
+    expose:
+      - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U garuda -d garuda"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-garuda} -d ${POSTGRES_DB:-garuda_db}"]
+      interval: 10s
+      timeout: 5s
       retries: 5
+    networks:
+      - garuda-net
 
   redis:
     image: redis:7-alpine
     container_name: garuda-redis-prod
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
-    ports:
-      - "6379:6379"
+    restart: always
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in production}"]
     volumes:
-      - redis_data:/data
+      - redisdata:/data
+    expose:
+      - "6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
       retries: 5
-
-  telemetry-collector:
-    build:
-      context: .
-      dockerfile: build/Dockerfile.collector
-    image: garuda/telemetry-collector:latest
-    container_name: garuda-telemetry-collector
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgres://garuda:${POSTGRES_PASSWORD:-garudapassword}@postgres:5432/garuda?sslmode=disable
-      SUPABASE_URL: ${SUPABASE_URL:-}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
-      TELEMETRY_PORT: "8081"
-    ports:
-      - "8081:8081"
-    depends_on:
-      postgres:
-        condition: service_healthy
+    networks:
+      - garuda-net
 
   garuda-api:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
-    image: garuda/garuda-api:v1.0.0
     container_name: garuda-api-prod
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgres://garuda:${POSTGRES_PASSWORD:-garudapassword}@postgres:5432/garuda?sslmode=disable
-      REDIS_ADDR: redis:6379
-      GARUDA_ENV: production
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      GARUDA_TELEMETRY_ENABLED: "true"
-      GARUDA_TELEMETRY_ENDPOINT: "http://telemetry-collector:8081/v1/telemetry"
+    restart: always
     ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  garuda-worker:
-    build:
-      context: .
-      dockerfile: build/Dockerfile.worker
-    image: garuda/garuda-worker:latest
-    container_name: garuda-worker-prod
-    restart: unless-stopped
+      - "${GARUDA_BIND_HOST:-127.0.0.1}:8080:8080"
     environment:
-      DATABASE_URL: postgres://garuda:${POSTGRES_PASSWORD:-garudapassword}@postgres:5432/garuda?sslmode=disable
-      REDIS_ADDR: redis:6379
+      GARUDA_ENV: "production"
+      PORT: "8080"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-garuda}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-garuda_db}?sslmode=disable"
+      REDIS_URL: "redis://:${REDIS_PASSWORD}@redis:6379/0"
+      JWT_PRIVATE_KEY_HEX: ${JWT_PRIVATE_KEY_HEX:?JWT_PRIVATE_KEY_HEX must be set in production}
+      JWT_PUBLIC_KEY_HEX: ${JWT_PUBLIC_KEY_HEX:?JWT_PUBLIC_KEY_HEX must be set in production}
+      GARUDA_RATE_LIMIT_RPS: ${GARUDA_RATE_LIMIT_RPS:-100}
+      GARUDA_RATE_LIMIT_BURST: ${GARUDA_RATE_LIMIT_BURST:-200}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - garuda-net
 
 volumes:
-  postgres_data:
-  redis_data:
+  pgdata:
+  redisdata:
+
+networks:
+  garuda-net:
+    driver: bridge
+    internal: false

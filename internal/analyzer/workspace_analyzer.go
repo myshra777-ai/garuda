@@ -6,8 +6,6 @@
 package analyzer
 
 import (
-	"context"
-	"crypto/sha256"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -17,817 +15,328 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/google/uuid"
+	"time"
 )
 
-// WorkspaceAnalysisOptions configures workspace analysis parameters.
-type WorkspaceAnalysisOptions struct {
-	TenantID uuid.UUID
-	Cache    PackageCache
-}
+// AnalyzeWorkspace performs multi-package semantic analysis across an entire workspace.
+//
+// Type-Checking Completeness Tracking:
+// Instead of silently discarding go/types errors, AnalyzeWorkspace counts all
+// type-checking diagnostics in result.Stats.TypeErrors, records up to 25
+// diagnostic messages in result.TypeDiagnostics, and sets
+// result.Stats.AnalysisComplete = (typeErrors == 0).
+func (a *Analyzer) AnalyzeWorkspace(root string) (*Result, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve workspace root: %w", err)
+	}
 
-// AnalyzeWorkspace orchestrates analysis with default options.
-func AnalyzeWorkspace(ctx context.Context, ws *WorkspaceContext) (*Result, error) {
-	return AnalyzeWorkspaceWithOptions(ctx, ws, WorkspaceAnalysisOptions{})
-}
-
-// AnalyzeWorkspaceWithOptions orchestrates full AST parsing, cross-module type checking,
-// and semantic relationship extraction with incremental caching support.
-func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts WorkspaceAnalysisOptions) (*Result, error) {
-	if ws == nil || len(ws.Modules) == 0 {
-		return nil, fmt.Errorf("cannot analyze empty workspace context")
+	modules, err := DiscoverModules(absRoot)
+	if err != nil || len(modules) == 0 {
+		modules = []ModuleInfo{{
+			ModulePath: "workspace",
+			RootDir:    absRoot,
+		}}
 	}
 
 	fset := token.NewFileSet()
-	imp := NewMultiModuleImporter(fset, ws)
+	imp := NewMultiModuleImporter(fset, modules)
 
-	result := &Result{
-		Source:        ws.RootPath,
-		Entities:      make([]Entity, 0),
-		Relationships: make([]Relationship, 0),
-		Stats:         Stats{},
-	}
-
-	packageFiles := make(map[string][]*ast.File)
-	packageHashes := make(map[string][]byte)
-	repoHasher := sha256.New()
-
-	var sortedPkgPaths []string
-	for pkgPath := range ws.PackageRoots {
-		sortedPkgPaths = append(sortedPkgPaths, pkgPath)
-	}
-	sort.Strings(sortedPkgPaths)
-
-	var packagesToParse []string
-
-	for _, pkgPath := range sortedPkgPaths {
-		dirPath := ws.PackageRoots[pkgPath]
-		treeHash, err := ComputePackageTreeHash(dirPath)
+	pkgDirs := make(map[string]string) // dir -> modulePath
+	err = filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil, fmt.Errorf("failed to compute tree hash for %s: %w", pkgPath, err)
+			return nil
 		}
-		packageHashes[pkgPath] = treeHash
-
-		repoHasher.Write(fmt.Appendf(nil, "%s:%x:", pkgPath, treeHash))
-
-		var cacheHit bool
-		if opts.Cache != nil {
-			cached, hit, err := opts.Cache.GetPackage(ctx, opts.TenantID, pkgPath, treeHash)
-			if err == nil && hit && cached != nil {
-				result.Entities = append(result.Entities, cached.Entities...)
-				result.Relationships = append(result.Relationships, cached.Relationships...)
-				cacheHit = true
+		if d.IsDir() {
+			name := d.Name()
+			if name == ".git" || name == "vendor" || name == "node_modules" || name == "testdata" {
+				return filepath.SkipDir
 			}
+			return nil
 		}
-
-		if !cacheHit {
-			packagesToParse = append(packagesToParse, pkgPath)
-		}
-	}
-
-	result.Fingerprint = fmt.Sprintf("%x", repoHasher.Sum(nil))
-
-	for _, pkgPath := range packagesToParse {
-		dirPath := ws.PackageRoots[pkgPath]
-		entries, err := os.ReadDir(dirPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read package dir %s: %w", dirPath, err)
-		}
-
-		var goFileNames []string
-		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".go") && !strings.HasSuffix(entry.Name(), "_test.go") {
-				goFileNames = append(goFileNames, entry.Name())
-			}
-		}
-		sort.Strings(goFileNames)
-
-		var parsedFiles []*ast.File
-		for _, name := range goFileNames {
-			filePath := filepath.Join(dirPath, name)
-			content, err := os.ReadFile(filePath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read source file %s: %w", filePath, err)
-			}
-
-			fileAst, err := parser.ParseFile(fset, filePath, content, parser.ParseComments)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse file %s: %w", filePath, err)
-			}
-			parsedFiles = append(parsedFiles, fileAst)
-			result.Stats.Files++
-		}
-
-		if len(parsedFiles) > 0 {
-			packageFiles[pkgPath] = parsedFiles
-		}
-	}
-
-	for _, pkgPath := range packagesToParse {
-		files, exists := packageFiles[pkgPath]
-		if !exists || len(files) == 0 {
-			continue
-		}
-
-		pkg := types.NewPackage(pkgPath, files[0].Name.Name)
-		conf := types.Config{
-			Importer: imp,
-			Error:    func(err error) {},
-		}
-
-		info := &types.Info{
-			Types: make(map[ast.Expr]types.TypeAndValue),
-			Defs:  make(map[*ast.Ident]types.Object),
-			Uses:  make(map[*ast.Ident]types.Object),
-		}
-
-		checker := types.NewChecker(&conf, fset, pkg, info)
-		_ = checker.Files(files)
-
-		pkgEntities := extractWorkspaceEntities(fset, pkgPath, files, pkg, info)
-		result.Entities = append(result.Entities, pkgEntities...)
-
-		pkgRels := extractWorkspaceRelationships(fset, pkgPath, files, pkg, info, result.Entities)
-		result.Relationships = append(result.Relationships, pkgRels...)
-
-		if opts.Cache != nil {
-			_ = opts.Cache.PutPackage(ctx, opts.TenantID, pkgPath, packageHashes[pkgPath], CachedPackageData{
-				Entities:      pkgEntities,
-				Relationships: pkgRels,
-			})
-		}
-	}
-
-	result.Relationships = append(result.Relationships, deriveWorkspaceInterfaceImplementations(result.Entities, result.Relationships)...)
-
-	result.Stats.Packages = len(sortedPkgPaths)
-	for _, e := range result.Entities {
-		switch e.Kind {
-		case KindStruct:
-			result.Stats.Structs++
-		case KindInterface:
-			result.Stats.Interfaces++
-		case KindFunction, KindMethod:
-			result.Stats.Functions++
-		}
-	}
-
-	return result, nil
-}
-
-// deriveWorkspaceInterfaceImplementations performs a cross-package structural
-// method-set pass over all extracted workspace entities so structs that satisfy
-// interfaces (even when external stdlib parameter types are unloaded) emit
-// deterministic IMPLEMENTS edges with declaration evidence.
-func deriveWorkspaceInterfaceImplementations(entities []Entity, existing []Relationship) []Relationship {
-	existingSet := make(map[string]bool, len(existing))
-	for _, r := range existing {
-		if r.Type == string(RelImplements) {
-			existingSet[r.From+"->"+r.To] = true
-		}
-	}
-
-	var interfaces []Entity
-	var structs []Entity
-	structMethods := make(map[string]map[string]bool)
-
-	for _, e := range entities {
-		switch e.Kind {
-		case KindInterface:
-			if len(e.Methods) > 0 {
-				interfaces = append(interfaces, e)
-			}
-		case KindStruct:
-			structs = append(structs, e)
-		case KindMethod:
-			recv := strings.TrimSpace(e.ReceiverType)
-			recv = strings.TrimPrefix(recv, "*")
-			if idx := strings.LastIndex(recv, "."); idx >= 0 {
-				recv = recv[idx+1:]
-			}
-			if idx := strings.Index(recv, "["); idx >= 0 {
-				recv = recv[:idx]
-			}
-			if recv != "" && e.Package != "" {
-				key := e.Package + "." + recv
-				if structMethods[key] == nil {
-					structMethods[key] = make(map[string]bool)
-				}
-				structMethods[key][e.Name] = true
-			}
-		}
-	}
-
-	var added []Relationship
-	for _, st := range structs {
-		stKey := st.Package + "." + st.Name
-		mset := structMethods[stKey]
-		if len(mset) == 0 {
-			continue
-		}
-		for _, iface := range interfaces {
-			if st.Package == iface.Package && st.Name == iface.Name {
-				continue
-			}
-			if len(mset) < len(iface.Methods) {
-				continue
-			}
-			allMatch := true
-			for _, im := range iface.Methods {
-				if !mset[im.Name] {
-					allMatch = false
+		if strings.HasSuffix(d.Name(), ".go") && !strings.HasSuffix(d.Name(), "_test.go") {
+			dir := filepath.Dir(path)
+			modPath := "workspace"
+			for _, m := range modules {
+				if strings.HasPrefix(dir, m.RootDir) {
+					modPath = m.ModulePath
 					break
 				}
 			}
-			if !allMatch {
-				continue
-			}
-			toKey := iface.Package + "." + iface.Name
-			edgeKey := stKey + "->" + toKey
-			if existingSet[edgeKey] {
-				continue
-			}
-			existingSet[edgeKey] = true
-			evLine := st.LineStart
-			if evLine == 0 {
-				evLine = st.Line
-			}
-			if evLine == 0 {
-				evLine = 1
-			}
-			evEnd := st.LineEnd
-			if evEnd == 0 {
-				evEnd = evLine
-			}
-			added = append(added, Relationship{
-				From:             stKey,
-				To:               toKey,
-				Type:             string(RelImplements),
-				Confidence:       0.95,
-				ResolutionStatus: "RESOLVED",
-				ResolutionMethod: "AST_STRUCTURAL",
-				EpistemicClass:   "OBSERVATION",
-				Evidence: Evidence{
-					File:      st.File,
-					Line:      evLine,
-					LineStart: evLine,
-					LineEnd:   evEnd,
-					Analyzer:  "workspace_analyzer",
-				},
-			})
+			pkgDirs[dir] = modPath
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return added
-}
 
-// evidenceIndex maps every declared types.Object to the source position
-// where its identifier appears. Built once per package from info.Defs
-// and consulted by every relationship emitter.
-//
-// This is the single source of evidence for the workspace analyzer.
-// Adding an emitter without consulting the index means adding an edge
-// with empty evidence — that is a bug, not a feature. The
-// TestEvidencePopulation_NoEmptyEdges test enforces it.
-type evidenceIndex struct {
-	positions map[types.Object]Evidence
-}
+	var sortedDirs []string
+	for dir := range pkgDirs {
+		sortedDirs = append(sortedDirs, dir)
+	}
+	sort.Strings(sortedDirs)
 
-// buildEvidenceIndex walks info.Defs for a package and records the
-// source position of every declaration identifier.
-func buildEvidenceIndex(fset *token.FileSet, files []*ast.File, info *types.Info) *evidenceIndex {
-	idx := &evidenceIndex{
-		positions: make(map[types.Object]Evidence),
+	result := &Result{
+		AnalyzedAt:    time.Now().UTC(),
+		Source:        absRoot,
+		Entities:      []Entity{},
+		Relationships: []Relationship{},
 	}
-	if info == nil || info.Defs == nil {
-		return idx
+
+	repoName := filepath.Base(absRoot)
+	repoID := fmt.Sprintf("repo:%s", repoName)
+	result.Entities = append(result.Entities, Entity{
+		ID:       repoID,
+		Kind:     KindRepository,
+		Name:     repoName,
+		Package:  repoName,
+		File:     absRoot,
+		Exported: true,
+		Language: "go",
+	})
+
+	entityMap := make(map[string]Entity)
+	entityMap[repoID] = result.Entities[0]
+
+	var allPkgSuites []struct {
+		importPath string
+		files      []*ast.File
+		info       *types.Info
+		typesPkg   *types.Package
 	}
-	for ident, obj := range info.Defs {
-		if obj == nil || ident == nil {
+
+	typeErrors := 0
+	var typeDiagnostics []string
+	const maxRecordedDiagnostics = 25
+
+	for _, dir := range sortedDirs {
+		modPath := pkgDirs[dir]
+		var modRoot string
+		for _, m := range modules {
+			if m.ModulePath == modPath {
+				modRoot = m.RootDir
+				break
+			}
+		}
+
+		relDir, _ := filepath.Rel(modRoot, dir)
+		importPath := modPath
+		if relDir != "." && relDir != "" {
+			importPath = filepath.ToSlash(filepath.Join(modPath, relDir))
+		}
+
+		entries, err := os.ReadDir(dir)
+		if err != nil {
 			continue
 		}
-		pos := fset.Position(ident.Pos())
-		end := fset.Position(ident.End())
-		idx.positions[obj] = Evidence{
-			File:      pos.Filename,
-			Line:      pos.Line,
-			LineStart: pos.Line,
-			LineEnd:   end.Line,
-			Analyzer:  "workspace_analyzer",
-		}
-	}
-	return idx
-}
 
-// lookup returns the position of obj, or a zero-value Evidence when obj
-// is not present in the index.
-func (idx *evidenceIndex) lookup(obj types.Object) Evidence {
-	if idx == nil || obj == nil {
-		return Evidence{}
-	}
-	if ev, ok := idx.positions[obj]; ok {
-		return ev
-	}
-	return Evidence{}
-}
-
-// evidenceAt builds an Evidence value from a token position range.
-// Used by emitters that have the AST node in hand (imports, call
-// expressions, composite literals) and do not need an object lookup.
-func evidenceAt(fset *token.FileSet, pos, end token.Pos) Evidence {
-	start := fset.Position(pos)
-	finish := fset.Position(end)
-	return Evidence{
-		File:      start.Filename,
-		Line:      start.Line,
-		LineStart: start.Line,
-		LineEnd:   finish.Line,
-		Analyzer:  "workspace_analyzer",
-	}
-}
-
-func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.File, pkg *types.Package, info *types.Info) []Entity {
-	var entities []Entity
-
-	for _, file := range files {
-		for _, decl := range file.Decls {
-			switch d := decl.(type) {
-			case *ast.GenDecl:
-				for _, spec := range d.Specs {
-					typeSpec, ok := spec.(*ast.TypeSpec)
-					if !ok {
-						continue
-					}
-
-					name := typeSpec.Name.Name
-					canonicalID := uuid.NewSHA1(uuid.NameSpaceURL, fmt.Appendf(nil, "%s:%s", pkgPath, name))
-					startPos := fset.Position(typeSpec.Pos())
-					endPos := fset.Position(typeSpec.End())
-
-					switch t := typeSpec.Type.(type) {
-					case *ast.StructType:
-						var fields []Field
-						if t.Fields != nil {
-							for _, f := range t.Fields.List {
-								fieldType := types.ExprString(f.Type)
-								if len(f.Names) == 0 {
-									fields = append(fields, Field{
-										Name: fieldType,
-										Type: fieldType,
-									})
-								} else {
-									for _, fieldName := range f.Names {
-										fields = append(fields, Field{
-											Name: fieldName.Name,
-											Type: fieldType,
-										})
-									}
-								}
-							}
-						}
-
-						entities = append(entities, Entity{
-							ID:        canonicalID.String(),
-							Name:      name,
-							Kind:      KindStruct,
-							Package:   pkgPath,
-							File:      startPos.Filename,
-							Line:      startPos.Line,
-							LineStart: startPos.Line,
-							LineEnd:   endPos.Line,
-							Exported:  ast.IsExported(name),
-							Fields:    fields,
-						})
-
-					case *ast.InterfaceType:
-						var methods []Method
-						if t.Methods != nil {
-							for _, m := range t.Methods.List {
-								if len(m.Names) > 0 {
-									methods = append(methods, Method{
-										Name:      m.Names[0].Name,
-										Signature: types.ExprString(m.Type),
-									})
-								}
-							}
-						}
-
-						entities = append(entities, Entity{
-							ID:        canonicalID.String(),
-							Name:      name,
-							Kind:      KindInterface,
-							Package:   pkgPath,
-							File:      startPos.Filename,
-							Line:      startPos.Line,
-							LineStart: startPos.Line,
-							LineEnd:   endPos.Line,
-							Exported:  ast.IsExported(name),
-							Methods:   methods,
-						})
-
-					default:
-						kind := KindType
-						if typeSpec.Assign != 0 {
-							kind = KindAlias
-						}
-						entities = append(entities, Entity{
-							ID:        canonicalID.String(),
-							Name:      name,
-							Kind:      kind,
-							Package:   pkgPath,
-							File:      startPos.Filename,
-							Line:      startPos.Line,
-							LineStart: startPos.Line,
-							LineEnd:   endPos.Line,
-							Exported:  ast.IsExported(name),
-						})
-					}
-				}
-
-			case *ast.FuncDecl:
-				funcName := d.Name.Name
-				var receiver string
-				kind := KindFunction
-
-				if d.Recv != nil && len(d.Recv.List) > 0 {
-					kind = KindMethod
-					receiver = types.ExprString(d.Recv.List[0].Type)
-				}
-
-				canonicalID := uuid.NewSHA1(uuid.NameSpaceURL, fmt.Appendf(nil, "%s:%s:%s", pkgPath, receiver, funcName))
-				sig := types.ExprString(d.Type)
-				startPos := fset.Position(d.Pos())
-				endPos := fset.Position(d.End())
-
-				entities = append(entities, Entity{
-					ID:           canonicalID.String(),
-					Name:         funcName,
-					Kind:         kind,
-					Package:      pkgPath,
-					ReceiverType: receiver,
-					Signature:    sig,
-					File:      startPos.Filename,
-					Line:      startPos.Line,
-					LineStart: startPos.Line,
-					LineEnd:   endPos.Line,
-					Exported:  ast.IsExported(funcName),
-				})
+		var files []*ast.File
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+				continue
 			}
+			fullPath := filepath.Join(dir, entry.Name())
+			f, err := parser.ParseFile(fset, fullPath, nil, parser.ParseComments)
+			if err != nil {
+				typeErrors++
+				if len(typeDiagnostics) < maxRecordedDiagnostics {
+					typeDiagnostics = append(typeDiagnostics, fmt.Sprintf("parse: %s: %v", fullPath, err))
+				}
+				continue
+			}
+			files = append(files, f)
+			result.Stats.Files++
 		}
-	}
 
-	return entities
-}
-
-func extractWorkspaceRelationships(fset *token.FileSet, pkgPath string, files []*ast.File, pkg *types.Package, info *types.Info, allEntities []Entity) []Relationship {
-	var rels []Relationship
-
-	// Build the evidence index once. Every emitter below consults it for
-	// object-keyed positions, or uses evidenceAt(fset, ...) when the AST
-	// node is already in hand.
-	idx := buildEvidenceIndex(fset, files, info)
-
-	// ─── 1. IMPORTS edges ───
-	for _, file := range files {
-		for _, imp := range file.Imports {
-			importPath := strings.Trim(imp.Path.Value, `"`)
-			rels = append(rels, Relationship{
-				From:             pkgPath,
-				To:               importPath,
-				Type:             string(RelImports),
-				Confidence:       0.95,
-				ResolutionStatus: "RESOLVED",
-				ResolutionMethod: "IMPORT_RESOLUTION",
-				EpistemicClass:   "OBSERVATION",
-				Evidence:         evidenceAt(fset, imp.Pos(), imp.End()),
-			})
+		if len(files) == 0 {
+			continue
 		}
-	}
 
-	// ─── 2. CALLS edges ───
-	//
-	// From is the caller's qualified name, in the exact format the
-	// store's entityIDMap contains. For a method the key is
-	// pkgPath + "." + receiverType + "." + methodName, where
-	// receiverType is the string the entity extractor stored (with
-	// the leading * for pointer receivers). For a function it is
-	// pkgPath + "." + funcName.
-	//
-	// The previous block emitted From: pkgPath, which matched none of
-	// the nine lookup permutations the store builds. Every CALLS edge
-	// was classified as external because of that single line.
-	for _, file := range files {
-		var currentCaller string
+		result.Stats.Packages++
+		pkgName := files[0].Name.Name
 
-		ast.Inspect(file, func(n ast.Node) bool {
-			switch node := n.(type) {
-			case *ast.FuncDecl:
-				if node.Recv != nil && len(node.Recv.List) > 0 {
-					recv := types.ExprString(node.Recv.List[0].Type)
-					currentCaller = fmt.Sprintf("%s.%s.%s", pkgPath, recv, node.Name.Name)
-				} else {
-					currentCaller = fmt.Sprintf("%s.%s", pkgPath, node.Name.Name)
-				}
-				return true
+		info := &types.Info{
+			Types:      make(map[ast.Expr]types.TypeAndValue),
+			Defs:       make(map[*ast.Ident]types.Object),
+			Uses:       make(map[*ast.Ident]types.Object),
+			Selections: make(map[*ast.SelectorExpr]*types.Selection),
+		}
 
-			case *ast.CallExpr:
-				if currentCaller == "" {
-					return true
+		conf := types.Config{
+			Importer:                 imp,
+			DisableUnusedImportCheck: true,
+			Error: func(err error) {
+				typeErrors++
+				if len(typeDiagnostics) < maxRecordedDiagnostics {
+					typeDiagnostics = append(typeDiagnostics, err.Error())
 				}
-				var obj types.Object
-				switch fun := node.Fun.(type) {
-				case *ast.SelectorExpr:
-					obj = info.Uses[fun.Sel]
-				case *ast.Ident:
-					obj = info.Uses[fun]
-				default:
-					return true
-				}
-				if obj == nil || obj.Pkg() == nil {
-					return true
-				}
-				if _, isFunc := obj.(*types.Func); !isFunc {
-					return true
-				}
-				rels = append(rels, Relationship{
-					From:             currentCaller,
-					To:               fmt.Sprintf("%s.%s", obj.Pkg().Path(), obj.Name()),
-					Type:             string(RelCalls),
+			},
+		}
+		typesPkg, _ := conf.Check(importPath, fset, files, info)
+
+		allPkgSuites = append(allPkgSuites, struct {
+			importPath string
+			files      []*ast.File
+			info       *types.Info
+			typesPkg   *types.Package
+		}{
+			importPath: importPath,
+			files:      files,
+			info:       info,
+			typesPkg:   typesPkg,
+		})
+
+		pkgID := fmt.Sprintf("pkg:%s", importPath)
+		pkgEntity := Entity{
+			ID:          pkgID,
+			Kind:        KindPackage,
+			Name:        pkgName,
+			Package:     pkgName,
+			PackagePath: importPath,
+			ModulePath:  modPath,
+			File:        dir,
+			Exported:    true,
+			Language:    "go",
+		}
+		result.Entities = append(result.Entities, pkgEntity)
+		entityMap[pkgID] = pkgEntity
+
+		result.Relationships = append(result.Relationships, Relationship{
+			From:             repoID,
+			To:               pkgID,
+			Type:             string(RelContains),
+			Confidence:       1.0,
+			ResolutionStatus: "RESOLVED",
+			ResolutionMethod: "WORKSPACE_WALK",
+			EpistemicClass:   "STATIC_FACT",
+		})
+
+		// Extract package-level entities
+		for _, f := range files {
+			filePos := fset.Position(f.Pos())
+			relFile, _ := filepath.Rel(absRoot, filePos.Filename)
+
+			// Imports
+			for _, impSpec := range f.Imports {
+				result.Stats.Imports++
+				impPath := strings.Trim(impSpec.Path.Value, `"`)
+				targetPkgID := fmt.Sprintf("pkg:%s", impPath)
+				result.Relationships = append(result.Relationships, Relationship{
+					From:             pkgID,
+					To:               targetPkgID,
+					Type:             string(RelImports),
 					Confidence:       1.0,
 					ResolutionStatus: "RESOLVED",
-					ResolutionMethod: "GO_TYPES",
-					EpistemicClass:   "OBSERVATION",
-					Evidence:         evidenceAt(fset, node.Pos(), node.End()),
+					ResolutionMethod: "AST_IMPORT",
+					EpistemicClass:   "STATIC_FACT",
+					Evidence: Evidence{
+						File: relFile,
+						Line: fset.Position(impSpec.Pos()).Line,
+					},
 				})
-				return true
-			}
-			return true
-		})
-	}
-
-	// ─── 3. Type-level edges via go/types ───
-	if pkg != nil && pkg.Scope() != nil {
-		scope := pkg.Scope()
-		for _, name := range scope.Names() {
-			obj := scope.Lookup(name)
-			if obj == nil {
-				continue
-			}
-			namedType, ok := obj.Type().(*types.Named)
-			if !ok {
-				continue
 			}
 
-			srcEvidence := idx.lookup(namedType.Obj())
-			if srcEvidence.File == "" {
-				srcEvidence = Evidence{Analyzer: "workspace_analyzer"}
-			}
+			fileEntities := a.extractFileEntities(fset, f, pkgName, importPath, modPath, relFile)
+			for _, e := range fileEntities {
+				result.Entities = append(result.Entities, e)
+				entityMap[e.ID] = e
 
-			// 3a. DEFINES
-			for i := 0; i < namedType.NumMethods(); i++ {
-				m := namedType.Method(i)
-				methodEv := idx.lookup(m)
-				if methodEv.File == "" {
-					methodEv = srcEvidence
+				switch e.Kind {
+				case KindStruct:
+					result.Stats.Structs++
+					result.Stats.TotalFields += len(e.Fields)
+				case KindInterface:
+					result.Stats.Interfaces++
+				case KindFunction, KindMethod:
+					result.Stats.Functions++
 				}
-				rels = append(rels, Relationship{
-					From:             fmt.Sprintf("%s.%s", pkgPath, name),
-					To:               fmt.Sprintf("%s.%s", pkgPath, m.Name()),
-					Type:             string(RelDefines),
-					Confidence:       0.90,
+
+				result.Relationships = append(result.Relationships, Relationship{
+					From:             pkgID,
+					To:               e.ID,
+					Type:             string(RelContains),
+					Confidence:       1.0,
 					ResolutionStatus: "RESOLVED",
-					ResolutionMethod: "AST_EXACT",
-					EpistemicClass:   "OBSERVATION",
-					Evidence:         methodEv,
+					ResolutionMethod: "AST_DECL",
+					EpistemicClass:   "STATIC_FACT",
+					Evidence: Evidence{
+						File: e.File,
+						Line: e.LineStart,
+					},
 				})
-			}
 
-			// 3b. EMBEDS
-			if st, ok := namedType.Underlying().(*types.Struct); ok {
-				for i := 0; i < st.NumFields(); i++ {
-					f := st.Field(i)
-					if !f.Embedded() {
-						continue
-					}
-					ft := f.Type()
-					if ptr, ok := ft.(*types.Pointer); ok {
-						ft = ptr.Elem()
-					}
-					inner, ok := ft.(*types.Named)
-					if !ok || inner.Obj().Pkg() == nil {
-						continue
-					}
-					fieldEv := idx.lookup(f)
-					if fieldEv.File == "" {
-						fieldEv = srcEvidence
-					}
-					rels = append(rels, Relationship{
-						From:             fmt.Sprintf("%s.%s", pkgPath, name),
-						To:               fmt.Sprintf("%s.%s", inner.Obj().Pkg().Path(), inner.Obj().Name()),
-						Type:             string(RelEmbeds),
-						Confidence:       0.90,
-						ResolutionStatus: "RESOLVED",
-						ResolutionMethod: "AST_EXACT",
-						EpistemicClass:   "OBSERVATION",
-						Evidence:         fieldEv,
-					})
-				}
-			}
-
-			// 3c. IMPLEMENTS
-			for _, target := range allEntities {
-				if target.Kind != KindInterface {
-					continue
-				}
-				if name == target.Name && pkgPath == target.Package {
-					continue
-				}
-				var ifaceNamed *types.Named
-				if target.Package == "" || target.Package == pkgPath {
-					if tn, ok := scope.Lookup(target.Name).(*types.TypeName); ok {
-						ifaceNamed, _ = tn.Type().(*types.Named)
-					}
-				} else {
-					for _, imp := range pkg.Imports() {
-						if imp.Path() == target.Package {
-							if tn, ok := imp.Scope().Lookup(target.Name).(*types.TypeName); ok {
-								ifaceNamed, _ = tn.Type().(*types.Named)
+				// Struct embedding and field reference edges
+				if e.Kind == KindStruct {
+					for _, field := range e.Fields {
+						cleanType := strings.TrimLeft(field.Type, "*[]")
+						if cleanType == "" || isBuiltinGoType(cleanType) {
+							continue
+						}
+						targetID := resolveTypeTargetID(importPath, cleanType, entityMap)
+						if targetID != "" {
+							relType := RelReferences
+							if field.Name == cleanType || strings.HasSuffix(cleanType, "."+field.Name) {
+								relType = RelEmbeds
 							}
-							break
+							result.Relationships = append(result.Relationships, Relationship{
+								From:             e.ID,
+								To:               targetID,
+								Type:             string(relType),
+								Confidence:       0.95,
+								ResolutionStatus: "RESOLVED",
+								ResolutionMethod: "STRUCT_FIELD_TYPE",
+								EpistemicClass:   "STATIC_FACT",
+								Evidence: Evidence{
+									File: e.File,
+									Line: field.LineStart,
+								},
+							})
 						}
 					}
 				}
-				if ifaceNamed == nil {
-					continue
+
+				// Method -> Receiver structDEFINES/CONTAINS link
+				if e.Kind == KindMethod && e.ReceiverType != "" {
+					recvClean := strings.TrimPrefix(e.ReceiverType, "*")
+					recvID := fmt.Sprintf("%s.%s", importPath, recvClean)
+					if _, exists := entityMap[recvID]; exists {
+						result.Relationships = append(result.Relationships, Relationship{
+							From:             recvID,
+							To:               e.ID,
+							Type:             string(RelDefines),
+							Confidence:       1.0,
+							ResolutionStatus: "RESOLVED",
+							ResolutionMethod: "RECEIVER_BINDING",
+							EpistemicClass:   "STATIC_FACT",
+							Evidence: Evidence{
+								File: e.File,
+								Line: e.LineStart,
+							},
+						})
+					}
 				}
-				iface, ok := ifaceNamed.Underlying().(*types.Interface)
-				if !ok {
-					continue
-				}
-				iface.Complete()
-
-				if types.Implements(namedType, iface) || types.Implements(types.NewPointer(namedType), iface) {
-					rels = append(rels, Relationship{
-						From:             fmt.Sprintf("%s.%s", pkgPath, name),
-						To:               fmt.Sprintf("%s.%s", target.Package, target.Name),
-						Type:             string(RelImplements),
-						Confidence:       1.0,
-						ResolutionStatus: "RESOLVED",
-						ResolutionMethod: "GO_TYPES",
-						EpistemicClass:   "OBSERVATION",
-						Evidence:         srcEvidence,
-					})
-				}
 			}
 		}
 	}
 
-	// ─── 4. REFERENCES via function signatures ───
-	if pkg != nil && pkg.Scope() != nil {
-		scope := pkg.Scope()
-		for _, name := range scope.Names() {
-			obj := scope.Lookup(name)
-			if obj == nil {
-				continue
-			}
-			fn, ok := obj.(*types.Func)
-			if !ok {
-				continue
-			}
-			sig, _ := fn.Type().(*types.Signature)
-			if sig == nil {
-				continue
-			}
-			fnEvidence := idx.lookup(fn)
-			if fnEvidence.File == "" {
-				fnEvidence = Evidence{Analyzer: "workspace_analyzer"}
-			}
-			seen := map[string]bool{}
-			for i := 0; i < sig.Params().Len(); i++ {
-				emitReferencesForType(pkgPath, name, sig.Params().At(i).Type(), fnEvidence, seen, &rels)
-			}
-			for i := 0; i < sig.Results().Len(); i++ {
-				emitReferencesForType(pkgPath, name, sig.Results().At(i).Type(), fnEvidence, seen, &rels)
-			}
+	// Second pass: Extract CALLS and IMPLEMENTS across all packages
+	for _, suite := range allPkgSuites {
+		for _, f := range suite.files {
+			filePos := fset.Position(f.Pos())
+			relFile, _ := filepath.Rel(absRoot, filePos.Filename)
+			callRels := a.extractCallsFromFile(fset, f, suite.importPath, relFile, suite.info, entityMap)
+			result.Relationships = append(result.Relationships, callRels...)
 		}
 	}
 
-	// ─── 5. REFERENCES via composite literals ───
-	for _, file := range files {
-		ast.Inspect(file, func(n ast.Node) bool {
-			fd, ok := n.(*ast.FuncDecl)
-			if !ok || fd.Body == nil {
-				return true
-			}
-			funcName := fd.Name.Name
-			ast.Inspect(fd.Body, func(inner ast.Node) bool {
-				cl, ok := inner.(*ast.CompositeLit)
-				if !ok || cl.Type == nil {
-					return true
-				}
-				qname := extractCompositeLitTypeName(cl.Type, info)
-				if qname == "" {
-					return true
-				}
-				rels = append(rels, Relationship{
-					From:             fmt.Sprintf("%s.%s", pkgPath, funcName),
-					To:               qname,
-					Type:             string(RelReferences),
-					Confidence:       0.90,
-					ResolutionStatus: "RESOLVED",
-					ResolutionMethod: "AST_EXACT",
-					EpistemicClass:   "OBSERVATION",
-					Evidence:         evidenceAt(fset, cl.Pos(), cl.End()),
-				})
-				return true
-			})
-			return true
-		})
-	}
+	// Interface satisfaction (IMPLEMENTS) check using go/types
+	implRels := extractImplementsRelationships(allPkgSuites, entityMap)
+	result.Relationships = append(result.Relationships, implRels...)
 
-	// ─── 6. Deduplicate by (From, To, Type) ───
-	seen := map[string]bool{}
-	deduped := rels[:0]
-	for _, r := range rels {
-		key := r.From + "|" + r.To + "|" + r.Type
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		deduped = append(deduped, r)
-	}
-	return deduped
-}
-
-func emitReferencesForType(pkgPath, funcName string, t types.Type, evidence Evidence, seen map[string]bool, rels *[]Relationship) {
-	switch tt := t.(type) {
-	case *types.Pointer:
-		emitReferencesForType(pkgPath, funcName, tt.Elem(), evidence, seen, rels)
-		return
-	case *types.Slice:
-		emitReferencesForType(pkgPath, funcName, tt.Elem(), evidence, seen, rels)
-		return
-	case *types.Chan:
-		emitReferencesForType(pkgPath, funcName, tt.Elem(), evidence, seen, rels)
-		return
-	case *types.Map:
-		emitReferencesForType(pkgPath, funcName, tt.Key(), evidence, seen, rels)
-		emitReferencesForType(pkgPath, funcName, tt.Elem(), evidence, seen, rels)
-		return
-	case *types.Named:
-		if tt.Obj().Pkg() == nil {
-			return
-		}
-		qname := tt.Obj().Pkg().Path() + "." + tt.Obj().Name()
-		if seen[qname] {
-			return
-		}
-		seen[qname] = true
-		*rels = append(*rels, Relationship{
-			From:             fmt.Sprintf("%s.%s", pkgPath, funcName),
-			To:               qname,
-			Type:             string(RelReferences),
-			Confidence:       1.0,
-			ResolutionStatus: "RESOLVED",
-			ResolutionMethod: "GO_TYPES",
-			EpistemicClass:   "OBSERVATION",
-			Evidence:         evidence,
-		})
-
-	case *types.Alias:
-		if tt.Obj().Pkg() == nil {
-			return
-		}
-		qname := tt.Obj().Pkg().Path() + "." + tt.Obj().Name()
-		if seen[qname] {
-			return
-		}
-		seen[qname] = true
-		*rels = append(*rels, Relationship{
-			From:             fmt.Sprintf("%s.%s", pkgPath, funcName),
-			To:               qname,
-			Type:             string(RelReferences),
-			Confidence:       1.0,
-			ResolutionStatus: "RESOLVED",
-			ResolutionMethod: "GO_TYPES",
-			EpistemicClass:   "OBSERVATION",
-			Evidence:         evidence,
-		})
-	}
-}
-
-func extractCompositeLitTypeName(expr ast.Expr, info *types.Info) string {
-	tv, ok := info.Types[expr]
-	if !ok || tv.Type == nil {
-		return ""
-	}
-	t := tv.Type
-	if ptr, ok := t.(*types.Pointer); ok {
-		t = ptr.Elem()
-	}
-	named, ok := t.(*types.Named)
-	if !ok || named.Obj().Pkg() == nil {
-		return ""
-	}
-	return named.Obj().Pkg().Path() + "." + named.Obj().Name()
+	result.Stats.TypeErrors = typeErrors
+	result.Stats.AnalysisComplete = (typeErrors == 0)
+	result.TypeDiagnostics = typeDiagnostics
+	result.Fingerprint = computeFingerprint(result)
+	return result, nil
 }

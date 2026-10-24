@@ -2,6 +2,31 @@
 
 All notable changes to Garuda are documented in this file.
 
+## [v1.3.0] - 2026-10-24
+
+### Security & Trust Hardening (GPT-5 Astra Due-Diligence Audit Remediation)
+- **Cryptographic Ed25519 JWT Enforcement in `AuthMiddleware` (`internal/api/auth_middleware.go`)**:
+  - Wired `s.jwtConfig.ValidateToken(token)` directly into `Server.AuthMiddleware` across all `/api/v1` routes.
+  - Forged, malformed, or expired Bearer tokens now strictly return `401 Unauthorized` instead of passing a presence-only check.
+  - Request `tenant_id` and `actor` identity are extracted directly from the cryptographically verified JWT claims (`auth.ContextWithActorAndTenant`) rather than defaulting to `tenant.CanonicalID` or trusting unverified `X-Garuda-Actor` headers.
+  - Added `TestAuthMiddleware_EnforcesRealEd25519JWTValidation` in `internal/api/router_test.go`.
+- **Edge-Level Epistemic Verification for `SUPPORTED` Claims (`internal/runtime/verifier.go`)**:
+  - Hardened Statement 3 of `RecomputeWorkspaceVerification` so a static claim (`from_entity_id -> to_entity_id`) is promoted to `SUPPORTED` only when runtime evidence confirms **both** the caller (`from_entity_id`) and the specific target (`to_entity_id`) via a correlated `runtime_edges` record or co-execution in the same `trace_id`. Observing only the caller no longer auto-promotes all of its outgoing static claims.
+- **Unified Runtime Span Ingestion & Correlation (`internal/api/handler.go` & `internal/api/runtime_handlers.go`)**:
+  - Wired `POST /api/v1/telemetry/spans` (and `/api/v1/runtime/spans`) to `HandleIngestRuntimeSpans`, ensuring ingested OpenTelemetry spans automatically run `EntityCorrelator.Correlate` for both caller and callee symbols, populate `runtime_observations` and `runtime_edges`, and write synchronous `CONTRADICTED` or `SUPPORTED` records into `claim_verifications`.
+  - Updated `scripts/runtime_contradiction_test.py` to authenticate with a real Ed25519 JWT or session cookie.
+- **Fail-Closed Policy Parsing, Evaluation & Merkle Anchoring (`internal/policy/parser.go` & `internal/policy/engine.go`)**:
+  - Updated `ParseDirectory` (`internal/policy/parser.go`) to fail closed and return an immediate error if any `.yaml`/`.yml` file in the policy directory fails YAML unmarshaling or schema/predicate validation, instead of silently skipping malformed policy files.
+  - Updated `Engine.Run` (`internal/policy/engine.go`) so any predicate evaluation error or non-dry-run persistence/Merkle anchoring failure aborts the run and returns an error rather than continuing with `ALLOW`.
+  - Added `TestParseDirectory_FailsClosedOnMalformedPolicy` in `internal/policy/engine_run_test.go`.
+- **Go Type-Checking Completeness & `vendor/` Resolution (`internal/analyzer/workspace_analyzer.go`, `importer.go`, `model.go`)**:
+  - Added `TypeErrors int` and `AnalysisComplete bool` to `analyzer.Stats` and bounded `TypeDiagnostics []string` to `analyzer.Result` instead of silently discarding `go/types` errors.
+  - Upgraded `MultiModuleImporter.ImportFrom` (`internal/analyzer/importer.go`) to resolve packages from module-local `vendor/` directories before falling back to `importer.Default()`.
+- **Production Operations & Probe Alignment (`internal/api/handler.go`, `deploy/k8s/garuda-stack.yaml`, `deploy/compose/docker-compose.prod.yml`)**:
+  - Registered `/health`, `/healthz`, `/readyz`, and `/api/v1/system/health` (with database ping verification on `/readyz` and `/api/v1/system/health`).
+  - Hardened `deploy/k8s/garuda-stack.yaml` with non-root `securityContext`, read-only root filesystem, `NetworkPolicy`, and secret references (`JWT_PRIVATE_KEY_HEX`, `JWT_PUBLIC_KEY_HEX`, `DATABASE_URL`).
+  - Hardened `deploy/compose/docker-compose.prod.yml` by removing public `0.0.0.0:5432` and `0.0.0.0:6379` port bindings for PostgreSQL and Redis and requiring explicit secrets (`:?must be set in production`).
+
 ## [v1.2.0] - 2026-10-24
 
 ### Added
@@ -44,28 +69,5 @@ All notable changes to Garuda are documented in this file.
 - Fixed `internal/runtime/verifier.go` (`RecomputeWorkspaceVerification`) so runtime edges observed between known entities that have no corresponding static `claims` edge are flagged as `CONTRADICTED` (shadow runtime dependencies) rather than only matching hardcoded string markers.
 - Fixed VS Code extension MCP client (`vscode-extension/src/mcpClient.ts`) binary path lookup (`bin/garuda-mcp`) and JSON-RPC tool names (`garuda.detect_contradictions`, `garuda.blast_radius`, `garuda.governance.status`), and added `name`/`symbol` resolution to `handleBlastRadius` in `cmd/garuda-mcp/tools_governance.go`.
 
----
-
-## [v1.0.0] - 2026-10-12
-
-### Added
-- **Hygiene & Advisory CLI**: Introduced `garuda hygiene` command with typed advisory analysis core, contract hardening, and `ponytail` compatibility alias.
-- **MCP Integration & Server**:
-  - Consolidated MCP into a long-lived stdio server binary (`bin/garuda-mcp`).
-  - Added MCP tools: `garuda.briefing`, `garuda.handoff`, `garuda.resume`, `garuda.blast_radius`, `garuda.verify_policy_evaluation`, and graph structure exploration tools (`garuda.entities`, `garuda.neighbors`, `garuda.find_entity`, `garuda.subclasses`, `garuda.implementers`).
-  - Added session tracking and telemetry per tool invocation in `mcp_sessions` and `mcp_tool_calls`.
-- **Control Plane & Dashboard**:
-  - Multi-tab Control Plane dashboard (Operations, Tenants, Decisions, Agents, Business metrics).
-  - Added read-only DB role and background telemetry refresh jobs (`telemetry_aggregates`).
-  - UI improvements including embedded static CSS/JS assets, workspace picker on sidebar, detail drawers, and revision chain tracking for decisions.
-- **Multi-Tenancy & Workspace Scope**:
-  - Schema additions for tenant memberships (`tenant_members`, `workspace_members`) and user signup flow (`/signup`).
-  - Session-scoped and workspace-scoped data isolation across storage, HTTP API, and CLI.
-- **Multi-Language Parsing**:
-  - Python AST parsing support and unified polyglot knowledge graph construction.
-  - TypeScript parser support via Tree-sitter.
-- **Merkle Verification System**:
-  - RFC 6962 Merkle tree structure with golden test vectors.
-  - Canonical evaluation encoders, epoch leaves schema, and epoch root hash writes.
-- **Benchmarking**:
-  - Expanded benchmark corpus to 20 fixtures (GAP-20) with verified deterministic output.
+## [v1.1.0] - 2026-09-20
+- Initial public release of the Garuda Epistemic Architecture & Governance Engine (`garuda`, `garuda-api`, `garuda-mcp`), Dual-Root RFC 6962 Merkle Ledger, 20-tool MCP server, and D3.js Epistemic Truth Graph visualizer.

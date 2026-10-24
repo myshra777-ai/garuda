@@ -8,8 +8,10 @@ kind: Deployment
 metadata:
   name: garuda-api
   namespace: garuda-system
+  labels:
+    app: garuda-api
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: garuda-api
@@ -18,78 +20,125 @@ spec:
       labels:
         app: garuda-api
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-        - name: garuda-api
-          image: garuda/garuda-api:v1.0.0
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8080
-          env:
-            - name: PORT
-              value: "8080"
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: garuda-secrets
-                  key: DATABASE_URL
-          readinessProbe:
-            httpGet:
-              path: /api/v1/system/health
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /api/v1/system/health
-              port: 8080
-            initialDelaySeconds: 15
-            periodSeconds: 20
+      - name: garuda-api
+        image: ghcr.io/myshra777-ai/garuda-api:v1.3.0
+        ports:
+        - containerPort: 8080
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: GARUDA_ENV
+          value: "production"
+        - name: PORT
+          value: "8080"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: garuda-secrets
+              key: database-url
+        - name: JWT_PRIVATE_KEY_HEX
+          valueFrom:
+            secretKeyRef:
+              name: garuda-secrets
+              key: jwt-private-key-hex
+        - name: JWT_PUBLIC_KEY_HEX
+          valueFrom:
+            secretKeyRef:
+              name: garuda-secrets
+              key: jwt-public-key-hex
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: garuda-secrets
+              key: redis-url
+              optional: true
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: garuda-api-service
+  name: garuda-api-svc
   namespace: garuda-system
 spec:
-  type: ClusterIP
-  ports:
-    - port: 8080
-      targetPort: 8080
-      protocol: TCP
   selector:
     app: garuda-api
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: ClusterIP
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
 metadata:
-  name: garuda-worker
+  name: garuda-api-hpa
   namespace: garuda-system
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: garuda-worker
-  template:
-    metadata:
-      labels:
-        app: garuda-worker
-    spec:
-      containers:
-        - name: garuda-worker
-          image: garuda/garuda-worker:v1.0.0
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: garuda-secrets
-                  key: DATABASE_URL
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: garuda-api
+  minReplicas: 3
+  maxReplicas: 15
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
 ---
-apiVersion: v1
-kind: Secret
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
-  name: garuda-secrets
+  name: garuda-api-netpol
   namespace: garuda-system
-type: Opaque
-data:
-  DATABASE_URL: <base64-encoded-db-url>
+spec:
+  podSelector:
+    matchLabels:
+      app: garuda-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  - ports:
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+    - protocol: TCP
+      port: 4317
+    - protocol: UDP
+      port: 53
