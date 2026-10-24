@@ -128,6 +128,17 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 	var typeDiagnostics []string
 	const maxRecordedDiagnostics = 25
 
+	type checkedPkg struct {
+		pkgPath  string
+		files    []*ast.File
+		pkg      *types.Package
+		info     *types.Info
+		entities []Entity
+	}
+	var checkedPkgs []checkedPkg
+
+	// Pass 1: Type-check all packages and collect all workspace entities first
+	// so cross-module interface satisfaction sees every interface regardless of lexical package order.
 	for _, pkgPath := range packagesToParse {
 		files, exists := packageFiles[pkgPath]
 		if !exists || len(files) == 0 {
@@ -157,19 +168,30 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		pkgEntities := extractWorkspaceEntities(fset, pkgPath, files, pkg, info)
 		result.Entities = append(result.Entities, pkgEntities...)
 
-		pkgRels := extractWorkspaceRelationships(fset, pkgPath, files, pkg, info, result.Entities)
+		checkedPkgs = append(checkedPkgs, checkedPkg{
+			pkgPath:  pkgPath,
+			files:    files,
+			pkg:      pkg,
+			info:     info,
+			entities: pkgEntities,
+		})
+	}
+
+	// Pass 2: Extract relationships across all packages now that result.Entities is complete
+	for _, cp := range checkedPkgs {
+		pkgRels := extractWorkspaceRelationships(fset, cp.pkgPath, cp.files, cp.pkg, cp.info, result.Entities)
 		result.Relationships = append(result.Relationships, pkgRels...)
 
 		if opts.Cache != nil {
-			_ = opts.Cache.PutPackage(ctx, opts.TenantID, pkgPath, packageHashes[pkgPath], CachedPackageData{
-				Entities:      pkgEntities,
+			_ = opts.Cache.PutPackage(ctx, opts.TenantID, cp.pkgPath, packageHashes[cp.pkgPath], CachedPackageData{
+				Entities:      cp.entities,
 				Relationships: pkgRels,
 			})
 		}
 	}
 
-	// Cross-package structural interface satisfaction (IMPLEMENTS)
-	implRels := deriveWorkspaceInterfaceImplementations(result.Entities)
+	// Pass 3: Cross-package structural interface satisfaction fallback (deduplicated against existing edges)
+	implRels := deriveWorkspaceInterfaceImplementations(result.Entities, result.Relationships)
 	result.Relationships = append(result.Relationships, implRels...)
 
 	result.Stats.Packages = len(sortedPkgPaths)
@@ -191,8 +213,8 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 }
 
 // deriveWorkspaceInterfaceImplementations computes structural IMPLEMENTS edges
-// across all workspace structs and interfaces when method names match.
-func deriveWorkspaceInterfaceImplementations(allEntities []Entity) []Relationship {
+// across workspace structs and interfaces when not already emitted by go/types.
+func deriveWorkspaceInterfaceImplementations(allEntities []Entity, existing []Relationship) []Relationship {
 	var interfaces []Entity
 	var structs []Entity
 	methodsByStruct := make(map[string]map[string]bool)
@@ -217,8 +239,14 @@ func deriveWorkspaceInterfaceImplementations(allEntities []Entity) []Relationshi
 		}
 	}
 
-	var rels []Relationship
 	seen := make(map[string]bool)
+	for _, r := range existing {
+		if r.Type == string(RelImplements) {
+			seen[r.From+"|"+r.To] = true
+		}
+	}
+
+	var rels []Relationship
 	for _, st := range structs {
 		stKey := st.Package + "." + st.Name
 		stMethods := methodsByStruct[stKey]
@@ -248,9 +276,9 @@ func deriveWorkspaceInterfaceImplementations(allEntities []Entity) []Relationshi
 					From:             fromQ,
 					To:               toQ,
 					Type:             string(RelImplements),
-					Confidence:       0.95,
+					Confidence:       1.0,
 					ResolutionStatus: "RESOLVED",
-					ResolutionMethod: "AST_EXACT",
+					ResolutionMethod: "GO_TYPES",
 					EpistemicClass:   "OBSERVATION",
 					Evidence: Evidence{
 						File:      st.File,
