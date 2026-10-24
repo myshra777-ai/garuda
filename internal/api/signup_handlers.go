@@ -251,15 +251,15 @@ const signupHTML = `<!DOCTYPE html>
 <title>Create account — Garuda</title>
 <style>
 :root {
-    --bg: #060810;
-    --surface: #0e1424;
-    --border: #1f2b45;
-    --text: #f8fafc;
-    --text-2: #94a3b8;
-    --muted: #64748b;
-    --brand: #38bdf8;
-    --brand-dark: #0284c7;
-    --red: #f43f5e;
+    --bg: #F7F7F3;
+    --surface: #FFFFFF;
+    --border: #E7E7E1;
+    --ink: #191B19;
+    --text: #191B19;
+    --text-2: #4A4D48;
+    --muted: #767A72;
+    --accent: #D5E66A;
+    --red: #991B1B;
 }
 * { box-sizing: border-box; }
 body {
@@ -267,97 +267,99 @@ body {
     min-height: 100vh;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
-    font-size: 14px;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13.5px;
     display: grid;
     place-items: center;
 }
 .card {
-    width: min(440px, 92vw);
+    width: min(430px, 92vw);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 36px 32px;
-    box-shadow: 0 20px 60px -10px rgba(0,0,0,0.8);
+    border-radius: 12px;
+    padding: 34px 32px;
+    box-shadow: 0 12px 32px -4px rgba(25, 27, 25, 0.08);
 }
 .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 28px;
+    gap: 10px;
+    margin-bottom: 24px;
 }
 .brand-mark {
-    width: 40px; height: 40px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #0284c7, #38bdf8);
+    width: 32px; height: 32px;
+    border-radius: 7px;
+    background: var(--ink);
+    color: var(--accent);
     display: grid; place-items: center;
-    font-size: 20px;
-    box-shadow: 0 0 22px rgba(56,189,248,0.5);
+    font-weight: 800;
+    font-size: 14px;
 }
-.brand-name { font-weight: 800; font-size: 18px; letter-spacing: 0.5px; }
-.brand-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
-h1 { font-size: 20px; font-weight: 700; margin: 0 0 6px; }
-.subtitle { color: var(--text-2); font-size: 13px; margin-bottom: 24px; }
-label { display: block; font-size: 12px; font-weight: 650; color: var(--text-2); margin-bottom: 6px; }
+.brand-name { font-weight: 750; font-size: 15px; letter-spacing: -0.01em; color: var(--text); }
+.brand-sub { color: var(--muted); font-size: 11px; margin-top: 1px; }
+h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; margin: 0 0 6px; }
+.subtitle { color: var(--text-2); font-size: 13px; margin-bottom: 22px; line-height: 1.45; }
+label { display: block; font-size: 11.5px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
 input[type=email], input[type=password], input[type=text] {
     width: 100%;
-    height: 42px;
+    height: 38px;
     border: 1px solid var(--border);
-    background: #050811;
-    border-radius: 9px;
-    padding: 0 14px;
-    color: white;
+    background: var(--bg);
+    border-radius: 7px;
+    padding: 0 12px;
+    color: var(--text);
     outline: none;
-    margin-bottom: 16px;
-    transition: 0.15s;
+    font: inherit;
+    margin-bottom: 14px;
+    transition: border-color 0.15s, background 0.15s;
 }
 input:focus {
-    border-color: var(--brand);
-    box-shadow: 0 0 0 3px rgba(56,189,248,0.25);
+    border-color: var(--ink);
+    background: var(--surface);
 }
 button {
     width: 100%;
-    height: 44px;
-    border: 0;
-    background: var(--brand);
-    color: #04060c;
-    border-radius: 9px;
-    font-weight: 750;
-    font-size: 14px;
+    height: 40px;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: #FFFFFF;
+    border-radius: 7px;
+    font-weight: 600;
+    font-size: 13px;
     cursor: pointer;
-    transition: 0.15s;
+    transition: opacity 0.15s;
 }
-button:hover { background: var(--brand-dark); color: white; }
+button:hover { opacity: 0.9; }
 .error {
-    background: rgba(244,63,94,0.12);
-    border: 1px solid rgba(244,63,94,0.4);
+    background: #FDECEC;
+    border: 1px solid #F3B8B8;
     color: var(--red);
-    padding: 10px 14px;
-    border-radius: 8px;
+    padding: 10px 12px;
+    border-radius: 7px;
     font-size: 12px;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
 }
 .footer {
-    margin-top: 22px;
+    margin-top: 20px;
     font-size: 12px;
     color: var(--muted);
     text-align: center;
 }
-.footer a { color: var(--brand); text-decoration: none; font-weight: 600; }
+.footer a { color: var(--text); text-decoration: none; font-weight: 600; }
 .footer a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
 <form class="card" method="POST" action="/signup" autocomplete="off">
     <div class="brand">
-        <div class="brand-mark">🦅</div>
+        <div class="brand-mark">G</div>
         <div>
             <div class="brand-name">GARUDA</div>
-            <div class="brand-sub">Epistemic Software Intelligence</div>
+            <div class="brand-sub">Software Intelligence Instrument</div>
         </div>
     </div>
     <h1>Create your workspace</h1>
-    <div class="subtitle">You will be the owner of a private tenant and one default workspace. Invite your team later.</div>
+    <div class="subtitle">Provision an isolated workspace with deterministic AST analysis, policy gates, and RFC 6962 Merkle anchoring.</div>
     {{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
     <label for="full_name">Full name</label>
     <input type="text" id="full_name" name="full_name" value="{{ .FullName }}" autocomplete="name">
@@ -367,7 +369,7 @@ button:hover { background: var(--brand-dark); color: white; }
     <input type="password" id="password" name="password" autocomplete="new-password" required>
     <label for="confirm">Confirm password</label>
     <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
-    <button type="submit">Create account</button>
+    <button type="submit">Create workspace →</button>
     <div class="footer">
         Already have an account? <a href="/login">Sign in</a>
     </div>

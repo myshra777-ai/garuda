@@ -1,310 +1,364 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Garuda — Epistemic Software Intelligence</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
-
 <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 
 <body>
 <div class="app">
+    <!-- ====================================================================
+         LEFT SIDEBAR: Linear-style restrained hierarchy & workspace context
+         ==================================================================== -->
     <aside class="sidebar">
         <div class="brand">
-            <div class="brand-mark">🦅</div>
-            <div>
-                <div class="brand-name">GARUDA</div>
-                <div class="brand-subtitle">Epistemic Software Intelligence</div>
+            <div class="brand-left">
+                <div class="brand-mark">G</div>
+                <div>
+                    <div class="brand-name">GARUDA</div>
+                    <div class="brand-subtitle">Software Intelligence</div>
+                </div>
+            </div>
+            <button class="footer-link-btn" onclick="toggleTheme()" id="theme-toggle-btn" title="Switch Light / Graphite Dark Mode">☀</button>
+        </div>
+
+        <div class="workspace-switcher-box">
+            <div class="workspace-mini">
+                <div class="workspace-mini-header">
+                    <div class="workspace-mini-name" id="sidebar-workspace">{{ .WorkspaceName }}</div>
+                    <span class="badge-pill success" style="font-size:9px; padding:1px 6px;">synced</span>
+                </div>
+                <div class="workspace-mini-meta" id="sidebar-meta">Loading workspace index...</div>
+                <select id="workspace-picker" class="workspace-picker" onchange="switchWorkspace(this.value)" aria-label="Switch workspace"></select>
             </div>
         </div>
 
+        <button class="cmd-trigger-btn" onclick="openCommandPalette()">
+            <span>⌕ Jump or run command…</span>
+            <span class="kbd-chip">⌘K</span>
+        </button>
+
+        <nav class="sidebar-nav" aria-label="Primary Working Surfaces">
+            <div class="nav-group-label">Working Surfaces</div>
+            <button class="nav-btn active" data-surface="workspace" onclick="showView('workspace')">
+                <span class="nav-btn-left"><span class="nav-num">01</span><span>Overview</span></span>
+                <span class="nav-badge" id="nav-badge-overview">Live</span>
+            </button>
+            <button class="nav-btn" data-surface="search" onclick="showView('search')">
+                <span class="nav-btn-left"><span class="nav-num">02</span><span>Explore Index</span></span>
+                <span class="kbd-chip">/</span>
+            </button>
+            <button class="nav-btn" data-surface="graph" onclick="showView('graph')">
+                <span class="nav-btn-left"><span class="nav-num">03</span><span>Architecture Map</span></span>
+                <span class="nav-badge" id="nav-badge-packages">—</span>
+            </button>
+            <button class="nav-btn" data-surface="review" onclick="showView('review')">
+                <span class="nav-btn-left"><span class="nav-num">04</span><span>Change Review</span></span>
+                <span class="nav-badge" id="nav-badge-review">Gate</span>
+            </button>
+            <button class="nav-btn" data-surface="governance" onclick="showView('governance')">
+                <span class="nav-btn-left"><span class="nav-num">05</span><span>Evidence &amp; Ledger</span></span>
+                <span class="nav-badge" id="nav-badge-ledger">#1</span>
+            </button>
+            <button class="nav-btn" data-surface="agents" onclick="showView('agents')">
+                <span class="nav-btn-left"><span class="nav-num">06</span><span>Agents &amp; Policies</span></span>
+                <span class="nav-badge" id="nav-badge-agents">MCP</span>
+            </button>
+
+            <div class="nav-group-label" style="margin-top:12px;">Governance Records</div>
+            <button class="nav-btn" data-surface="decisions" onclick="showView('decisions')">
+                <span class="nav-btn-left"><span class="nav-num">ADR</span><span>Decision Lineage</span></span>
+                <span class="nav-badge" id="nav-badge-decisions">0</span>
+            </button>
+        </nav>
+
         <div class="sidebar-footer">
-            <div class="workspace-mini">
-                <div class="workspace-mini-name" id="sidebar-workspace">{{ .WorkspaceName }}</div>
-                <div class="workspace-mini-meta" id="sidebar-meta">Loading workspace...</div>
-                <select id="workspace-picker" class="workspace-picker" onchange="switchWorkspace(this.value)" aria-label="Switch workspace"></select>
-                <div class="trust-mini">✓ Transactionally verified</div>
+            <div class="trust-mini">
+                <span class="trust-dot"></span>
+                <span id="sidebar-trust-label">RFC 6962 Ledger Verified</span>
+            </div>
+            <div class="sidebar-footer-actions">
+                <a href="/docs" class="footer-link-btn" target="_blank" rel="noopener">API Spec</a>
+                <form method="POST" action="/logout" style="margin:0;">
+                    <button type="submit" class="footer-link-btn">Sign out</button>
+                </form>
             </div>
         </div>
     </aside>
 
+    <!-- ====================================================================
+         MAIN WORKSPACE AREA
+         ==================================================================== -->
     <section class="main">
         <header class="topbar">
+            <div class="topbar-breadcrumbs">
+                <span class="crumb-root">Workspace</span>
+                <span class="crumb-sep">/</span>
+                <span class="crumb-ws" id="workspace-breadcrumb">{{ .WorkspaceName }}</span>
+                <span class="crumb-sep">/</span>
+                <span class="crumb-surface" id="topbar-surface-name">01 — Overview</span>
+            </div>
+
             <div class="global-search">
                 <span class="search-icon">⌕</span>
-                <input id="global-search" class="search-input" placeholder="Search repositories, packages, files, functions, methods..." autocomplete="off">
-                <span class="search-shortcut">/</span>
+                <input id="global-search" class="search-input" placeholder="Search symbols, packages, policies, or press ⌘K..." autocomplete="off">
+                <span class="search-shortcut">⌘K</span>
             </div>
+
             <div class="topbar-right">
-                <div class="live-pill">
-                    <span class="live-dot"></span>
-                    <span>Live workspace</span>
+                <div class="live-pill" id="honest-system-pill" title="Separates static AST completeness, runtime trace verification, and cryptographic ledger integrity">
+                    <span class="live-dot" id="honest-system-dot"></span>
+                    <span id="honest-system-text">Static AST synced</span>
                 </div>
                 <button class="refresh-button" onclick="loadAll()">Refresh</button>
             </div>
         </header>
 
+        <!-- Programmatic compatibility tab strip -->
         <nav class="tab-strip" role="tablist">
             <button class="tab active" data-tab="workspace" role="tab" aria-selected="true" onclick="showView('workspace')">Workspace</button>
-            <button class="tab" data-tab="agents" role="tab" aria-selected="false" onclick="showView('agents')">Agents</button>
-            <button class="tab" data-tab="governance" role="tab" aria-selected="false" onclick="showView('governance')">Governance</button>
-            <button class="tab" data-tab="decisions" role="tab" aria-selected="false" onclick="showView('decisions')">Decisions</button>
+            <button class="tab" data-tab="search" role="tab" aria-selected="false" onclick="showView('search')">Explore</button>
             <button class="tab" data-tab="graph" role="tab" aria-selected="false" onclick="showView('graph')">Graph</button>
+            <button class="tab" data-tab="review" role="tab" aria-selected="false" onclick="showView('review')">Change Review</button>
+            <button class="tab" data-tab="governance" role="tab" aria-selected="false" onclick="showView('governance')">Evidence</button>
+            <button class="tab" data-tab="agents" role="tab" aria-selected="false" onclick="showView('agents')">Agents</button>
+            <button class="tab" data-tab="decisions" role="tab" aria-selected="false" onclick="showView('decisions')">Decisions</button>
         </nav>
 
         <main class="content">
+            <!-- ============================================================
+                 01 — OVERVIEW: THE SYSTEM COMMAND CENTER
+                 ============================================================ -->
             <section id="view-overview">
-                <div class="breadcrumbs">
-                    <span>Workspace</span>
-                    <span>/</span>
-                    <span class="breadcrumb-current" id="workspace-breadcrumb">{{ .WorkspaceName }}</span>
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>SYSTEM COMMAND CENTER · WORKSPACE {{ .WorkspaceName }}</span>
+                    <span>·</span>
+                    <span id="overview-updated-at">Syncing state…</span>
                 </div>
 
                 <div class="hero">
                     <div>
-                        <h1 class="hero-title">Workspace intelligence</h1>
-                        <div class="hero-subtitle">
-                            Continuous system verification. Garuda triangulates compiler ASTs, runtime traces, and architectural intent.
+                        <h1 class="hero-title">What needs attention in your software system.</h1>
+                        <div class="hero-subtitle" id="overview-narrative">
+                            Garuda triangulates compiler ASTs, runtime OpenTelemetry traces, and declarative architecture policies. Semantic evidence status is reported separately from cryptographic ledger integrity.
                         </div>
                     </div>
-                    <div class="trust-badge">
-                        <span>✓</span>
-                        <span>Cryptographic state verified</span>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="btn-secondary" onclick="showView('graph')">Open Architecture Map</button>
+                        <button class="btn-primary" onclick="showView('review')">Change Review Workbench →</button>
                     </div>
                 </div>
 
-                <div class="kpi-grid">
-                    <div class="kpi-card">
-                        <div class="kpi-label">Repositories</div>
-                        <div class="kpi-value" id="stat-repositories">—</div>
-                        <div class="kpi-foot">Scanned source codebases</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Packages</div>
-                        <div class="kpi-value" id="stat-packages">—</div>
-                        <div class="kpi-foot">Architectural modules</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Entities</div>
-                        <div class="kpi-value" id="stat-entities">—</div>
-                        <div class="kpi-foot">Functions, structs & symbols</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Relationships</div>
-                        <div class="kpi-value" id="stat-relationships">—</div>
-                        <div class="kpi-foot"><span id="stat-cross-links">—</span> cross-repo bridges</div>
-                    </div>
-                    <div class="kpi-card" style="border-left: 4px solid var(--brand);">
-                        <div class="kpi-label" style="color:var(--brand);">Idempotency</div>
-                        <div class="kpi-value" id="stat-idempotency">—</div>
-                        <div class="kpi-foot">Safeguarded transactions</div>
-                    </div>
-                </div>
-
-                <div class="kpi-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 20px;">
-                    <div class="kpi-card" style="border-left: 4px solid var(--brand);">
-                        <div class="kpi-label" style="color:var(--brand);">Active Policies</div>
-                        <div class="kpi-value" id="stat-active-policies">—</div>
-                        <div class="kpi-foot">Enforcement rules loaded</div>
-                    </div>
-                    <div class="kpi-card" style="border-left: 4px solid var(--red);">
-                        <div class="kpi-label" style="color:var(--red);">Drift Prevented</div>
-                        <div class="kpi-value" id="stat-drift-count">0</div>
-                        <div class="kpi-foot">Quarantined contract violations</div>
-                    </div>
-                </div>
-
-                <div class="panel" style="margin-bottom: 20px;">
-                    <div class="panel-header">
-                        <div>
-                            <div class="panel-title">Languages</div>
-                            <div class="panel-subtitle">Codebase composition across all scanned repositories</div>
+                <!-- Unified 4-Column Architectural Pulse Strip (LeonAnd / Linear style) -->
+                <div class="pulse-strip">
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>01 · Indexed Topology</span>
+                            <span class="mono" id="stat-repositories">—</span>
                         </div>
-                    </div>
-                    <div class="panel-body">
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="stat-entities">—</span>
+                            <span class="pulse-delta"><span id="stat-packages">—</span> pkgs · <span id="stat-relationships">—</span> edges</span>
+                        </div>
                         <div class="lang-bar-container" id="lang-bar"></div>
-                        <div class="lang-legend" id="lang-legend">
-                            <span style="color:var(--muted); font-size:11px;">Loading languages...</span>
+                        <div class="pulse-foot">
+                            <span id="lang-legend" style="margin:0; gap:10px; font-size:11px;">Loading languages…</span>
+                            <span class="mono"><span id="stat-cross-links">0</span> cross-repo</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>02 · Epistemic Evidence</span>
+                            <span class="badge-pill info" id="epistemic-mode-badge">3-State</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="stat-supported">—</span>
+                            <span class="pulse-delta">supported of <span id="pulse-total-claims">—</span> claims</span>
+                        </div>
+                        <div class="pulse-bar-track">
+                            <div id="bar-supported" style="background:var(--green); width:0%;"></div>
+                            <div id="bar-unverified" style="background:#D97706; width:100%;"></div>
+                            <div id="bar-contradicted" style="background:var(--red); width:0%;"></div>
+                        </div>
+                        <div class="pulse-foot">
+                            <span><strong class="mono" id="stat-unverified">—</strong> unverified (<span id="stat-unverified-desc">awaiting runtime</span>)</span>
+                            <span style="color:var(--red); font-weight:600;"><span class="mono" id="stat-contradicted">0</span> contradicted</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>03 · Policy Gate Verdict</span>
+                            <span class="badge-pill success" id="policy-final-decision-badge">ALLOW</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="stat-active-policies">—</span>
+                            <span class="pulse-delta">active rules · <span id="stat-drift-count">0</span> drift quarantined</span>
+                        </div>
+                        <div class="pulse-bar-track">
+                            <div style="background:var(--ink); width:100%;"></div>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono"><strong id="policy-block-count">0</strong> block · <strong id="policy-review-count">0</strong> review · <strong id="policy-warn-count">0</strong> warn · <strong id="policy-allow-count">0</strong> allow</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>04 · RFC 6962 Ledger</span>
+                            <span class="merkle-chip" id="policy-latest-anchor">block #1</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="overview-block-height">#1</span>
+                            <span class="pulse-delta"><span id="stat-idempotency">0</span> safeguarded txns</span>
+                        </div>
+                        <div class="pulse-bar-track">
+                            <div style="background:var(--brand-accent); width:100%; border:1px solid var(--brand-accent-border);"></div>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono" id="overview-merkle-short" style="font-size:10.5px;">Genesis root verified</span>
+                            <button class="inspector-ref-link" onclick="showView('governance')">Audit →</button>
                         </div>
                     </div>
                 </div>
 
-                <div class="panel" style="margin-bottom: 20px;">
-                    <div class="panel-header">
-                        <div>
-                            <div class="panel-title">🛡️ Policy Enforcement</div>
-                            <div class="panel-subtitle">
-                                Deterministic decisions anchored to the Merkle ledger.
-                                Each evaluation exposes its evidence and cryptographic proof.
+                <!-- Main 2-Column Command Center Grid -->
+                <div class="two-column">
+                    <div>
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Recent Change Checks &amp; Policy Evaluations</div>
+                                    <div class="panel-subtitle">Click any evaluation to open its 3-pane blast-radius and evidence review.</div>
+                                </div>
+                                <button class="btn-secondary" onclick="showView('review')">Open Change Review →</button>
                             </div>
-                        </div>
-                        <div class="graph-toolbar">
-                            <span class="badge-pill info" id="policy-final-decision-badge">—</span>
-                            <span class="merkle-chip" id="policy-latest-anchor">block —</span>
-                        </div>
-                    </div>
-                    <div class="panel-body">
-                        <div class="policy-strip">
-                            <div class="policy-decision-card block">
-                                <div class="policy-decision-title">Blocked</div>
-                                <div class="policy-decision-val" id="policy-block-count">—</div>
-                                <div class="policy-decision-desc">Merge prevented</div>
-                            </div>
-                            <div class="policy-decision-card review">
-                                <div class="policy-decision-title">Review</div>
-                                <div class="policy-decision-val" id="policy-review-count">—</div>
-                                <div class="policy-decision-desc">Human approval required</div>
-                            </div>
-                            <div class="policy-decision-card warn">
-                                <div class="policy-decision-title">Warn</div>
-                                <div class="policy-decision-val" id="policy-warn-count">—</div>
-                                <div class="policy-decision-desc">Non-blocking signal</div>
-                            </div>
-                            <div class="policy-decision-card allow">
-                                <div class="policy-decision-title">Allow</div>
-                                <div class="policy-decision-val" id="policy-allow-count">—</div>
-                                <div class="policy-decision-desc">No violation detected</div>
+                            <div class="panel-body" style="padding:0;">
+                                <div class="policy-eval-list" id="policy-eval-list" style="border:0; border-radius:0;">
+                                    <div class="list-row">
+                                        <div class="row-main">
+                                            <div class="row-title">No evaluations recorded yet</div>
+                                            <div class="row-meta">Run <code>./bin/garuda check --project {{ .WorkspaceName }} --policy policies --save</code></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="policy-eval-list" id="policy-eval-list" style="margin-top: 16px;">
-                            <div class="list-row">
-                                <div class="row-main">
-                                    <div class="row-title">No evaluations yet</div>
-                                    <div class="row-meta">Run <code>garuda policy evaluate &lt;dir&gt;</code> to record decisions.</div>
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Indexed Repositories (<span id="repo-list-ws">{{ .WorkspaceName }}</span>)</div>
+                                    <div class="panel-subtitle">Select a repository to inspect its package boundaries or symbol neighborhood.</div>
+                                </div>
+                                <div class="pill-group">
+                                    <span class="kbd-chip">Repos: <span id="explorer-repos">—</span></span>
+                                    <span class="kbd-chip">Packages: <span id="explorer-packages">—</span></span>
+                                    <span class="kbd-chip">Entities: <span id="explorer-entities">—</span></span>
+                                </div>
+                            </div>
+                            <div class="list" id="scanned-repos-list">
+                                <div class="list-row"><div class="row-main"><div class="row-title">Loading repositories...</div></div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Needs Attention: Contradictions &amp; Alerts</div>
+                                    <div class="panel-subtitle">Quarantined runtime-vs-static deviations and policy blocks.</div>
+                                </div>
+                            </div>
+                            <div class="list" id="attention-list">
+                                <div class="list-row"><div class="row-main"><div class="row-title">Evaluating system invariants...</div></div></div>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Highest-Centrality Architectural Hubs</div>
+                                    <div class="panel-subtitle">Symbols with the largest inbound caller blast radius. Click to inspect neighborhood.</div>
+                                </div>
+                                <button class="inspector-ref-link" onclick="openArchitecture('entity')">Map →</button>
+                            </div>
+                            <div class="list" id="hub-list">
+                                <div class="list-row"><div class="row-main"><div class="row-title">Loading hubs...</div></div></div>
+                            </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <div class="panel-title">Documentation ↔ Code Drift</div>
+                                    <div class="panel-subtitle">Comparison of ADR/spec claims against static and runtime graph edges.</div>
+                                </div>
+                            </div>
+                            <div class="panel-body">
+                                <div class="drift-row">
+                                    <span class="drift-row-label">Documented capabilities</span>
+                                    <span class="drift-row-val" id="drift-total-docs">—</span>
+                                </div>
+                                <div class="drift-row">
+                                    <span class="drift-row-label">Supported by code (<span style="color:var(--green);">SUPPORTED</span>)</span>
+                                    <span class="drift-row-val" id="drift-doc-supported" style="color:var(--green);">—</span>
+                                </div>
+                                <div class="drift-row">
+                                    <span class="drift-row-label">Unverified at runtime (<span style="color:var(--amber);">UNVERIFIED</span>)</span>
+                                    <span class="drift-row-val" id="drift-doc-unverified" style="color:var(--amber);">—</span>
+                                </div>
+                                <div class="drift-row">
+                                    <span class="drift-row-label">Contradicted (<span style="color:var(--red);">CONTRADICTED</span>)</span>
+                                    <span class="drift-row-val" id="drift-doc-contradicted" style="color:var(--red);">—</span>
+                                </div>
+                                <div class="drift-row">
+                                    <span class="drift-row-label">Doc-to-code drift / Undocumented exported</span>
+                                    <span class="drift-row-val"><span id="drift-doc-to-code">—</span> / <span id="drift-undocumented-code">—</span> (<span id="drift-code-to-doc" style="display:none;">0</span><span id="drift-unimplemented-docs">0</span> unimpl)</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
+            </section>
 
-                <div class="drift-grid">
-                    <div class="drift-card">
-                        <div class="drift-card-title">📄 Documentation Claims</div>
-                        <div class="drift-row">
-                            <span class="drift-row-label">Total documented capabilities</span>
-                            <span class="drift-row-val" id="drift-total-docs">—</span>
-                        </div>
-                        <div class="drift-row">
-                            <span class="drift-row-label">Supported by code</span>
-                            <span class="drift-row-val" id="drift-doc-supported" style="color:var(--green);">—</span>
-                        </div>
-                        <div class="drift-row">
-                            <span class="drift-row-label">Unverified</span>
-                            <span class="drift-row-val" id="drift-doc-unverified" style="color:var(--amber);">—</span>
-                        </div>
-                        <div class="drift-row">
-                            <span class="drift-row-label">Contradicted</span>
-                            <span class="drift-row-val" id="drift-doc-contradicted" style="color:var(--red);">—</span>
-                        </div>
-                    </div>
-                    <div class="drift-card">
-                        <div class="drift-card-title">🔍 Knowledge Drift</div>
-                        <div class="drift-row">
-                            <span class="drift-row-label">Doc claims with no code reference</span>
-                            <span class="drift-row-val" id="drift-doc-to-code" style="color:var(--amber);">—</span>
-                        </div>
-                        <div class="drift-row">
-                            <span class="drift-row-label">Code entities with no doc claim</span>
-                            <span class="drift-row-val" id="drift-code-to-doc" style="color:var(--amber);">—</span>
-                        </div>
-                        <div class="drift-row">
-                            <span class="drift-row-label">Undocumented exported code entities</span>
-                            <span class="drift-row-val" id="drift-undocumented-code" style="color:var(--amber);">—</span>
-                        </div>
-                        <div class="drift-row">
-                            <span class="drift-row-label">Doc claims unverified at runtime</span>
-                            <span class="drift-row-val" id="drift-unimplemented-docs" style="color:var(--amber);">—</span>
-                        </div>
-                    </div>
+            <!-- ============================================================
+                 02 — EXPLORE: SEARCH-FIRST SEMANTIC CODEBASE INDEX
+                 ============================================================ -->
+            <section id="view-search" class="search-view">
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>02 · SEMANTIC CODEBASE EXPLORER</span>
                 </div>
-
-                <div class="panel" style="margin-bottom: 20px;">
-                    <div class="panel-header">
-                        <div>
-                            <div class="panel-title">Scanned repositories</div>
-                            <div class="panel-subtitle">Active codebases bound to workspace '<span id="repo-list-ws">{{ .WorkspaceName }}</span>'. Click any repository to filter its package hierarchy.</div>
-                        </div>
-                    </div>
-                    <div class="list" id="scanned-repos-list">
-                        <div class="list-row"><div class="row-main"><div class="row-title">Loading repositories...</div></div></div>
-                    </div>
-                </div>
-
-                <div class="trust-strip">
-                    <div class="trust-card supported">
-                        <div class="trust-card-title">✓ Supported Claims</div>
-                        <div class="trust-card-val" id="stat-supported">—</div>
-                        <div class="trust-card-desc">Static AST verified against runtime</div>
-                    </div>
-                    <div class="trust-card unverified">
-                        <div class="trust-card-title">? Unverified Claims</div>
-                        <div class="trust-card-val" id="stat-unverified">—</div>
-                        <div class="trust-card-desc" id="stat-unverified-desc">Awaiting runtime verification</div>
-                    </div>
-                    <div class="trust-card contradicted">
-                        <div class="trust-card-title">⚠ Contradictions</div>
-                        <div class="trust-card-val" id="stat-contradicted">0</div>
-                        <div class="trust-card-desc">Quarantined architectural drift</div>
+                <div class="hero">
+                    <div>
+                        <h1 class="hero-title">Explore the semantic index.</h1>
+                        <div class="hero-subtitle">Search repositories, packages, functions, methods, structs, and interfaces with instant architectural preview.</div>
                     </div>
                 </div>
 
                 <div class="start-card">
-                    <div class="start-title">Find anything in the workspace</div>
-                    <div class="start-description">Instant fuzzy search across all symbols, files, and packages.</div>
-                    <input id="quick-search" class="quick-search" placeholder="Try: HandleFunc, Parse, chi, mux.go, securecookie...">
-                    <div class="quick-hints">
-                        <button class="hint" onclick="runHint('HandleFunc')">HandleFunc</button>
-                        <button class="hint" onclick="runHint('Parse')">Parse</button>
-                        <button class="hint" onclick="runHint('chi')">chi</button>
-                        <button class="hint" onclick="runHint('securecookie')">securecookie</button>
-                        <button class="hint" onclick="runHint('Harvester')">Harvester</button>
-                    </div>
-                </div>
-
-                <div class="two-column">
-                    <div class="panel">
-                        <div class="panel-header">
-                            <div>
-                                <div class="panel-title">Architecture explorer</div>
-                                <div class="panel-subtitle">Hierarchical progressive exploration.</div>
-                            </div>
+                    <input id="search-page-input" class="quick-search" placeholder="Search symbols, packages, files, functions, methods (e.g., Engine, Run, AuthMiddleware, ParseDirectory)...">
+                    <input id="quick-search" type="hidden">
+                    <div class="arch-pill-bar" style="margin-top:12px;">
+                        <div class="pill-group" id="search-kind-filters">
+                            <button class="filter-pill active" data-kind="all" onclick="setSearchKindFilter('all')">All Objects</button>
+                            <button class="filter-pill" data-kind="function" onclick="setSearchKindFilter('function')">Functions &amp; Methods</button>
+                            <button class="filter-pill" data-kind="struct" onclick="setSearchKindFilter('struct')">Structs &amp; Interfaces</button>
+                            <button class="filter-pill" data-kind="package" onclick="setSearchKindFilter('package')">Packages</button>
                         </div>
-                        <div class="panel-body">
-                            <div class="explorer">
-                                <button class="explorer-card" onclick="openArchitecture('repository')">
-                                    <div class="explorer-icon">▦</div>
-                                    <div class="explorer-name">Repositories</div>
-                                    <div class="explorer-count" id="explorer-repos">—</div>
-                                    <div class="explorer-meta">System boundaries</div>
-                                </button>
-                                <button class="explorer-card" onclick="openArchitecture('package')">
-                                    <div class="explorer-icon">◇</div>
-                                    <div class="explorer-name">Packages</div>
-                                    <div class="explorer-count" id="explorer-packages">—</div>
-                                    <div class="explorer-meta">Architectural modules</div>
-                                </button>
-                                <button class="explorer-card" onclick="openArchitecture('entity')">
-                                    <div class="explorer-icon">ƒ</div>
-                                    <div class="explorer-name">Entities</div>
-                                    <div class="explorer-count" id="explorer-entities">—</div>
-                                    <div class="explorer-meta">Symbol intelligence</div>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="panel">
-                        <div class="panel-header">
-                            <div>
-                                <div class="panel-title">Architectural hubs</div>
-                                <div class="panel-subtitle">Highest centrality symbols ranked by callers.</div>
-                            </div>
-                        </div>
-                        <div class="list" id="hub-list">
-                            <div class="list-row"><div class="row-main"><div class="row-title">Loading hubs...</div></div></div>
+                        <div class="quick-hints" style="margin-top:0;">
+                            <button class="hint" onclick="runHint('Engine')">Engine</button>
+                            <button class="hint" onclick="runHint('AuthMiddleware')">AuthMiddleware</button>
+                            <button class="hint" onclick="runHint('RecomputeWorkspaceVerification')">RecomputeWorkspaceVerification</button>
+                            <button class="hint" onclick="runHint('AnalyzeWorkspace')">AnalyzeWorkspace</button>
+                            <button class="hint" onclick="runHint('ParseDirectory')">ParseDirectory</button>
                         </div>
                     </div>
                 </div>
@@ -313,139 +367,163 @@
                     <div class="panel">
                         <div class="panel-header">
                             <div>
-                                <div class="panel-title">⚠ Needs attention</div>
-                                <div class="panel-subtitle">Quarantined contradictions & unverified dependencies.</div>
+                                <div class="panel-title" id="search-results-title">Indexed Symbols &amp; Entities</div>
+                                <div class="panel-subtitle">Select any item to preview its signature, location, and blast-radius actions.</div>
                             </div>
                         </div>
-                        <div class="list" id="attention-list">
-                            <div class="list-row"><div class="row-main"><div class="row-title">Loading alerts...</div></div></div>
+                        <div class="list" id="search-results">
+                            <div class="list-row"><div class="row-main"><div class="row-title">Type above or click a suggested symbol to search the workspace index.</div></div></div>
                         </div>
                     </div>
 
                     <div class="panel">
                         <div class="panel-header">
                             <div>
-                                <div class="panel-title">📜 Recent evidence ledger</div>
-                                <div class="panel-subtitle">Verified static AST proofs & runtime observations.</div>
+                                <div class="panel-title">Symbol Preview &amp; Neighborhood Actions</div>
+                                <div class="panel-subtitle">Inspect before jumping to the Architecture Map or Change Review.</div>
                             </div>
                         </div>
-                        <div class="list" id="evidence-list">
-                            <div class="list-row"><div class="row-main"><div class="row-title">Loading evidence ledger...</div></div></div>
+                        <div class="panel-body" id="search-preview-pane">
+                            <div style="color:var(--muted); padding:20px 0; text-align:center;">
+                                Select a search result on the left to inspect its source file, package boundary, and 1-hop neighborhood.
+                            </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <section id="view-agents" style="display:none;">
-                <div class="breadcrumbs">
-                    <span>Workspace</span>
-                    <span>/</span>
-                    <span class="breadcrumb-current">Agents</span>
-                </div>
-                <div class="hero">
-                    <div>
-                        <h1 class="hero-title">Agent activity</h1>
-                        <div class="hero-subtitle">MCP sessions, tool calls, and multi-agent handoffs.</div>
-                    </div>
-                </div>
-
-                <div class="panel" style="margin-bottom: 20px;">
-                    <div class="panel-header">
-                        <div>
-                            <div class="panel-title">Active sessions</div>
-                            <div class="panel-subtitle">Clients with activity in the last 5 minutes.</div>
-                        </div>
-                    </div>
-                    <div class="list" id="agents-active-list">
-                        <div class="list-row"><div class="row-main"><div class="row-title">Loading active sessions...</div></div></div>
-                    </div>
-                </div>
-
-                <div class="panel">
-                    <div class="panel-header">
-                        <div>
-                            <div class="panel-title">Recent sessions</div>
-                            <div class="panel-subtitle">MCP sessions started in the last 24 hours.</div>
-                        </div>
-                    </div>
-                    <div class="list" id="agents-recent-list">
-                        <div class="list-row"><div class="row-main"><div class="row-title">Loading recent sessions...</div></div></div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="view-decisions" style="display:none;">
-                <div class="breadcrumbs">
-                    <span>Workspace</span>
-                    <span>/</span>
-                    <span class="breadcrumb-current">Decisions</span>
-                </div>
-                <div class="hero">
-                    <div>
-                        <h1 class="hero-title">Decision history</h1>
-                        <div class="hero-subtitle">Lineage, impact, and cryptographic anchors.</div>
-                    </div>
-                </div>
-
-                <div class="panel" style="margin-bottom: 20px;">
-                    <div class="panel-header">
-                        <div>
-                            <div class="panel-title">Decisions</div>
-                            <div class="panel-subtitle" id="decisions-subtitle">Loading…</div>
-                        </div>
-                    </div>
-                    <div class="list" id="decisions-list">
-                        <div class="list-row"><div class="row-main"><div class="row-title">Loading decisions...</div></div></div>
-                    </div>
-                </div>
-            </section>
-
+            <!-- ============================================================
+                 03 — ARCHITECTURE MAP: GRAPH WITHOUT THE HAIRBALL (Screenshot 3 & 7)
+                 ============================================================ -->
             <section id="view-architecture" style="display:none;">
-                <div class="breadcrumbs">
-                    <button class="breadcrumb-button" onclick="showView('overview')">Workspace</button>
-                    <span>/</span>
-                    <span class="breadcrumb-current" id="architecture-breadcrumb">Company Graph</span>
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>03 · ARCHITECTURE MAP · <span id="architecture-breadcrumb">Focused Neighborhood</span></span>
                 </div>
                 <div class="hero">
                     <div>
-                        <h1 class="hero-title" id="architecture-title">Company Graph</h1>
-                        <div class="hero-subtitle" id="architecture-subtitle">Force-directed semantic topology map.</div>
+                        <h1 class="hero-title" id="architecture-title">Architecture Map</h1>
+                        <div class="hero-subtitle" id="architecture-subtitle">Start with context, not every node. Explore 1-hop and 2-hop symbol neighborhoods, package layers, and blast radius.</div>
                     </div>
-                    <div class="graph-toolbar">
-                        <button class="graph-button" id="btn-mode-repo" onclick="setArchitectureMode('repository')">Repositories</button>
-                        <button class="graph-button" id="btn-mode-package" onclick="setArchitectureMode('package')">All Packages</button>
-                        <button class="graph-button" id="btn-mode-full" onclick="setArchitectureMode('full')">Full Knowledge Graph</button>
-                        <button class="graph-button" onclick="goUpArchitecture()">← Up Level</button>
-                        <button class="graph-button" onclick="state.graphCache = {}; loadArchitecture(state.currentLevel, state.currentFocus)">Refresh</button>
+                    <div class="pill-group">
+                        <button class="btn-secondary" onclick="goUpArchitecture()">← Up Level</button>
+                        <button class="btn-secondary" onclick="fitGraph()">Fit Canvas</button>
+                        <button class="btn-primary" onclick="openSelectedInChangeReview()">Inspect in Change Review →</button>
                     </div>
                 </div>
 
-                <div class="panel graph-panel">
-                    <div class="panel-header">
-                        <div>
-                            <div class="panel-title">Interactive topology explorer</div>
-                            <div class="panel-subtitle" id="graph-description">Workspace-level repository mesh.</div>
+                <div class="arch-map-shell">
+                    <!-- Top Search & Pill Bar modeled directly on Screenshot 7 -->
+                    <div class="arch-map-topbar">
+                        <div class="arch-search-row">
+                            <input id="arch-symbol-search" class="arch-search-input" placeholder="Search symbols, packages, dependencies to focus neighborhood (press Enter)…" onkeydown="if(event.key==='Enter') focusGraphByQuery(this.value)">
+                            <button class="btn-accent" onclick="focusGraphByQuery(document.getElementById('arch-symbol-search').value)">Focus Map</button>
+                            <button class="btn-secondary" onclick="state.graphCache = {}; loadArchitecture(state.currentLevel, state.currentFocus)">Reset</button>
                         </div>
-                        <div class="graph-toolbar">
-                            <button class="graph-button primary" onclick="fitGraph()">Fit Canvas</button>
+
+                        <div class="arch-pill-bar">
+                            <div class="pill-group">
+                                <button class="filter-pill active" id="btn-hop-1" onclick="setHopDepth(1)">1 hop</button>
+                                <button class="filter-pill" id="btn-hop-2" onclick="setHopDepth(2)">2 hops</button>
+                                <button class="filter-pill" id="btn-mode-entity" onclick="setArchitectureMode('entity')">Symbols</button>
+                                <button class="filter-pill" id="btn-mode-package" onclick="setArchitectureMode('package')">Packages</button>
+                                <button class="filter-pill" id="btn-mode-repo" onclick="setArchitectureMode('repository')">Repositories</button>
+                                <button class="filter-pill" id="btn-mode-full" onclick="setArchitectureMode('full')">Full Mesh</button>
+                            </div>
+
+                            <div class="pill-group">
+                                <button class="filter-pill active" data-edge-filter="ALL" onclick="setEdgeTypeFilter('ALL')">All Edges</button>
+                                <button class="filter-pill" data-edge-filter="CALLS" onclick="setEdgeTypeFilter('CALLS')">Calls</button>
+                                <button class="filter-pill" data-edge-filter="IMPORTS" onclick="setEdgeTypeFilter('IMPORTS')">Imports</button>
+                                <button class="filter-pill" data-edge-filter="IMPLEMENTS" onclick="setEdgeTypeFilter('IMPLEMENTS')">Implements</button>
+                                <button class="filter-pill" data-edge-filter="CONTRADICTED" onclick="setEdgeTypeFilter('CONTRADICTED')">Contradicted</button>
+                            </div>
+
+                            <div class="pill-group">
+                                <button class="filter-pill active" id="btn-layout-both" onclick="setGraphLayoutMode('both')">Neighborhood + Canvas</button>
+                                <button class="filter-pill" id="btn-layout-cards" onclick="setGraphLayoutMode('cards')">Card Map Only</button>
+                                <button class="filter-pill" id="btn-layout-canvas" onclick="setGraphLayoutMode('canvas')">Bloom Canvas Only</button>
+                            </div>
                         </div>
                     </div>
-                    <div class="graph-layout">
+
+                    <!-- Screenshot 7 Focused Neighborhood Architectural Diagram -->
+                    <div class="neighborhood-stage" id="neighborhood-stage">
+                        <div class="neighborhood-diagram">
+                            <div class="selected-fn-card" id="nb-selected-card">
+                                <div class="selected-fn-title" id="nb-selected-title">Selected symbol</div>
+                                <div class="selected-fn-loc" id="nb-selected-loc">current source location</div>
+                            </div>
+
+                            <svg class="neighborhood-connector-svg" viewBox="0 0 560 44" preserveAspectRatio="none">
+                                <path d="M280,0 L280,22 M95,22 L465,22 M95,22 L95,42 M280,22 L280,42 M465,22 L465,42" stroke="#9FA39A" stroke-width="1.4" fill="none"/>
+                                <polygon points="95,44 91,37 99,37" fill="#9FA39A"/>
+                                <polygon points="280,44 276,37 284,37" fill="#9FA39A"/>
+                                <polygon points="465,44 461,37 469,37" fill="#9FA39A"/>
+                            </svg>
+
+                            <div class="neighborhood-trio">
+                                <div class="nb-card" id="nb-caller-card" onclick="focusFirstCaller()">
+                                    <div class="nb-card-icon">&lt;/&gt;</div>
+                                    <div class="nb-card-label" id="nb-caller-title">Caller</div>
+                                    <div class="nb-card-sub" id="nb-caller-sub">0 incoming callers</div>
+                                </div>
+                                <div class="nb-card dependency-highlight" id="nb-dep-card" onclick="focusFirstDependency()">
+                                    <div class="nb-card-icon">⑂</div>
+                                    <div class="nb-card-label" id="nb-dep-title">Dependency</div>
+                                    <div class="nb-card-sub" id="nb-dep-sub">0 outgoing dependencies</div>
+                                </div>
+                                <div class="nb-card" id="nb-policy-card" onclick="showView('review')">
+                                    <div class="nb-card-icon">🛡️</div>
+                                    <div class="nb-card-label" id="nb-policy-title">Policy &amp; Evidence</div>
+                                    <div class="nb-card-sub" id="nb-policy-sub">Click to review governance</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="neighborhood-caption" id="graph-description">
+                            Focused architectural neighborhood · Select any node below to update inspector
+                        </div>
+                    </div>
+
+                    <!-- Interactive D3 Bloom Canvas + Persistent Right Inspector -->
+                    <div class="graph-layout" id="graph-canvas-stage">
                         <div class="graph-wrap" id="graph-wrap">
                             <svg id="graph"></svg>
-                            <div id="graph-empty" class="graph-empty" style="display:none;">No architecture data available for this view.</div>
+                            <div id="graph-empty" class="graph-empty" style="display:none;">No architecture data available for this filter.</div>
                             <div class="graph-controls">
                                 <button class="graph-control" onclick="toggleFullscreen()" title="Toggle Fullscreen">⛶</button>
                                 <button class="graph-control" onclick="zoomGraph(1.25)" title="Zoom in">+</button>
                                 <button class="graph-control" onclick="zoomGraph(0.8)" title="Zoom out">−</button>
                                 <button class="graph-control" onclick="fitGraph()" title="Fit graph">⌂</button>
                             </div>
-                            <div class="graph-help">Click to inspect · Double-click to expand · Hover to spotlight connections</div>
+                            <div class="graph-help">Click node to inspect · Double-click to focus 1-hop neighborhood · Quiet lines = static AST · Red dashed = runtime contradiction</div>
                         </div>
+
                         <aside class="graph-side-panel">
+                            <div class="inspector-header">
+                                <div class="wb-pane-kicker">SELECTED ENTITY INSPECTOR</div>
+                                <div class="inspector-entity-name" id="inspector-name">Workspace Overview</div>
+                                <div class="inspector-sub" id="inspector-meta">Source · Relationships · Policy results · Evidence</div>
+                            </div>
+                            <div class="inspector-body" id="inspector-body">
+                                <div class="inspector-ref-row">
+                                    <span>Incoming references (<strong id="insp-in-count">0</strong>)</span>
+                                    <button class="inspector-ref-link" onclick="expandInspectorList('in')">Details →</button>
+                                </div>
+                                <div id="insp-in-list" style="margin-bottom:8px;"></div>
+
+                                <div class="inspector-ref-row">
+                                    <span>Outgoing dependencies (<strong id="insp-out-count">0</strong>)</span>
+                                    <button class="inspector-ref-link" onclick="expandInspectorList('out')">Details →</button>
+                                </div>
+                                <div id="insp-out-list" style="margin-bottom:12px;"></div>
+
+                                <div id="insp-properties"></div>
+                            </div>
+
                             <div class="side-panel-header">
-                                <span>COMMUNITIES</span>
-                                <span style="font-size:10px; color:var(--brand); cursor:pointer;" onclick="toggleAllCommunities()">Toggle All</span>
+                                <span>MODULES / PACKAGES</span>
+                                <span style="font-size:10px; color:var(--text); cursor:pointer; font-weight:700;" onclick="toggleAllCommunities()">Toggle All</span>
                             </div>
                             <div class="side-panel-list" id="communities-list">
                                 <div style="color:var(--muted); font-size:11px; padding:8px;">Analyzing topology...</div>
@@ -455,79 +533,306 @@
                 </div>
             </section>
 
-            <section id="view-search" class="search-view">
-                <div class="breadcrumbs">
-                    <button class="breadcrumb-button" onclick="showView('overview')">Workspace</button>
-                    <span>/</span>
-                    <span class="breadcrumb-current">Search</span>
+            <!-- ============================================================
+                 04 — CHANGE REVIEW: GARUDA'S SIGNATURE 3-PART WORKBENCH
+                 ============================================================ -->
+            <section id="view-review" style="display:none;">
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>04 · CHANGE REVIEW WORKBENCH · ARCHITECTURAL IMPACT &amp; GOVERNANCE</span>
                 </div>
                 <div class="hero">
                     <div>
-                        <h1 class="hero-title">Global search</h1>
-                        <div class="hero-subtitle">Instantly locate any symbol across all connected repositories.</div>
+                        <h1 class="hero-title">Change Review Workbench</h1>
+                        <div class="hero-subtitle">Inspect a change check or target symbol across three planes: Change Context, Blast-Radius Neighborhood, and Epistemic &amp; Policy Evidence.</div>
+                    </div>
+                    <div class="pill-group">
+                        <button class="btn-secondary" onclick="showView('graph')">View Full Architecture Map</button>
                     </div>
                 </div>
-                <div class="start-card">
-                    <input id="search-page-input" class="quick-search" placeholder="Search repositories, packages, files, functions, methods...">
-                </div>
-                <div class="panel">
-                    <div class="panel-header">
-                        <div>
-                            <div class="panel-title" id="search-results-title">Results</div>
-                            <div class="panel-subtitle">Click any result to open its details drawer.</div>
+
+                <div class="workbench-grid">
+                    <!-- LEFT PANE: Change Context -->
+                    <div class="wb-pane">
+                        <div class="wb-pane-header">
+                            <div>
+                                <div class="wb-pane-kicker">LEFT · CHANGE CONTEXT</div>
+                                <div class="wb-pane-title">Evaluated Checks &amp; Targets</div>
+                            </div>
+                        </div>
+                        <div class="wb-pane-body">
+                            <div class="detail-section">
+                                <div class="detail-section-title">Target Symbol or Check</div>
+                                <select id="review-target-picker" class="workspace-picker" style="height:34px; margin-top:2px;" onchange="selectReviewTarget(this.value)"></select>
+                            </div>
+
+                            <div class="detail-section" id="review-context-details">
+                                <div class="detail-section-title">Repository &amp; Revision Context</div>
+                                <div class="detail-property"><div class="detail-key">Workspace</div><div class="detail-value">{{ .WorkspaceName }}</div></div>
+                                <div class="detail-property"><div class="detail-key">Target</div><div class="detail-value" id="rev-ctx-target">—</div></div>
+                                <div class="detail-property"><div class="detail-key">Package</div><div class="detail-value" id="rev-ctx-pkg">—</div></div>
+                                <div class="detail-property"><div class="detail-key">Source File</div><div class="detail-value" id="rev-ctx-file">—</div></div>
+                            </div>
+
+                            <div class="detail-section">
+                                <div class="detail-section-title">Recent Policy Evaluations</div>
+                                <div class="list" id="review-evaluations-list" style="border:1px solid var(--border); border-radius:6px; overflow:hidden;"></div>
+                            </div>
                         </div>
                     </div>
-                    <div class="list" id="search-results">
-                        <div class="list-row"><div class="row-main"><div class="row-title">Start typing to search Garuda.</div></div></div>
+
+                    <!-- CENTER PANE: Impact & Blast-Radius Map -->
+                    <div class="wb-pane" style="background:var(--bg);">
+                        <div class="wb-pane-header">
+                            <div>
+                                <div class="wb-pane-kicker">CENTER · IMPACT MAP</div>
+                                <div class="wb-pane-title" id="rev-center-title">Affected Graph Neighborhood &amp; Dependency Paths</div>
+                            </div>
+                            <span class="kbd-chip" id="rev-blast-summary">0 callers · 0 callees</span>
+                        </div>
+                        <div class="wb-pane-body" id="review-impact-stage">
+                            <!-- Dynamically populated with Upstream Callers -> Target -> Downstream Dependencies -->
+                        </div>
+                    </div>
+
+                    <!-- RIGHT PANE: Decision & Evidence -->
+                    <div class="wb-pane">
+                        <div class="wb-pane-header">
+                            <div>
+                                <div class="wb-pane-kicker">RIGHT · DECISION &amp; EVIDENCE</div>
+                                <div class="wb-pane-title">Explicit 3-Plane Verification</div>
+                            </div>
+                        </div>
+                        <div class="wb-pane-body">
+                            <!-- Never merge Epistemic Status, Policy Verdict, and Ledger Integrity into one generic tick -->
+                            <div class="state-triad">
+                                <div class="triad-box">
+                                    <div class="triad-label">1. Epistemic</div>
+                                    <span class="badge-pill state-supported" id="rev-triad-epistemic">SUPPORTED</span>
+                                </div>
+                                <div class="triad-box">
+                                    <div class="triad-label">2. Policy</div>
+                                    <span class="policy-badge ALLOW" id="rev-triad-policy">ALLOW</span>
+                                </div>
+                                <div class="triad-box">
+                                    <div class="triad-label">3. Ledger</div>
+                                    <span class="merkle-chip" id="rev-triad-ledger" style="margin-left:0;">ANCHORED</span>
+                                </div>
+                            </div>
+
+                            <div class="decision-record-card" id="review-decision-record">
+                                <div class="dr-header">
+                                    <div class="dr-title">📄 Decision Record</div>
+                                    <div class="dr-meta" id="rev-dr-id">Select a check</div>
+                                </div>
+                                <div class="dr-grid">
+                                    <div class="dr-row">
+                                        <div class="dr-key">What it evaluated</div>
+                                        <div class="dr-val" id="rev-dr-what">Workspace architectural invariants and call-graph blast radius.</div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="dr-key">What rule applied</div>
+                                        <div class="dr-val mono" id="rev-dr-rule">architecture-layer-guardrails</div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="dr-key">Evidence &amp; counts</div>
+                                        <div class="dr-val" id="rev-dr-evidence">—</div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="dr-key">Uncertainty note</div>
+                                        <div class="dr-val" id="rev-dr-uncertainty">Static AST relationships are resolved via go/types; unexecuted runtime branches remain UNVERIFIED until observed.</div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="dr-key">CLI reproduction</div>
+                                        <div class="dr-val"><code id="rev-dr-cli">./bin/garuda check --project {{ .WorkspaceName }} --policy policies</code></div>
+                                    </div>
+                                </div>
+                                <div style="margin-top:12px; display:flex; gap:8px;" id="rev-dr-actions"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
 
+            <!-- ============================================================
+                 05 — EVIDENCE & LEDGER: VERO-STYLE AUDIT LOG (Screenshot 5)
+                 ============================================================ -->
             <section id="view-trust" class="search-view">
-                <div class="breadcrumbs">
-                    <button class="breadcrumb-button" onclick="showView('overview')">Workspace</button>
-                    <span>/</span>
-                    <span class="breadcrumb-current">Evidence & Trust</span>
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>05 · EVIDENCE &amp; CRYPTOGRAPHIC LEDGER · APPEND-ONLY</span>
                 </div>
                 <div class="hero">
                     <div>
-                        <h1 class="hero-title">Evidence & cryptographic trust</h1>
-                        <div class="hero-subtitle">Every claim is anchored to compiler ASTs and Merkle-backed ledgers.</div>
+                        <h1 class="hero-title">Audit Log &amp; Epistemic Evidence</h1>
+                        <div class="hero-subtitle">Every claim and policy evaluation traces back to its file, line, resolution method, and RFC 6962 Merkle anchor.</div>
                     </div>
                     <div class="trust-badge">
-                        <span>✓</span>
-                        <span>Verified state</span>
+                        <span class="trust-badge-dot"></span>
+                        <span>Ledger <span id="trust-status">Verified</span> · Block <span id="trust-height">#1</span></span>
                     </div>
                 </div>
+
                 <div class="trust-strip">
                     <div class="trust-card supported">
-                        <div class="trust-card-title">Ledger Status</div>
-                        <div class="trust-card-val" id="trust-status" style="color:var(--green);">Verified</div>
-                        <div class="trust-card-desc">Current Merkle Root State</div>
+                        <div class="trust-card-title">Current Epoch Merkle Root</div>
+                        <div class="merkle" id="trust-merkle">Genesis verified</div>
+                        <div class="trust-card-desc">RFC 6962 canonical SHA-256 tree root</div>
                     </div>
                     <div class="trust-card">
-                        <div class="trust-card-title">Block Height</div>
-                        <div class="trust-card-val" id="trust-height">#1</div>
-                        <div class="trust-card-desc">Latest Recorded Snapshot</div>
+                        <div class="trust-card-title">Parent Epoch Root</div>
+                        <div class="merkle" id="trust-parent">Genesis</div>
+                        <div class="trust-card-desc">Immutable hash-chain predecessor</div>
                     </div>
                     <div class="trust-card">
-                        <div class="trust-card-title">Observation Time</div>
-                        <div class="trust-card-val" id="trust-updated" style="font-size:14px; margin-top:12px;">—</div>
-                        <div class="trust-card-desc">Last Synced Timestamp</div>
+                        <div class="trust-card-title">Last Anchored Observation</div>
+                        <div class="trust-card-val" id="trust-updated" style="font-size:15px; margin-top:10px;">—</div>
+                        <div class="trust-card-desc">Semantic correctness ≠ hash validity</div>
                     </div>
                 </div>
-                <div class="panel" style="margin-top:18px;">
+
+                <!-- Vero-style Audit Log Table (Screenshot 5) -->
+                <div class="panel">
                     <div class="panel-header">
                         <div>
-                            <div class="panel-title">Latest Merkle snapshot</div>
-                            <div class="panel-subtitle">Cryptographic state root.</div>
+                            <div class="panel-title">Entries</div>
+                            <div class="panel-subtitle">Click any entry to inspect its full Decision &amp; Evidence Record below.</div>
+                        </div>
+                        <div class="pill-group">
+                            <button class="filter-pill active" onclick="filterAuditEntries('ALL', this)">Result: All</button>
+                            <button class="filter-pill" onclick="filterAuditEntries('ALLOW', this)">Allow / Supported</button>
+                            <button class="filter-pill" onclick="filterAuditEntries('WARN', this)">Warn / Unverified</button>
+                            <button class="filter-pill" onclick="filterAuditEntries('BLOCK', this)">Block / Contradicted</button>
                         </div>
                     </div>
-                    <div class="panel-body">
-                        <div class="kpi-label">Current root</div>
-                        <div class="merkle" id="trust-merkle">Genesis verified</div>
-                        <div class="kpi-label" style="margin-top:14px;">Parent</div>
-                        <div class="merkle" id="trust-parent">Genesis</div>
+                    <div style="overflow-x:auto;">
+                        <table class="audit-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Actor / Source</th>
+                                    <th>Action / Claim</th>
+                                    <th>Object / Scope</th>
+                                    <th>Anchor</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody id="audit-log-tbody">
+                                <tr><td colspan="6" style="color:var(--muted);">Loading audit entries...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Bottom Decision Record Panel (Modeled directly on Screenshot 5) -->
+                <div class="decision-record-card" id="audit-decision-record-card" style="margin-bottom:20px;">
+                    <div class="dr-header">
+                        <div class="dr-title">📄 Decision &amp; Evidence Record</div>
+                        <div class="dr-meta" id="audit-dr-meta">Select an entry above</div>
+                    </div>
+                    <div class="dr-grid">
+                        <div class="dr-row">
+                            <div class="dr-key">What it did</div>
+                            <div class="dr-val" id="audit-dr-what">Evaluated workspace claims and policy constraints against the canonical revision snapshot.</div>
+                        </div>
+                        <div class="dr-row">
+                            <div class="dr-key">What it looked at</div>
+                            <div class="dr-val" id="audit-dr-looked">Compiler AST entities, static CALLS/IMPORTS claims, and runtime_observations.</div>
+                        </div>
+                        <div class="dr-row">
+                            <div class="dr-key">What rule applied</div>
+                            <div class="dr-val mono" id="audit-dr-rule">—</div>
+                        </div>
+                        <div class="dr-row">
+                            <div class="dr-key">How confident</div>
+                            <div class="dr-val" id="audit-dr-confidence">Deterministic static resolution (1.0 GO_TYPES); runtime status reported separately.</div>
+                        </div>
+                        <div class="dr-row">
+                            <div class="dr-key">How to verify / override</div>
+                            <div class="dr-val" id="audit-dr-remedy">Use <code>garuda check</code> or click Verify RFC 6962 Proof to validate inclusion against the epoch root.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Raw Evidence Stream</div>
+                            <div class="panel-subtitle">Static AST extraction records and runtime telemetry observations.</div>
+                        </div>
+                    </div>
+                    <div class="list" id="evidence-list">
+                        <div class="list-row"><div class="row-main"><div class="row-title">Loading evidence ledger...</div></div></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 06 — AGENTS & POLICIES: SESSIONS, HANDOFFS & TIMELINES (Screenshot 6)
+                 ============================================================ -->
+            <section id="view-agents" style="display:none;">
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>06 · AGENTS, SESSIONS &amp; COLLABORATION</span>
+                </div>
+                <div class="hero">
+                    <div>
+                        <h1 class="hero-title">Agent Activity &amp; Session Timeline</h1>
+                        <div class="hero-subtitle">MCP client sessions, tool invocations, checkpoints, and multi-agent handoffs in workspace {{ .WorkspaceName }}.</div>
+                    </div>
+                </div>
+
+                <div class="two-column">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <div class="panel-title">Active MCP Sessions (Last 5m)</div>
+                                <div class="panel-subtitle">Connected AI coding agents querying the Garuda truth graph.</div>
+                            </div>
+                        </div>
+                        <div class="list" id="agents-active-list">
+                            <div class="list-row"><div class="row-main"><div class="row-title">Loading active sessions...</div></div></div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <div class="panel-title">24-Hour Session Timeline</div>
+                                <div class="panel-subtitle">Chronological MCP tool call activity and session durations.</div>
+                            </div>
+                        </div>
+                        <div class="list" id="agents-recent-list">
+                            <div class="list-row"><div class="row-main"><div class="row-title">Loading recent sessions...</div></div></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 ADR — ARCHITECTURAL DECISION LINEAGE
+                 ============================================================ -->
+            <section id="view-decisions" style="display:none;">
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>ADR · ARCHITECTURAL DECISION RECORDS &amp; LINEAGE</span>
+                </div>
+                <div class="hero">
+                    <div>
+                        <h1 class="hero-title">Decision History &amp; Supersession Chain</h1>
+                        <div class="hero-subtitle">MADR-compatible architectural decisions, policy overrides, and Merkle revision chains.</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Canonical Decisions</div>
+                            <div class="panel-subtitle" id="decisions-subtitle">Loading…</div>
+                        </div>
+                    </div>
+                    <div class="list" id="decisions-list">
+                        <div class="list-row"><div class="row-main"><div class="row-title">Loading decisions...</div></div></div>
                     </div>
                 </div>
             </section>
@@ -535,6 +840,7 @@
     </section>
 </div>
 
+<!-- Slide-over Inspector Drawer -->
 <div id="drawer-overlay" class="drawer-overlay" onclick="closeDrawer()"></div>
 <aside id="drawer" class="drawer">
     <div class="drawer-header">
@@ -546,6 +852,24 @@
     </div>
     <div class="drawer-body" id="drawer-body"></div>
 </aside>
+
+<!-- Linear-style ⌘K Command Palette Modal (Screenshot 2) -->
+<div id="cmdk-backdrop" class="cmdk-backdrop" onclick="if(event.target===this) closeCommandPalette()">
+    <div class="cmdk-modal" role="dialog" aria-modal="true" aria-label="Command Palette">
+        <div class="cmdk-input-wrap">
+            <span style="color:var(--muted);">⌕</span>
+            <input id="cmdk-input" class="cmdk-input" placeholder="Type a command or search symbols, packages, policies…" autocomplete="off">
+            <span class="kbd-chip">ESC</span>
+        </div>
+        <div class="cmdk-list" id="cmdk-list"></div>
+        <div class="cmdk-footer">
+            <span><span class="kbd-chip">↑</span> <span class="kbd-chip">↓</span> navigate</span>
+            <span><span class="kbd-chip">↵</span> open</span>
+            <span><span class="kbd-chip">esc</span> close</span>
+            <span style="margin-left:auto;">Garuda Command Instrument</span>
+        </div>
+    </div>
+</div>
 
 <script>window.GARUDA_WORKSPACE = "{{ .WorkspaceName }}";</script>
 <script src="/static/dashboard.js"></script>

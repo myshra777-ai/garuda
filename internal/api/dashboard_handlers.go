@@ -223,6 +223,7 @@ type GraphNodeDTO struct {
 	Kind     string `json:"kind"`
 	Package  string `json:"package"`
 	Repo     string `json:"repo"`
+	File     string `json:"file,omitempty"`
 	Exported bool   `json:"exported"`
 	Status   string `json:"status"`
 	Count    int    `json:"count,omitempty"`
@@ -1161,11 +1162,14 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	type rawClaim struct{ from, to string }
+	type rawClaim struct {
+		from, to, claimType string
+		confidence          float64
+	}
 	var claims []rawClaim
 	const maxGraphClaims = 200000
 	cRows, err := pgStore.Pool().Query(ctx, `
-        SELECT from_entity_id::text, to_entity_id::text
+        SELECT from_entity_id::text, to_entity_id::text, COALESCE(claim_type, 'CALLS'), COALESCE(confidence, 1.0)
         FROM claims
         WHERE workspace_id = $1
         LIMIT $2
@@ -1174,7 +1178,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		defer cRows.Close()
 		for cRows.Next() {
 			var c rawClaim
-			if err := cRows.Scan(&c.from, &c.to); err == nil {
+			if err := cRows.Scan(&c.from, &c.to, &c.claimType, &c.confidence); err == nil {
 				claims = append(claims, c)
 			}
 		}
@@ -1416,26 +1420,35 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else if level == "entity" {
-		// Compute degree — how many claims each entity participates in
-		// as source or target. The no-focus view ("Top architectural
-		// symbols") uses this to select the top N by connectivity.
-		// Without it, the cap falls through to alphabetical order and
-		// keeps 200 unconnected stubs (../../vendor/...), producing a
-		// scattered cloud with no visible edges.
 		degree := make(map[string]int)
 		for _, c := range claims {
 			degree[c.from]++
 			degree[c.to]++
 		}
 
-		for _, e := range entityMap {
-			if focus != "" && e.Package != focus {
-				continue
+		// Determine whether focus is a symbol ID/Name or a package path
+		symbolFocusIDs := make(map[string]bool)
+		isPackageFocus := false
+		if focus != "" {
+			for _, e := range entityMap {
+				if e.Package == focus {
+					isPackageFocus = true
+				}
+				if e.ID == focus || e.Name == focus {
+					symbolFocusIDs[e.ID] = true
+				}
 			}
-			// No focus = "top architectural symbols." An entity with
-			// zero claims is not architectural; it is a standalone
-			// type, an external stub, or an unused symbol. Filter it
-			// out so the cap keeps real neighborhood hubs.
+		}
+
+		for _, e := range entityMap {
+			if focus != "" {
+				if isPackageFocus && e.Package != focus {
+					continue
+				}
+				if !isPackageFocus && !symbolFocusIDs[e.ID] {
+					continue
+				}
+			}
 			if focus == "" && degree[e.ID] == 0 {
 				continue
 			}
@@ -1445,6 +1458,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 				Kind:     e.Kind,
 				Repo:     e.Repo,
 				Package:  e.Package,
+				File:     e.File,
 				Exported: e.Exported,
 				Status:   "SUPPORTED",
 				Count:    degree[e.ID],
@@ -1453,25 +1467,49 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 		for _, c := range claims {
 			src := entityMap[c.from]
 			tgt := entityMap[c.to]
-			if focus == "" || src.Package == focus || tgt.Package == focus {
+			if src.ID == "" || tgt.ID == "" {
+				continue
+			}
+			match := focus == ""
+			if !match {
+				if isPackageFocus {
+					match = (src.Package == focus || tgt.Package == focus)
+				} else {
+					match = (symbolFocusIDs[src.ID] || symbolFocusIDs[tgt.ID])
+				}
+			}
+			if match {
 				if _, exists := nodesMap[src.ID]; !exists {
 					nodesMap[src.ID] = GraphNodeDTO{
 						ID: src.ID, Label: src.Name, Kind: src.Kind,
-						Package: src.Package, Repo: src.Repo,
-						Status: "SUPPORTED", Count: degree[src.ID],
+						Package: src.Package, Repo: src.Repo, File: src.File,
+						Exported: src.Exported, Status: "SUPPORTED", Count: degree[src.ID],
 					}
 				}
 				if _, exists := nodesMap[tgt.ID]; !exists {
 					nodesMap[tgt.ID] = GraphNodeDTO{
 						ID: tgt.ID, Label: tgt.Name, Kind: tgt.Kind,
-						Package: tgt.Package, Repo: tgt.Repo,
-						Status: "SUPPORTED", Count: degree[tgt.ID],
+						Package: tgt.Package, Repo: tgt.Repo, File: tgt.File,
+						Exported: tgt.Exported, Status: "SUPPORTED", Count: degree[tgt.ID],
 					}
 				}
-				edgeKey := src.ID + "->" + tgt.ID
+				edgeType := c.claimType
+				if edgeType == "" {
+					edgeType = "CALLS"
+				}
+				edgeKey := src.ID + "->" + tgt.ID + ":" + edgeType
 				edge := edgesMap[edgeKey]
 				if edge.Source == "" {
-					edge = GraphEdgeDTO{ID: edgeKey, Source: src.ID, Target: tgt.ID, Type: "STATIC_DEPENDENCY", Status: "SUPPORTED", Count: 0}
+					edge = GraphEdgeDTO{
+						ID:         edgeKey,
+						Source:     src.ID,
+						Target:     tgt.ID,
+						Type:       edgeType,
+						Label:      strings.ToLower(edgeType),
+						Confidence: c.confidence,
+						Status:     "SUPPORTED",
+						Count:      0,
+					}
 				}
 				edge.Count++
 				edgesMap[edgeKey] = edge

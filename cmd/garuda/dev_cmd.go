@@ -210,28 +210,28 @@ const visualizerHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Garuda Epistemic Truth Graph</title>
+    <title>Garuda Architecture Map</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
-        body { margin: 0; background: #0f172a; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
-        #header { position: absolute; top: 16px; left: 16px; z-index: 10; background: rgba(15, 23, 42, 0.85); padding: 12px 20px; border-radius: 8px; border: 1px solid #334155; backdrop-filter: blur(8px); }
-        h1 { margin: 0 0 4px 0; font-size: 18px; font-weight: 600; color: #38bdf8; }
-        .meta { font-size: 12px; color: #94a3b8; }
+        body { margin: 0; background: #F7F7F3; background-image: radial-gradient(#CECEC5 1px, transparent 1px); background-size: 20px 20px; color: #191B19; font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+        #header { position: absolute; top: 16px; left: 16px; z-index: 10; background: rgba(255, 255, 255, 0.94); padding: 14px 20px; border-radius: 10px; border: 1px solid #E7E7E1; box-shadow: 0 4px 16px rgba(25,27,25,0.06); }
+        h1 { margin: 0 0 4px 0; font-size: 16px; font-weight: 650; color: #191B19; letter-spacing: -0.01em; }
+        .meta { font-size: 11.5px; color: #767A72; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
         svg { width: 100vw; height: 100vh; }
-        .node circle { stroke-width: 2px; cursor: pointer; transition: all 0.2s; }
-        .node text { font-size: 11px; fill: #cbd5e1; pointer-events: none; }
-        .link { stroke-opacity: 0.6; stroke-width: 1.5px; }
-        .link.CONTRADICTED { stroke: #ef4444; stroke-width: 2.5px; stroke-dasharray: 4; }
-        .node.CONTRADICTED circle { fill: #ef4444 !important; stroke: #fca5a5; }
-        .node.SUPPORTED circle { fill: #10b981; stroke: #6ee7b7; }
-        .node.repository circle { fill: #6366f1; stroke: #a5b4fc; }
-        #tooltip { position: absolute; display: none; background: #1e293b; border: 1px solid #475569; padding: 10px 14px; border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 100; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); }
+        .node circle { stroke-width: 2px; cursor: pointer; transition: all 0.15s; }
+        .node text { font-size: 11px; fill: #191B19; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; pointer-events: none; }
+        .link { stroke: #9FA39A; stroke-opacity: 0.55; stroke-width: 1.4px; }
+        .link.CONTRADICTED { stroke: #991B1B; stroke-width: 2.2px; stroke-dasharray: 5,4; }
+        .node.CONTRADICTED circle { fill: #991B1B !important; stroke: #F3B8B8; }
+        .node.SUPPORTED circle { fill: #FFFFFF; stroke: #191B19; }
+        .node.repository circle { fill: #191B19; stroke: #D5E66A; stroke-width: 3px; }
+        #tooltip { position: absolute; display: none; background: #FFFFFF; border: 1px solid #E7E7E1; padding: 10px 14px; border-radius: 8px; font-size: 12px; color: #191B19; pointer-events: none; z-index: 100; box-shadow: 0 8px 24px rgba(25,27,25,0.12); }
     </style>
 </head>
 <body>
     <div id="header">
-        <h1>🦅 Garuda Epistemic Truth Graph</h1>
-        <div class="meta">Dual-Root Merkle Engine · Real-time AST & Runtime Verification</div>
+        <h1>Garuda Architecture Map</h1>
+        <div class="meta">Focused Epistemic Topology · <a href="/dashboard" style="color:#191B19; font-weight:600;">← Back to Command Center</a></div>
     </div>
     <div id="tooltip"></div>
     <svg></svg>
@@ -240,7 +240,7 @@ const visualizerHTML = `<!DOCTYPE html>
         const width = window.innerWidth, height = window.innerHeight;
         const svg = d3.select("svg");
         const g = svg.append("g");
-        svg.call(d3.zoom().scaleExtent([0.1, 4]).on("zoom", (e) => g.attr("transform", e.transform)));
+        svg.call(d3.zoom().scaleExtent([0.15, 4]).on("zoom", (e) => g.attr("transform", e.transform)));
 
         const tooltip = d3.select("#tooltip");
         const params = new URLSearchParams(window.location.search);
@@ -254,16 +254,16 @@ const visualizerHTML = `<!DOCTYPE html>
 
                 const simulation = d3.forceSimulation(nodes)
                     .force("link", d3.forceLink(links).id(d => d.id).distance(120))
-                    .force("charge", d3.forceManyBody().strength(-300))
+                    .force("charge", d3.forceManyBody().strength(-320))
                     .force("center", d3.forceCenter(width / 2, height / 2))
-                    .force("collision", d3.forceCollide().radius(25));
+                    .force("collision", d3.forceCollide().radius(28));
 
                 const link = g.append("g")
                     .selectAll("line")
                     .data(links)
                     .enter().append("line")
                     .attr("class", d => "link " + (d.status || ""))
-                    .attr("stroke", d => d.status === "CONTRADICTED" ? "#ef4444" : "#475569");
+                    .attr("stroke", d => d.status === "CONTRADICTED" ? "#991B1B" : "#9FA39A");
 
                 const node = g.append("g")
                     .selectAll("g")
@@ -276,11 +276,11 @@ const visualizerHTML = `<!DOCTYPE html>
                         .on("end", (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
 
                 node.append("circle")
-                    .attr("r", d => d.kind === "repository" ? 12 : 8)
+                    .attr("r", d => d.kind === "repository" ? 13 : 9)
                     .on("mouseover", (e, d) => {
                         tooltip.style("display", "block")
-                            .html("<strong>" + d.label + "</strong><br/>Kind: " + d.kind + "<br/>Status: " + d.status + (d.count ? "<br/>Entities: " + d.count : ""))
-                            .style("left", (e.pageX + 10) + "px")
+                            .html("<strong>" + d.label + "</strong><br/>Kind: " + d.kind + "<br/>Status: " + d.status + (d.count ? "<br/>Connections: " + d.count : ""))
+                            .style("left", (e.pageX + 12) + "px")
                             .style("top", (e.pageY - 10) + "px");
                     })
                     .on("mouseout", () => tooltip.style("display", "none"));
