@@ -31,6 +31,32 @@ This playbook is the operational guide for running Garuda against a real codebas
 
 ---
 
+## 1-Command Zero-Config Onboarding (New in v1.2)
+
+To bring up the entire Garuda stack in a single command (PostgreSQL container, idempotent database migrations, persistent `.env` and Ed25519 JWT keys, compiled binaries, background API gateway, provisioned owner account, Cursor/Claude MCP config, multi-repo indexing, and MCP spec verification):
+
+```bash
+./setup.sh
+```
+
+Or initialize any repository directly via the CLI:
+
+```bash
+./bin/garuda init /path/to/repo --workspace go-validation-10 --email myshra777@gmail.com --password garuda2026
+```
+
+Once initialized, all Garuda binaries (`bin/garuda`, `bin/garuda-api`, `bin/garuda-mcp`) automatically load `.env` from the repository root — you never need to manually export `DATABASE_URL`, `GARUDA_WORKSPACE`, `PORT`, or `JWT_PRIVATE_KEY_HEX` across terminal tabs.
+
+### Unified Change-Control Check (`garuda check`)
+
+Run all five Garuda planes (Blast Radius + 3-State Evidence + Policy Evaluation + Governance Verdict + RFC 6962 Merkle Seal) in a single command:
+
+```bash
+./bin/garuda check --project go-validation-10 --target SQLModel --policy ./policies --save --fail-on-block
+```
+
+---
+
 ## What Garuda Is For
 
 Garuda is a verified state and governance plane for AI-assisted software development. It builds a shared semantic model of code, relationships, documentation claims, runtime observations, policies, evidence, and decisions, then exposes that model through CLI, HTTP, MCP, dashboards, CI, and VS Code.

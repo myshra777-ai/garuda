@@ -201,7 +201,7 @@ func deriveWorkspaceInterfaceImplementations(entities []Entity, existing []Relat
 		case KindStruct:
 			structs = append(structs, e)
 		case KindMethod:
-			recv := strings.TrimSpace(e.Receiver)
+			recv := strings.TrimSpace(e.ReceiverType)
 			recv = strings.TrimPrefix(recv, "*")
 			if idx := strings.LastIndex(recv, "."); idx >= 0 {
 				recv = recv[idx+1:]
@@ -252,6 +252,9 @@ func deriveWorkspaceInterfaceImplementations(entities []Entity, existing []Relat
 			evLine := st.LineStart
 			if evLine == 0 {
 				evLine = st.Line
+			}
+			if evLine == 0 {
+				evLine = 1
 			}
 			evEnd := st.LineEnd
 			if evEnd == 0 {
@@ -457,11 +460,12 @@ func extractWorkspaceEntities(fset *token.FileSet, pkgPath string, files []*ast.
 				endPos := fset.Position(d.End())
 
 				entities = append(entities, Entity{
-					ID:        canonicalID.String(),
-					Name:      funcName,
-					Kind:      kind,
-					Package:   pkgPath,
-					Signature: sig,
+					ID:           canonicalID.String(),
+					Name:         funcName,
+					Kind:         kind,
+					Package:      pkgPath,
+					ReceiverType: receiver,
+					Signature:    sig,
 					File:      startPos.Filename,
 					Line:      startPos.Line,
 					LineStart: startPos.Line,
