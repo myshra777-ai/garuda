@@ -1,32 +1,31 @@
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;assets/garuda-logo.png&quot; width=&quot;104&quot; alt=&quot;Garuda Logo&quot;&gt;
-&lt;/p&gt;
+<p align="center">
+  <img src="assets/garuda-logo.png" width="104" alt="Garuda Logo">
+</p>
 
-&lt;h1 align=&quot;center&quot;&gt;Garuda&lt;/h1&gt;
+<h1 align="center">Garuda</h1>
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;strong&gt;Let agents write. Garuda guards the architecture.&lt;/strong&gt;&lt;br&gt;
-  &lt;em&gt;Garuda watches your architecture even when you aren&#39;t watching the diff — it maps, verifies, and gates every change before it merges.&lt;/em&gt;
-&lt;/p&gt;
+<p align="center">
+  <strong>Let agents write. Garuda guards the architecture.</strong><br>
+  <em>Garuda watches your architecture even when you aren't watching the diff — it maps, verifies, and gates every change before it merges.</em>
+</p>
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;a href=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml&quot;&gt;&lt;img src=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml/badge.svg&quot; alt=&quot;CI&quot;&gt;&lt;/a&gt;
-  &lt;a href=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml&quot;&gt;&lt;img src=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml/badge.svg&quot; alt=&quot;Garuda CI &amp; Governance&quot;&gt;&lt;/a&gt;
-  &lt;a href=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml&quot;&gt;&lt;img src=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml/badge.svg&quot; alt=&quot;Garuda Integrity Gate&quot;&gt;&lt;/a&gt;
-  &lt;a href=&quot;LICENSE&quot;&gt;&lt;img src=&quot;https://img.shields.io/badge/license-Apache--2.0-blue.svg&quot; alt=&quot;Apache 2.0 License&quot;&gt;&lt;/a&gt;
-  &lt;a href=&quot;PLAYBOOK.md&quot;&gt;&lt;img src=&quot;https://img.shields.io/badge/docs-Operational_Playbook-0f172a.svg&quot; alt=&quot;Operational Playbook&quot;&gt;&lt;/a&gt;
-  &lt;a href=&quot;EVIDENCE.md&quot;&gt;&lt;img src=&quot;https://img.shields.io/badge/evidence-38%2F38_MCP_%7C_10%2F10_Runtime-16a34a.svg&quot; alt=&quot;Verification Evidence&quot;&gt;&lt;/a&gt;
-&lt;/p&gt;
+<p align="center">
+  <a href="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml/badge.svg" alt="Garuda CI & Governance"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 License"></a>
+  <a href="PLAYBOOK.md"><img src="https://img.shields.io/badge/docs-Operational_Playbook-0f172a.svg" alt="Operational Playbook"></a>
+  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/evidence-38%2F38_MCP_%7C_10%2F10_Runtime-16a34a.svg" alt="Verification Evidence"></a>
+</p>
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;a href=&quot;#the-5-second-workflow&quot;&gt;5-Second Workflow&lt;/a&gt; ·
-  &lt;a href=&quot;#what-garuda-does-for-you&quot;&gt;What Garuda Does&lt;/a&gt; ·
-  &lt;a href=&quot;#why-the-graph-is-only-layer-1&quot;&gt;The Moat&lt;/a&gt; ·
-  &lt;a href=&quot;#put-the-gate-in-cicd&quot;&gt;CI/CD Gates&lt;/a&gt; ·
-  &lt;a href=&quot;#software-intelligence-instrument-dashboard&quot;&gt;v1.4 Dashboard&lt;/a&gt; ·
-  &lt;a href=&quot;#21-mcp-tools-for-coding-agents&quot;&gt;21 MCP Tools&lt;/a&gt; ·
-  &lt;a href=&quot;#evidence-not-false-certainty&quot;&gt;Epistemic Honesty&lt;/a&gt;
-&lt;/p&gt;
+<p align="center">
+  <a href="#the-5-second-workflow">5-Second Workflow</a> ·
+  <a href="#what-garuda-does-for-you">What Garuda Does</a> ·
+  <a href="#why-the-graph-is-only-layer-1">The Moat</a> ·
+  <a href="#put-the-gate-in-cicd">CI/CD Gates</a> ·
+  <a href="#software-intelligence-instrument-dashboard">v1.4 Dashboard</a> ·
+  <a href="#21-mcp-tools-for-coding-agents">21 MCP Tools</a> ·
+  <a href="#evidence-not-false-certainty">Epistemic Honesty</a>
+</p>
 
 AI coding agents (Cursor, Claude Code, Codex, Devin) write code faster than humans can review it. A pull request can pass every unit test and linter check while quietly introducing a forbidden `Handler -> Database` dependency, creating a circular package dependency (`A -> B -> C -> A`), breaking a shared struct with 170+ downstream callers, or drifting away from documented ADRs and live production behavior.
 
@@ -56,7 +55,7 @@ Or run the unified change-control gate against any symbol or pull request target
 
 **Here is what happens immediately:**
 
-1. **Compiler & AST Extraction (`100%` Local, Zero LLM Guessing)** — Garuda parses your workspace using `go/types` + `go/work` + `vendor/` for Go (`1.0` exact type resolution across modules), Python ASTs, and Tree-sitter TypeScript ASTs. No source code leaves your machine, and there is no embedding or vector-store hallucination.
+1. **Compiler & AST Extraction (`100%` Local, Zero LLM Guessing)** — Garuda parses your workspace using `go/types` + `go.work` + `vendor/` for Go (exact type resolution across modules), Python ASTs, and Tree-sitter TypeScript ASTs. No source code leaves your machine, and there is no embedding or vector-store hallucination.
 2. **Transitive Blast Radius & Topology Mapping** — Computes confidence-weighted downstream callers, interface implementers, structural hubs, and package cycles in milliseconds.
 3. **3-State Epistemic Truth (`SUPPORTED` / `UNVERIFIED` / `CONTRADICTED`)** — Correlates static code edges with ingested Markdown/ADR requirements (`garuda docs ingest`) and live OpenTelemetry runtime spans (`POST /api/v1/telemetry/spans`). Shadow runtime calls that bypass static boundaries are automatically quarantined as `CONTRADICTED`.
 4. **Fail-Closed Policy Evaluation (`ALLOW` / `WARN` / `REVIEW` / `BLOCK`)** — Runs 9 deterministic SQL/CTE policy predicates (`layer_violation`, `transitive_claim_exists`, `cycle_exists`, `blast_radius_exceeds`, `contradiction_exists`, `verification_missing`, `claim_exists`, `entity_exists`, `language_matches`). With `--fail-on-block`, a `BLOCK` verdict exits with code `2` to fail your CI pipeline.
@@ -108,41 +107,29 @@ Garuda provides three purpose-built CI gates so you can enforce the exact failur
 
 ### Example Executable Architecture Policy (`policies/architecture-layer-guardrails.yaml`)
 
+Garuda policies are explicit YAML files. There is no hidden magic. If a policy is malformed, the CI gate fails closed.
+
 ```yaml
-apiVersion: garuda.io/v1
-kind: ArchitecturePolicy
-metadata:
-  name: architecture-layer-guardrails
-  description: Prevent HTTP handlers from bypassing service layers and cap unreviewed blast radius
-spec:
-  rules:
-    - id: no-handler-to-store-direct
-      description: HTTP handlers must not call or import database store packages directly
-      predicate: layer_violation
-      params:
-        from_layer: "internal/api"
-        to_layer: "internal/store"
-      action: BLOCK
-
-    - id: no-package-cycles
-      description: Block circular dependencies across internal packages
-      predicate: cycle_exists
-      action: BLOCK
-
-    - id: high-blast-radius-review
-      description: Require human architecture review when modifying symbols with >25 transitive dependents
-      predicate: blast_radius_exceeds
-      params:
-        threshold: 25
-      action: REVIEW
-
-    - id: quarantine-runtime-contradictions
-      description: Block changes touching components with active runtime vs. static contradictions
-      predicate: contradiction_exists
-      action: BLOCK
+id: architecture-no-api-to-store-bypass
+version: v1
+title: "API handlers must not bypass service layer to access store directly"
+priority: 150
+language: any
+authority: "Architecture Review Board"
+scope:
+  domain: platform
+  package: "internal/api"
+when:
+  - type: layer_violation
+    params:
+      from_layer: "internal/api"
+      to_layer: "internal/store|database/sql"
+then:
+  decision: BLOCK
+  reason: "API layer must route state mutations through domain/service interfaces rather than calling persistence packages directly."
 ```
 
-Start with the included [architecture layer guardrails policy](https://www.google.com/search?q=policies/architecture-layer-guardrails.yaml) and the full [CLI \& Policy Reference](https://www.google.com/search?q=docs/API.md).
+Start with the included [architecture layer guardrails policy](policies/architecture-layer-guardrails.yaml) and the full [CLI & Policy Reference](docs/API.md).
 
 ## Software Intelligence Instrument (`/dashboard`)
 
@@ -157,14 +144,14 @@ Garuda v1.4 ships a redesigned, high-craft web instrument at `http://localhost:8
 
 ## 21 MCP Tools for Coding Agents
 
- `./setup.sh` automatically registers `garuda-mcp` with **Cursor** and **Claude Desktop** (and prints ready-to-paste config for **Codex CLI**). Connected agents query the shared workspace model directly via 21 deterministic tools:
+`./setup.sh` automatically registers `garuda-mcp` with **Cursor** and **Claude Desktop** (and prints ready-to-paste config for **Codex CLI**). Connected agents query the shared workspace model directly via 21 deterministic tools:
 
 | Category | MCP Tools | Purpose |
 |---|---|---|
-| **Orientation & Discovery** | `garuda.briefing`, `garuda.status`, `garuda.summary`, `garuda.find_entity`, `garuda.get_Symbol_context` | Orient the agent to workspace health, resolve exact symbol IDs, and inspect source signatures before editing. |
-| **Topology & Blast Radius** | `garuda.neighbors`, `garuda.blast_radius`, `garuda.impact`, `garuda.implementers`, `garuda.subclasses`, `garuda.call_path` | Trace upstream callers, downstream dependencies, interface implementations, and transitive change impact. |
-| **Governance & Policy Gates** | `garuda.verify_policy_evaluation`, `garuda.evaluate_policies`, `garuda.check_gate`, `garuda.get_decision_proof` | Pre-check proposed refactors against active YAML policies and verify RFC 6962 Merkle receipts. |
-| **Epistemic Truth & Runtime** | `garuda.detect_contradictions`, `garuda.verify_claims`, `garuda.ingest_doc_claims`, `garuda.hygiene` | Query static-vs-runtime contradictions, ADR drift, and dead-code / structural hygiene (`ponytail`). |
+| **Orientation & Discovery** | `garuda.briefing`, `garuda.entities`, `garuda.find_entity`, `garuda.inspect` | Orient the agent to workspace health, resolve exact symbol IDs, and inspect source signatures before editing. |
+| **Topology & Blast Radius** | `garuda.neighbors`, `garuda.blast_radius`, `garuda.get_impact`, `garuda.implementers`, `garuda.subclasses`, `garuda.query_claims` | Trace upstream callers, downstream dependencies, interface implementations, and transitive change impact. |
+| **Governance & Policy Gates** | `garuda.verify_policy_evaluation`, `garuda.policy.evaluate`, `garuda.governance.status`, `garuda.policy.list` | Pre-check proposed refactors against active YAML policies and verify RFC 6962 Merkle receipts. |
+| **Epistemic Truth & Runtime** | `garuda.detect_contradictions`, `garuda.check_drift`, `garuda.get_lineage`, `garuda.propose_decision` | Query static-vs-runtime contradictions, ADR drift, and decision history. |
 | **Multi-Agent Continuity** | `garuda.handoff`, `garuda.resume` | Persist and resume structured multi-agent task state, pinned symbols, and architectural constraints across sessions. |
 
 ### Complete CLI Command Surface
@@ -199,14 +186,14 @@ The Merkle ledger cryptographically proves the **inclusion, ordering, and tamper
 | **Python** | Structural AST Analyzer | Module, class, function, import, and call-graph extraction. | **Beta** |
 | **TypeScript** | Tree-sitter AST Analyzer | Interface, class, function, import, and structural relationship extraction. | **Beta** |
 
-- **Reproducible Verification Suite:** `make benchmark-strict` executes 24 ground-truth compiler and cross-module benchmarks (`TestDoubleRunDeterminism` across all 24 cases), `38/38` reference MCP verifier checks (`scripts/mcp_verify.py`), and `10/10` edge-level runtime contradiction detections (`scripts/runtime_contradiction_test.py`). See [EVIDENCE.md](https://www.google.com/search?q=EVIDENCE.md) for full methodology and scope boundaries.
+- **Reproducible Verification Suite:** `make benchmark-strict` executes 24 ground-truth compiler and cross-module benchmarks (`TestDoubleRunDeterminism` across all 24 cases), `38/38` reference MCP verifier checks (`scripts/mcp_verify.py`), and `10/10` edge-level runtime contradiction detections (`scripts/runtime_contradiction_test.py`). See [EVIDENCE.md](EVIDENCE.md) for full methodology and scope boundaries.
 
 ## Documentation
 
 - **[Operational Playbook](PLAYBOOK.md)** — 1-command onboarding, MCP client wiring (Cursor, Claude Desktop, Codex), policy authoring, runtime OpenTelemetry ingestion, and troubleshooting.
-- **[System Walkthrough](https://www.google.com/search?q=docs/WALKTHROUGH.md)** — End-to-end CLI, v1.4 Dashboard, MCP, and VS Code extension workflows.
-- **[Capabilities \& Verification Tiers](https://www.google.com/search?q=docs/CAPABILITIES.md)** — Detailed breakdown of production vs. beta capabilities and verification guarantees.
-- **[CLI, Policy, MCP \& HTTP API Reference](https://www.google.com/search?q=docs/API.md)** — Complete reference for all CLI flags, 9 policy predicates, 21 MCP tools, and REST endpoints.
-- **[System Specifications](https://www.google.com/search?q=docs/SPECS.md)** — Architecture internals, PostgreSQL schema, Ed25519 JWT auth, and Merkle tree specifications.
-- **[Verification Evidence](https://www.google.com/search?q=EVIDENCE.md)** — Reproducible benchmark output, test coverage, and explicit security/epistemic boundaries.
-- **[Changelog](CHANGELOG.md)** · **[Codebase Hygiene](https://www.google.com/search?q=docs/hygiene.md)** · **[License (Apache 2.0)](https://www.google.com/search?q=LICENSE)**
+- **[System Walkthrough](docs/WALKTHROUGH.md)** — End-to-end CLI, v1.4 Dashboard, MCP, and VS Code extension workflows.
+- **[Capabilities & Verification Tiers](docs/CAPABILITIES.md)** — Detailed breakdown of production vs. beta capabilities and verification guarantees.
+- **[CLI, Policy, MCP & HTTP API Reference](docs/API.md)** — Complete reference for all CLI flags, 9 policy predicates, 21 MCP tools, and REST endpoints.
+- **[System Specifications](docs/SPECS.md)** — Architecture internals, PostgreSQL schema, Ed25519 JWT auth, and Merkle tree specifications.
+- **[Verification Evidence](EVIDENCE.md)** — Reproducible benchmark output, test coverage, and explicit security/epistemic boundaries.
+- **[Changelog](CHANGELOG.md)** · **[Codebase Hygiene](docs/hygiene.md)** · **[License (Apache 2.0)](LICENSE)**
