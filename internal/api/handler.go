@@ -111,12 +111,6 @@ func (s *Server) SetControlPool(pool *pgxpool.Pool) {
 }
 
 // NewServer creates a new API server instance with initialized state and SSE broker.
-//
-// The router is not constructed here. SetupRouter owns the mux.Router,
-// builds the middleware chain (rate limiting, recovery, request ID),
-// calls RegisterRoutes on the returned Server, and returns the fully
-// wired handler. This keeps the middleware order in one place instead
-// of split between NewServer and SetupRouter.
 func NewServer(
 	store types.DecisionStore,
 	authService *auth.AuthService,
@@ -155,10 +149,6 @@ func NewServer(
 }
 
 // RegisterRoutes sets up HTTP routing and subrouter middleware hierarchy.
-//
-// Rate limiting is applied by the caller's middleware chain in
-// SetupRouter, before this function's routes are reached. RegisterRoutes
-// itself does not install middleware on r.
 func (s *Server) RegisterRoutes(r *mux.Router) {
 	// =========================================================================
 	// PUBLIC ROUTES (no authentication)
@@ -178,9 +168,6 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 
 	// =========================================================================
 	// SESSION-PROTECTED ROUTES (browser)
-	//
-	// Wrapped in RequireSession. Requests without a valid session cookie
-	// are redirected to /login (HTML) or receive 401 (API).
 	// =========================================================================
 	sess := r.NewRoute().Subrouter()
 	sess.Use(func(next http.Handler) http.Handler {
@@ -204,16 +191,12 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	sess.HandleFunc("/admin", s.HandleAdminDashboard).Methods(http.MethodGet)
 	// =========================================================================
 	// JWT-PROTECTED API SUBROUTER (CLI / MCP tokens)
-	//
-	// These are not used by browsers. They are for programmatic clients
-	// that hold a signed Ed25519 JWT issued by HandleDebugToken or an
-	// admin tool.
 	// =========================================================================
 	api := r.PathPrefix("/api/v1").Subrouter()
 	api.Use(s.AuthMiddleware)
 
 	api.HandleFunc("/decisions/propose", s.HandleProposeDecision).Methods(http.MethodPost)
-	api.HandleFunc("/evidence/verify/{id}", s.HandleVerifyDecisionEvidence).Methods(http.MethodGet)
+	api.HandleFunc("/evidence/verify/{id}", s.HandleVerifyDecision).Methods(http.MethodGet)
 	api.HandleFunc("/agent/warmup", s.HandleAgentWarmup).Methods(http.MethodGet)
 	api.HandleFunc("/agents/checkpoint", s.HandleAgentCheckpoint).Methods(http.MethodPost)
 	api.HandleFunc("/agents/handoff", s.HandleHandoff).Methods(http.MethodPost)
@@ -231,15 +214,6 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/debug/token", s.HandleDebugToken).Methods(http.MethodGet)
 
 	// ── Control Plane (/ _ / control) ──
-	//
-	// Owner-facing platform panel. Registered here, alongside the
-	// tenant routes, because every entry point that calls
-	// RegisterRoutes should serve it. Public login/logout routes are
-	// registered first so they take precedence over the protected
-	// subtree; gorilla matches in registration order.
-	//
-	// Unauthenticated requests to the protected subtree return 404,
-	// not 401 — a 401 confirms the endpoint exists.
 	r.HandleFunc("/_/control/login", s.HandleControlPlaneLoginGET).Methods(http.MethodGet)
 	r.HandleFunc("/_/control/login", s.HandleControlPlaneLoginPOST).Methods(http.MethodPost)
 	r.HandleFunc("/_/control/logout", s.HandleControlPlaneLogout).Methods(http.MethodPost)
@@ -347,10 +321,6 @@ func readRateLimitBurst() int {
 	return defaultRateLimitBurst
 }
 
-// RateLimiter returns the server's configured IP rate limiter. Used by
-// cmd/garuda/dev_cmd.go, which builds its own router via api.SetupRouter
-// and needs to pass the same limiter the server holds. Without this
-// getter, the field is unreachable from package main.
 func (s *Server) RateLimiter() *IPRateLimiter {
 	return s.rateLimiter
 }

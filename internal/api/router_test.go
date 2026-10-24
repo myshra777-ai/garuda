@@ -75,7 +75,7 @@ func TestAuthMiddleware_EnforcesRealEd25519JWTValidation(t *testing.T) {
 
 	protected := s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedActor, _ = auth.ActorFromContext(r.Context())
-		capturedTenant, _ = auth.TenantFromContext(r.Context())
+		capturedTenant, _ = auth.TenantIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
 
