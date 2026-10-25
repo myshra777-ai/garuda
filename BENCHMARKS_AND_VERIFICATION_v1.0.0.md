@@ -1,5 +1,6 @@
-Markdown
 # Garuda Engine v1.0.0 — System Verification & Benchmark Report
+
+> **Historical report for Garuda v1.0.0.** The measurements and product descriptions in this file apply to the v1.0.0 test environment and should not be used as current v1.5.0 feature claims or SLAs. The current v1.5.0 verification record is [EVIDENCE.md](EVIDENCE.md); implementation changes are summarized in [CHANGELOG.md](CHANGELOG.md).
 
 > **Disclaimer**: The benchmark metrics, latencies, and transaction throughput reported in this document were measured in an isolated testing environment running locally on Linux x86_64 (`garuda_test` schema, Docker 26.x, PostgreSQL 16 on local NVMe storage). Real-world production results will vary depending on network topology, database connection pool sizing, disk IOPS, hardware specs, and agent swarm concurrency.
 

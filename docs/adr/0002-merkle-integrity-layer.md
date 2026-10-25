@@ -187,8 +187,7 @@ constraints.
 
 Consequences
 Positive: Independent verifiability. Standard Merkle construction. No
-JSON dependency. Proofs are O(log n). Roots are typographically guaranteed
-to be 32 bytes. Historical data is preserved but distinguished.
+JSON dependency. Proofs are O(log n). Roots are constrained to the expected 32-byte SHA-256 digest length. Historical data is preserved but distinguished.
 
 Negative: The v0 verification code path must be preserved for
 historical proofs — it cannot be deleted. This adds ~150 lines of dead
@@ -255,7 +254,7 @@ site, changing type signatures across package boundaries, and re-testing
 every hash comparison. The safety gain over the amended approach is zero:
 both `BYTEA` and `TEXT` with a 64-hex CHECK constraint guarantee
 
-1. Exactly 32 bytes of entropy (a SHA-256 digest).
+1. Exactly 32 bytes, matching the SHA-256 digest length.
 2. Well-formed values — no truncation, no uppercase, no non-hex characters.
 3. Database-enforced rejection of malformed inserts.
 

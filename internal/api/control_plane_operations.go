@@ -39,14 +39,11 @@ type RecentError struct {
 
 // OperationsMetrics is the payload the Operations tab renders.
 //
-// The four working panels each have a paired Error field. When the
-// query fails, the template renders "Not measured" with the error in
-// the tooltip.
-//
-// The three locked panels (latency, error rate, recent errors) are
-// declared here as booleans so the template can render the "not yet
-// instrumented" state explicitly. They are not errors — they are
-// honest signals that the underlying infrastructure does not exist.
+// Database-backed panels carry an Error field so failed queries render as
+// "Not measured" rather than a fabricated zero. Query latency and HTTP error
+// rate are measured in-process; recent errors are read from errors_log.
+// Query-latency percentiles remain in a collecting state until enough samples
+// exist. These in-process measurements reset when the API process restarts.
 type OperationsMetrics struct {
 	// Working panels
 	UptimeSeconds int64
@@ -81,11 +78,10 @@ type OperationsMetrics struct {
 	Error string
 }
 
-// loadOperationsMetrics runs the four working Operations panels.
-//
-// Latency, error rate, and the recent-errors log are not instrumented
-// yet. The corresponding Locked flags are false so the template
-// renders them as locked cards rather than fabricated zeros.
+// loadOperationsMetrics reads the current Operations-tab metrics: process
+// uptime, database size, stalled sessions, MCP tool error rates, in-process
+// HTTP error rate, query-latency percentiles, and recent errors. Query and
+// configuration failures are represented separately from real zero counts.
 func (s *Server) loadOperationsMetrics(ctx context.Context) OperationsMetrics {
 	m := OperationsMetrics{}
 

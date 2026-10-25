@@ -76,7 +76,7 @@ If a background PostgreSQL database stops after a reboot, a binary is missing, o
 
 ## 3. Garuda Talon Active Agent Execution Harness (`garuda talon`)
 
-Standard MCP servers are passive—if an AI agent forgets to query a tool, it writes code blind. **Garuda Talon** enforces architectural boundaries before, during, and after every agent edit.
+A passive MCP server answers when the agent asks. **Garuda Talon adds configured pre-edit and post-edit integration points**: it can compile the workspace contract, provide targeted context, check changed files and return repair instructions. The exact interception boundary depends on the installed client hooks, command wrapper and CI configuration; Talon is not a universal agent sandbox.
 
 ### Pre-Edit Briefing (`garuda talon brief`)
 Before modifying a high-impact struct, interface, or package, inspect its exact blast radius, applicable ADR `MUST`/`MUST_NOT` rules, and active YAML policies:
@@ -113,7 +113,7 @@ Incrementally re-indexes dirty working-tree files in milliseconds, maps git diff
 ```
 
 ### Autonomous Supervisor Loop (`garuda talon run`)
-Wrap any CLI coding agent (`claude`, `aider`, `codex`) in a closed self-repair loop that automatically feeds policy/ADR violation fixes back to the agent (up to `--max-retries 3`) until `ALLOW` is achieved:
+Wrap a compatible CLI coding agent (`claude`, `aider`, `codex`) in a bounded feedback loop. When a guard returns `BLOCK`, Talon can feed repair instructions back to the agent for up to `--max-retries 3` attempts. The final result can still be `BLOCK`; this is not a guarantee of automatic repair or a sandbox:
 
 ```bash
 ./bin/garuda talon run --max-retries 3 -- claude "Refactor CheckoutHandler to use OrderService"

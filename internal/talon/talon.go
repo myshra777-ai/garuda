@@ -16,8 +16,8 @@
 //     .windsurfrules, and .git/hooks/pre-commit + commit-msg).
 //  3. Pre-Flight Context Injection (PreEditBrief) before any file or symbol is edited.
 //  4. Post-Edit Guard & Deterministic Self-Repair Loop (RunGuard & RunHarnessLoop)
-//     that blocks violating edits and feeds structured refactoring instructions
-//     back to the coding agent until ALLOW is reached and Merkle-sealed.
+//     that returns blocking findings and can feed repair instructions back to the agent
+//     for a bounded number of attempts. A successful repair is not guaranteed.
 package talon
 
 import (
@@ -182,19 +182,20 @@ func RenderContractMarkdown(c *WorkspaceContract) string {
 	var b strings.Builder
 	b.WriteString("# GARUDA TALON — ACTIVE ARCHITECTURAL CONTRACT\n\n")
 	b.WriteString(fmt.Sprintf("- **Workspace**: `%s` (`%s`)\n", c.WorkspaceName, c.WorkspaceID))
-	b.WriteString(fmt.Sprintf("- **Graph Scale**: %d AST entities | %d verified edges\n", c.EntityCount, c.ClaimCount))
-	b.WriteString("- **Enforcement Mode**: `ACTIVE (FAIL-CLOSED)`\n\n")
+	b.WriteString(fmt.Sprintf("- **Graph Scale at compile time**: %d entities | %d relationships\n", c.EntityCount, c.ClaimCount))
+	b.WriteString("- **Workflow Mode**: `TALON CONFIGURED` (hooks + policy checks)\n\n")
+	b.WriteString("> This contract reflects the workspace, policy directory, and document claims available when it was compiled. Refresh it after changing that state. Client hooks vary; this contract is not a universal interception barrier or sandbox.\n\n")
 
 	b.WriteString("## 1. Mandatory Agent Execution Protocol (Non-Negotiable)\n\n")
-	b.WriteString("You are operating inside a **Garuda Talon Enforced Workspace**. Every code change is verified against the AST call graph, ingested Architecture Decision Records (ADRs), and declarative YAML policies before completion:\n\n")
+	b.WriteString("You are working in a Talon-configured repository. Follow this pre-edit and post-edit protocol for supported tool operations. Talon provides context and configured checks; hooks vary by client and are not a universal interception barrier or sandbox. Run the guard against the changed diff and rely on a required CI check for the merge boundary when configured:\n\n")
 	b.WriteString("1. **BEFORE editing any file or symbol**: Call MCP tool `garuda.talon_pre_edit` (or `garuda.briefing` + `garuda.blast_radius`) with the target file or symbol name to inspect its callers, layer boundaries, and ADR rules.\n")
 	b.WriteString("2. **WHILE writing code**: Respect all `MUST` / `MUST_NOT` ADR rules and YAML architectural policies listed below. Never introduce forbidden cross-layer imports/calls or circular package dependencies.\n")
 	b.WriteString("3. **IMMEDIATELY AFTER editing any file**: Call MCP tool `garuda.talon_verify_edit` (or CLI `./bin/garuda talon guard --diff HEAD`) to incrementally re-index your edits and run diff-scoped policy & ADR verification.\n")
-	b.WriteString("4. **ON `BLOCK` VERDICT**: You MUST NOT stop, commit, or declare the task complete. Follow the `self_repair_instructions` in the verdict immediately and re-run `garuda.talon_verify_edit` until `ALLOW` is returned.\n\n")
+	b.WriteString("4. **ON `BLOCK` VERDICT**: Do not claim the change is ready. Follow `self_repair_instructions` and retry only within the configured supervisor limit. If the result remains `BLOCK`, stop and report the unresolved findings; Talon does not guarantee that every change can be repaired to `ALLOW`.\n\n")
 
 	b.WriteString("## 2. Active Declarative Policy Guardrails\n\n")
 	if len(c.Policies) == 0 {
-		b.WriteString("- Standard Garuda structural integrity policies apply (no circular dependencies, no undocumented breaking hub changes).\n\n")
+		b.WriteString("- No YAML policy guardrails were loaded into this contract. Validate and supply the intended policy directory before relying on policy checks.\n\n")
 	} else {
 		for _, p := range c.Policies {
 			b.WriteString(fmt.Sprintf("- **`[%s]` %s** (`%s`, predicates: `%s`): %s\n",
@@ -292,7 +293,7 @@ func InstallHooks(
 	_ = os.MkdirAll(cursorRulesDir, 0755)
 	cursorRulePath := filepath.Join(cursorRulesDir, "garuda-talon.mdc")
 	cursorMDC := "---\n" +
-		"description: Garuda Talon Active Architectural & ADR Enforcement Contract (Mandatory for all code edits)\n" +
+		"description: Garuda Talon architecture context and configured pre/post-edit checks\n" +
 		"globs: [\"**/*\"]\n" +
 		"alwaysApply: true\n" +
 		"---\n\n" +
@@ -758,14 +759,15 @@ func BuildSelfRepairPrompt(v *GuardVerdict) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("Refactor the offending code now, then invoke `garuda.talon_verify_edit` (or `garuda talon guard`) to confirm `ALLOW`.\n")
+	b.WriteString("Address the reported finding, then invoke `garuda.talon_verify_edit` (or `garuda talon guard`) and inspect the resulting verdict. If it remains `BLOCK`, report the unresolved findings rather than claiming the change is ready.\n")
 	return b.String()
 }
 
 // RunHarnessLoop executes an external coding agent command (`agentArgs`), runs
 // incremental AST re-indexing + `RunGuard` after each pass, and if `BLOCK`
 // occurs, re-invokes the agent with `GARUDA_TALON_REPAIR_PROMPT` (and `--repair`
-// prompt flag if supported) up to `maxRetries` times until `ALLOW` is reached.
+// prompt flag if supported) for at most `maxRetries` attempts. The final
+// verdict may remain `BLOCK`; the harness does not guarantee automatic repair.
 func RunHarnessLoop(
 	ctx context.Context,
 	st *store.PostgresStore,

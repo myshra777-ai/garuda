@@ -39,7 +39,7 @@ jobs:
       - name: Set up Go Runtime
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26.0'
           cache: true
 
       - name: Verify License Headers
@@ -120,8 +120,11 @@ jobs:
         id: garuda_diff
         continue-on-error: true
         run: |
+          set +e
           ./garuda diff garuda-baseline.json garuda-pr.json --json -o diff-report.json
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
 
       - name: Generate Blast Radius Impact Report
         if: github.event_name == 'pull_request' && always()
@@ -147,11 +150,12 @@ jobs:
             const fs = require('fs');
             const marker = '<!-- garuda-ci-comment-marker -->';
             
-            let diffReport = {};
+            let diffReport = null;
+            let diffReportError = '';
             try {
               diffReport = JSON.parse(fs.readFileSync('diff-report.json', 'utf8'));
             } catch (e) {
-              diffReport = { summary: { breaking_changes: 0, warnings: 0, additions: 0, removals: 0, modified: 0 } };
+              diffReportError = String(e);
             }
             
             let impactReport = {};
@@ -161,18 +165,22 @@ jobs:
               impactReport = {};
             }
             
-            const summary = diffReport.summary || {};
+            const summary = (diffReport && diffReport.summary) || {};
             let body = `## 🧠 Garuda CI Quality & Governance Report\n\n`;
-            body += `**Truth-First Benchmark:** ✅ 100% Precision / Recall (20 Fixtures - GAP-20)\n`;
-            body += `**Diff Status:** ${diffReport.status || 'OK'}\n\n`;
-            body += `| Metric | Count |\n| :--- | :--- |\n`;
-            body += `| 🚫 Breaking Changes | **${summary.breaking_changes || 0}** |\n`;
-            body += `| ⚠️ Warnings | ${summary.warnings || 0} |\n`;
-            body += `| ➕ Additions | ${summary.additions || 0} |\n`;
-            body += `| ➖ Removals | ${summary.removals || 0} |\n`;
-            body += `| 🔄 Modified | ${summary.modified || 0} |\n\n`;
+            body += `**Grounding benchmark:** GAP-20 results are fixture- and task-specific; see evidence/benchmarks/gap20-grounding.md for scope.\n`;
+            if (diffReport) {
+              body += `**Diff Status:** ${diffReport.status || 'reported; inspect details below'}\n\n`;
+              body += `| Metric | Count |\n| :--- | :--- |\n`;
+              body += `| 🚫 Breaking Changes | **${summary.breaking_changes ?? '—'}** |\n`;
+              body += `| ⚠️ Warnings | ${summary.warnings ?? '—'} |\n`;
+              body += `| ➕ Additions | ${summary.additions ?? '—'} |\n`;
+              body += `| ➖ Removals | ${summary.removals ?? '—'} |\n`;
+              body += `| 🔄 Modified | ${summary.modified ?? '—'} |\n\n`;
+            } else {
+              body += `**Diff Status:** ⚠️ Report unavailable; counts are not measured, not zero. ${diffReportError}\n\n`;
+            }
 
-            const entityDiffs = diffReport.entity_diffs || [];
+            const entityDiffs = (diffReport && diffReport.entity_diffs) || [];
             if (entityDiffs.length > 0) {
               body += `### Entity Changes\n`;
               const added = entityDiffs.filter(e => e.status === 'added');
@@ -193,7 +201,7 @@ jobs:
               }
             }
 
-            const relDiffs = diffReport.relationship_diffs || [];
+            const relDiffs = (diffReport && diffReport.relationship_diffs) || [];
             if (relDiffs.length > 0) {
               body += `\n### Relationship Graph Changes\n`;
               relDiffs.forEach(rd => {

@@ -302,6 +302,25 @@ Add Garuda to GitHub Actions (`.github/workflows/garuda-gate.yml`) or GitLab CI:
     ./bin/garuda talon guard --diff origin/main...HEAD --workspace default --policies ./policies --fail-on-block
 ```
 
+Use this path when you have explicit before/after analyzer outputs and want a structured entity/relationship difference report.
+
+### Publish impact results
+
+```bash
+./bin/garuda impact --target <changed-symbol> --json
+```
+
+Use the human-readable or JSON report as a CI artifact. GitHub-specific pull-request annotation output is not part of the current verified CLI contract.
+
+### Recommended sequence
+
+1. Provision PostgreSQL and apply the current migrations.
+2. Resolve the intended tenant and workspace.
+3. Analyze or incrementally synchronize the candidate repository state.
+4. Validate the policy directory and run the diff-scoped change-control check.
+5. Fail the job on a blocking result; configure the job as a required check if it must block merges.
+6. Publish the decision JSON, touched-symbol report and relevant evidence/proof artifacts.
+7. Test failure cases: invalid policy, unavailable database, stale/mismatched index, unresolved diff symbols and a deliberate policy violation.
 ---
 
 ## 15. Troubleshooting & Common Error Reference
