@@ -2,6 +2,12 @@ schema_version: "1.0"
 product:
   name: "garuda"
   display_name: "Garuda"
+  version: "v1.5.0-talon"
+  docs_contract_version: "1.5" 
+  repository:
+    github: "https://github.com/myshra777-ai/garuda"
+    primary_language: "Go"
+    current_language_scope: ["Go", "Python", "TypeScript"]
   tagline: "Let agents write code. Keep architecture in the loop."
   category:
     primary: "Architecture-aware change control for AI-written software"
