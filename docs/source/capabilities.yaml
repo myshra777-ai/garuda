@@ -4,7 +4,7 @@ last_updated: "2026-10-25"
 
 categories:
   - name: "Multi-Language AST, Incremental Sync & Call-Graph Extraction"
-    description: "Go compiler-backed AST/type/go.work resolution and Python/TypeScript cross-file alias and instance call-graph extraction"
+    description: "Go compiler/type-aware resolution for supported constructs plus selected AST-based Python/TypeScript cross-file patterns"
     capabilities:
       - name: "Go Struct, Interface & Field Extraction"
         status: "production"
@@ -32,7 +32,7 @@ categories:
 
       - name: "Incremental Working-Tree Re-Index (garuda analyze --incremental)"
         status: "production"
-        verification_tier: "Sub-Second Dirty File Sync"
+        verification_tier: "Incremental dirty-file sync tests; latency depends on repository and environment"
         supported_semantics: "Shared in-memory package caching and targeted file re-indexing for uncommitted edits"
         invariant: "Deterministic Graph Parity"
 
@@ -52,8 +52,8 @@ categories:
     description: "Declarative YAML policy evaluation, Git-diff AST targeting, and RFC 6962 Merkle governance receipts"
     capabilities:
       - name: "Diff-Scoped Change-Control CLI (garuda check --diff)"
-        status: "production"
-        verification_tier: "CLI & CI/CD Exit Code 2 Gate"
+        status: "implemented"
+        verification_tier: "Diff-targeting and policy CLI path; verify exact candidate/index and CI failure propagation"
         supported_semantics: "Git diff hunk-to-AST mapping + union blast radius + 3-state evidence + net-new vs baseline policy evaluation + Merkle block seal"
         invariant: "Deterministic Verdict"
 
@@ -64,7 +64,7 @@ categories:
         invariant: "Zero Hidden Coupling"
 
       - name: "3-State Edge-Level Runtime Drift & Contradiction Engine"
-        status: "production"
+        status: "implemented"
         verification_tier: "10/10 Controlled Contradiction Suite"
         supported_semantics: "Edge-level caller+callee corroboration (SUPPORTED, UNVERIFIED, CONTRADICTED)"
         invariant: "Automatic Quarantine"
@@ -74,6 +74,27 @@ categories:
         verification_tier: "Golden Vectors (internal/merkle)"
         supported_semantics: "VerifyDecisionCryptographic, VerifyEvaluation, dual-tier epoch snapshots"
         invariant: "Cryptographic Tamper-Evidence"
+
+  - name: "Owner Control Plane & MCP Operations Observability"
+    description: "Separate owner-facing metrics and operational views backed by MCP session/tool-call records and a configured read-only database pool"
+    capabilities:
+      - name: "MCP Session and Tool-Call Records"
+        status: "implemented"
+        verification_tier: "migrations/088_mcp_sessions.sql + cmd/garuda-mcp/session_tracking.go"
+        supported_semantics: "Best-effort session start/close and tool name, duration, status, whitelisted argument summary and error recording; database failure does not block MCP calls"
+        invariant: "Observability Must Not Block Agent Calls; outage may reduce attribution"
+
+      - name: "Owner Control Plane (/_/control)"
+        status: "implemented"
+        verification_tier: "internal/api/control_plane.go and Control Plane handlers"
+        supported_semantics: "Configured owner-token access to Business, Tenants, Operations and Internal views; requires GARUDA_CONTROL_TOKEN and CONTROL_DATABASE_URL"
+        invariant: "Separate from tenant Workspace Console; reads use a separately configured read-only pool"
+
+      - name: "Operations Metrics and Recent-Error View"
+        status: "implemented"
+        verification_tier: "internal/api/control_plane_operations.go + migrations/092_errors_log.sql"
+        supported_semantics: "Process uptime, database size, stalled sessions, MCP tool errors, rolling 60-minute request error rate, in-process query-latency percentiles and recent errors"
+        invariant: "Unmeasured/query-failed values must remain visibly distinct from real zero counts"
 
   - name: "Garuda Talon Active Agent Harness & 23-Tool MCP Surface"
     description: "Configured pre-edit and post-edit agent workflow integration across supported clients and Git hooks; enforcement depends on installation and failure handling"
