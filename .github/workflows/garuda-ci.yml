@@ -167,7 +167,7 @@ jobs:
             
             const summary = (diffReport && diffReport.summary) || {};
             let body = `## 🧠 Garuda CI Quality & Governance Report\n\n`;
-            body += `**Grounding benchmark:** GAP-20 results are fixture- and task-specific; see \\`evidence/benchmarks/gap20-grounding.md\\` for scope.\n`;
+            body += `**Grounding benchmark:** GAP-20 results are fixture- and task-specific; see evidence/benchmarks/gap20-grounding.md for scope.\n`;
             if (diffReport) {
               body += `**Diff Status:** ${diffReport.status || 'reported; inspect details below'}\n\n`;
               body += `| Metric | Count |\n| :--- | :--- |\n`;
@@ -180,7 +180,7 @@ jobs:
               body += `**Diff Status:** ⚠️ Report unavailable; counts are not measured, not zero. ${diffReportError}\n\n`;
             }
 
-            const entityDiffs = diffReport.entity_diffs || [];
+            const entityDiffs = (diffReport && diffReport.entity_diffs) || [];
             if (entityDiffs.length > 0) {
               body += `### Entity Changes\n`;
               const added = entityDiffs.filter(e => e.status === 'added');
@@ -201,7 +201,7 @@ jobs:
               }
             }
 
-            const relDiffs = diffReport.relationship_diffs || [];
+            const relDiffs = (diffReport && diffReport.relationship_diffs) || [];
             if (relDiffs.length > 0) {
               body += `\n### Relationship Graph Changes\n`;
               relDiffs.forEach(rd => {
