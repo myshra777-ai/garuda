@@ -116,3 +116,60 @@ categories:
         verification_tier: "internal/talon and CLI integration; validate the target agent command and failure paths"
         supported_semantics: "Incremental sync, diff-scoped policy/ADR checks, structured repair prompt and bounded supervisor retries"
         invariant: "Bounded repair attempts; human/team controls the merge boundary"
+
+  - name: "Architecture Intent, Runtime Evidence & Documentation Drift"
+    description: "Correlate supported document claims and captured runtime observations with the indexed semantic model"
+    capabilities:
+      - name: "Markdown and ADR Claim Ingestion / Verification"
+        status: "implemented"
+        verification_tier: "scripts/doc_verify_test.py; current workflow documented in docs/API.md"
+        supported_semantics: "garuda docs ingest|verify|status extracts supported claim shapes from Markdown/ADRs and compares them with the indexed workspace graph"
+        invariant: "Claim extraction is deterministic and narrow; it is not general natural-language proof"
+
+      - name: "OpenTelemetry Runtime Span Ingestion"
+        status: "implemented"
+        verification_tier: "POST /api/v1/telemetry/spans and /api/v1/runtime/spans; controlled contradiction test in EVIDENCE.md"
+        supported_semantics: "Accept captured spans, correlate mapped caller/target observations with indexed entities, and expose supported/contradicted/unverified evidence within the modeled scope"
+        invariant: "Only telemetry captured, ingested and mapped can contribute runtime evidence"
+
+  - name: "Developer Interfaces, Governance Records & Team Coordination"
+    description: "Inspect architecture and evidence, preserve decision history, and transfer structured agent task state"
+    capabilities:
+      - name: "Software Intelligence Dashboard"
+        status: "implemented"
+        verification_tier: "Dashboard surfaces exercised per EVIDENCE.md"
+        supported_semantics: "Six core engineering surfaces for briefing, architecture exploration, change review, policy state, contradictions/evidence and governance ledger, plus separate ADR Decision Lineage"
+        invariant: "A visible dashboard surface does not itself guarantee fresh data or execute a new server-side evaluation"
+
+      - name: "VS Code Architecture and Evidence Views"
+        status: "implemented"
+        verification_tier: "IDE workflow evidence in EVIDENCE.md"
+        supported_semantics: "Selected graph exploration, ledger, contradiction views, diagnostics, refresh/reanalysis and Go symbol hover"
+        invariant: "Coverage is specific to the exercised editor workflows and supported symbols"
+
+      - name: "Agent Handoff, Resume and Checkpoint APIs"
+        status: "implemented"
+        verification_tier: "MCP tools and /api/v1/agents/checkpoint, /handoff, /resume routes"
+        supported_semantics: "Persist and resume structured task/context state and hand off task ownership across supported clients"
+        invariant: "Coordination state is scoped to the configured tenant/workspace; it is not a general-purpose multi-agent planner"
+
+  - name: "Repository Hygiene, Snapshot Comparison & Structured Utilities"
+    description: "Supplement architecture change control with advisory graph review and repository/snapshot utilities"
+    capabilities:
+      - name: "Hygiene Candidate Report (garuda hygiene; legacy alias garuda ponytail)"
+        status: "implemented"
+        verification_tier: "cmd/garuda/ponytail.go and tests"
+        supported_semantics: "Read-only advisory candidates for unreferenced graph entities, duplicate symbol-name candidates and naming-based standard-library alternatives"
+        invariant: "A candidate is not proof that code is dead or safe to delete; report reads the existing indexed workspace and does not refresh it"
+
+      - name: "Semantic Snapshot Diff and CI Baseline Assessment"
+        status: "implemented"
+        verification_tier: "cmd/garuda/ci.go and CLI diff path"
+        supported_semantics: "Compare saved analyzer snapshots, summarize entity/relationship changes and optionally return non-zero for configured breaking-change criteria"
+        invariant: "Snapshot comparison is distinct from YAML policy evaluation and depends on compatible, current input snapshots"
+
+      - name: "Structured Product Description and Plan Utilities"
+        status: "implemented"
+        verification_tier: "cmd/garuda/self_describe.go and cmd/garuda/plan_cli.go"
+        supported_semantics: "Emit a product description from available source/metadata and request a scoped plan from the configured Garuda API"
+        invariant: "Self-description reflects available source/metadata; plan requests require the configured API service and graph state"
