@@ -52,7 +52,7 @@
 
 Garuda is a PostgreSQL-backed semantic software-intelligence and governance system. It analyzes supported source repositories, stores scoped semantic state, correlates documentation and runtime evidence, evaluates policies, exposes query and coordination surfaces, and provides cryptographic verification for persisted governance records.
 
-Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. In v1.5.0, Garuda includes **Garuda Talon** (`internal/talon`, `garuda talon`, `bin/garuda-talon`), an active pre-edit and post-edit execution harness that compiles live ADR and YAML policy contracts into coding agent rules, incrementally re-indexes dirty working-tree files, evaluates diff-scoped net-new violations, and runs a supervisor self-repair loop until `ALLOW` is achieved.
+Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. In v1.5.0, Garuda includes **Garuda Talon** (`internal/talon`, `garuda talon`, `bin/garuda-talon`), an active pre-edit and post-edit agent-workflow harness that compiles available ADR and YAML policy contracts into coding-agent instructions, incrementally re-indexes dirty working-tree files, evaluates diff-scoped findings, and can feed repair guidance into a supervisor loop for a bounded number of attempts. It does not guarantee convergence to `ALLOW`.
 
 ### Current product questions
 
@@ -748,7 +748,10 @@ Breaking changes should state which surface changed, how compatibility is handle
 - [`docs/invariants.md`](docs/invariants.md) — invariant contract.
 - [`docs/adr/`](docs/adr/) — architecture decision records.
 - [`scripts/mcp_verify.py`](scripts/mcp_verify.py) — MCP reference verifier.
-- [`openapi.yaml`](openapi.yaml) — HTTP contract.
+- [`openapi.yaml`](../openapi.yaml) — Current registered HTTP route inventory.
+- [`specs/control-plane.md`](specs/control-plane.md) — Owner Control Plane and access/configuration boundaries.
+- [`specs/control-plane-metrics.md`](specs/control-plane-metrics.md) — Implemented and not-yet-measured operator metrics.
+- [`specs/mcp-sessions.md`](specs/mcp-sessions.md) — MCP session/tool-call records and retention design.
 - [`vscode-extension/`](vscode-extension/) — VS Code integration.
 
 ---
