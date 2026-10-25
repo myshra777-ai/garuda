@@ -21,6 +21,7 @@ Garuda connects five things that are often separated:
 3. **Intent:** YAML policies and supported claims extracted from Markdown/ADRs.
 4. **Observed behavior:** OpenTelemetry spans that can be correlated with indexed entities.
 5. **Governance:** outcomes that can fail a configured gate and, when persisted, carry a verifiable Merkle inclusion record.
+6. **Operations:** an optional, separate owner Control Plane for aggregate tenant/workspace status and MCP runtime/tool-call operations, using a separately configured read-only database role.
 
 ### Two cooperating layers
 
@@ -62,6 +63,7 @@ The core user question is:
 - Nine supported YAML policy predicate types.
 - Talon pre-edit briefing, post-edit guard and bounded CLI-agent supervisor loop.
 - 23 MCP tools plus contract prompt/resources and active session contract injection.
+- Optional owner Control Plane for tenant overview, MCP session/tool errors and process-local operational metrics.
 - Static/document/runtime evidence states and Merkle verification for persisted records.
 
 ## What Garuda is not
