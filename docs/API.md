@@ -158,6 +158,36 @@ Extracts normative architectural claims (`MUST` / `MUST_NOT`) from Markdown ADRs
 
 ---
 
+### Additional CLI commands
+
+These utility commands are implemented alongside the main analysis, policy and Talon workflow.
+
+| Command | Purpose | Important behavior |
+|---|---|---|
+| `garuda ci` | Analyze the current repository and compare it with a saved semantic baseline | Use `--baseline <file>`; `--block-on-break` exits non-zero when the assessment is breaking |
+| `garuda diff <before.json> <after.json>` | Compare two serialized analysis snapshots | `--fail-on-breaking` exits non-zero when breaking changes are detected |
+| `garuda self-describe [path]` | Emit a structured JSON product description or Markdown skeleton from source analysis, CLI structure and optional workspace evidence | Use `--markdown`, `--workspace`, and `--output`; product metadata is read from `docs/source/product.yaml` when available |
+| `garuda plan` | Request a structured plan from the configured Garuda API truth graph | Requires the API service and accepts `--scope-domain`, `--scope-system`, `--status`, `--at`, and `--format markdown|json` |
+| `garuda hygiene [path]` | Produce advisory unreferenced-symbol, duplicate-name and standard-library-alternative candidates from the indexed graph | Does not prove code is dead, does not refresh analysis, and does not persist findings; `garuda ponytail` is a deprecated alias |
+
+Examples:
+
+```bash
+# Compare an analysis snapshot with a stored baseline in CI.
+./bin/garuda ci --baseline garuda-baseline.json --block-on-break
+
+# Compare two saved analyzer outputs.
+./bin/garuda diff before.json after.json --fail-on-breaking
+
+# Emit product description metadata as Markdown.
+./bin/garuda self-describe . --markdown --output PRODUCT.md
+
+# Request a scoped plan from the running API.
+./bin/garuda plan --scope-domain infrastructure --format markdown
+```
+
+---
+
 ### `garuda dev` / `garuda up` / `garuda status`
 - `./bin/garuda dev` — Starts the unified Garuda daemon (HTTP API server + 6-surface `/dashboard` Software Intelligence Instrument + 10-second background runtime verification & Merkle epoch worker).
 - `./bin/garuda up` — Starts PostgreSQL container, runs migrations, and launches the gateway stack.
