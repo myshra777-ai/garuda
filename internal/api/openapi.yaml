@@ -1,14 +1,17 @@
+# NOTE: Generated-client/interface schema; not the live route inventory. See ../../openapi.yaml and ../../docs/API.md for registered v1.5.0 routes.
 openapi: 3.0.3
 info:
-  title: Garuda Engine API Gateway
+  title: Garuda Generated Client Contract (legacy route shape)
   version: 1.0.0
   description: |
-    Garuda exposes HTTP endpoints for workspace/software intelligence, runtime
-    telemetry ingestion, policy and decision governance, agent coordination,
-    and proof verification. The API works alongside the Garuda MCP server and
-    Talon agent-integration layer. Recorded Merkle proofs establish integrity
-    and inclusion against the applicable proof and root; they do not prove
-    analysis completeness or guarantee that every agent action is intercepted.
+    This schema is retained for the generated types and client/server interface
+    in internal/api/generated.go. Its operation/path catalog is not the
+    authoritative list of routes registered by the current Gorilla router.
+    For current local route availability, use the root openapi.yaml and
+    docs/API.md, which are aligned to internal/api/handler.go. Do not infer
+    that an operation described only here is available in the current runtime.
+    Merkle proof endpoints verify integrity and inclusion of recorded data;
+    they do not prove analysis completeness or universal agent interception.
   contact:
     name: Garuda Team
     url: https://github.com/myshra777-ai/garuda
