@@ -3,11 +3,12 @@ info:
   title: Garuda Engine API Gateway
   version: 1.0.0
   description: |
-    Garuda is the deterministic governance, multi-agent state handoff,
-    and cryptographic audit layer for enterprise AI swarms.
-
-    All state changes are cryptographically verifiable via Merkle hashing.
-    Error responses include machine‑actionable remediation hints for self‑healing.
+    Garuda exposes HTTP endpoints for workspace/software intelligence, runtime
+    telemetry ingestion, policy and decision governance, agent coordination,
+    and proof verification. The API works alongside the Garuda MCP server and
+    Talon agent-integration layer. Recorded Merkle proofs establish integrity
+    and inclusion against the applicable proof and root; they do not prove
+    analysis completeness or guarantee that every agent action is intercepted.
   contact:
     name: Garuda Team
     url: https://github.com/myshra777-ai/garuda
