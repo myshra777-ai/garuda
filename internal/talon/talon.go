@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -239,6 +240,13 @@ type InstallSummary struct {
 	GitCommitMsgPath  string `json:"git_commit_msg_path,omitempty"`
 }
 
+func talonExeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
+
 // InstallHooks writes the compiled Talon contract and installs active enforcement
 // hooks across Cursor, Claude Code, Codex/Aider, Windsurf, and Git hooks.
 func InstallHooks(
@@ -249,11 +257,12 @@ func InstallHooks(
 	if err != nil {
 		return nil, err
 	}
+	ext := talonExeSuffix()
 	if garudaBin == "" {
-		garudaBin = filepath.Join(absRoot, "bin", "garuda")
+		garudaBin = filepath.Join(absRoot, "bin", "garuda"+ext)
 	}
 	if mcpBin == "" {
-		mcpBin = filepath.Join(absRoot, "bin", "garuda-mcp")
+		mcpBin = filepath.Join(absRoot, "bin", "garuda-mcp"+ext)
 	}
 
 	contractMD := ""
@@ -316,7 +325,7 @@ func InstallHooks(
 	claudeDir := filepath.Join(absRoot, ".claude")
 	_ = os.MkdirAll(claudeDir, 0755)
 	claudeSettingsPath := filepath.Join(claudeDir, "settings.json")
-	guardCmd := fmt.Sprintf("%s talon guard --hook --workspace %s", garudaBin, workspaceName)
+	guardCmd := fmt.Sprintf("\"%s\" talon guard --hook --workspace %s", filepath.ToSlash(garudaBin), workspaceName)
 	claudeSettings := map[string]interface{}{
 		"hooks": map[string]interface{}{
 			"PostToolUse": []map[string]interface{}{
@@ -350,17 +359,18 @@ func InstallHooks(
 	upsertMarkedSection(windsurfPath, contractMD)
 	summary.WindsurfRulesPath = windsurfPath
 
-	// 6. Git Hooks (.git/hooks/pre-commit & .git/hooks/commit-msg)
+	// 6. Git Hooks (.git/hooks/pre-commit & .git/hooks/commit-msg) — Cross-platform (POSIX sh / Git for Windows Bash)
 	gitHooksDir := filepath.Join(absRoot, ".git", "hooks")
 	if st, err := os.Stat(gitHooksDir); err == nil && st.IsDir() {
+		slashBin := filepath.ToSlash(garudaBin)
 		preCommitPath := filepath.Join(gitHooksDir, "pre-commit")
 		preCommitScript := fmt.Sprintf(`#!/usr/bin/env bash
-# Garuda Talon Active Pre-Commit Gate
+# Garuda Talon Active Pre-Commit Gate (Windows Git Bash / macOS / Linux)
 set -e
-if [ -x "%s" ]; then
+if [ -x "%s" ] || [ -f "%s" ]; then
   "%s" talon guard --staged --fail-on-block --workspace "%s"
 fi
-`, garudaBin, garudaBin, workspaceName)
+`, slashBin, slashBin, slashBin, workspaceName)
 		if os.WriteFile(preCommitPath, []byte(preCommitScript), 0755) == nil {
 			summary.GitPreCommitPath = preCommitPath
 		}

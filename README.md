@@ -14,6 +14,7 @@
   <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml/badge.svg" alt="Garuda CI & Governance"></a>
   <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml/badge.svg" alt="Garuda Integrity Gate"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 License"></a>
+  <a href="INSTALL.md"><img src="https://img.shields.io/badge/install-Windows_%7C_macOS_%7C_Linux_%7C_Chromebook_%7C_Android-2563eb.svg" alt="Universal 1-Command Install"></a>
   <a href="PLAYBOOK.md"><img src="https://img.shields.io/badge/docs-Operational_Playbook-0f172a.svg" alt="Operational Playbook"></a>
   <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/evidence-24%2F24_Benchmarks_%7C_23_MCP_Tools_%7C_10%2F10_Runtime-16a34a.svg" alt="Verification Evidence"></a>
 </p>
@@ -33,15 +34,30 @@ AI coding agents (Cursor, Claude Code, Codex, Devin, Windsurf) write code faster
 
 **Garuda is a deterministic change-control gate, active AI execution harness (`Garuda Talon`), and architecture intelligence platform for AI-written code.** The moment you initialize Garuda, it compiles your live ADRs and YAML policies into an active contract, hooks directly into your coding agents and Git workflow, forces pre-edit blast-radius checks and post-edit verification, and blocks architectural violations in the editor and in CI before they merge.
 
-## The 5-Second Workflow
+## The 5-Second Workflow (Zero Pre-Installed Dependencies)
 
-Boot the entire local stack, index your repository, and activate **Garuda Talon** + **Active MCP** across Cursor, Claude Code, Codex, and Git hooks in one command:
+Whether you are a Product Manager, Founder, or Engineer—**you do not need Go, PostgreSQL, GCC/Xcode, or Docker pre-installed**. Garuda automatically provisions a portable runtime, database, Active MCP, and Garuda Talon in **1 or 2 commands** across **Windows (PowerShell)**, **macOS**, **Linux**, **Chromebook (ChromiumOS)**, and **Android (Termux / PWA)**:
 
+**macOS, Linux, Chromebook (Crostini) & Android (Termux):**
 ```bash
-git clone https://github.com/myshra777-ai/garuda.git
-cd garuda
-./setup.sh
+# Option A: 1-Command Remote Install & Launch
+curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash
+
+# Option B: From a cloned repository
+git clone https://github.com/myshra777-ai/garuda.git && cd garuda && ./setup.sh
 ```
+
+**Windows 10 / 11 (PowerShell — Zero Admin / Zero Dependencies):**
+```powershell
+# Option A: 1-Command Remote Install & Launch (works even without Git, Go, Postgres, or Docker!)
+Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 | iex
+
+# Option B: From a cloned repository
+cd $HOME\garuda
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+> 📖 **Need platform-specific instructions or hit an installation error?** See the **[Universal Installation & Troubleshooting Guide (`INSTALL.md`)](INSTALL.md)** or run `./bin/garuda doctor --fix` (`.in\garuda.exe doctor --fix` on Windows).
 
 Or run the diff-scoped change-control gate against your uncommitted working tree, staged index, or branch diff:
 
@@ -149,6 +165,7 @@ Garuda ships a high-craft web instrument at `http://localhost:8080/dashboard` in
 ### Complete CLI Command Surface
 
 - `garuda init <repo-path> --workspace <name>` — Initialize Postgres, migrations, owner account, Active MCP, and Garuda Talon hooks in 1 command.
+- `garuda doctor [--fix] [--json]` — Diagnose and auto-repair `.env`, PostgreSQL, binaries, MCP config, and Talon hooks across Windows, macOS, Linux, Chromebook, and Android.
 - `garuda talon <init|contract|brief|guard|run>` (or `garuda-talon ...`) — Manage the active AI execution harness, inspect compiled ADR/policy contracts, gate working-tree diffs, or supervise agent commands.
 - `garuda analyze <path> [--incremental] [--files a.go,b.go] [--save]` — Run full or incremental compiler-backed Go (`go/types` + `go.work`), Python, and TypeScript AST extraction.
 - `garuda check [--diff <rev> | --staged | --files <csv> | --target <sym>] [--net-new-only] [--save] [--fail-on-block]` — Turn a symbol or git diff into an evidence-backed governance decision.
@@ -181,6 +198,7 @@ The Merkle ledger cryptographically proves the **inclusion, ordering, and tamper
 
 ## Documentation
 
+- **[Universal Installation & Troubleshooting Guide](INSTALL.md)** — 1-command zero-dependency setup for Windows PowerShell, macOS, Linux, Chromebook (ChromiumOS), and Android (Termux & Chromium PWA), plus the 12-item installation error troubleshooting table.
 - **[Operational Playbook](PLAYBOOK.md)** — 1-command onboarding, Garuda Talon harness setup, MCP client wiring (Cursor, Claude Code, Codex), policy authoring, runtime OpenTelemetry ingestion, and troubleshooting.
 - **[System Walkthrough](docs/WALKTHROUGH.md)** — End-to-end CLI, v1.5 Dashboard, Garuda Talon, MCP, and VS Code extension workflows.
 - **[Capabilities & Verification Tiers](docs/CAPABILITIES.md)** — Detailed breakdown of capabilities and verification guarantees.

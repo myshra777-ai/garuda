@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.0] - 2026-10-25 — Universal Zero-Dependency Onboarding (Windows, macOS, Linux, Chromebook & Android)
+
+### Added
+- **Windows PowerShell 1-Command Installers (`install.ps1` & `setup.ps1`)**: Zero-dependency Windows 10/11 bootstrapper that automatically downloads Portable Zero-Admin PostgreSQL 16 (`~/.garuda/runtime/postgres`) and Portable Go 1.24 (`~/.garuda/toolchain/go`), compiles with `CGO_ENABLED=0`, runs migrations, configures `%APPDATA%\Claude\claude_desktop_config.json` and `.cursor\mcp.json`, and launches the dashboard.
+- **Universal 1-Command Installer (`install.sh` & upgraded `setup.sh`)**: Zero-dependency installer for macOS (Apple Silicon & Intel), Linux, Chromebook (ChromiumOS Crostini), and Android (Termux) with automatic Portable Go toolchain provisioning, user-space PostgreSQL cluster initialization (`~/.garuda/data/pg`), and automatic `CGO_ENABLED=0` fallback when `gcc`/`clang` is absent.
+- **Pure-Go (`!cgo`) TypeScript AST Fallback (`internal/ast/typescript/parser_nocgo.go` & `internal/ast/treesitter/bridge_nocgo.go`)**: Enables 100% Pure-Go compilation (`CGO_ENABLED=0`) and cross-OS binary builds without requiring a C compiler (`gcc`, `clang`, MinGW, or Xcode Command Line Tools).
+- **Garuda System Doctor (`garuda doctor [--fix]`)**: Built-in CLI diagnostic and auto-remediation command (`cmd/garuda/doctor_cmd.go`) verifying OS/arch, `.env`, PostgreSQL connectivity, migrations, binaries, Talon hooks, and API gateway health.
+- **Chromium, ChromeOS, Android & Desktop PWA Support (`/manifest.json`, `/sw.js`, `/icon.svg`)**: 1-click installable Progressive Web App manifest, Service Worker, and mobile/tablet responsive CSS for `/dashboard`.
+- **Dedicated Installation & Troubleshooting Guide (`INSTALL.md`)**: Step-by-step 1-command onboarding for non-technical users (PMs, founders) and engineers, plus a 12-scenario installation error resolution reference.
+
 All notable changes to Garuda are documented in this file.
 
 ## [v1.5.0] - 2026-10-25

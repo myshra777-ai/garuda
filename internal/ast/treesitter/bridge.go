@@ -1,3 +1,5 @@
+//go:build cgo
+
 // Copyright 2026 Rohit Mishra
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -8,6 +10,7 @@
 // packages (typescript, tsx) and consume the AST this package produces.
 //
 // Build requirement: CGO_ENABLED=1 and a working C toolchain (gcc/clang).
+// When compiled with CGO_ENABLED=0, bridge_nocgo.go provides a pure-Go stub.
 package treesitter
 
 import (

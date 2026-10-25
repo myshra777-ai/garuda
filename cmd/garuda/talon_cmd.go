@@ -99,10 +99,10 @@ var talonInitCmd = &cobra.Command{
 
 		selfPath, err := os.Executable()
 		if err != nil {
-			selfPath = filepath.Join(absRepo, "bin", "garuda")
+			selfPath = filepath.Join(absRepo, "bin", "garuda"+exeSuffix())
 		}
 		binDir := filepath.Dir(selfPath)
-		mcpPath := filepath.Join(binDir, "garuda-mcp")
+		mcpPath := filepath.Join(binDir, "garuda-mcp"+exeSuffix())
 
 		summary, err := talon.InstallHooks(absRepo, selfPath, mcpPath, dbURL, wsName, contract)
 		if err != nil {

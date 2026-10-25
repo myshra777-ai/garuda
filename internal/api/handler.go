@@ -160,6 +160,9 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}).Methods(http.MethodGet)
+	r.HandleFunc("/icon.svg", s.HandlePWAIcon).Methods(http.MethodGet)
+	r.HandleFunc("/manifest.json", s.HandlePWAManifest).Methods(http.MethodGet)
+	r.HandleFunc("/sw.js", s.HandlePWAServiceWorker).Methods(http.MethodGet)
 	r.HandleFunc("/login", s.HandleLoginGET).Methods(http.MethodGet)
 	r.HandleFunc("/login", s.HandleLoginPOST).Methods(http.MethodPost)
 	r.HandleFunc("/signup", s.HandleSignupGET).Methods(http.MethodGet)

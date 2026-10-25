@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -34,6 +35,27 @@ var (
 	initSkipScanFlag  bool
 )
 
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
+
+func resolveClaudeDesktopConfigPath(homeDir string) string {
+	switch runtime.GOOS {
+	case "windows":
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return filepath.Join(appData, "Claude", "claude_desktop_config.json")
+		}
+		return filepath.Join(homeDir, "AppData", "Roaming", "Claude", "claude_desktop_config.json")
+	case "darwin":
+		return filepath.Join(homeDir, "Library", "Application Support", "Claude", "claude_desktop_config.json")
+	default:
+		return filepath.Join(homeDir, ".config", "Claude", "claude_desktop_config.json")
+	}
+}
+
 // resolveSmartEmail discovers the developer's email from flags, env, git config, or OS user.
 func resolveSmartEmail(flagVal string) string {
 	if v := strings.TrimSpace(flagVal); v != "" {
@@ -47,8 +69,11 @@ func resolveSmartEmail(flagVal string) string {
 			return email
 		}
 	}
-	if u := strings.TrimSpace(os.Getenv("USER")); u != "" {
-		return u + "@garuda.local"
+	for _, envKey := range []string{"USER", "USERNAME", "LOGNAME"} {
+		if u := strings.TrimSpace(os.Getenv(envKey)); u != "" {
+			clean := strings.ReplaceAll(strings.ToLower(u), " ", ".")
+			return clean + "@garuda.local"
+		}
 	}
 	return "admin@garuda.local"
 }
@@ -74,7 +99,7 @@ func resolveSmartWorkspace(ctx context.Context, pool *pgxpool.Pool, flagVal, tar
 	}
 	if abs, err := filepath.Abs(targetPath); err == nil {
 		base := filepath.Base(abs)
-		if base != "" && base != "." && base != "/" {
+		if base != "" && base != "." && base != "/" && base != `\` {
 			return base
 		}
 	}
@@ -95,11 +120,11 @@ var initCmd = &cobra.Command{
 			targetPath = args[0]
 		}
 
-		// 1. Resolve & Ensure PostgreSQL is running
+		// 1. Resolve & Ensure PostgreSQL is running (Docker or Portable User-Space Cluster)
 		dbURL := config.ResolveDBURL()
 		if !isPostgresReachable(ctx, dbURL) {
-			fmt.Println("  ⏳ PostgreSQL not yet reachable — starting Docker container 'garuda-postgres'...")
-			ensureDockerPostgres()
+			fmt.Println("  ⏳ PostgreSQL not yet reachable — starting local or Docker PostgreSQL instance...")
+			ensureLocalOrDockerPostgres()
 		}
 
 		pool, err := pgxpool.New(ctx, dbURL)
@@ -196,30 +221,31 @@ var initCmd = &cobra.Command{
 			}
 		}
 
-		// 6. Ensure bin/garuda-mcp, bin/garuda-api, and bin/garuda-talon are built
+		// 6. Ensure bin/garuda-mcp, bin/garuda-api, and bin/garuda-talon are built (with .exe on Windows)
+		ext := exeSuffix()
 		selfPath, err := os.Executable()
 		if err != nil {
 			wd, _ := os.Getwd()
-			selfPath = filepath.Join(wd, "bin", "garuda")
+			selfPath = filepath.Join(wd, "bin", "garuda"+ext)
 		}
 		binDir := filepath.Dir(selfPath)
-		mcpPath := filepath.Join(binDir, "garuda-mcp")
+		mcpPath := filepath.Join(binDir, "garuda-mcp"+ext)
 		if _, statErr := os.Stat(mcpPath); statErr != nil {
-			fmt.Println("  🔨 Building bin/garuda-mcp...")
+			fmt.Printf("  🔨 Building %s...\n", mcpPath)
 			_ = exec.Command("go", "build", "-o", mcpPath, "./cmd/garuda-mcp").Run()
 		}
-		apiPath := filepath.Join(binDir, "garuda-api")
+		apiPath := filepath.Join(binDir, "garuda-api"+ext)
 		if _, statErr := os.Stat(apiPath); statErr != nil {
-			fmt.Println("  🔨 Building bin/garuda-api...")
+			fmt.Printf("  🔨 Building %s...\n", apiPath)
 			_ = exec.Command("go", "build", "-o", apiPath, "./cmd/garuda-api").Run()
 		}
-		talonBinPath := filepath.Join(binDir, "garuda-talon")
+		talonBinPath := filepath.Join(binDir, "garuda-talon"+ext)
 		if _, statErr := os.Stat(talonBinPath); statErr != nil {
-			fmt.Println("  🔨 Building bin/garuda-talon...")
+			fmt.Printf("  🔨 Building %s...\n", talonBinPath)
 			_ = exec.Command("go", "build", "-o", talonBinPath, "./cmd/garuda-talon").Run()
 		}
 
-		// 7. Auto-Configure Claude Desktop MCP
+		// 7. Auto-Configure Claude Desktop MCP across Windows, macOS, and Linux
 		absTarget, _ := filepath.Abs(targetPath)
 		if absTarget == "" {
 			absTarget, _ = os.Getwd()
@@ -231,9 +257,8 @@ var initCmd = &cobra.Command{
 			"GARUDA_REPO_ROOT":     absTarget,
 		}
 		homeDir, _ := os.UserHomeDir()
-		claudeDir := filepath.Join(homeDir, ".config", "Claude")
-		_ = os.MkdirAll(claudeDir, 0755)
-		claudeConfigPath := filepath.Join(claudeDir, "claude_desktop_config.json")
+		claudeConfigPath := resolveClaudeDesktopConfigPath(homeDir)
+		_ = os.MkdirAll(filepath.Dir(claudeConfigPath), 0755)
 		var existingClaude map[string]interface{}
 		if claudeBytes, err := os.ReadFile(claudeConfigPath); err == nil {
 			_ = json.Unmarshal(claudeBytes, &existingClaude)
@@ -273,13 +298,14 @@ var initCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n══════════════════════════════════════════════════════════════════")
-		fmt.Println("🎉 Garuda v1.5 + Garuda Talon Active Harness Initialized!")
+		fmt.Println("🎉 Garuda v1.6 + Garuda Talon Active Harness Initialized!")
 		fmt.Println("══════════════════════════════════════════════════════════════════")
+		fmt.Printf("  • Platform:           %s/%s\n", runtime.GOOS, runtime.GOARCH)
 		fmt.Printf("  • Active Workspace:   %s\n", workspaceName)
 		fmt.Printf("  • Owner Login:        %s\n", email)
-		fmt.Printf("  • Talon Guard CLI:    ./bin/garuda talon guard --workspace %s\n", workspaceName)
-		fmt.Printf("  • Diff Check CLI:     ./bin/garuda check --diff HEAD --project %s --policy policies --save\n", workspaceName)
-		fmt.Printf("  • Verify MCP Server:  python3 scripts/mcp_verify.py\n")
+		fmt.Printf("  • Health & Doctor:    %s doctor\n", selfPath)
+		fmt.Printf("  • Talon Guard CLI:    %s talon guard --workspace %s\n", selfPath, workspaceName)
+		fmt.Printf("  • Diff Check CLI:     %s check --diff HEAD --project %s --policy policies --save\n", selfPath, workspaceName)
 		fmt.Println("══════════════════════════════════════════════════════════════════")
 		return nil
 	},
@@ -296,7 +322,24 @@ func isPostgresReachable(ctx context.Context, dbURL string) bool {
 	return pool.Ping(cCtx) == nil
 }
 
-func ensureDockerPostgres() {
+func ensureLocalOrDockerPostgres() {
+	// 1. Try portable user-space cluster in ~/.garuda/data/pg first if initialized
+	homeDir, _ := os.UserHomeDir()
+	pgDataDir := filepath.Join(homeDir, ".garuda", "data", "pg")
+	if _, err := os.Stat(filepath.Join(pgDataDir, "PG_VERSION")); err == nil {
+		pgCtl := "pg_ctl"
+		portableCtl := filepath.Join(homeDir, ".garuda", "runtime", "postgres", "pgsql", "bin", "pg_ctl"+exeSuffix())
+		if _, pErr := os.Stat(portableCtl); pErr == nil {
+			pgCtl = portableCtl
+		}
+		_ = exec.Command(pgCtl, "-D", pgDataDir, "-l", filepath.Join(homeDir, ".garuda", "data", "postgres.log"), "-o", "-p 5433", "start").Run()
+	}
+
+	// 2. Try Docker container garuda-postgres if port 5433 is still closed
+	if conn, err := net.DialTimeout("tcp", "127.0.0.1:5433", 500*time.Millisecond); err == nil {
+		_ = conn.Close()
+		return
+	}
 	if err := exec.Command("docker", "start", "garuda-postgres").Run(); err != nil {
 		_ = exec.Command(
 			"docker", "run", "-d",
