@@ -87,7 +87,7 @@ A CLI failure is not, by itself, branch protection. Configure the Garuda job as 
 
 Garuda exposes **23 MCP tools**, plus an architectural-contract prompt and workspace-contract resources. The surface includes symbol discovery, neighbors, implementations, blast radius, policy/evidence queries, contradictions, handoff/resume, and Talon's pre-edit/post-edit calls. The server can inject the active contract into tool responses by default; set `GARUDA_TALON_ENFORCE=false` only when intentionally disabling that behavior.
 
-The tenant-facing dashboard gives engineers a way to inspect the workspace model: architecture neighborhoods, change review, policy outcomes, contradictions and decision history.
+The tenant-facing dashboard gives engineers a way to inspect the workspace model: architecture neighborhoods, change review, policy outcomes, contradictions and decision history. It provides six core engineering surfaces plus a separate **ADR Decision Lineage** view for canonical decisions and revision/supersession history.
 
 Garuda also includes a separate **owner Control Plane** at `/_/control`. When explicitly configured with `GARUDA_CONTROL_TOKEN` and a separate `CONTROL_DATABASE_URL`, it provides Business, Tenants, Operations and Internal views, including MCP session/tool-call activity, stalled sessions, tool-error rates, process-local query latency and recent errors. The Control Plane is separate from the tenant Workspace Console and uses a separately configured read-only database role. Some user-activity metrics can remain “not yet measured”; in-process metrics reset when the API process restarts.
 
