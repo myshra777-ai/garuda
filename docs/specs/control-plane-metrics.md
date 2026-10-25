@@ -1,8 +1,8 @@
 # Control Plane — metric definitions
 
-**Status:** agreed 2026-09-17.
-**Scope:** every metric shown on the Control Plane Business tab and the
-Tenants tab table.
+**Status:** Core Business, Tenants and Operations metrics are implemented in the current v1.5.0 tree. This document describes the intended formulas and empty states; some values remain unmeasured or deliberately uninstrumented.
+**Implementation anchors:** `internal/api/control_plane_business.go`, `internal/api/control_plane_tenants.go`, `internal/api/control_plane_operations.go`, `internal/api/control_plane.go`, and `migrations/088_mcp_sessions.sql` / `092_errors_log.sql`.
+**Scope:** Metric definitions for the owner-facing Control Plane.
 
 Every metric has a formula, a window, a refresh cadence, and an empty
 state. Two operators looking at this dashboard must see the same number.
@@ -228,9 +228,9 @@ Formula: SELECT pg_database_size(current_database())
 
 Empty state: 0 bytes (cannot occur in practice)
 
-Average query latency
+Query latency percentiles
 
-Formula: P50 / P95 / P99 of the API server's own query durations over the last 5 minutes, from an in-process ring buffer
+Formula: P50 / P95 / P99 from the in-process query-duration ring buffer; sample count is shown and the ring resets when the API process restarts
 
 Empty state: "Not yet measured"
 
@@ -246,7 +246,7 @@ Recent errors
 
 Formula: SELECT * FROM errors_log WHERE occurred_at >= NOW() - INTERVAL '24 hours' ORDER BY occurred_at DESC LIMIT 50
 
-Dependency note: the errors_log table does not exist. This metric is blocked on a separate migration. Until that ships, the panel shows: "Error log not yet instrumented."
+The `errors_log` table is created by migration `092_errors_log.sql`. The panel is implemented; query failures are rendered as a measurement error rather than being represented as a fabricated zero.
 
 Empty state: "No errors in the last 24 hours"
 
