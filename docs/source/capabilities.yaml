@@ -8,13 +8,13 @@ categories:
     capabilities:
       - name: "Go Struct, Interface & Field Extraction"
         status: "production"
-        verification_tier: "100% Benchmark (24/24 Strict Suite)"
+        verification_tier: "24/24 strict compiler/AST cases passed; fixture-suite result"
         supported_semantics: "Tags (json, db, validate), line spans, pointer/slice flags, method sets"
         invariant: "ACGM Resolution Invariant"
 
       - name: "Go Method & Receiver Disambiguation"
         status: "production"
-        verification_tier: "100% Benchmark (002-method-identity)"
+        verification_tier: "Method-identity fixture cases passed"
         supported_semantics: "Pointer and value receivers (ReceiverType), exported/unexported"
         invariant: "Canonical UUIDv5"
 
@@ -26,9 +26,9 @@ categories:
 
       - name: "Go Interface Implementation Matching (IMPLEMENTS)"
         status: "production"
-        verification_tier: "100% Benchmark (003, 009, 010, 024)"
+        verification_tier: "Interface and cross-module fixture cases passed"
         supported_semantics: "go/types satisfaction plus cross-module structural method-set matching at 1.0 confidence"
-        invariant: "Full Recall Gate"
+        invariant: "Supported interface cases matched in benchmark fixtures"
 
       - name: "Incremental Working-Tree Re-Index (garuda analyze --incremental)"
         status: "production"
@@ -61,13 +61,13 @@ categories:
         status: "production"
         verification_tier: "Recursive SQL CTEs"
         supported_semantics: "transitive_claim_exists, layer_violation, cycle_exists, blast_radius_exceeds"
-        invariant: "Zero Hidden Coupling"
+        invariant: "Detect configured dependency paths in the indexed graph"
 
       - name: "3-State Edge-Level Runtime Drift & Contradiction Engine"
         status: "implemented"
         verification_tier: "10/10 Controlled Contradiction Suite"
         supported_semantics: "Edge-level caller+callee corroboration (SUPPORTED, UNVERIFIED, CONTRADICTED)"
-        invariant: "Automatic Quarantine"
+        invariant: "Classify injected contradictions within the tested runtime scope"
 
       - name: "RFC 6962 Cryptographic Merkle Verification"
         status: "production"
@@ -116,3 +116,60 @@ categories:
         verification_tier: "internal/talon and CLI integration; validate the target agent command and failure paths"
         supported_semantics: "Incremental sync, diff-scoped policy/ADR checks, structured repair prompt and bounded supervisor retries"
         invariant: "Bounded repair attempts; human/team controls the merge boundary"
+
+  - name: "Architecture Intent, Runtime Evidence & Documentation Drift"
+    description: "Correlate supported document claims and captured runtime observations with the indexed semantic model"
+    capabilities:
+      - name: "Markdown and ADR Claim Ingestion / Verification"
+        status: "implemented"
+        verification_tier: "scripts/doc_verify_test.py; current workflow documented in docs/API.md"
+        supported_semantics: "garuda docs ingest|verify|status extracts supported claim shapes from Markdown/ADRs and compares them with the indexed workspace graph"
+        invariant: "Claim extraction is deterministic and narrow; it is not general natural-language proof"
+
+      - name: "OpenTelemetry Runtime Span Ingestion"
+        status: "implemented"
+        verification_tier: "POST /api/v1/telemetry/spans and /api/v1/runtime/spans; controlled contradiction test in EVIDENCE.md"
+        supported_semantics: "Accept captured spans, correlate mapped caller/target observations with indexed entities, and expose supported/contradicted/unverified evidence within the modeled scope"
+        invariant: "Only telemetry captured, ingested and mapped can contribute runtime evidence"
+
+  - name: "Developer Interfaces, Governance Records & Team Coordination"
+    description: "Inspect architecture and evidence, preserve decision history, and transfer structured agent task state"
+    capabilities:
+      - name: "Software Intelligence Dashboard"
+        status: "implemented"
+        verification_tier: "Dashboard surfaces exercised per EVIDENCE.md"
+        supported_semantics: "Six core engineering surfaces for briefing, architecture exploration, change review, policy state, contradictions/evidence and governance ledger, plus separate ADR Decision Lineage"
+        invariant: "A visible dashboard surface does not itself guarantee fresh data or execute a new server-side evaluation"
+
+      - name: "VS Code Architecture and Evidence Views"
+        status: "implemented"
+        verification_tier: "IDE workflow evidence in EVIDENCE.md"
+        supported_semantics: "Selected graph exploration, ledger, contradiction views, diagnostics, refresh/reanalysis and Go symbol hover"
+        invariant: "Coverage is specific to the exercised editor workflows and supported symbols"
+
+      - name: "Agent Handoff, Resume and Checkpoint APIs"
+        status: "implemented"
+        verification_tier: "MCP tools and /api/v1/agents/checkpoint, /handoff, /resume routes"
+        supported_semantics: "Persist and resume structured task/context state and hand off task ownership across supported clients"
+        invariant: "Coordination state is scoped to the configured tenant/workspace; it is not a general-purpose multi-agent planner"
+
+  - name: "Repository Hygiene, Snapshot Comparison & Structured Utilities"
+    description: "Supplement architecture change control with advisory graph review and repository/snapshot utilities"
+    capabilities:
+      - name: "Hygiene Candidate Report (garuda hygiene; legacy alias garuda ponytail)"
+        status: "implemented"
+        verification_tier: "cmd/garuda/ponytail.go and tests"
+        supported_semantics: "Read-only advisory candidates for unreferenced graph entities, duplicate symbol-name candidates and naming-based standard-library alternatives"
+        invariant: "A candidate is not proof that code is dead or safe to delete; report reads the existing indexed workspace and does not refresh it"
+
+      - name: "Semantic Snapshot Diff and CI Baseline Assessment"
+        status: "implemented"
+        verification_tier: "cmd/garuda/ci.go and CLI diff path"
+        supported_semantics: "Compare saved analyzer snapshots, summarize entity/relationship changes and optionally return non-zero for configured breaking-change criteria"
+        invariant: "Snapshot comparison is distinct from YAML policy evaluation and depends on compatible, current input snapshots"
+
+      - name: "Structured Product Description (garuda self-describe)"
+        status: "implemented"
+        verification_tier: "cmd/garuda/self_describe.go"
+        supported_semantics: "Emit a structured JSON product description or Markdown report from source analysis, CLI structure, product metadata and optional workspace evidence"
+        invariant: "The report reflects available source, metadata and workspace evidence; it is not a proof of all product behavior"

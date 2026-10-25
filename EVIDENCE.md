@@ -21,7 +21,7 @@ Every number below is a measured result, a snapshot value, or an explicitly labe
 | Blended validation | 9 repositories across Go (`1.0`), Python (`0.95` alias/instance AST), and TypeScript (`0.95` alias/instance Tree-sitter) |
 | Blended workspace snapshot | 14,333 entities and 40,956 relationships |
 | Controlled runtime contradiction test | `10/10` injected contradictions detected (`scripts/runtime_contradiction_test.py` with Ed25519 JWT auth) |
-| Software Intelligence Instrument (`/dashboard`) | All 6 surfaces (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) + `⌘K` palette verified |
+| Software Intelligence Instrument (`/dashboard`) | Six core surfaces (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) plus a separate ADR Decision Lineage view; `⌘K` palette exercised |
 | VS Code integration | Ledger, contradictions, diagnostics, graph, refresh, reanalysis, and Go hover workflows exercised |
 
 ---

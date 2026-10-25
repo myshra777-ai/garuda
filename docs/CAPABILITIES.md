@@ -26,7 +26,7 @@ This is a current capability guide—not a certification of production readiness
 | Dashboard and IDE | Six dashboard workspaces and a VS Code extension for evidence, graph, diagnostics and selected symbol workflows | UI presence is not proof that each panel is populated or that every path is continuously refreshed |
 | Owner Control Plane and MCP operations | Separate `/_/control` surface with Business, Tenants, Operations and Internal views; session/tool-call records, stalled sessions, tool error rates, rolling in-process request error rate, query-latency percentiles and recent errors | Requires `GARUDA_CONTROL_TOKEN` and `CONTROL_DATABASE_URL` with the read-only role; session tracking is best-effort and in-process metrics reset on restart |
 | Hygiene report | Advisory static unreferenced candidates, duplicate symbol-name candidates and naming-based standard-library suggestions | No finding is proof of dead code or safe deletion; the report does not mutate code or persist a finding lifecycle |
-| Snapshot/plan utilities | Semantic snapshot comparison, baseline CI assessment, and structured plan/self-description endpoints or reports | These utilities have their own input and server prerequisites; use the API reference for exact flags |
+| Snapshot and description utilities | Semantic snapshot comparison, baseline CI assessment and structured self-description reports | Snapshot inputs must be compatible/current; the `garuda plan` CLI exists but its `/api/v1/plan` target is not registered in the current router, so it is a known integration gap, not a working capability |
 
 ## Garuda's differentiator: connect the loop
 

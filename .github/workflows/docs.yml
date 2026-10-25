@@ -50,6 +50,9 @@ jobs:
             pip install pyyaml requests
           fi
 
+      - name: Test documentation context schema compatibility
+        run: python scripts/test_build_docs_context.py
+
       - name: Generate capabilities draft
         run: |
           python scripts/generate_capabilities.py \

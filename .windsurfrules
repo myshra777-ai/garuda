@@ -1,9 +1,11 @@
 <!-- GARUDA-TALON:START -->
 # GARUDA TALON — ACTIVE ARCHITECTURAL CONTRACT
 
-- **Workspace**: `default` (`48416063-0cb2-40ea-b89e-0c92ae6d4c13`)
-- **Graph Scale**: 1849 AST entities | 3349 verified edges
+- **Workspace**: `default` (generated workspace ID; refresh with `garuda talon init` before relying on it)
+- **Graph Scale**: snapshot values from the last contract generation; recompile before relying on counts or impact
 - **Workflow Mode**: `TALON CONFIGURED` (hooks + policy checks)
+
+> **Snapshot note:** The policy list and high-impact symbols below were generated from a prior validation workspace. They are reference context, not a live graph of this checkout. Re-run `./bin/garuda talon init . --workspace <workspace> --policies ./policies` to compile the current workspace contract.
 
 ## 1. Mandatory Agent Execution Protocol (Non-Negotiable)
 
@@ -23,18 +25,9 @@ You are working in a Talon-configured repository. Follow this pre-edit and post-
 
 - No explicit ADR claims ingested yet (run `./bin/garuda docs ingest <adr.md>` to register ADR rules).
 
-## 4. High-Blast-Radius Architectural Hubs (Modify With Caution)
+## 4. Repository-specific high-impact symbols
 
-- **`sqlmodel.main.SQLModel`** (class, 171 inbound edges) — `/home/rohit/garuda-validation/py/sqlmodel/sqlmodel/main.py`
-- **`github.com/spf13/cobra.Command`** (struct, 49 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
-- **`github.com/spf13/cobra.Name`** (method, 36 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
-- **`docs_src.tutorial.fastapi.update.tutorial002_py310.HeroBase`** (class, 30 inbound edges) — `/home/rohit/garuda-validation/py/sqlmodel/docs_src/tutorial/fastapi/update/tutorial002_py310.py`
-- **`github.com/spf13/cobra.Flags`** (method, 29 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
-- **`github.com/spf13/cobra.HasParent`** (method, 26 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
-- **`github.com/spf13/cobra.CommandPath`** (method, 22 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
-- **`github.com/spf13/cobra.WriteStringAndCheck`** (function, 21 inbound edges) — `/home/rohit/garuda-validation/go/cobra/cobra.go`
-- **`github.com/spf13/cobra.IsAvailableCommand`** (method, 18 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
-- **`github.com/spf13/cobra.Commands`** (method, 15 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
+- The checked-in contract does not contain current repository-specific hub rankings. Run `./bin/garuda analyze . --save` and recompile the contract to populate them for the selected workspace.
 
 <!-- GARUDA-TALON:END -->
 

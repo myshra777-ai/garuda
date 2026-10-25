@@ -287,13 +287,14 @@ change when they hit refresh.
 
 Empty state variants
 
-Kind	Rendering	Example
-Numeric zero	The digit 0	Tenants on a fresh deployment
-Not yet measured	Italic text in the metric slot	Latency before any query runs
-Not instrumented	Greyed card with a lock icon	Billing, error log
-A 0 is a real number. A "not yet measured" is an honest absence. A
-"not instrumented" is a dependency that has not been built. Rendering
-all three the same way is how dashboards lie.
+| Kind | Rendering | Example |
+|---|---|---|
+| Numeric zero | The digit `0` | No tenants on a fresh deployment, when the query succeeded |
+| Not yet measured | Explicit text, never a fabricated zero | Query-latency percentiles before enough samples have been recorded |
+| Query/configuration error | An error or "Not measured" state | The database query failed or the separate read-only connection is not usable |
+| Not instrumented / deferred | Clearly identified unavailable capability | Billing metrics, which are not part of the current Control Plane implementation |
+
+The recent-error log is implemented using the `errors_log` migration. Request error rate and query latency are measured in process-local counters/rings and reset when the API process restarts. A real zero, an insufficient sample, a failed query and a deferred capability are different states; the UI and docs should never represent them as the same green zero.
 
 What is not measured
 Any metric requiring a data source the schema does not contain. The

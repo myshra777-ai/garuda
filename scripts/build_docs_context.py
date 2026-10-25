@@ -51,7 +51,7 @@ def get_git_info():
 def flatten_capabilities(capability_doc):
     """Accept the current category-list schema and the former map schema."""
     rows = []
-    categories = capability_doc.get("categories", [])
+    categories = capability_doc.get("categories")
     if isinstance(categories, list):
         for category in categories:
             if not isinstance(category, dict):
