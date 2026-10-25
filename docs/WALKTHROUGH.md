@@ -42,7 +42,7 @@ Or initialize any specific repository directly:
 
 ## 2. Garuda Talon Active Agent Execution Harness (`garuda talon`)
 
-Standard MCP servers are passive—if an AI agent forgets to query a tool, it writes code blind. **Garuda Talon** enforces architectural boundaries before, during, and after every agent edit.
+A passive MCP server answers when the agent asks. **Garuda Talon adds configured pre-edit and post-edit integration points**: it can compile the workspace contract, provide targeted context, check changed files and return repair instructions. The exact interception boundary depends on the installed client hooks, command wrapper and CI configuration; Talon is not a universal agent sandbox.
 
 ### Pre-Edit Briefing (`garuda talon brief`)
 Before modifying a high-impact struct, interface, or package, inspect its exact blast radius, applicable ADR `MUST`/`MUST_NOT` rules, and active YAML policies:
@@ -140,7 +140,7 @@ Visit `http://localhost:8080/login` (or `http://localhost:8080/dashboard`) and p
 
 ## 5. 23 Active MCP Tools + Prompts & Resources (`bin/garuda-mcp`)
 
-Garuda speaks JSON-RPC 2.0 over stdio (`protocolVersion: "2025-06-18"`). With `GARUDA_TALON_ENFORCE=true` (enabled by default), the very first MCP tool call in any session automatically injects the workspace's active ADR `MUST`/`MUST_NOT` guardrails and YAML policies into the response payload.
+Garuda speaks JSON-RPC 2.0 over stdio (`protocolVersion: "2025-06-18"`). With `GARUDA_TALON_ENFORCE=true` (the default unless explicitly disabled), MCP responses can include the active workspace contract and its ADR/policy guardrails. This response injection helps the agent see the rules, but is not by itself an unbypassable enforcement boundary.
 
 ### MCP Prompts & Resources
 - **Prompt**: `garuda.architectural_contract` (returns compiled Markdown contract for the workspace)
@@ -186,6 +186,7 @@ npm run compile
 
 ## Where to Go Next
 - **[README.md](../README.md)** — High-level overview and 5-second workflow.
+- **[TALON.md](TALON.md)** — Focused guide to the active agent harness and hook boundaries.
 - **[PLAYBOOK.md](../PLAYBOOK.md)** — Full operational runbook, Garuda Talon setup, and troubleshooting.
 - **[docs/CAPABILITIES.md](CAPABILITIES.md)** — 6-plane capability and verification matrix.
 - **[docs/API.md](API.md)** — Complete CLI, Talon, Policy YAML, MCP, and HTTP API reference.
