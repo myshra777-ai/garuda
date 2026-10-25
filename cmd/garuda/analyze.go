@@ -110,8 +110,8 @@ func handleAnalyze(path string) {
 			}
 		}
 		_, deltas, _ := diff.CollectGitDeltas(absPath, false, "", explicit)
-		if len(deltas) == 0 && len(explicit) == 0 {
-			fmt.Printf("⚡ Incremental sync: working tree clean in %s (0 dirty files)\n", absPath)
+		if !diff.HasSourceFileDeltas(deltas) && len(explicit) == 0 {
+			fmt.Printf("⚡ Incremental sync: 0 modified source code files in %s (skipping AST re-parse)\n", absPath)
 			return
 		}
 		fmt.Printf("⚡ Incremental AST sync: %d modified file(s) detected in %s\n", len(deltas), absPath)

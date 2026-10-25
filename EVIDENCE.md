@@ -10,16 +10,18 @@ Every number below is a measured result, a snapshot value, or an explicitly labe
 
 ## Evidence at a Glance
 
-| Area | Current evidence |
+| Area | Current evidence (v1.5.0) |
 |---|---|
-| Reference MCP verifier | `38/38` checks passed |
-| MCP tools | 21 tools exposed |
-| MCP clients tested | Cursor, Claude Desktop, Codex CLI, and dependency-free reference verifier |
-| Go-only validation | 14 repositories |
-| Blended validation | 9 repositories across Go, Python, and TypeScript |
+| Ground-Truth Compiler & AST Benchmark Suite | `24/24` strict benchmarks passed (`make benchmark-strict`, including `TestDoubleRunDeterminism` and `024-go-work` at `1.0` confidence) |
+| Reference MCP & Talon Active Verifier | `30/30` dynamic checks passed (`scripts/mcp_verify.py`) |
+| MCP Tools, Prompts & Resources | **23 tools** exposed + `garuda.architectural_contract` prompt + `garuda://workspace/contract` resources + first-call active contract injection |
+| Garuda Talon Active Harness | Unit & integration suite passing (`internal/talon`, `internal/diff`, `internal/policy` net-new vs. baseline diff scoping) |
+| MCP clients tested | Cursor, Claude Desktop, Claude Code (`PostToolUse` hook), Codex CLI, and dependency-free reference verifier |
+| Go-only validation | 14 repositories (4,888 entities, 5,894 relationships, 55 cross-module bridges) |
+| Blended validation | 9 repositories across Go (`1.0`), Python (`0.95` alias/instance AST), and TypeScript (`0.95` alias/instance Tree-sitter) |
 | Blended workspace snapshot | 14,333 entities and 40,956 relationships |
-| Controlled runtime contradiction test | 10/10 injected contradictions detected |
-| Workspace Console | Workspace, Agents, Governance, Decisions, and Graph surfaces exercised |
+| Controlled runtime contradiction test | `10/10` injected contradictions detected (`scripts/runtime_contradiction_test.py` with Ed25519 JWT auth) |
+| Software Intelligence Instrument (`/dashboard`) | All 6 surfaces (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) + `⌘K` palette verified |
 | VS Code integration | Ledger, contradictions, diagnostics, graph, refresh, reanalysis, and Go hover workflows exercised |
 
 ---
@@ -231,7 +233,7 @@ These values describe the tested environment: local Linux x86_64 deployment, Pos
 
 ## MCP Server Verification
 
-The current MCP server exposes 21 tools and has been tested against four clients:
+The current MCP server exposes **23 tools** (plus MCP Prompts and Resources) and has been tested against four clients:
 
 | Client | Verification scope |
 |---|---|
@@ -243,7 +245,7 @@ The current MCP server exposes 21 tools and has been tested against four clients
 ### Current reference result
 
 ```text
-═══ 38/38 checks passed ═══
+═══ 30/30 checks passed ═══
 ```
 
 Run the current verifier against your workspace:
@@ -256,7 +258,7 @@ The verifier checks:
 
 - Initialization and request identifiers.
 - MCP protocol version `2025-06-18`.
-- Tool discovery and 21-tool availability.
+- Tool discovery and 23-tool availability (including `garuda.talon_pre_edit` and `garuda.talon_verify_edit`), plus MCP `prompts/list`, `resources/list`, and automatic first-call Talon contract injection.
 - Entity lookup and graph relationships.
 - Subclass and implementer semantics.
 - Policy-proof failure behavior for unknown evaluations.
@@ -342,7 +344,7 @@ The extension is tested for editor-integrated diagnostics and exploration. Its u
 
 Garuda's current MCP and coordination surface includes:
 
-- 21 MCP tools.
+- 23 MCP tools + MCP Prompts & Resources + Garuda Talon active pre/post-edit enforcement.
 - Transactional handoff.
 - Checkpoint creation.
 - Resume and single-consumption behavior.
@@ -410,7 +412,7 @@ WORKSPACE=<workspace-name> python3 scripts/mcp_verify.py
 Expected:
 
 ```text
-═══ 38/38 checks passed ═══
+═══ 30/30 checks passed ═══
 ```
 
 ### Inspect ledger status
@@ -452,4 +454,4 @@ psql "$DATABASE_URL" -c "
 - [`scripts/doc_verify_test.py`](scripts/doc_verify_test.py) — Documentation extraction and verification test.
 - [`vscode-extension/`](vscode-extension/) — VS Code integration source and manifest.
 
-Historical evidence documents may contain earlier corpus sizes or MCP check totals. Such entries should be read as historical milestones; the current MCP reference result is `38/38` and the current public product surface is documented in `README.md`, `PLAYBOOK.md`, and `docs/SPECS.md`.
+Historical evidence documents may contain earlier corpus sizes or MCP check totals. Such entries should be read as historical milestones; the current MCP & Talon reference result is `30/30` (`scripts/mcp_verify.py`) alongside `24/24` strict ground-truth compiler benchmarks (`make benchmark-strict`) and the current public product surface is documented in `README.md`, `PLAYBOOK.md`, and `docs/SPECS.md`.

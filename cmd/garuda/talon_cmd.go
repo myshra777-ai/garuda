@@ -291,7 +291,7 @@ var talonGuardCmd = &cobra.Command{
 		// Incrementally sync working tree if dirty files exist
 		if talonAutoIndexFlag {
 			_, deltas, dErr := diff.CollectGitDeltas(absRepo, talonStagedFlag, talonDiffFlag, explicit)
-			if dErr == nil && len(deltas) > 0 {
+			if dErr == nil && diff.HasSourceFileDeltas(deltas) {
 				workspaceFlag = wsName
 				incrementalFlag = true
 				saveFlag = true

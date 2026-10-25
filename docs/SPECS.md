@@ -1,9 +1,9 @@
 # Garuda Specifications
 
-**Version:** 1.2.0  
+**Version:** 1.5.0  
 **Document status:** Current-state reference draft
 
-**Updated:** 2026-10-24
+**Updated:** 2026-10-25
 **Scope:** Verified repository capabilities, validation boundaries, and explicitly marked future work.
 
 > This document describes Garuda as implemented and verified in the current repository state. A capability is not considered current merely because it appears in a roadmap, design document, dashboard label, or generated artifact.
@@ -52,7 +52,7 @@
 
 Garuda is a PostgreSQL-backed semantic software-intelligence and governance system. It analyzes supported source repositories, stores scoped semantic state, correlates documentation and runtime evidence, evaluates policies, exposes query and coordination surfaces, and provides cryptographic verification for persisted governance records.
 
-Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. The current repository does not provide a production execution harness that autonomously modifies code, reanalyzes a worktree, evaluates policy, and merges changes.
+Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. In v1.5.0, Garuda includes **Garuda Talon** (`internal/talon`, `garuda talon`, `bin/garuda-talon`), an active pre-edit and post-edit execution harness that compiles live ADR and YAML policy contracts into coding agent rules, incrementally re-indexes dirty working-tree files, evaluates diff-scoped net-new violations, and runs a supervisor self-repair loop until `ALLOW` is achieved.
 
 ### Current product questions
 
@@ -110,7 +110,7 @@ Runtime observations ── correlate ────┤
 | Policy layer | Evaluate declarative policy outcomes | Current |
 | Trust layer | Anchor and verify committed records | Current |
 | Integration layer | CLI, MCP, HTTP, dashboard, CI, and VS Code surfaces | Mixed; see individual sections |
-| Execution harness | Autonomous sandboxed code-edit loop | Planned; not current |
+| Execution harness (`Garuda Talon`) | Active contract compiler, IDE/Git hook installer, diff-scoped guard, and self-repair supervisor loop | Current (v1.5.0) |
 
 Garuda’s persistent source of truth is PostgreSQL. The pure Hygiene analyzer is deliberately side-effect free and operates on typed in-memory semantic data.
 
@@ -160,19 +160,19 @@ Go call relationships can be resolved through `go/types` and carry resolution me
 
 ### Python
 
-Python support extracts modules, classes, functions, methods, `IMPORTS`, `INHERITS`, and intra/cross-module function and method body `CALLS` (`self.method()`, local functions, and imported symbols). Dynamic dispatch and `eval`/`importlib` runtime imports remain outside the authority of static AST analysis and are covered by runtime OpenTelemetry correlation.
+Python support (`internal/ast/python`) extracts modules, classes, functions, methods, `IMPORTS`, `INHERITS`, cross-file import aliases (`import X as Y`, `from X import Y as Z`), and class instance method calls (`self.repo.fetch()`, `local_repo.fetch()`) at `0.95` static confidence. Dynamic dispatch and `eval`/`importlib` runtime imports remain outside the authority of static AST analysis and are covered by runtime OpenTelemetry correlation.
 
 ### TypeScript
 
-TypeScript support uses Tree-sitter AST parsing (`internal/ast/typescript`) to extract modules (with `package.json` module path discovery), classes, interfaces, functions, arrow functions, methods, `IMPORTS`, `INHERITS`, `IMPLEMENTS`, and `call_expression` `CALLS` (`this.method()` and module functions).
+TypeScript support (`internal/ast/typescript`) uses Tree-sitter AST parsing to extract modules, classes, interfaces, functions, arrow functions, methods, `IMPORTS`, `INHERITS`, `IMPLEMENTS`, named/namespace import aliases (`import { X as Y }`, `import * as NS`), `new Class()` instantiations, and cross-file instance method calls at `0.95` static confidence.
 
 ### Language status
 
 | Language | Status |
 |---|---|
 | Go | Current; compiler-backed within supported scope |
-| Python | Beta; structural |
-| TypeScript | Beta; structural |
+| Python | Current; structural + cross-file alias & instance call resolution (`0.95` confidence) |
+| TypeScript | Current; Tree-sitter + cross-file alias & instance call resolution (`0.95` confidence) |
 | Rust | Planned |
 | Java | Planned |
 | Elixir | Planned |
@@ -323,10 +323,11 @@ Garuda exposes MCP over line-delimited JSON-RPC on standard input and output. Th
 
 ### Current tools
 
-The current catalog contains 21 tools across session, graph, governance, and coordination groups.
+The current catalog contains **23 tools** (plus `prompts/list` -> `garuda.architectural_contract` and `resources/list` -> `garuda://workspace/contract`, `garuda://workspace/adr-guardrails`) across Active Talon enforcement, session, graph, governance, and coordination groups.
 
 | Group | Tools |
 |---|---|
+| Active Talon harness | `garuda.talon_pre_edit`, `garuda.talon_verify_edit` |
 | Session context | `garuda.briefing` |
 | Graph exploration | `garuda.entities`, `garuda.find_entity`, `garuda.inspect`, `garuda.neighbors`, `garuda.subclasses`, `garuda.implementers`, `garuda.blast_radius`, `garuda.query_claims`, `garuda.query` |
 | Governance | `garuda.policy.list`, `garuda.policy.evaluate`, `garuda.verify_policy_evaluation`, `garuda.governance.status`, `garuda.check_drift`, `garuda.get_lineage`, `garuda.get_impact`, `garuda.detect_contradictions`, `garuda.propose_decision` |
@@ -349,7 +350,7 @@ The current mutating tools are:
 The dependency-free reference verifier currently reports:
 
 ```text
-38/38 checks passed
+30/30 checks passed
 ```
 
 The verification suite covers initialization, tool discovery, protocol behavior, representative graph queries, negative paths, handoff/resume responses, unknown-tool behavior, and clean shutdown. It is not a complete proof of every tool’s semantic correctness.
@@ -366,7 +367,10 @@ Garuda supports task and checkpoint coordination through transactional handoff a
 
 The handoff path uses Serializable transaction semantics and has regression coverage for repeated handoffs and happy-path MCP invocation.
 
-The proposed autonomous execution harness is not part of the current Garuda product contract. It remains a future external orchestrator that must be designed around verified MCP contracts, sandbox boundaries, fresh-analysis guarantees, and explicit merge authorization.
+**Garuda Talon (`internal/talon`)** is now part of the verified v1.5.0 product contract. It provides:
+- `CompileContract`: synthesizes live workspace ADRs (`document_claims`), YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`.
+- `InstallHooks`: configures `.cursor/rules/garuda-talon.mdc` (`alwaysApply: true`), `.cursor/mcp.json` (`GARUDA_TALON_ENFORCE=true`), `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook running `garuda talon guard --hook`), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit` + `commit-msg`.
+- `RunGuard` & `RunHarnessLoop`: runs incremental AST re-indexing on dirty files, maps git diff hunks (`internal/diff`) to affected AST entities, evaluates net-new vs. baseline policy violations (`DiffScopeFilter`), and emits a deterministic Self-Repair Prompt on `BLOCK`.
 
 ---
 
@@ -633,7 +637,7 @@ WORKSPACE=go-validation-10 python3 scripts/mcp_verify.py
 The current recorded reference result is:
 
 ```text
-38/38 checks passed
+30/30 checks passed
 ```
 
 ### Evidence discipline

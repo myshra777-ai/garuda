@@ -230,6 +230,17 @@ func CollectGitDeltas(repoDir string, staged bool, rev string, explicitFiles []s
 	return "working_tree", deltas, nil
 }
 
+// HasSourceFileDeltas returns true if at least one FileDelta touches a supported
+// source code file (.go, .py, .ts, .tsx, .js, .jsx).
+func HasSourceFileDeltas(deltas []FileDelta) bool {
+	for _, d := range deltas {
+		if isSupportedSourceFile(d.FilePath) {
+			return true
+		}
+	}
+	return false
+}
+
 func isSupportedSourceFile(p string) bool {
 	ext := strings.ToLower(filepath.Ext(p))
 	switch ext {

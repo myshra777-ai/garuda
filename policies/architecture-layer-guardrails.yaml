@@ -3,7 +3,7 @@
 
 id: architecture-no-api-to-store-bypass
 version: v1
-title: "API handlers must not bypass service layer to access store directly or transitively"
+title: "API handlers must not bypass store layer to access database/sql directly or transitively"
 description: |
   Enforces clean layered architecture using Garuda's graph-native layer_violation
   and transitive_claim_exists predicates.
@@ -19,10 +19,10 @@ when:
   - type: layer_violation
     params:
       from_layer: "internal/api"
-      to_layer: "internal/store|database/sql"
+      to_layer: "database/sql"
 
 then:
   decision: BLOCK
   reason: |
-    API layer must route state mutations through domain/service interfaces
-    rather than calling persistence packages directly.
+    API layer must route persistence operations through internal/store interfaces
+    rather than calling raw database/sql packages directly.

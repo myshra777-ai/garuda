@@ -119,7 +119,7 @@ var checkCmd = &cobra.Command{
 		var diffRes *diff.TargetResolution
 		if isDiffMode {
 			mode, deltas, dErr := diff.CollectGitDeltas(absDir, checkStagedFlag, checkDiffFlag, explicitFiles)
-			if dErr == nil && len(deltas) > 0 && checkAutoIndexFlag {
+			if dErr == nil && diff.HasSourceFileDeltas(deltas) && checkAutoIndexFlag {
 				// Synchronize uncommitted working-tree changes before running graph evaluation
 				workspaceFlag = wsName
 				incrementalFlag = true
@@ -248,14 +248,16 @@ var checkCmd = &cobra.Command{
 
 		// 3. Build DiffScopeFilter if diff mode or net-new-only is requested
 		var scopeFilter *policy.DiffScopeFilter
-		if diffRes != nil && (checkNetNewOnlyFlag || isDiffMode) && len(diffRes.TouchedEntities) > 0 {
-			entMap := make(map[uuid.UUID]bool, len(diffRes.TouchedEntities))
-			for _, te := range diffRes.TouchedEntities {
-				entMap[te.ID] = true
-			}
-			pkgMap := make(map[string]bool, len(diffRes.TouchedPackages))
-			for _, p := range diffRes.TouchedPackages {
-				pkgMap[p] = true
+		if checkNetNewOnlyFlag || isDiffMode {
+			entMap := make(map[uuid.UUID]bool)
+			pkgMap := make(map[string]bool)
+			if diffRes != nil {
+				for _, te := range diffRes.TouchedEntities {
+					entMap[te.ID] = true
+				}
+				for _, p := range diffRes.TouchedPackages {
+					pkgMap[p] = true
+				}
 			}
 			scopeFilter = &policy.DiffScopeFilter{
 				TouchedEntityIDs: entMap,

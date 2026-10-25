@@ -618,16 +618,20 @@ func RunGuard(
 		}
 	}
 
-	// Build diff scope filter when dirty files/entities exist
+	// Build diff scope filter whenever NetNewOnly is active (including when 0 AST symbols
+	// are touched, e.g. documentation/config-only commits or clean trees, so pre-existing
+	// baseline findings are classified as Baseline rather than Net-New).
 	var scopeFilter *policy.DiffScopeFilter
-	if opts.NetNewOnly && diffRes != nil && len(diffRes.TouchedEntities) > 0 {
-		entMap := make(map[uuid.UUID]bool, len(diffRes.TouchedEntities))
-		for _, te := range diffRes.TouchedEntities {
-			entMap[te.ID] = true
-		}
-		pkgMap := make(map[string]bool, len(diffRes.TouchedPackages))
-		for _, p := range diffRes.TouchedPackages {
-			pkgMap[p] = true
+	if opts.NetNewOnly {
+		entMap := make(map[uuid.UUID]bool)
+		pkgMap := make(map[string]bool)
+		if diffRes != nil {
+			for _, te := range diffRes.TouchedEntities {
+				entMap[te.ID] = true
+			}
+			for _, p := range diffRes.TouchedPackages {
+				pkgMap[p] = true
+			}
 		}
 		scopeFilter = &policy.DiffScopeFilter{
 			TouchedEntityIDs: entMap,

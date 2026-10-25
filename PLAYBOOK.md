@@ -31,9 +31,9 @@ This playbook is the operational guide for running Garuda against a real codebas
 
 ---
 
-## 1-Command Zero-Config Onboarding (New in v1.2)
+## 1-Command Zero-Config Onboarding & Active Talon Harness (v1.5.0)
 
-To bring up the entire Garuda stack in a single command (PostgreSQL container, idempotent database migrations, persistent `.env` and Ed25519 JWT keys, compiled binaries, background API gateway, provisioned owner account, Cursor/Claude MCP config, multi-repo indexing, and MCP spec verification):
+To bring up the entire Garuda v1.5 stack in a single command (PostgreSQL container, idempotent database migrations, persistent `.env` and Ed25519 JWT keys, compiled binaries, background API gateway, provisioned owner account, **Garuda Talon** active agent hooks across Cursor/Claude Code/Codex/Windsurf/Git, multi-repo indexing, and 30/30 MCP + Talon spec verification):
 
 ```bash
 ./setup.sh
@@ -47,12 +47,22 @@ Or initialize any repository directly via the CLI:
 
 Once initialized, all Garuda binaries (`bin/garuda`, `bin/garuda-api`, `bin/garuda-mcp`) automatically load `.env` from the repository root — you never need to manually export `DATABASE_URL`, `GARUDA_WORKSPACE`, `PORT`, or `JWT_PRIVATE_KEY_HEX` across terminal tabs.
 
-### Unified Change-Control Check (`garuda check`)
+### Diff-Scoped Change-Control & Active Talon Guard (`garuda check` & `garuda talon`)
 
-Run all five Garuda planes (Blast Radius + 3-State Evidence + Policy Evaluation + Governance Verdict + RFC 6962 Merkle Seal) in a single command:
+Run all five Garuda planes across your active git diff (isolating `net_new_violations` from legacy `baseline_violations`) or against a specific symbol:
 
 ```bash
-./bin/garuda check --project go-validation-10 --target SQLModel --policy ./policies --save --fail-on-block
+# 1. Diff-scoped change-control gate (evaluates only symbols touched in git diff)
+./bin/garuda check --diff HEAD --project go-validation-10 --policy ./policies --save --fail-on-block
+
+# 2. Active Garuda Talon guard (auto-indexes dirty working-tree files + verifies ADRs & policies + emits self-repair instructions)
+./bin/garuda talon guard --workspace go-validation-10 --fail-on-block
+
+# 3. Pre-edit blast radius & ADR briefing before modifying a symbol
+./bin/garuda talon brief SQLModel --workspace go-validation-10
+
+# 4. Supervisor loop wrapping a CLI coding agent until ALLOW is reached
+./bin/garuda talon run --max-retries 3 -- claude "Refactor CheckoutHandler"
 ```
 
 ---
@@ -101,7 +111,7 @@ Garuda is not an agent framework or coding agent. It is the shared semantic, evi
 | Runtime evidence | Ingest observations and identify supported or contradictory behavior | Runtime API and telemetry paths |
 | Policy engine | Evaluate rules and produce `ALLOW`, `WARN`, `REVIEW`, or `BLOCK` | `garuda policy evaluate` |
 | Trust layer | Anchor committed evaluations and decisions in a Merkle ledger | `garuda status`, `garuda verify`, `garuda policy verify` |
-| AI integration | Expose graph and governance tools over MCP | `garuda-mcp` |
+| AI integration & active harness | Expose 23 active MCP tools, MCP Prompts/Resources, and Garuda Talon pre/post-edit enforcement | `garuda-mcp`, `garuda talon` |
 | Agent coordination | Transfer tasks and consume checkpoints transactionally | `garuda.handoff`, `garuda.resume` |
 | Workspace Console | Present workspace, agent, governance, decision, and graph views | `garuda dev` |
 | IDE integration | Present ledger, contradictions, diagnostics, graph, and hover impact | `vscode-extension/` |
@@ -133,8 +143,8 @@ You do not need:
 | Language | Detection | Analysis mode | Maturity |
 |---|---|---|---|
 | Go | `go.mod` | Compiler-backed and validated | Production within supported scope |
-| Python | `pyproject.toml` or `setup.py` | Structural | Beta |
-| TypeScript | `tsconfig.json` or `package.json` | Structural; requires CGO and a C compiler | Beta |
+| Python | `pyproject.toml` or `setup.py` | Structural + Cross-File Alias & Instance Resolution (`0.95`) | Production-Ready |
+| TypeScript | `tsconfig.json` or `package.json` | Tree-sitter + Cross-File Alias & Instance Resolution (`0.95`) | Production-Ready |
 | Rust | — | Planned | Upcoming |
 | Java | — | Planned | Upcoming |
 | Elixir | — | Planned | Upcoming |
@@ -150,7 +160,9 @@ git clone https://github.com/myshra777-ai/garuda.git
 cd garuda
 
 go build -o bin/garuda ./cmd/garuda
+go build -o bin/garuda-talon ./cmd/garuda-talon
 go build -o bin/garuda-mcp ./cmd/garuda-mcp
+go build -o bin/garuda-api ./cmd/garuda-api
 ```
 
 For TypeScript analysis:
@@ -365,7 +377,7 @@ WORKSPACE=my-first-workspace python3 scripts/mcp_verify.py
 Current reference-verifier result:
 
 ```text
-═══ 38/38 checks passed ═══
+═══ 30/30 checks passed ═══
 ```
 
 The verifier exercises tool discovery, positive and negative paths, structured errors, protocol notifications, and clean shutdown behavior.
@@ -684,12 +696,14 @@ Use this to verify the ledger and decision-chain integrity exposed by the CLI.
 
 ## MCP Server Reference
 
-The MCP server exposes 21 tools over line-delimited JSON-RPC 2.0 over stdio.
+The MCP server exposes **23 tools** (plus `prompts/list` and `resources/list`) over line-delimited JSON-RPC 2.0 over stdio, with active session-level contract injection (`GARUDA_TALON_ENFORCE=true`) enabled by default.
 
 ### Tool catalog
 
 | Group | Tool | Description | Access |
 |---|---|---|---|
+| Active Talon harness | `garuda.talon_pre_edit` | Pre-edit blast radius, callers, ADR rules, and active policy constraints | Read-only |
+| Active Talon harness | `garuda.talon_verify_edit` | Post-edit incremental AST sync, diff-scoped policy/ADR evaluation, Merkle seal, and Self-Repair Prompt | Mutating (ledger) |
 | Session / overview | `garuda.briefing` | Workspace state, trust anchor, scale, hubs, policies, contradictions, and recent changes | Read-only |
 | Code graph | `garuda.entities` | Lists semantic entities, filterable by package and kind | Read-only |
 | Code graph | `garuda.find_entity` | Finds entities by name pattern, kind, package, or file path | Read-only |
@@ -733,7 +747,7 @@ The mutating tools are `garuda.propose_decision`, `garuda.handoff`, and `garuda.
 WORKSPACE=my-first-workspace python3 scripts/mcp_verify.py
 ```
 
-The current reference verifier reports 38/38 checks. It covers initialization, protocol version, tool discovery, graph queries, policy-proof failure handling, blast-radius output, handoff and resume negative paths, unknown-tool errors, notification behavior, and clean shutdown.
+The current reference verifier reports 30/30 checks across all 23 active MCP tools, MCP prompts/resources, and Garuda Talon contract injection. It covers initialization, protocol version, tool discovery, graph queries, policy-proof failure handling, blast-radius output, handoff and resume negative paths, unknown-tool errors, notification behavior, and clean shutdown.
 
 ---
 
@@ -848,7 +862,7 @@ WORKSPACE=my-first-workspace python3 scripts/mcp_verify.py
 The current reference result should be:
 
 ```text
-═══ 38/38 checks passed ═══
+═══ 30/30 checks passed ═══
 ```
 
 ### Proof failure details
@@ -940,7 +954,7 @@ Run `garuda <command> --help` for the authoritative flags for the installed bina
 
 ### MCP tools
 
-The current MCP surface contains 21 tools grouped into session context, graph exploration, governance and decisions, and multi-agent coordination. See the [MCP Server Reference](#mcp-server-reference) for the complete catalog.
+The current MCP surface contains 23 tools grouped into Active Talon enforcement, session context, graph exploration, governance and decisions, and multi-agent coordination. See the [MCP Server Reference](#mcp-server-reference) for the complete catalog.
 
 ---
 
