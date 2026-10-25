@@ -1,19 +1,18 @@
-# Control Plane — design
+# Control Plane — implementation and design reference
 
-**Status:** agreed 2026-09-17. Not yet implemented.
-**Scope:** owner-facing platform management panel.
-**Depends on:** `mcp-sessions.md` (Operations tab), `control-plane-metrics.md`
-(Business and Tenants tabs).
-**Blocks:** nothing.
+**Status:** Baseline implemented in the current v1.5.0 tree. Impersonation, feature flags, experiments and the beta-tester list remain deferred.
+**Scope:** Owner-facing platform management panel, distinct from the tenant Workspace Console.
+**Implementation anchors:** `internal/api/control_plane.go`, `internal/api/control_plane_business.go`, `internal/api/control_plane_operations.go`, `internal/api/control_plane_tenants.go`, and migrations `088_mcp_sessions.sql` / `089_control_plane_readonly_role.sql`.
+**Related:** [MCP session tracking](mcp-sessions.md) and [Control Plane metric definitions](control-plane-metrics.md).
 
 ---
 
 ## Non-goals
 
-This spec does not build impersonation, feature flags, A/B experiments,
-or the beta tester list. Those are queued. This spec builds the shell
-they will eventually live in. It also does not build the tenant-facing
-Workspace Console — that is `tenant-tabs.md`.
+The implemented baseline includes the owner-facing shell and its Business,
+Tenants, Operations and Internal surfaces. It does not implement impersonation,
+per-tenant feature flags, A/B experiments or a beta-tester list; those remain
+queued. The tenant-facing Workspace Console is a separate surface.
 
 ---
 
@@ -323,8 +322,8 @@ impersonation_log	forever	—
 The nightly job runs at 03:00 UTC. It is the same goroutine described in
 mcp-sessions.md §Retention, extended to prune control_plane_access.
 
-Queued items
-Not built in Arc A, B, or C. Design is recorded here so it does not drift.
+Queued items — not implemented in the current tree
+The following designs are deliberately deferred; their presence here is not a claim that they ship.
 
 Impersonation
 Open a tenant workspace as them, for debugging.
@@ -407,10 +406,11 @@ which the session cookie does not do. If inactivity-based expiry
 becomes important, the cookie value becomes a token that is checked
 against a server-side session table.
 
-What happens on a fresh deployment with zero tenants? Current
-answer: the Control Plane renders, all metrics show 0, the Tenants
-table is empty with a message "No tenants yet." The Control Plane is
-not hidden on a fresh deployment.
+What happens on a fresh deployment with zero tenants? When the Control
+Plane is enabled with `GARUDA_CONTROL_TOKEN` and its separate read-only
+database pool is configured, the view can render the empty state and an
+empty Tenants table. If the control token or required configuration is
+absent, the Control Plane routes intentionally return 404.
 
 Fixture
 Minimum state to verify the Definition of Done.
