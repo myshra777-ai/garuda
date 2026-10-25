@@ -1,10 +1,10 @@
 # yaml-language-server: $schema=none
-version: "1.5.0"
+version: "1.6.0"
 last_updated: "2026-10-25"
 
 categories:
   - name: "Multi-Language AST, Incremental Sync & Call-Graph Extraction"
-    description: "Go compiler-backed AST/type/go.work resolution and Python/TypeScript cross-file alias and instance call-graph extraction"
+    description: "Go compiler-backed AST/type/go.work resolution and Python/TypeScript cross-file alias and instance call-graph extraction (with Pure-Go CGO_ENABLED=0 fallback)"
     capabilities:
       - name: "Go Struct, Interface & Field Extraction"
         status: "production"
@@ -42,10 +42,10 @@ categories:
         supported_semantics: "Modules, classes, methods, functions, import aliases (import X as Y), and instance method calls (0.95 confidence)"
         invariant: "Deterministic SHA-1 UUID"
 
-      - name: "TypeScript Tree-Sitter, Alias & Instance Call Graph"
+      - name: "TypeScript Tree-Sitter & Pure-Go (!cgo) Call Graph"
         status: "production"
-        verification_tier: "Tree-sitter TypeScript Grammar + Cross-File Alias/Instance Tests"
-        supported_semantics: "Classes, interfaces, functions, named/namespace import aliases, new Class() instances, and method calls (0.95 confidence)"
+        verification_tier: "Tree-sitter (cgo) + Pure-Go Lexical/Scope (!cgo) + Cross-File Alias/Instance Tests"
+        supported_semantics: "Classes, interfaces, functions, named/namespace import aliases, new Class() instances, and method calls (0.95 confidence, zero C compiler needed)"
         invariant: "Deterministic SHA-1 UUID"
 
   - name: "Graph-Native Policy, Diff Scoping & Change-Control Engine"
@@ -75,9 +75,15 @@ categories:
         supported_semantics: "VerifyDecisionCryptographic, VerifyEvaluation, dual-tier epoch snapshots"
         invariant: "Cryptographic Tamper-Evidence"
 
-  - name: "Garuda Talon Active Agent Harness & 23-Tool MCP Surface"
-    description: "Active pre-edit and post-edit enforcement across Cursor, Claude Code, Codex, Windsurf, and Git hooks"
+  - name: "Garuda Talon Active Agent Harness, Universal Runtime & 23-Tool MCP Surface"
+    description: "Active pre-edit and post-edit enforcement across Cursor, Claude Code, Codex, Windsurf, and Git hooks with 1-command cross-OS provisioning"
     capabilities:
+      - name: "Universal Zero-Dependency Installer & Doctor (install.ps1, install.sh, garuda doctor)"
+        status: "production"
+        verification_tier: "Windows PowerShell, macOS, Linux, Chromebook & Android"
+        supported_semantics: "Auto-provisions Portable Go, Portable PostgreSQL, CGO_ENABLED=0 Pure-Go binaries, PWA manifest/service-worker, and self-healing diagnostics (garuda doctor --fix)"
+        invariant: "Zero Pre-Installed Dependencies"
+
       - name: "Active Contract & Hook Installer (garuda talon init)"
         status: "production"
         verification_tier: "internal/talon/talon_test.go"

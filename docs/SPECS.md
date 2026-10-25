@@ -1,6 +1,6 @@
 # Garuda Specifications
 
-**Version:** 1.5.0  
+**Version:** 1.6.0  
 **Document status:** Current-state reference draft
 
 **Updated:** 2026-10-25
@@ -52,7 +52,7 @@
 
 Garuda is a PostgreSQL-backed semantic software-intelligence and governance system. It analyzes supported source repositories, stores scoped semantic state, correlates documentation and runtime evidence, evaluates policies, exposes query and coordination surfaces, and provides cryptographic verification for persisted governance records.
 
-Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. In v1.5.0, Garuda includes **Garuda Talon** (`internal/talon`, `garuda talon`, `bin/garuda-talon`), an active pre-edit and post-edit execution harness that compiles live ADR and YAML policy contracts into coding agent rules, incrementally re-indexes dirty working-tree files, evaluates diff-scoped net-new violations, and runs a supervisor self-repair loop until `ALLOW` is achieved.
+Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. In v1.6.0, Garuda includes **Garuda Talon** (`internal/talon`, `garuda talon`, `bin/garuda-talon`), an active pre-edit and post-edit execution harness that compiles live ADR and YAML policy contracts into coding agent rules, incrementally re-indexes dirty working-tree files, evaluates diff-scoped net-new violations, and runs a supervisor self-repair loop until `ALLOW` is achieved.
 
 ### Current product questions
 
@@ -110,7 +110,7 @@ Runtime observations ── correlate ────┤
 | Policy layer | Evaluate declarative policy outcomes | Current |
 | Trust layer | Anchor and verify committed records | Current |
 | Integration layer | CLI, MCP, HTTP, dashboard, CI, and VS Code surfaces | Mixed; see individual sections |
-| Execution harness (`Garuda Talon`) | Active contract compiler, IDE/Git hook installer, diff-scoped guard, and self-repair supervisor loop | Current (v1.5.0) |
+| Execution harness (`Garuda Talon`) | Active contract compiler, IDE/Git hook installer, diff-scoped guard, and self-repair supervisor loop | Current (v1.6.0) |
 
 Garuda’s persistent source of truth is PostgreSQL. The pure Hygiene analyzer is deliberately side-effect free and operates on typed in-memory semantic data.
 
@@ -367,7 +367,7 @@ Garuda supports task and checkpoint coordination through transactional handoff a
 
 The handoff path uses Serializable transaction semantics and has regression coverage for repeated handoffs and happy-path MCP invocation.
 
-**Garuda Talon (`internal/talon`)** is now part of the verified v1.5.0 product contract. It provides:
+**Garuda Talon (`internal/talon`)** is now part of the verified v1.6.0 product contract. It provides:
 - `CompileContract`: synthesizes live workspace ADRs (`document_claims`), YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`.
 - `InstallHooks`: configures `.cursor/rules/garuda-talon.mdc` (`alwaysApply: true`), `.cursor/mcp.json` (`GARUDA_TALON_ENFORCE=true`), `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook running `garuda talon guard --hook`), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit` + `commit-msg`.
 - `RunGuard` & `RunHarnessLoop`: runs incremental AST re-indexing on dirty files, maps git diff hunks (`internal/diff`) to affected AST entities, evaluates net-new vs. baseline policy violations (`DiffScopeFilter`), and emits a deterministic Self-Repair Prompt on `BLOCK`.

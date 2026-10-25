@@ -1,6 +1,6 @@
-# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (v1.5.0)
+# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (v1.6.0 Universal)
 
-This reference documents the complete command-line interface (`bin/garuda` and `bin/garuda-talon`), the **Garuda Talon** active agent harness, declarative policy specification (`policies/*.yaml`), Model Context Protocol surface (`bin/garuda-mcp` with 23 active tools), and HTTP REST gateway (`bin/garuda-api`).
+This reference documents the complete command-line interface (`bin/garuda` and `bin/garuda-talon`), the **Garuda Talon** active agent harness, declarative policy specification (`policies/*.yaml`), Model Context Protocol surface (`bin/garuda-mcp` with 23 active tools), and HTTP REST / PWA gateway (`bin/garuda-api`).
 
 ---
 
@@ -26,7 +26,7 @@ All Garuda binaries (`garuda`, `garuda-talon`, `garuda-api`, `garuda-mcp`) autom
 ## 2. CLI Commands (`bin/garuda` & `bin/garuda-talon`)
 
 ### `garuda init [target_repo_path]`
-Initializes Garuda in a single command: verifies or starts the `garuda-postgres` Docker container, runs all database migrations idempotently, persists `.env` and Ed25519 JWT keys, provisions the default workspace and owner account, indexes the target repository, and runs `garuda talon init` to wire Cursor, Claude Code, Codex, Windsurf, and Git hooks.
+Initializes Garuda in a single command: verifies or starts PostgreSQL (local user-space cluster or Docker container), runs all database migrations idempotently, persists `.env` and Ed25519 JWT keys, provisions the default workspace and owner account, indexes the target repository, and runs `garuda talon init` to wire Cursor, Claude Code, Codex, Windsurf, and Git hooks across Windows, macOS, Linux, Chromebook, and Android.
 
 ```bash
 ./bin/garuda init . --workspace go-validation-10 --email myshra777@gmail.com --password garuda2026
@@ -38,6 +38,25 @@ Initializes Garuda in a single command: verifies or starts the `garuda-postgres`
 - `--password string` — Owner password to provision (default `garuda2026`).
 - `--target string` — Repository path to index (default `.`).
 - `--skip-scan` — Skip initial repository AST scan during setup.
+
+---
+
+### `garuda doctor [--fix] [--json]`
+Diagnoses and auto-repairs your Garuda installation across Windows PowerShell, macOS, Linux, Chromebook (Crostini), and Android (Termux). Verifies:
+1. Platform & Runtime Environment (`GOOS/GOARCH`, Crostini, Termux)
+2. `.env` Configuration
+3. PostgreSQL Reachability & Idempotent Schema Migrations
+4. Core Binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`)
+5. Garuda Talon Active Contract & IDE/Git Hooks (`.garuda/TALON_CONTRACT.md`, `.cursor/mcp.json`, `.claude/settings.json`, `CLAUDE.md`, `AGENTS.md`)
+6. API Gateway & `/dashboard` PWA Live Reachability
+
+```bash
+# Diagnose and automatically repair any missing or stopped components
+./bin/garuda doctor --fix
+
+# Emit machine-readable JSON diagnostic report
+./bin/garuda doctor --json
+```
 
 ---
 
@@ -104,7 +123,7 @@ Executes the unified 5-plane Change-Control workflow across either a target symb
 ---
 
 ### `garuda analyze <path>`
-Analyzes a Go (`go/types`, `go.work`, `vendor/`), Python (AST + cross-file alias/instance resolution), or TypeScript (Tree-sitter + cross-file alias/instance resolution) repository, extracts entities and typed relationships (`CALLS`, `IMPORTS`, `IMPLEMENTS`, `INHERITS`, `EMBEDS`, `REFERENCES`), and persists the semantic graph and Merkle decision revision to PostgreSQL.
+Analyzes a Go (`go/types`, `go.work`, `vendor/`), Python (AST + cross-file alias/instance resolution), or TypeScript (Tree-sitter CGO or Pure-Go `!cgo` + cross-file alias/instance resolution) repository, extracts entities and typed relationships (`CALLS`, `IMPORTS`, `IMPLEMENTS`, `INHERITS`, `EMBEDS`, `REFERENCES`), and persists the semantic graph and Merkle decision revision to PostgreSQL.
 
 ```bash
 # Full repository analysis
@@ -221,13 +240,14 @@ Expected result: `═══ 30/30 checks passed ═══`.
 
 ---
 
-## 5. Key HTTP Gateway Endpoints (`bin/garuda-api`)
+## 5. Key HTTP Gateway & PWA Endpoints (`bin/garuda-api`)
 
 All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddleware`) or authenticated session cookies (`garuda_session`).
 
 | Method & Path | Auth | Description |
 | :--- | :--- | :--- |
-| `GET /health` | Public | Gateway & database liveness check |
+| `GET /health`, `GET /healthz`, `GET /readyz` | Public | Gateway liveness and PostgreSQL readiness checks |
+| `GET /manifest.json`, `GET /sw.js`, `GET /icon.svg` | Public | Progressive Web App (PWA) manifest, service worker, and vector icon for Chromium/Android/Desktop installation |
 | `GET /signup`, `POST /signup` | Public | Browser & CLI/API account + tenant + workspace provisioning |
 | `GET /login`, `POST /login` | Public | Session authentication (`garuda_session` cookie) |
 | `GET /dashboard` | Session | 6-surface Software Intelligence Instrument (`Briefing`, `Map`, `Workbench`, `Policies`, `Contradictions`, `Ledger`) |
@@ -236,6 +256,6 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 | `POST /api/v1/dashboard/workbench/simulate` | Session / Bearer | Live Change Review Workbench pre-merge policy & blast-radius simulator |
 | `GET /graph`, `GET /api/v1/graph` | Session / Bearer | Interactive D3 force graph & JSON graph payload |
 | `POST /api/v1/telemetry/spans` | Bearer / Session | OpenTelemetry runtime span ingestion & synchronous edge-level contradiction detection |
-| `GET /api/v1/decisions/{id}/verify-evidence` | Bearer / Session | RFC 6962 cryptographic Merkle inclusion proof verification for a decision |
+| `GET /api/v1/evidence/verify/{id}` | Bearer / Session | RFC 6962 cryptographic Merkle inclusion proof verification for a decision |
 | `GET /api/v1/merkle/state` | Bearer / Session | Current tenant Merkle root hash and epoch block height |
 | `GET /admin` | Control Token | Multi-tenant operator Control Plane dashboard |

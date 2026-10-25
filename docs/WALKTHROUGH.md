@@ -1,46 +1,80 @@
-# Garuda Walkthrough (v1.5.0)
+# Garuda System Walkthrough (v1.6 Universal)
 
-**What each interface looks like, what each view shows, and how to launch it in one command.**
+**What each interface looks like, how it helps you, and how to launch it in one command across Windows, macOS, Linux, Chromebook, and Android.**
 
-This walkthrough covers the six core surfaces of **Garuda v1.5**:
-1. **1-Command Smart Setup & Active Talon Wiring (`./setup.sh` / `garuda init`)**
-2. **Garuda Talon Active Agent Execution Harness (`garuda talon`)**
-3. **Diff-Scoped Unified Change-Control CLI (`garuda check --diff`)**
-4. **6-Surface Software Intelligence Instrument (`/dashboard`)**
-5. **23 Active MCP Tools + Prompts & Resources (`bin/garuda-mcp`)**
-6. **VS Code / Cursor Extension (`vscode-extension/`)**
+This walkthrough covers all seven core surfaces of **Garuda v1.6**:
+1. **1-Command Zero-Dependency Universal Setup (`install.ps1` / `setup.ps1` & `install.sh` / `setup.sh`)**
+2. **Self-Diagnosis & Auto-Repair CLI (`garuda doctor --fix`)**
+3. **Garuda Talon Active Agent Execution Harness (`garuda talon`)**
+4. **Diff-Scoped Unified Change-Control CLI (`garuda check --diff`)**
+5. **6-Surface Software Intelligence Instrument & PWA (`/dashboard`)**
+6. **23 Active MCP Tools + Prompts & Resources (`bin/garuda-mcp`)**
+7. **VS Code / Cursor Extension (`vscode-extension/`)**
 
 ---
 
-## 1. 1-Command Smart Setup (`./setup.sh` & `garuda init`)
+## 1. 1-Command Zero-Dependency Universal Setup
 
-Garuda v1.5 eliminates manual environment variable exports, manual SQL migration loops, manual JWT key generation, and passive MCP configuration. Everything is discovered dynamically, persisted to `.env`, and wired into your coding agents automatically:
+Garuda v1.6 eliminates manual toolchain downloads, manual SQL migration loops, manual JWT key generation, and passive MCP configuration. Whether you are on a fresh Windows laptop, a MacBook without Xcode CLI tools, a Linux workstation, a Chromebook, or Android Termux, Garuda provisions its own portable runtime in user-space (`~/.garuda`) and boots in one command:
 
+**Windows 10 / 11 (PowerShell):**
+```powershell
+# Remote 1-command install & launch
+Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 | iex
+
+# Or inside a local repository
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+**macOS, Linux, Chromebook (Crostini) & Android (Termux):**
 ```bash
+# Remote 1-command install & launch
+curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash
+
+# Or inside a local repository
 ./setup.sh
 ```
 
-Or initialize any specific repository directly:
-
-```bash
-./bin/garuda init /path/to/your/repo --workspace my-system
-```
-
 ### What happens automatically
-1. **Dynamic Identity & Workspace Discovery**: Reads your developer email and name from `git config user.email` / `git config user.name` (or `$GARUDA_EMAIL`) and derives the active workspace from `$GARUDA_WORKSPACE` or the target repository name.
-2. **PostgreSQL & Idempotent Migrations**: Starts or creates the `garuda-postgres` Docker container if PostgreSQL is not running, and runs `store.Migrate` idempotently across all SQL migrations (`001` through `084`).
-3. **Persistent `.env` & Ed25519 JWT Keys**: Generates and writes `DATABASE_URL`, `CONTROL_DATABASE_URL`, `GARUDA_WORKSPACE`, `PORT`, `JWT_PRIVATE_KEY_HEX`, and `JWT_PUBLIC_KEY_HEX` into `.env`, which `garuda`, `garuda-api`, and `garuda-mcp` load automatically on every startup.
-4. **Garuda Talon Active Agent Harness (`garuda talon init`)**: Compiles live workspace ADRs (`document_claims`), declarative YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into:
-   - `.garuda/TALON_CONTRACT.md` (compiled Markdown contract)
-   - `.cursor/rules/garuda-talon.mdc` (`alwaysApply: true` Cursor agent rule)
-   - `.cursor/mcp.json` (`GARUDA_TALON_ENFORCE=true` active MCP enforcement)
-   - `CLAUDE.md` and `.claude/settings.json` (`PostToolUse` hook running `garuda talon guard --hook` after every `Edit|Write|MultiEdit`)
-   - `AGENTS.md` and `.windsurfrules` (Codex, Aider, Windsurf contract blocks)
-   - `.git/hooks/pre-commit` and `.git/hooks/commit-msg` (diff-scoped policy gate + RFC 6962 Merkle commit trailers)
+1. **Zero-Admin Portable Toolchain & Database**: If Go or PostgreSQL are not installed on your device, Garuda downloads Portable Go and Portable PostgreSQL into `~/.garuda/`, initializes a local database cluster on port `5433`, and builds all four binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) using `CGO_ENABLED=0` Pure-Go mode when no C compiler (`gcc`/`clang`) is present.
+2. **Dynamic Identity & Persistent `.env`**: Reads your identity from `git config` (or defaults), runs all SQL migrations idempotently, and persists `DATABASE_URL`, `GARUDA_WORKSPACE`, `GARUDA_TALON_ENFORCE=true`, `PORT=8080`, and Ed25519 JWT keys into `.env`.
+3. **Garuda Talon Active Agent Harness (`garuda talon init`)**: Compiles live workspace ADRs (`document_claims`), declarative YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc`, `.cursor/mcp.json`, `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit`.
 
 ---
 
-## 2. Garuda Talon Active Agent Execution Harness (`garuda talon`)
+## 2. Self-Diagnosis & Auto-Repair (`garuda doctor`)
+
+If a background PostgreSQL database stops after a reboot, a binary is missing, or an IDE hook needs re-linking, run:
+
+```bash
+./bin/garuda doctor --fix
+```
+
+```text
+╔═══════════════════════════════════════════════════════════════════╗
+║               🦅 GARUDA SYSTEM DOCTOR & DIAGNOSTICS               ║
+╚═══════════════════════════════════════════════════════════════════╝
+  Platform:  linux/amd64  |  Workspace: default
+
+  ✓ [PASS] Platform & Runtime Environment
+      OS=linux ARCH=amd64
+  ✓ [PASS] Environment File (.env)
+      Loaded .env (GARUDA_WORKSPACE=default, GARUDA_TALON_ENFORCE=true)
+  ✓ [PASS] PostgreSQL Database & Migrations
+      PostgreSQL reachable and all schema migrations verified
+  ✓ [PASS] Garuda Binaries (CLI, API, MCP, Talon)
+      All 4 binaries present in /home/user/garuda/bin
+  ✓ [PASS] Garuda Talon Active Harness & MCP Hooks
+      .garuda/TALON_CONTRACT.md, .cursor/mcp.json, .claude/settings.json, CLAUDE.md, and AGENTS.md active
+  ✓ [PASS] Garuda API & Software Intelligence Dashboard
+      Online at http://localhost:8080/dashboard (PWA enabled for Chromium/Android/Desktop)
+
+🎉 All core systems healthy! Open http://localhost:8080/dashboard in your browser.
+```
+
+---
+
+## 3. Garuda Talon Active Agent Execution Harness (`garuda talon`)
 
 Standard MCP servers are passive—if an AI agent forgets to query a tool, it writes code blind. **Garuda Talon** enforces architectural boundaries before, during, and after every agent edit.
 
@@ -87,7 +121,7 @@ Wrap any CLI coding agent (`claude`, `aider`, `codex`) in a closed self-repair l
 
 ---
 
-## 3. Diff-Scoped Unified Change-Control CLI (`garuda check`)
+## 4. Diff-Scoped Unified Change-Control CLI (`garuda check`)
 
 Run `garuda check` against a specific symbol (`--target`), a git revision range (`--diff HEAD`), staged index changes (`--staged`), or explicit files (`--files`). By default, diff mode isolates **net-new violations** introduced by your change from pre-existing baseline technical debt:
 
@@ -116,77 +150,33 @@ Add `--json` inside CI/CD pipelines to emit a machine-readable JSON decision pay
 
 ---
 
-## 4. 6-Surface Software Intelligence Instrument (`/dashboard`)
+## 5. 6-Surface Software Intelligence Instrument & PWA (`/dashboard`)
 
-Garuda v1.5 ships a redesigned Software Intelligence Instrument at `http://localhost:8080/dashboard` inspired by Linear, Vercel, Sentry, and Neo4j Bloom.
+Open `http://localhost:8080/dashboard` in any browser (or click **Install Garuda** in Chrome/Edge/Chromebook/Android to run it as a standalone Progressive Web App):
 
-**Launch it:**
+1. **Workspace Briefing (`/dashboard#briefing`)** — Clean status strip (`Workspace`, `Indexed Entities`, `Policy Posture`, `Active Contradictions`, `Merkle Ledger Head`) with an actionable **Needs Attention** queue and recent governance verdicts.
+2. **Architecture Map (`/dashboard#map`)** — **Neighborhood-first 1-hop / 2-hop topology explorer** (`[Selected Caller] ──> [Focal Symbol] ──> [Direct Dependency / Policy Badge]`) with hop-depth (`1 hop`, `2 hops`) and edge-kind filters (`Calls`, `Imports`, `Implements`, `Claims`) plus a synchronized 4-tab Inspector Drawer (`Source`, `Relationships`, `Policy Results`, `Evidence`).
+3. **Change Review Workbench (`/dashboard#workbench`)** — 3-pane pre-merge simulator: choose a target symbol and policy bundle on the left, inspect impacted callers and policy rules in the center, and generate a live `ALLOW` / `WARN` / `REVIEW` / `BLOCK` governance gate receipt on the right.
+4. **Policies (`/dashboard#policies`)** — Interactive catalog of all 9 deterministic SQL/CTE policy predicates (`layer_violation`, `transitive_claim_exists`, `cycle_exists`, `blast_radius_exceeds`, `contradiction_exists`, `verification_missing`, `claim_exists`, `entity_exists`, `language_matches`) plus a live YAML Policy Sandbox.
+5. **Contradictions & Evidence (`/dashboard#contradictions`)** — Sentry-style forensic queue for `CONTRADICTED` and `UNVERIFIED` claims, comparing static AST location against live OpenTelemetry runtime trace spans (`trace_id`, `span_id`, service pair) with a 1-click OTel Span Simulator.
+6. **Governance & Audit Ledger (`/dashboard#ledger`)** — Append-only decision table with a bottom **Decision Record Inspector** (`What it did`, `What it looked at`, `What rule applied`, `Epistemic state`, `RFC 6962 Merkle Inclusion Proof`) and 1-click cryptographic verification.
 
-```bash
-./bin/garuda dev
-```
-
-Visit `http://localhost:8080/login` (or `http://localhost:8080/dashboard`) and press `⌘K` / `Ctrl+K` at any time to open the global command palette.
-
-### The 6 Engineering Surfaces
-1. **Workspace Briefing (`/dashboard#briefing`)**: Clean status strip and health KPIs (Indexed Entities, Policy Posture, Active Contradictions, Merkle Ledger Head) paired with an actionable Needs-Attention queue and recent governance verdicts.
-2. **Architecture Map (`/dashboard#map`)**: **Neighborhood-first 1-hop / 2-hop topology explorer** (`[Selected Caller] ──> [Focal Symbol] ──> [Direct Dependency / Policy Badge]`) with interactive hop-depth (`1 hop`, `2 hops`) and edge-kind filters (`Calls`, `Imports`, `Implements`, `Claims`) plus a synchronized 4-tab Inspector Drawer (`Source`, `Relationships`, `Policy Results`, `Evidence`).
-3. **Change Review Workbench (`/dashboard#workbench`)**: 3-pane pre-merge simulator—select a target symbol and policy bundle on the left, inspect impacted callers and policy rules in the center, and generate a live `ALLOW` / `WARN` / `REVIEW` / `BLOCK` governance gate receipt on the right.
-4. **Policies (`/dashboard#policies`)**: Interactive catalog of all 9 deterministic SQL/CTE policy predicates alongside a live YAML Policy Sandbox to test rules before committing them to CI.
-5. **Contradictions & Evidence (`/dashboard#contradictions`)**: Sentry-style forensic queue for `CONTRADICTED` and `UNVERIFIED` claims, comparing static AST location against live OpenTelemetry runtime trace spans (`trace_id`, `span_id`, service pair) plus an interactive OTel Span Simulator.
-6. **Governance & Audit Ledger (`/dashboard#ledger`)**: Append-only decision table with a bottom **Decision Record Inspector** (`What it did`, `What it looked at`, `What rule applied`, `Epistemic state`, `RFC 6962 Merkle Inclusion Proof`) and 1-click cryptographic verification.
+Press `⌘K` / `Ctrl+K` from any surface to open the global command palette.
 
 ---
 
-## 5. 23 Active MCP Tools + Prompts & Resources (`bin/garuda-mcp`)
+## 6. 23 Active MCP Tools + Prompts & Resources (`bin/garuda-mcp`)
 
-Garuda speaks JSON-RPC 2.0 over stdio (`protocolVersion: "2025-06-18"`). With `GARUDA_TALON_ENFORCE=true` (enabled by default), the very first MCP tool call in any session automatically injects the workspace's active ADR `MUST`/`MUST_NOT` guardrails and YAML policies into the response payload.
-
-### MCP Prompts & Resources
-- **Prompt**: `garuda.architectural_contract` (returns compiled Markdown contract for the workspace)
-- **Resources**: `garuda://workspace/contract` (`text/markdown`) and `garuda://workspace/adr-guardrails` (`application/json`)
-
-### The 23 MCP Tools
-- **Active Talon Enforcement (2)**: `garuda.talon_pre_edit`, `garuda.talon_verify_edit`
-- **Orientation & Discovery (5)**: `garuda.briefing`, `garuda.entities`, `garuda.find_entity`, `garuda.inspect`, `garuda.query`
-- **Topology & Blast Radius (6)**: `garuda.neighbors`, `garuda.blast_radius`, `garuda.implementers`, `garuda.subclasses`, `garuda.get_impact`, `garuda.get_lineage`
-- **Governance & Cryptographic Verification (5)**: `garuda.policy.list`, `garuda.policy.evaluate`, `garuda.verify_policy_evaluation`, `garuda.governance.status`, `garuda.propose_decision`
-- **Epistemic Truth & Drift (3)**: `garuda.detect_contradictions`, `garuda.check_drift`, `garuda.query_claims`
-- **Multi-Agent Continuity (2)**: `garuda.handoff`, `garuda.resume`
-
-### Verify MCP & Talon Compliance Dynamically
-Run `scripts/mcp_verify.py` at any time:
-
-```bash
-python3 scripts/mcp_verify.py
-```
-
-Expected output:
-```text
-═══ 30/30 checks passed ═══
-```
+Connected AI coding agents automatically receive the workspace's active architectural contract on their first tool call (`GARUDA_TALON_ENFORCE=true`) and can invoke 23 tools across 6 categories:
+- **Active Talon Enforcement**: `garuda.talon_pre_edit`, `garuda.talon_verify_edit`
+- **Orientation & Discovery**: `garuda.briefing`, `garuda.entities`, `garuda.find_entity`, `garuda.inspect`, `garuda.query`
+- **Topology & Blast Radius**: `garuda.neighbors`, `garuda.blast_radius`, `garuda.implementers`, `garuda.subclasses`, `garuda.get_impact`, `garuda.get_lineage`
+- **Governance & Policy Gates**: `garuda.policy.list`, `garuda.policy.evaluate`, `garuda.verify_policy_evaluation`, `garuda.governance.status`, `garuda.propose_decision`
+- **Epistemic Truth & Drift**: `garuda.detect_contradictions`, `garuda.check_drift`, `garuda.query_claims`
+- **Multi-Agent Continuity**: `garuda.handoff`, `garuda.resume`
 
 ---
 
-## 6. The VS Code / Cursor Extension (`vscode-extension/`)
+## 7. VS Code / Cursor Extension (`vscode-extension/`)
 
-Build and compile the extension from `vscode-extension/`:
-
-```bash
-cd vscode-extension
-npm install
-npm run compile
-```
-
-- **Inline Contradiction Diagnostics**: Highlights lines where runtime traces or policy evaluations flag `ARCH_DRIFT_001`.
-- **Blast-Radius Hover**: Hover over any symbol to view its resolved upstream callers and downstream blast radius via `garuda.blast_radius`.
-- **Merkle Ledger Status Bar**: Displays current Merkle block height and active contradiction count via `garuda.governance.status`.
-
----
-
-## Where to Go Next
-- **[README.md](../README.md)** — High-level overview and 5-second workflow.
-- **[PLAYBOOK.md](../PLAYBOOK.md)** — Full operational runbook, Garuda Talon setup, and troubleshooting.
-- **[docs/CAPABILITIES.md](CAPABILITIES.md)** — 6-plane capability and verification matrix.
-- **[docs/API.md](API.md)** — Complete CLI, Talon, Policy YAML, MCP, and HTTP API reference.
-- **[docs/SPECS.md](SPECS.md)** — Formal system specifications and boundaries.
+Install the extension from `vscode-extension/` to view the **Merkle Decision Ledger**, **Active Contradictions**, **Inline Hover Blast Radius**, and **Interactive Graph Panel** directly inside VS Code or Cursor.

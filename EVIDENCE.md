@@ -10,7 +10,7 @@ Every number below is a measured result, a snapshot value, or an explicitly labe
 
 ## Evidence at a Glance
 
-| Area | Current evidence (v1.5.0) |
+| Area | Current evidence (v1.6.0) |
 |---|---|
 | Ground-Truth Compiler & AST Benchmark Suite | `24/24` strict benchmarks passed (`make benchmark-strict`, including `TestDoubleRunDeterminism` and `024-go-work` at `1.0` confidence) |
 | Reference MCP & Talon Active Verifier | `30/30` dynamic checks passed (`scripts/mcp_verify.py`) |
@@ -22,6 +22,7 @@ Every number below is a measured result, a snapshot value, or an explicitly labe
 | Blended workspace snapshot | 14,333 entities and 40,956 relationships |
 | Controlled runtime contradiction test | `10/10` injected contradictions detected (`scripts/runtime_contradiction_test.py` with Ed25519 JWT auth) |
 | Software Intelligence Instrument (`/dashboard`) | All 6 surfaces (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) + `⌘K` palette verified |
+| Universal Zero-Dependency Build & Runtime | `CGO_ENABLED=0` Pure-Go compilation verified across Go, Python, and TypeScript (`internal/ast/typescript/parser_nocgo.go`), plus `install.ps1`/`setup.ps1`, `install.sh`/`setup.sh`, `garuda doctor`, and PWA (`/manifest.json`, `/sw.js`) |
 | VS Code integration | Ledger, contradictions, diagnostics, graph, refresh, reanalysis, and Go hover workflows exercised |
 
 ---

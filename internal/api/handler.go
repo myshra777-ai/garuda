@@ -327,3 +327,44 @@ func readRateLimitBurst() int {
 func (s *Server) RateLimiter() *IPRateLimiter {
 	return s.rateLimiter
 }
+
+// HandlePWAIcon serves a crisp SVG vector icon for Progressive Web App installation.
+func (s *Server) HandlePWAIcon(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="24" fill="#090d16"/><path d="M64 20L104 42V86L64 108L24 86V42L64 20Z" fill="none" stroke="#38bdf8" stroke-width="6"/><circle cx="64" cy="64" r="16" fill="#10b981"/><path d="M64 20V48M104 42L78 56M104 86L78 72M64 108V80M24 86L50 72M24 42L50 56" stroke="#38bdf8" stroke-width="4"/></svg>`))
+}
+
+// HandlePWAManifest serves the Web App Manifest so Chrome/Edge/Chromebook/Android/macOS/Windows can install Garuda as a standalone app.
+func (s *Server) HandlePWAManifest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{
+  "name": "Garuda v1.6 — Software Intelligence & Change Control",
+  "short_name": "Garuda",
+  "description": "Deterministic Architecture Change-Control Gate, Active AI Agent Harness (Talon), and 6-Surface Software Intelligence Instrument",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}`))
+}
+
+// HandlePWAServiceWorker serves a lightweight service worker for Chromium/Android PWA compliance.
+func (s *Server) HandlePWAServiceWorker(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', () => {});
+`))
+}

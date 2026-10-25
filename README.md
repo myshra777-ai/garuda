@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Let agents write. Garuda guards the architecture.</strong><br>
-  <em>Garuda watches your architecture even when you aren't watching the diff — it maps, verifies, and gates every change before it merges.</em>
+  <em>Zero-dependency change-control gate, active AI execution harness (<code>Garuda Talon</code>), and 6-surface software intelligence instrument for AI-written code.</em>
 </p>
 
 <p align="center">
@@ -16,113 +16,174 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 License"></a>
   <a href="INSTALL.md"><img src="https://img.shields.io/badge/install-Windows_%7C_macOS_%7C_Linux_%7C_Chromebook_%7C_Android-2563eb.svg" alt="Universal 1-Command Install"></a>
   <a href="PLAYBOOK.md"><img src="https://img.shields.io/badge/docs-Operational_Playbook-0f172a.svg" alt="Operational Playbook"></a>
-  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/evidence-24%2F24_Benchmarks_%7C_23_MCP_Tools_%7C_10%2F10_Runtime-16a34a.svg" alt="Verification Evidence"></a>
+  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/evidence-24%2F24_Benchmarks_%7C_30%2F30_MCP_%7C_10%2F10_Runtime-16a34a.svg" alt="Verification Evidence"></a>
 </p>
 
 <p align="center">
-  <a href="#the-5-second-workflow">5-Second Workflow</a> ·
-  <a href="#garuda-talon-active-agent-harness">Garuda Talon Harness</a> ·
-  <a href="#what-garuda-does-for-you">What Garuda Does</a> ·
-  <a href="#why-the-graph-is-only-layer-1">The Moat</a> ·
-  <a href="#put-the-gate-in-cicd">CI/CD Gates</a> ·
-  <a href="#software-intelligence-instrument-dashboard">v1.5 Dashboard</a> ·
-  <a href="#23-active-mcp-tools-for-coding-agents">23 Active MCP Tools</a> ·
-  <a href="#evidence-not-false-certainty">Epistemic Honesty</a>
+  <a href="#the-problem-why-ai-written-code-breaks-architecture">The Problem</a> ·
+  <a href="#1-command-universal-install-zero-dependencies">1-Command Install</a> ·
+  <a href="#how-garuda-helps-every-role">Who It's For</a> ·
+  <a href="#garuda-talon-active-agent-execution-harness">Garuda Talon Harness</a> ·
+  <a href="#end-to-end-real-world-workflow">How to Use It</a> ·
+  <a href="#why-the-graph-is-only-layer-1">5-Plane Architecture</a> ·
+  <a href="#software-intelligence-instrument-dashboard-pwa">6-Surface Dashboard PWA</a> ·
+  <a href="#23-active-mcp-tools-for-coding-agents">23 Active MCP Tools</a>
 </p>
 
-AI coding agents (Cursor, Claude Code, Codex, Devin, Windsurf) write code faster than humans can review it. A pull request can pass every unit test and linter check while quietly introducing a forbidden `Handler -> Database` dependency, creating a circular package dependency (`A -> B -> C -> A`), breaking a shared struct with 170+ downstream callers, or violating documented Architecture Decision Records (ADRs).
+## The Problem: Why AI-Written Code Breaks Architecture
 
-**Garuda is a deterministic change-control gate, active AI execution harness (`Garuda Talon`), and architecture intelligence platform for AI-written code.** The moment you initialize Garuda, it compiles your live ADRs and YAML policies into an active contract, hooks directly into your coding agents and Git workflow, forces pre-edit blast-radius checks and post-edit verification, and blocks architectural violations in the editor and in CI before they merge.
+AI coding agents (**Cursor**, **Claude Code**, **Codex**, **Devin**, **Windsurf**) write code faster than humans can review it. A pull request can pass every unit test and linter check while quietly corroding your system architecture:
 
-## The 5-Second Workflow (Zero Pre-Installed Dependencies)
+- **Silent Layer Bypass:** An HTTP handler starts calling or importing a database repository directly (`CheckoutHandler -> OrderRepository`) instead of going through the domain service layer.
+- **Circular Package Coupling:** Three packages end up depending on each other in a cycle (`auth -> billing -> users -> auth`).
+- **Blind Hub Modifications:** An agent modifies a core shared struct or class with 170+ transitive callers without checking downstream blast radius.
+- **ADR & Runtime Drift:** Code contradicts documented Architecture Decision Records (ADRs), or production OpenTelemetry traces reveal runtime calls to unapproved services that do not exist in the static codebase.
 
-Whether you are a Product Manager, Founder, or Engineer—**you do not need Go, PostgreSQL, GCC/Xcode, or Docker pre-installed**. Garuda automatically provisions a portable runtime, database, Active MCP, and Garuda Talon in **1 or 2 commands** across **Windows (PowerShell)**, **macOS**, **Linux**, **Chromebook (ChromiumOS)**, and **Android (Termux / PWA)**:
+Unit tests pass. The diff looks clean. A busy reviewer approves it. Six months later, nobody can change anything without breaking something else.
 
-**macOS, Linux, Chromebook (Crostini) & Android (Termux):**
-```bash
-# Option A: 1-Command Remote Install & Launch
-curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash
+### What Garuda Is Now (v1.6 Universal)
 
-# Option B: From a cloned repository
-git clone https://github.com/myshra777-ai/garuda.git && cd garuda && ./setup.sh
-```
+**Garuda is a deterministic change-control gate, active AI execution harness (`Garuda Talon`), and 6-surface software intelligence instrument for Go, Python, and TypeScript codebases.**
 
-**Windows 10 / 11 (PowerShell — Zero Admin / Zero Dependencies):**
+Unlike passive code-graph indexers that wait for an agent to ask a question, Garuda actively governs the entire lifecycle of a code change:
+
+1. **Zero-Dependency Universal Runtime (`v1.6`)** — Installs and launches in **1 command** on **Windows 10/11 (PowerShell)**, **macOS**, **Linux**, **Chromebook (ChromiumOS)**, and **Android (Termux / Chrome PWA)**. You do **not** need Go, PostgreSQL, GCC/Xcode/MinGW, or Docker pre-installed; Garuda automatically downloads or provisions a portable user-space toolchain and database, and compiles in 100% Pure-Go mode (`CGO_ENABLED=0`) when no C compiler is present.
+2. **Garuda Talon Active Agent Harness (`garuda talon`)** — Turns passive MCP into an active, fail-closed harness. It compiles your live ADRs and YAML policies into `.garuda/TALON_CONTRACT.md`, injects rules into the agent's very first MCP tool call (`GARUDA_TALON_ENFORCE=true`), wires Cursor (`.cursor/rules/garuda-talon.mdc`), Claude Code (`PostToolUse` hook), Codex (`AGENTS.md`), Windsurf (`.windsurfrules`), and Git `pre-commit` hooks, and forces agents to self-repair when an edit violates architecture.
+3. **Diff-Scoped Change-Control Gate (`garuda check --diff`)** — Maps `git diff` hunks (`--staged`, `--diff <rev>`, `--files`) directly to modified AST symbols, computes union transitive blast radius, and separates **net-new violations** introduced by your diff from legacy **baseline violations** so teams can adopt strict gates on brownfield repos immediately.
+4. **3-State Epistemic Truth (`SUPPORTED` · `UNVERIFIED` · `CONTRADICTED`)** — Correlates static AST edges with Markdown ADRs (`garuda docs ingest`) and live OpenTelemetry trace spans (`POST /api/v1/telemetry/spans`). Shadow runtime calls or forbidden ADR dependencies are automatically quarantined as `CONTRADICTED`.
+5. **6-Surface Software Intelligence Instrument (`/dashboard` PWA) & RFC 6962 Merkle Ledger** — A browser and standalone desktop/mobile Progressive Web App (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) backed by cryptographic RFC 6962 SHA-256 Merkle inclusion proofs.
+
+## 1-Command Universal Install (Zero Dependencies)
+
+Whether you are a **Product Manager**, **Founder**, **Architect**, or **Software Engineer**—**you do not need Go, PostgreSQL, GCC/Xcode, or Docker installed on your laptop**. Garuda manages everything automatically in user-space (`~/.garuda`):
+
+### Windows 10 / 11 (PowerShell — No Admin, No Go, No Postgres, No GCC Required)
+
+Open **Windows PowerShell** and paste:
+
 ```powershell
 # Option A: 1-Command Remote Install & Launch (works even without Git, Go, Postgres, or Docker!)
 Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 | iex
 
-# Option B: From a cloned repository
+# Option B: Inside an existing cloned or extracted garuda folder
 cd $HOME\garuda
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-> 📖 **Need platform-specific instructions or hit an installation error?** See the **[Universal Installation & Troubleshooting Guide (`INSTALL.md`)](INSTALL.md)** or run `./bin/garuda doctor --fix` (`.in\garuda.exe doctor --fix` on Windows).
+### macOS, Linux, Chromebook (Crostini) & Android (Termux)
 
-Or run the diff-scoped change-control gate against your uncommitted working tree, staged index, or branch diff:
+Open **Terminal** and paste:
 
 ```bash
-# Check only the symbols modified in your current git diff (isolating net-new violations from legacy debt)
-./bin/garuda check --diff HEAD --project my-system --policy ./policies --save --fail-on-block
+# Option A: 1-Command Remote Install & Launch
+curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash
 
-# Or run the active Garuda Talon guard (auto-indexes dirty files + verifies ADRs & policies + emits self-repair instructions)
-./bin/garuda talon guard --workspace my-system --fail-on-block
+# Option B: Inside an existing cloned or extracted garuda folder
+git clone https://github.com/myshra777-ai/garuda.git && cd garuda && ./setup.sh
 ```
 
-**Here is what happens immediately:**
+### Instant Self-Diagnostics & Auto-Repair (`garuda doctor`)
 
-1. **Compiler & AST Extraction (`100%` Local, Sub-Second Incremental Sync)** — Garuda parses your workspace using `go/types` + `go/work` + `vendor/` for Go (`1.0` exact type resolution across modules), Python ASTs (`0.95` cross-file alias and instance call resolution), and Tree-sitter TypeScript ASTs (`0.95` cross-file named/namespace alias and class instance call resolution). With `--incremental` (or automatic `--auto-index` on `garuda check --diff` / `garuda talon guard`), dirty working-tree files are re-indexed in milliseconds.
-2. **Git-Diff Native Targeting & Union Blast Radius** — Maps `git diff --unified=0` hunks (`--staged`, `--diff <rev>`, or `--files`) directly to affected AST entities (`[line_start, line_end]`) and computes the union transitive blast radius across all modified symbols.
-3. **3-State Epistemic Truth (`SUPPORTED` / `UNVERIFIED` / `CONTRADICTED`)** — Correlates static code edges with ingested Markdown/ADR requirements (`garuda docs ingest`) and live OpenTelemetry runtime spans (`POST /api/v1/telemetry/spans`). Shadow runtime calls or forbidden ADR dependencies are automatically quarantined as `CONTRADICTED`.
-4. **Net-New vs. Baseline Policy Evaluation (`ALLOW` / `WARN` / `REVIEW` / `BLOCK`)** — Runs 9 deterministic SQL/CTE policy predicates (`layer_violation`, `transitive_claim_exists`, `cycle_exists`, `blast_radius_exceeds`, `contradiction_exists`, `verification_missing`, `claim_exists`, `entity_exists`, `language_matches`), partitioning violations touching your active diff (`net_new_violations`) from pre-existing legacy debt (`baseline_violations`).
-5. **RFC 6962 Merkle Audit Receipt** — When persisted with `--save`, the governance decision and its exact input hashes are anchored in an append-only SHA-256 Merkle tree so any auditor or CI job can cryptographically verify inclusion and tamper-evidence.
+If anything is ever stopped, unlinked, or misconfigured on your machine, run one command to diagnose and auto-repair `.env`, PostgreSQL, binaries, MCP configs, and Talon hooks:
 
-## Garuda Talon: Active Agent Harness
+```bash
+# macOS / Linux / Chromebook / Android
+./bin/garuda doctor --fix
 
-Standard MCP servers are **passive** — if an AI coding agent forgets to call a tool, it writes code blind and violates your architecture. **Garuda Talon (`garuda talon` / `bin/garuda-talon`) turns MCP and your local workspace into an active, fail-closed enforcement harness** the moment `./setup.sh` or `garuda init` runs:
+# Windows PowerShell
+.\bin\garuda.exe doctor --fix
+```
+
+> 📖 **Full platform instructions (including Chromebook & Android PWA install) and a 13-item installation error guide:** see **[`INSTALL.md`](INSTALL.md)**.
+
+## How Garuda Helps Every Role
+
+| Who You Are | How Garuda Helps You | What You Run or Open |
+|---|---|---|
+| **Product Managers & Non-Technical Founders** | Install Garuda in 1 command without installing developer toolchains. Open the visual **Software Intelligence Instrument (`/dashboard`)** to see system health, high-risk coupling hubs, whether AI-written PRs respect documented product/architecture rules, and a plain-English audit trail of every governance decision. | Run `install.ps1` (Windows) or `install.sh` (Mac/Linux), then open `http://localhost:8080/dashboard` (or install it as a desktop/mobile PWA). |
+| **Software Engineers** | See every direct and transitive caller, interface implementation, and active ADR/policy rule **before** you refactor a shared struct, class, or package—and check only your uncommitted git diff without being blocked by old legacy code. | Run `garuda talon brief <Symbol>`, `garuda check --diff HEAD`, or use the **Change Review Workbench** (`/dashboard#workbench`). |
+| **Staff / Principal Architects** | Turn Markdown ADRs (`MUST` / `MUST_NOT`) and YAML layer/cycle/blast-radius policies into executable gates enforced automatically in Cursor, Claude Code, Git pre-commit, and CI/CD. | Author rules in `policies/*.yaml`, ingest ADRs via `garuda docs ingest`, and enforce with `garuda talon guard --fail-on-block`. |
+| **AI Coding Agents (Cursor, Claude Code, Codex, Windsurf)** | Stop guessing via grep/RAG. Agents automatically receive your workspace's ADR & policy contract on their very first MCP call (`GARUDA_TALON_ENFORCE=true`) and use 23 deterministic tools for pre-edit blast radius, post-edit verification, and self-repair. | Automatic via `.cursor/mcp.json`, `.cursor/rules/garuda-talon.mdc`, `.claude/settings.json` (`PostToolUse` hook), and `AGENTS.md`. |
+| **Security, Risk & Governance Leads** | Maintain an append-only, cryptographically verifiable RFC 6962 SHA-256 Merkle ledger of every saved architecture evaluation, policy outcome, and runtime OpenTelemetry contradiction. | Open **Governance & Audit Ledger** (`/dashboard#ledger`) or query `GET /api/v1/evidence/verify/{id}`. |
+
+## Garuda Talon: Active Agent Execution Harness
+
+Standard MCP servers are **passive**—if an AI coding agent chooses not to call a tool, it edits files blind and violates your architecture. **Garuda Talon (`garuda talon` / `bin/garuda-talon`) makes architectural governance active at all times** the moment `setup.sh`, `setup.ps1`, or `garuda init` runs:
 
 | Enforcement Layer | What `garuda talon init` Configures Automatically | How It Forces Agent Compliance |
 |---|---|---|
 | **1. Active MCP Session Gate (`bin/garuda-mcp`)** | Exposes MCP `prompts/list` (`garuda.architectural_contract`), `resources/list` (`garuda://workspace/contract`, `garuda://workspace/adr-guardrails`), and active session injection (`GARUDA_TALON_ENFORCE=true`). | On the agent's very first MCP tool call, Garuda automatically injects the workspace's active ADR `MUST` / `MUST_NOT` rules and YAML policy guardrails into the response payload so the agent cannot miss them. |
 | **2. Cursor Always-On Rule (`.cursor/rules/garuda-talon.mdc`)** | Compiles live ADRs (`document_claims`), YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md` and `.cursor/rules/garuda-talon.mdc` (`alwaysApply: true`). | Forces Cursor agents to call `garuda.talon_pre_edit` before modifying files and `garuda.talon_verify_edit` immediately after editing. |
-| **3. Claude Code Active Hooks (`.claude/settings.json` & `CLAUDE.md`)** | Writes `CLAUDE.md` and registers a `PostToolUse` hook on `Edit\|Write\|MultiEdit` in `.claude/settings.json` executing `garuda talon guard --hook`. | Every time Claude Code edits a file, `garuda talon guard --hook` incrementally re-indexes the change and evaluates policies + ADRs. On `BLOCK`, it exits `2` and feeds a structured **Self-Repair Prompt** back to Claude. |
+| **3. Claude Code Active Hooks (`.claude/settings.json` & `CLAUDE.md`)** | Writes `CLAUDE.md` and registers a `PostToolUse` hook on `Edit\|Write\|MultiEdit` in `.claude/settings.json` executing `garuda talon guard --hook` (Windows & POSIX path-safe). | Every time Claude Code edits a file, `garuda talon guard --hook` incrementally re-indexes the change and evaluates policies + ADRs. On `BLOCK`, it exits `2` and feeds a structured **Self-Repair Prompt** back to Claude. |
 | **4. Codex / Aider / Windsurf (`AGENTS.md` & `.windsurfrules`)** | Maintains idempotent `<!-- GARUDA-TALON:START -->` contract blocks in `AGENTS.md` and `.windsurfrules`. | Ensures CLI and IDE agents share the exact same architectural rules and hub warnings. |
 | **5. Git Pre-Commit & Provenance Hooks (`.git/hooks/`)** | Installs `.git/hooks/pre-commit` (`garuda talon guard --staged --fail-on-block`) and `.git/hooks/commit-msg`. | Blocks commits with net-new policy or ADR violations and stamps `Garuda-Governance-Outcome` and `Garuda-Merkle-Block` trailers into every verified commit message. |
 | **6. Supervisor Loop (`garuda talon run -- <cmd>`)** | Wraps any autonomous CLI agent (`garuda talon run -- claude ...` or `garuda talon run -- aider ...`). | Intercepts working-tree edits after the agent runs, executes `talon guard`, and automatically loops the agent with the deterministic self-repair prompt (up to `--max-retries 3`) until `ALLOW` is achieved. |
 
-## What Garuda Does for You
+## End-to-End Real-World Workflow
 
-| Who You Are | What Garuda Does for You | How You Use It |
-|---|---|---|
-| **Software Engineers** | Shows every direct and transitive caller, interface implementation, and architectural rule before you refactor a shared struct or service. | Run `garuda talon brief <symbol>`, `garuda check --diff HEAD`, or inspect the **Change Review Workbench** in `/dashboard`. |
-| **Staff / Principal Architects** | Turns tribal architecture rules and Markdown ADRs into executable guardrails enforced in the editor, on pre-commit, and on every PR. | Commit policies in `policies/*.yaml`, ingest ADRs with `garuda docs ingest`, and enforce them with `garuda talon guard --fail-on-block`. |
-| **AI Coding Agents (Cursor, Claude, Codex)** | Replaces blind grep/RAG guessing with 23 active MCP tools for pre-edit briefing, blast radius, post-edit verification, and self-repair loops. | Call `garuda.talon_pre_edit`, `garuda.blast_radius`, `garuda.talon_verify_edit`, `garuda.handoff`, and `garuda.resume`. |
-| **Security & Governance Leads** | Preserves a tamper-evident ledger of every saved architecture decision, policy evaluation, and runtime contradiction with RFC 6962 Merkle inclusion proofs. | Inspect the **Governance & Audit Ledger** surface or call `GET /api/v1/decisions/{id}/verify-evidence`. |
+### Step 1: Index Any Go, Python, or TypeScript Repository (or Multi-Repo Workspace)
+
+```bash
+# Index a repository into a named workspace (creates an initial RFC 6962 Merkle baseline)
+./bin/garuda analyze /path/to/my-repo --workspace my-system --save
+
+# Or initialize the repo + Active MCP + Garuda Talon hooks in one command
+./bin/garuda init /path/to/my-repo --workspace my-system
+```
+
+### Step 2: Ingest Markdown Architecture Decision Records (ADRs)
+
+Turn human-written Markdown ADRs (`MUST` / `MUST_NOT` rules) into machine-verifiable claims:
+
+```bash
+./bin/garuda docs ingest ./docs/adr --workspace my-system
+./bin/garuda docs verify --workspace my-system
+```
+
+### Step 3: Brief Yourself (or Your Agent) Before Touching a Core Symbol
+
+```bash
+./bin/garuda talon brief CheckoutHandler --workspace my-system
+```
+
+Output shows the exact symbol location, inbound caller count, transitive blast radius (`CRITICAL` / `HIGH` / `MEDIUM` / `LOW`), applicable ADR rules, and active YAML policies before a single line of code is edited.
+
+### Step 4: Gate Your Uncommitted or Staged Diff (`garuda check` / `garuda talon guard`)
+
+```bash
+# Gate only the symbols touched in your current git diff (net-new violations only)
+./bin/garuda check --diff HEAD --project my-system --policy ./policies --save --fail-on-block
+
+# Or run the active Talon guard (auto-indexes dirty files + verifies ADRs & policies + emits Self-Repair instructions)
+./bin/garuda talon guard --workspace my-system --fail-on-block
+```
+
+If an agent or developer introduces a forbidden dependency (for example, `CheckoutHandler -> OrderRepository`), Garuda returns `OUTCOME: BLOCK` (exit code `2`) and prints the exact file, line number, policy/ADR rule violated, and a concrete **Self-Repair Prompt** explaining how to refactor the change cleanly.
 
 ## Why the Graph Is Only Layer 1
 
-Tools like knowledge-graph indexers stop at building a graph to help agents browse files. **In Garuda, the graph is the shared foundation — the product is the active execution harness and deterministic change-control system built on top of it:**
+Tools like knowledge-graph indexers stop at building a graph to help agents browse files. **In Garuda, the graph is Layer 1 — the product is the 5-plane active execution harness and deterministic change-control system built on top of it:**
 
 ```mermaid
 flowchart LR
-    SRC["Source Code & Git Diff\n(Go / Python / TS)"] --> ANALYZE["Incremental Compiler & AST Indexer\n(go/types, go.work, Python/TS AST)"]
+    SRC["Source Code & Git Diff\n(Go / Python / TS)"] --> ANALYZE["Plane 1: Incremental Compiler & AST\n(go/types, go.work, Python/TS AST)"]
     ANALYZE --> MODEL["Shared Workspace Graph\n(Entities & Confidence Edges)"]
-    AGENT["AI Coding Agents\n(Cursor / Claude / Codex)"] <-->|"23 Active MCP Tools\n+ Talon Pre/Post Edit Hooks"| MODEL
-    DOC["Markdown / ADRs\n(garuda docs ingest)"] --> EVIDENCE["3-State Epistemic Engine\nSUPPORTED · UNVERIFIED · CONTRADICTED"]
+    AGENT["AI Coding Agents\n(Cursor / Claude / Codex)"] <-->|"Plane 5: 23 Active MCP Tools\n+ Talon Pre/Post Edit Hooks"| MODEL
+    DOC["Markdown / ADRs\n(garuda docs ingest)"] --> EVIDENCE["Plane 2: 3-State Epistemic Engine\nSUPPORTED · UNVERIFIED · CONTRADICTED"]
     OTEL["OpenTelemetry Spans\n(Runtime Verifier)"] --> EVIDENCE
     MODEL --> IMPACT["Diff-Scoped Blast Radius\n& Cycle Detection"]
-    MODEL --> EVAL["Fail-Closed Policy Engine\n(Net-New vs Baseline)"]
+    MODEL --> EVAL["Plane 3: Fail-Closed Policy Engine\n(9 Predicates · Net-New vs Baseline)"]
     IMPACT --> EVAL
     POLICY["YAML Architecture Policies\n(policies/*.yaml)"] --> EVAL
     EVIDENCE --> EVAL
-    EVAL --> DECISION["Governance Outcome\nALLOW · WARN · REVIEW · BLOCK"]
+    EVAL --> DECISION["Plane 4: Governance Outcome\nALLOW · WARN · REVIEW · BLOCK"]
     DECISION -->|"BLOCK -> Self-Repair Prompt"| AGENT
     DECISION -->|"Exit Code 2 on BLOCK"| CI["Pre-Commit & CI/CD Gate"]
     DECISION -->|"When persisted (--save)"| LEDGER["RFC 6962 Merkle Ledger\n& Inclusion Proof"]
 ```
 
-- **Passive Graph Indexers vs. Garuda Talon Active Control:** A passive graph waits for an agent to ask what exists. Garuda Talon injects your ADR and policy rules before the agent writes, intercepts the diff after the agent edits, isolates net-new violations from legacy baseline debt, and forces the agent to self-repair before it can finish.
-- **Edge-Level Runtime Contradiction Quarantine:** Static analysis alone misses dynamic dispatch and reflection. Garuda ingests OpenTelemetry trace spans and promotes a static edge to `SUPPORTED` only when **both** caller and callee match at runtime—while automatically creating a `CONTRADICTED` quarantine record whenever production traffic makes an undeclared cross-service or cross-layer call.
+- **Pure-Go Universal Portability (`CGO_ENABLED=0`):** Even when compiled without a C compiler (`CGO_ENABLED=0`), Garuda's TypeScript analyzer (`internal/ast/typescript/parser_nocgo.go`) and Python analyzer (`internal/ast/python`) extract full cross-file alias, class inheritance, `new Class()` instance, and method call graphs at `0.95` confidence alongside Go's `go/types` + `go.work` compiler engine at `1.0` confidence.
+- **Edge-Level Runtime Contradiction Quarantine:** Garuda ingests OpenTelemetry trace spans (`POST /api/v1/telemetry/spans`) and promotes a static edge to `SUPPORTED` only when **both** caller and callee match at runtime—while automatically creating a `CONTRADICTED` quarantine record whenever production traffic makes an undeclared cross-service or cross-layer call.
 - **Fail-Closed Governance by Design:** Malformed policy YAML, unknown predicates, or persistence failures never silently pass (`ALLOW`). Garuda fails closed so broken guardrails cannot wave bad changes through CI.
 
 ## Put the Gate in CI/CD
@@ -138,9 +199,9 @@ Garuda provides four purpose-built gates so you can enforce the exact failure mo
 
 Start with the included [architecture layer guardrails policy](policies/architecture-layer-guardrails.yaml) and the full [CLI & Policy Reference](docs/API.md).
 
-## Software Intelligence Instrument (`/dashboard`)
+## Software Intelligence Instrument (`/dashboard` PWA)
 
-Garuda ships a high-craft web instrument at `http://localhost:8080/dashboard` inspired by Linear, Vercel, Sentry, and Neo4j Bloom—replacing noisy full-graph hairballs with 6 focused engineering surfaces and a global `⌘K` / `Ctrl+K` command palette:
+Garuda ships a high-craft web instrument at `http://localhost:8080/dashboard` (installable as a standalone **Progressive Web App** on Windows, macOS, Linux, Chromebook, and Android via `/manifest.json` and `/sw.js`) inspired by Linear, Vercel, Sentry, and Neo4j Bloom—replacing noisy full-graph hairballs with 6 focused engineering surfaces and a global `⌘K` / `Ctrl+K` command palette:
 
 1. **Workspace Briefing (`/dashboard#briefing`)** — Clean status strip and health KPIs (Indexed Entities, Policy Posture, Active Contradictions, Merkle Ledger Head) paired with an actionable Needs-Attention queue and recent governance verdicts.
 2. **Architecture Map (`/dashboard#map`)** — **Neighborhood-first 1-hop / 2-hop topology explorer** (`[Selected Caller] ──> [Focal Symbol] ──> [Direct Dependency / Policy Badge]`) with interactive hop-depth (`1 hop`, `2 hops`) and edge-kind filters (`Calls`, `Imports`, `Implements`, `Claims`) plus a synchronized 4-tab Inspector Drawer (`Source`, `Relationships`, `Policy Results`, `Evidence`).
@@ -151,7 +212,7 @@ Garuda ships a high-craft web instrument at `http://localhost:8080/dashboard` in
 
 ## 23 Active MCP Tools for Coding Agents
 
-`./setup.sh` automatically registers `garuda-mcp` with **Cursor** and **Claude Desktop** with `GARUDA_TALON_ENFORCE=true` enabled by default. Connected agents receive live MCP Prompts (`garuda.architectural_contract`), MCP Resources (`garuda://workspace/contract`), and 23 deterministic tools:
+`./setup.sh` and `.\setup.ps1` automatically register `garuda-mcp` with **Cursor** and **Claude Desktop** with `GARUDA_TALON_ENFORCE=true` enabled by default. Connected agents receive live MCP Prompts (`garuda.architectural_contract`), MCP Resources (`garuda://workspace/contract`), and 23 deterministic tools:
 
 | Category | MCP Tools | Purpose |
 |---|---|---|
@@ -192,17 +253,17 @@ The Merkle ledger cryptographically proves the **inclusion, ordering, and tamper
 |---|---|---|---|
 | **Go** | `go/types`, `go/ssa`, `go.work`, `vendor/` | Exact compiler-grade type, interface, and cross-module call resolution (`1.0` static confidence). | **Production** |
 | **Python** | Structural + Alias/Receiver AST Analyzer | Module, class, function, `import X as Y` / `from X import Y as Z` alias, and instance method call-graph resolution (`0.95` static confidence). | **Production-Ready** |
-| **TypeScript** | Tree-sitter + Alias/Instance AST Analyzer | Interface, class, function, named/namespace import alias, `new Class()` instance, and cross-file call-graph resolution (`0.95` static confidence). | **Production-Ready** |
+| **TypeScript** | Tree-sitter (CGO) + Pure-Go Lexical/Scope AST Analyzer (`!cgo`) | Interface, class, function, named/namespace import alias, `new Class()` instance, and cross-file call-graph resolution (`0.95` static confidence, works even with `CGO_ENABLED=0`). | **Production-Ready** |
 
 - **Reproducible Verification Suite:** `make benchmark-strict` executes 24 ground-truth compiler and cross-module benchmarks (`TestDoubleRunDeterminism` across all 24 cases), `30/30` reference MCP & Talon active verifier checks (`scripts/mcp_verify.py`), and `10/10` edge-level runtime contradiction detections (`scripts/runtime_contradiction_test.py`). See [EVIDENCE.md](EVIDENCE.md) for full methodology and scope boundaries.
 
 ## Documentation
 
-- **[Universal Installation & Troubleshooting Guide](INSTALL.md)** — 1-command zero-dependency setup for Windows PowerShell, macOS, Linux, Chromebook (ChromiumOS), and Android (Termux & Chromium PWA), plus the 12-item installation error troubleshooting table.
-- **[Operational Playbook](PLAYBOOK.md)** — 1-command onboarding, Garuda Talon harness setup, MCP client wiring (Cursor, Claude Code, Codex), policy authoring, runtime OpenTelemetry ingestion, and troubleshooting.
-- **[System Walkthrough](docs/WALKTHROUGH.md)** — End-to-end CLI, v1.5 Dashboard, Garuda Talon, MCP, and VS Code extension workflows.
-- **[Capabilities & Verification Tiers](docs/CAPABILITIES.md)** — Detailed breakdown of capabilities and verification guarantees.
-- **[CLI, Policy, MCP & HTTP API Reference](docs/API.md)** — Complete reference for all CLI flags, 9 policy predicates, 23 MCP tools, and REST endpoints.
-- **[System Specifications](docs/SPECS.md)** — Architecture internals, PostgreSQL schema, Ed25519 JWT auth, and Merkle tree specifications.
-- **[Verification Evidence](EVIDENCE.md)** — Reproducible benchmark output, test coverage, and explicit security/epistemic boundaries.
-- **[Changelog](CHANGELOG.md)** · **[Codebase Hygiene](docs/hygiene.md)** · **[License (Apache 2.0)](LICENSE)**
+- **[Universal Installation & Troubleshooting Guide (`INSTALL.md`)](INSTALL.md)** — 1-command zero-dependency setup for Windows PowerShell, macOS, Linux, Chromebook (ChromiumOS), and Android (Termux & Chromium PWA), plus the 13-item installation & Git troubleshooting table.
+- **[Operational Playbook (`PLAYBOOK.md`)](PLAYBOOK.md)** — Complete day-to-day operational guide: zero-dependency onboarding, Garuda Talon harness workflows, diff-scoped `garuda check`, policy authoring, ADR ingestion, runtime OpenTelemetry verification, and CI/CD gates.
+- **[System Walkthrough (`docs/WALKTHROUGH.md`)](docs/WALKTHROUGH.md)** — Guided tour of all 7 Garuda v1.6 surfaces (`setup.sh`/`setup.ps1`, `garuda doctor`, `garuda talon`, `garuda check`, 6-surface `/dashboard` PWA, 23-tool MCP server, and VS Code extension).
+- **[Capabilities & Verification Matrix (`docs/CAPABILITIES.md`)](docs/CAPABILITIES.md)** — Detailed breakdown of all 6 planes, verification guarantees, and enforced invariants.
+- **[CLI, Policy, MCP & HTTP API Reference (`docs/API.md`)](docs/API.md)** — Complete reference for all CLI commands (`init`, `doctor`, `talon`, `check`, `analyze`, `policy`, `docs`), 9 policy predicates, 23 MCP tools, and REST/PWA endpoints.
+- **[System Specifications (`docs/SPECS.md`)](docs/SPECS.md)** — Architecture internals, PostgreSQL schema, Ed25519 JWT auth, and RFC 6962 Merkle tree specifications.
+- **[Verification Evidence (`EVIDENCE.md`)](EVIDENCE.md)** — Reproducible benchmark output, test coverage, cross-OS `CGO_ENABLED=0` build matrix, and explicit security/epistemic boundaries.
+- **[Changelog (`CHANGELOG.md`)](CHANGELOG.md)** · **[Codebase Hygiene (`docs/hygiene.md`)](docs/hygiene.md)** · **[License (Apache 2.0)](LICENSE)**
