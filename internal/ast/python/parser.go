@@ -45,13 +45,15 @@ type Function struct {
 	LineEnd    int
 	IsExported bool
 	Calls      []string
+	LocalTypes map[string]string // variable name → instantiated class/type name (e.g. svc = OrderService())
 }
 
 type Import struct {
-	Module string
-	Names  []string // for `from X import a, b`
-	Alias  string   // for `import X as Y`
-	Line   int
+	Module      string
+	Names       []string          // for `from X import a, b` (canonical exported names)
+	NameAliases map[string]string // localAlias → exportedName (for `from X import a as b`)
+	Alias       string            // for `import X as Y`
+	Line        int
 }
 
 // analysisFrame tracks an open block (class or function) during parsing.
@@ -67,13 +69,15 @@ type analysisFrame struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 var (
-	reClass     = regexp.MustCompile(`^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\))?\s*:`)
-	reDef       = regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*(?:->\s*([^:]+))?\s*:`)
-	reImport    = regexp.MustCompile(`^import\s+(.+)$`)
-	reFromImpt  = regexp.MustCompile(`^from\s+([A-Za-z0-9_.]+)\s+import\s+(.+)$`)
-	reDecor     = regexp.MustCompile(`^@([A-Za-z_][A-Za-z0-9_.]*(?:\([^)]*\))?)`)
-	reDocstring = regexp.MustCompile(`^\s*(?:"""|''')`)
-	rePyCall    = regexp.MustCompile(`\b((?:self\.)?[A-Za-z_][A-Za-z0-9_]*)\s*\(`)
+	reClass      = regexp.MustCompile(`^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\))?\s*:`)
+	reDef        = regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*(?:->\s*([^:]+))?\s*:`)
+	reImport     = regexp.MustCompile(`^import\s+(.+)$`)
+	reFromImpt   = regexp.MustCompile(`^from\s+([A-Za-z0-9_.]+)\s+import\s+(.+)$`)
+	reDecor      = regexp.MustCompile(`^@([A-Za-z_][A-Za-z0-9_.]*(?:\([^)]*\))?)`)
+	reDocstring  = regexp.MustCompile(`^\s*(?:"""|''')`)
+	rePyCall     = regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\(`)
+	rePyAssign   = regexp.MustCompile(`^\s*((?:self\.)?[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*[A-Za-z_][A-Za-z0-9_.]*\s*)?=\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\(`)
+	rePyParamTyp = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_.]*)`)
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,16 +89,7 @@ func Parse(src, path, moduleName string) (*Module, error) {
 	lines := stripAndClean(src)
 	m := &Module{Path: path, Module: moduleName}
 
-	// Block stack — tracks (kind, indent, classIdx, funcIdx)
-	type frame struct {
-		kind     string // "class" or "def"
-		indent   int
-		classIdx int // index into m.Classes, -1 if none
-		funcIdx  int // index into m.Functions or m.Classes[classIdx].Methods
-	}
-
 	var stack []analysisFrame
-
 	lastDecorators := []string{}
 
 	for i := 0; i < len(lines); i++ {
@@ -133,6 +128,7 @@ func Parse(src, path, moduleName string) (*Module, error) {
 
 		// Function / method
 		if dm := reDef.FindStringSubmatch(text); dm != nil {
+			localTypes := parseParamTypes(dm[2])
 			fn := Function{
 				Name:       dm[1],
 				Params:     parseParams(dm[2]),
@@ -141,6 +137,7 @@ func Parse(src, path, moduleName string) (*Module, error) {
 				IsAsync:    strings.HasPrefix(strings.TrimSpace(text), "async"),
 				LineStart:  ln.LineNum,
 				IsExported: !strings.HasPrefix(dm[1], "_"),
+				LocalTypes: localTypes,
 			}
 			lastDecorators = nil
 
@@ -157,56 +154,87 @@ func Parse(src, path, moduleName string) (*Module, error) {
 			continue
 		}
 
-		// Imports — only at module level (indent == 0)
-		// Extract function/method body calls when inside an open def block
-			if len(stack) > 0 && stack[len(stack)-1].kind == "def" {
-				top := stack[len(stack)-1]
+		// Extract function/method body calls and local constructor bindings when inside an open def block
+		if len(stack) > 0 && stack[len(stack)-1].kind == "def" {
+			top := stack[len(stack)-1]
+			var targetFn *Function
+			if top.classIdx >= 0 && top.classIdx < len(m.Classes) && top.funcIdx >= 0 {
+				targetFn = &m.Classes[top.classIdx].Methods[top.funcIdx]
+			} else if top.classIdx == -1 && top.funcIdx >= 0 && top.funcIdx < len(m.Functions) {
+				targetFn = &m.Functions[top.funcIdx]
+			}
+
+			if targetFn != nil {
+				if targetFn.LocalTypes == nil {
+					targetFn.LocalTypes = make(map[string]string)
+				}
+				if am := rePyAssign.FindStringSubmatch(text); am != nil {
+					lhs := strings.TrimSpace(am[1])
+					rhs := strings.TrimSpace(am[2])
+					if lhs != "" && rhs != "" && !isPythonKeywordOrBuiltin(rhs) {
+						targetFn.LocalTypes[lhs] = rhs
+					}
+				}
 				for _, mcall := range rePyCall.FindAllStringSubmatch(text, -1) {
 					callee := mcall[1]
-					switch callee {
-					case "if", "for", "while", "return", "yield", "with", "except", "elif", "assert", "print", "len", "range", "isinstance", "super":
+					if isPythonKeywordOrBuiltin(callee) {
 						continue
 					}
-					if top.classIdx >= 0 && top.classIdx < len(m.Classes) && top.funcIdx >= 0 {
-						m.Classes[top.classIdx].Methods[top.funcIdx].Calls = append(
-							m.Classes[top.classIdx].Methods[top.funcIdx].Calls, callee)
-					} else if top.classIdx == -1 && top.funcIdx >= 0 && top.funcIdx < len(m.Functions) {
-						m.Functions[top.funcIdx].Calls = append(
-							m.Functions[top.funcIdx].Calls, callee)
-					}
+					targetFn.Calls = append(targetFn.Calls, callee)
 				}
 			}
-			if indent == 0 {
-			if im := reImport.FindStringSubmatch(text); im != nil {
-				for _, spec := range splitTopLevel(im[1], ',') {
-					spec = strings.TrimSpace(spec)
-					if spec == "" {
-						continue
-					}
-					imp := Import{Line: ln.LineNum}
-					if asIdx := strings.Index(spec, " as "); asIdx >= 0 {
-						imp.Module = strings.TrimSpace(spec[:asIdx])
-						imp.Alias = strings.TrimSpace(spec[asIdx+4:])
-					} else {
-						imp.Module = spec
-					}
-					m.Imports = append(m.Imports, imp)
+		}
+
+		// Imports — at module level or inside functions
+		if im := reImport.FindStringSubmatch(text); im != nil {
+			for _, spec := range splitTopLevel(im[1], ',') {
+				spec = strings.TrimSpace(spec)
+				if spec == "" {
+					continue
 				}
-				continue
-			}
-			if fm := reFromImpt.FindStringSubmatch(text); fm != nil {
-				mod := fm[1]
-				names := []string{}
-				for _, n := range splitTopLevel(fm[2], ',') {
-					n = strings.TrimSpace(n)
-					if n == "" {
-						continue
-					}
-					names = append(names, n)
+				imp := Import{Line: ln.LineNum}
+				if asIdx := strings.Index(spec, " as "); asIdx >= 0 {
+					imp.Module = strings.TrimSpace(spec[:asIdx])
+					imp.Alias = strings.TrimSpace(spec[asIdx+4:])
+				} else {
+					imp.Module = spec
 				}
-				m.Imports = append(m.Imports, Import{Module: mod, Names: names, Line: ln.LineNum})
-				continue
+				m.Imports = append(m.Imports, imp)
 			}
+			continue
+		}
+		if fm := reFromImpt.FindStringSubmatch(text); fm != nil {
+			mod := fm[1]
+			names := []string{}
+			aliases := make(map[string]string)
+			for _, rawSpec := range splitTopLevel(fm[2], ',') {
+				spec := strings.TrimSpace(rawSpec)
+				spec = strings.Trim(spec, "()")
+				spec = strings.TrimSpace(spec)
+				if spec == "" {
+					continue
+				}
+				if asIdx := strings.Index(spec, " as "); asIdx >= 0 {
+					orig := strings.TrimSpace(spec[:asIdx])
+					al := strings.TrimSpace(spec[asIdx+4:])
+					if orig != "" {
+						names = append(names, orig)
+						if al != "" {
+							aliases[al] = orig
+						}
+					}
+				} else {
+					names = append(names, spec)
+					aliases[spec] = spec
+				}
+			}
+			m.Imports = append(m.Imports, Import{
+				Module:      mod,
+				Names:       names,
+				NameAliases: aliases,
+				Line:        ln.LineNum,
+			})
+			continue
 		}
 	}
 
@@ -219,6 +247,34 @@ func Parse(src, path, moduleName string) (*Module, error) {
 	attachDocstrings(m, lines)
 
 	return m, nil
+}
+
+func isPythonKeywordOrBuiltin(callee string) bool {
+	switch callee {
+	case "if", "for", "while", "return", "yield", "with", "except", "elif", "assert",
+		"print", "len", "range", "isinstance", "super", "str", "int", "float", "bool",
+		"list", "dict", "set", "tuple", "getattr", "setattr", "hasattr", "enumerate", "zip":
+		return true
+	default:
+		return false
+	}
+}
+
+func parseParamTypes(s string) map[string]string {
+	out := make(map[string]string)
+	if strings.TrimSpace(s) == "" {
+		return out
+	}
+	for _, p := range splitTopLevel(s, ',') {
+		p = strings.TrimSpace(p)
+		if eq := strings.Index(p, "="); eq >= 0 {
+			p = strings.TrimSpace(p[:eq])
+		}
+		if m := rePyParamTyp.FindStringSubmatch(p); m != nil {
+			out[m[1]] = m[2]
+		}
+	}
+	return out
 }
 
 func closeBlock(m *Module, stack *[]analysisFrame, lines []cleanLine, endIdx int) {
@@ -261,8 +317,6 @@ type cleanLine struct {
 	Blank   bool
 }
 
-// stripAndClean produces a slice of logical lines with comments and strings removed
-// from structural analysis, but preserving indentation for block detection.
 func stripAndClean(src string) []cleanLine {
 	rawLines := strings.Split(src, "\n")
 	out := make([]cleanLine, 0, len(rawLines))
@@ -278,11 +332,9 @@ func stripAndClean(src string) []cleanLine {
 		lineNum := i + 1
 		line := strings.TrimRight(raw, " \t\r")
 
-		// If we're in a triple-quoted string, check for end
 		if inTripleQuote {
 			if idx := strings.Index(line, tripleDelim); idx >= 0 {
 				inTripleQuote = false
-				// Append remainder to buffer (the code after the closing delimiter)
 				remainder := line[idx+3:]
 				buffer.WriteString(" ")
 				buffer.WriteString(stripComment(remainder))
@@ -290,30 +342,25 @@ func stripAndClean(src string) []cleanLine {
 			continue
 		}
 
-		// Check if this line starts a triple-quoted string
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, `"""`) || strings.HasPrefix(trimmed, `'''`) {
 			delim := `"""`
 			if strings.HasPrefix(trimmed, `'''`) {
 				delim = `'''`
 			}
-			// Check if it opens AND closes on the same line
 			rest := trimmed[3:]
 			if !strings.Contains(rest, delim) {
 				inTripleQuote = true
 				tripleDelim = delim
 			}
-			// Either way, we don't care about the content for structural purposes
 			continue
 		}
 
-		// Strip comment (but respect quotes)
 		stripped := stripComment(line)
 		if strings.TrimSpace(stripped) == "" {
 			continue
 		}
 
-		// Compute logical line: if inside brackets, accumulate
 		if bracketDepth > 0 {
 			buffer.WriteString(" ")
 			buffer.WriteString(strings.TrimSpace(stripped))
@@ -330,7 +377,6 @@ func stripAndClean(src string) []cleanLine {
 			continue
 		}
 
-		// Compute indent from leading whitespace (tabs = 4 spaces)
 		indent := 0
 		for _, c := range line {
 			if c == ' ' {
@@ -362,7 +408,6 @@ func stripAndClean(src string) []cleanLine {
 	return out
 }
 
-// stripComment removes a trailing `# comment` while respecting string literals.
 func stripComment(line string) string {
 	inSingle, inDouble := false, false
 	for i := 0; i < len(line); i++ {
@@ -383,7 +428,6 @@ func stripComment(line string) string {
 	return line
 }
 
-// bracketDelta returns net open brackets in a line.
 func bracketDelta(line string) int {
 	depth := 0
 	inSingle, inDouble := false, false
@@ -409,10 +453,6 @@ func bracketDelta(line string) int {
 	return depth
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
 func parseBases(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -423,7 +463,6 @@ func parseBases(s string) []string {
 		if b == "" || b == "metaclass=type" {
 			continue
 		}
-		// Drop keyword args like metaclass=...
 		if strings.Contains(b, "=") {
 			continue
 		}
@@ -442,22 +481,18 @@ func parseParams(s string) []string {
 		if p == "" || p == "*" || p == "/" {
 			continue
 		}
-		// Name = default → keep name only
 		if eq := strings.Index(p, "="); eq >= 0 {
 			p = strings.TrimSpace(p[:eq])
 		}
-		// Annotations: name: Type → keep name
 		if colon := strings.Index(p, ":"); colon >= 0 {
 			p = strings.TrimSpace(p[:colon])
 		}
-		// *args / **kwargs → strip leading *
 		p = strings.TrimLeft(p, "*")
 		params = append(params, p)
 	}
 	return params
 }
 
-// splitTopLevel splits s by sep, ignoring separators inside brackets or strings.
 func splitTopLevel(s string, sep rune) []string {
 	var parts []string
 	depth := 0
@@ -493,11 +528,7 @@ func splitTopLevel(s string, sep rune) []string {
 	return parts
 }
 
-// attachDocstrings walks a module's classes and functions, looking for
-// triple-quoted strings immediately after the def/class line.
 func attachDocstrings(m *Module, lines []cleanLine) {
-	// Not critical for v1 — left as a future enhancement.
-	// The scanner already strips docstrings cleanly.
 	_ = m
 	_ = lines
 }

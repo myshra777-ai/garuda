@@ -84,22 +84,50 @@ type Outcome struct {
 	Reason   string   `yaml:"reason"   json:"reason"`
 }
 
+// DiffScopeFilter restricts policy evaluation to net-new violations touching
+// the active git diff or explicit target symbol/file set, while still tracking
+// pre-existing baseline violations separately.
+type DiffScopeFilter struct {
+	TouchedEntityIDs map[uuid.UUID]bool `json:"touched_entity_ids,omitempty"`
+	TouchedPackages  map[string]bool    `json:"touched_packages,omitempty"`
+	OnlyNetNew       bool               `json:"only_net_new"`
+}
+
+// MatchesEntity returns true if the filter is inactive or the entity/package
+// is part of the touched diff scope.
+func (f *DiffScopeFilter) MatchesEntity(entityID uuid.UUID, pkg string) bool {
+	if f == nil || !f.OnlyNetNew {
+		return true
+	}
+	if len(f.TouchedEntityIDs) > 0 && f.TouchedEntityIDs[entityID] {
+		return true
+	}
+	if pkg != "" && len(f.TouchedPackages) > 0 && f.TouchedPackages[pkg] {
+		return true
+	}
+	return false
+}
+
 // Evaluation is the immutable record of a policy run.
 type Evaluation struct {
-	ID                uuid.UUID `json:"id"`
-	TenantID          uuid.UUID `json:"tenant_id"`
-	WorkspaceID       uuid.UUID `json:"workspace_id"`
-	PolicyID          uuid.UUID `json:"policy_id"`
-	PolicyVersion     string    `json:"policy_version"`
-	Decision          Decision  `json:"decision"`
-	Reason            string    `json:"reason"`
-	Evidence          Evidence  `json:"evidence"`
-	EvaluatedAt       time.Time `json:"evaluated_at"`
-	MerkleBlockHeight *int64    `json:"merkle_block_height,omitempty"`
-	MerkleProof       []byte    `json:"merkle_proof,omitempty"`
-	SubjectKind       string    `json:"subject_kind,omitempty"`
-	SubjectID         string    `json:"subject_id,omitempty"`
-	Actor             string    `json:"actor,omitempty"`
+	ID                      uuid.UUID `json:"id"`
+	TenantID                uuid.UUID `json:"tenant_id"`
+	WorkspaceID             uuid.UUID `json:"workspace_id"`
+	PolicyID                uuid.UUID `json:"policy_id"`
+	PolicyExternalID        string    `json:"policy_external_id,omitempty"`
+	PolicyTitle             string    `json:"policy_title,omitempty"`
+	PolicyVersion           string    `json:"policy_version"`
+	Decision                Decision  `json:"decision"`
+	Reason                  string    `json:"reason"`
+	Evidence                Evidence  `json:"evidence"`
+	NetNewViolationsCount   int       `json:"net_new_violations_count"`
+	BaselineViolationsCount int       `json:"baseline_violations_count"`
+	EvaluatedAt             time.Time `json:"evaluated_at"`
+	MerkleBlockHeight       *int64    `json:"merkle_block_height,omitempty"`
+	MerkleProof             []byte    `json:"merkle_proof,omitempty"`
+	SubjectKind             string    `json:"subject_kind,omitempty"`
+	SubjectID               string    `json:"subject_id,omitempty"`
+	Actor                   string    `json:"actor,omitempty"`
 }
 
 // Evidence is the set of graph objects that justified the decision.
@@ -111,4 +139,5 @@ type Evidence struct {
 	MatchedPredicates []string    `json:"matched_predicates"`
 	SnapshotID        *uuid.UUID  `json:"snapshot_id,omitempty"`
 	ReasoningNotes    []string    `json:"reasoning_notes,omitempty"`
+	BaselineNotes     []string    `json:"baseline_notes,omitempty"`
 }

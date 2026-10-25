@@ -24,7 +24,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const version = "v1.2.0-multi-repo"
+const version = "v1.5.0-talon"
 
 var (
 	summaryFlag    bool

@@ -21,6 +21,7 @@ import (
 	"github.com/myshra777-ai/garuda/internal/auth"
 	"github.com/myshra777-ai/garuda/internal/config"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/talon"
 	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/spf13/cobra"
 )
@@ -82,12 +83,12 @@ func resolveSmartWorkspace(ctx context.Context, pool *pgxpool.Pool, flagVal, tar
 
 var initCmd = &cobra.Command{
 	Use:   "init [target_repo_path]",
-	Short: "Initialize Garuda in 1 command: start Postgres, run migrations, seed user & workspace, configure MCP, and index code",
+	Short: "Initialize Garuda in 1 command: start Postgres, run migrations, seed user & workspace, configure Active MCP & Talon Harness, and index code",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		config.LoadDotEnv()
 
-		fmt.Println("🦅 Initializing Garuda Epistemic Intelligence Engine (1-Click Smart Setup)...")
+		fmt.Println("🦅 Initializing Garuda Epistemic Intelligence Engine + Garuda Talon Active Harness...")
 
 		targetPath := initTargetFlag
 		if len(args) > 0 && args[0] != "" {
@@ -138,6 +139,7 @@ var initCmd = &cobra.Command{
 			"CONTROL_DATABASE_URL": dbURL,
 			"GARUDA_CONTROL_TOKEN": controlToken,
 			"GARUDA_WORKSPACE":     workspaceName,
+			"GARUDA_TALON_ENFORCE": "true",
 			"PORT":                 port,
 		})
 		// Ensure JWT keys are generated and persisted in .env
@@ -194,7 +196,7 @@ var initCmd = &cobra.Command{
 			}
 		}
 
-		// 6. Ensure bin/garuda-mcp and bin/garuda-api are built
+		// 6. Ensure bin/garuda-mcp, bin/garuda-api, and bin/garuda-talon are built
 		selfPath, err := os.Executable()
 		if err != nil {
 			wd, _ := os.Getwd()
@@ -211,27 +213,23 @@ var initCmd = &cobra.Command{
 			fmt.Println("  🔨 Building bin/garuda-api...")
 			_ = exec.Command("go", "build", "-o", apiPath, "./cmd/garuda-api").Run()
 		}
+		talonBinPath := filepath.Join(binDir, "garuda-talon")
+		if _, statErr := os.Stat(talonBinPath); statErr != nil {
+			fmt.Println("  🔨 Building bin/garuda-talon...")
+			_ = exec.Command("go", "build", "-o", talonBinPath, "./cmd/garuda-talon").Run()
+		}
 
-		// 7. Auto-Configure Cursor MCP (.cursor/mcp.json) & Claude Desktop
-		cursorDir := ".cursor"
-		_ = os.MkdirAll(cursorDir, 0755)
-		cursorConfigPath := filepath.Join(cursorDir, "mcp.json")
+		// 7. Auto-Configure Claude Desktop MCP
+		absTarget, _ := filepath.Abs(targetPath)
+		if absTarget == "" {
+			absTarget, _ = os.Getwd()
+		}
 		mcpEnv := map[string]string{
-			"DATABASE_URL":     dbURL,
-			"GARUDA_WORKSPACE": workspaceName,
+			"DATABASE_URL":         dbURL,
+			"GARUDA_WORKSPACE":     workspaceName,
+			"GARUDA_TALON_ENFORCE": "true",
+			"GARUDA_REPO_ROOT":     absTarget,
 		}
-		cursorConfig := map[string]interface{}{
-			"mcpServers": map[string]interface{}{
-				"garuda": map[string]interface{}{
-					"command": mcpPath,
-					"env":     mcpEnv,
-				},
-			},
-		}
-		cursorData, _ := json.MarshalIndent(cursorConfig, "", "  ")
-		_ = os.WriteFile(cursorConfigPath, cursorData, 0644)
-		fmt.Printf("  ✓ Configured Cursor MCP (%s)\n", cursorConfigPath)
-
 		homeDir, _ := os.UserHomeDir()
 		claudeDir := filepath.Join(homeDir, ".config", "Claude")
 		_ = os.MkdirAll(claudeDir, 0755)
@@ -265,12 +263,22 @@ var initCmd = &cobra.Command{
 			}
 		}
 
+		// 9. Compile & Install Garuda Talon Active Enforcement (Contract + Cursor/Claude/Agents/Git Hooks)
+		policyDir := filepath.Join(absTarget, "policies")
+		contract, _ := talon.CompileContract(ctx, pool, tenantID, ws.ID, workspaceName, policyDir)
+		if talonSummary, tErr := talon.InstallHooks(absTarget, selfPath, mcpPath, dbURL, workspaceName, contract); tErr == nil {
+			fmt.Printf("  ✓ Installed Garuda Talon Active Contract (%s)\n", talonSummary.ContractPath)
+			fmt.Printf("  ✓ Installed Active Cursor Rule (%s) & MCP (%s)\n", talonSummary.CursorRulePath, talonSummary.CursorMCPPath)
+			fmt.Printf("  ✓ Installed Claude Code Active Hooks (%s) & CLAUDE.md / AGENTS.md\n", talonSummary.ClaudeSettings)
+		}
+
 		fmt.Println("\n══════════════════════════════════════════════════════════════════")
-		fmt.Println("🎉 Garuda is initialized, migrated, and configured!")
+		fmt.Println("🎉 Garuda v1.5 + Garuda Talon Active Harness Initialized!")
 		fmt.Println("══════════════════════════════════════════════════════════════════")
 		fmt.Printf("  • Active Workspace:   %s\n", workspaceName)
 		fmt.Printf("  • Owner Login:        %s\n", email)
-		fmt.Printf("  • Change-Control CLI: ./bin/garuda check --project %s --policy policies --save\n", workspaceName)
+		fmt.Printf("  • Talon Guard CLI:    ./bin/garuda talon guard --workspace %s\n", workspaceName)
+		fmt.Printf("  • Diff Check CLI:     ./bin/garuda check --diff HEAD --project %s --policy policies --save\n", workspaceName)
 		fmt.Printf("  • Verify MCP Server:  python3 scripts/mcp_verify.py\n")
 		fmt.Println("══════════════════════════════════════════════════════════════════")
 		return nil

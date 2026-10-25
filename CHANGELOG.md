@@ -2,6 +2,32 @@
 
 All notable changes to Garuda are documented in this file.
 
+## [v1.5.0] - 2026-10-25
+
+### Added — Garuda Talon Active Agent Harness & 4 Pre-Flight Core Bridge Primitives
+- **Garuda Talon Active Execution Harness (`internal/talon`, `cmd/garuda/talon_cmd.go`, `cmd/garuda-talon`)**:
+  - `garuda talon init` (automatically triggered by `garuda init` and `./setup.sh`): Compiles live workspace ADRs (`document_claims`), YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc` (`alwaysApply: true`), `.cursor/mcp.json` (`GARUDA_TALON_ENFORCE=true`), `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook running `garuda talon guard --hook`), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit` + `commit-msg`.
+  - `garuda talon brief [target]`: Emits deterministic pre-flight architectural context, transitive blast radius, and applicable ADR rules before an agent modifies a symbol or file.
+  - `garuda talon guard [--staged | --diff <rev> | --files <csv> | --hook]`: Runs sub-second incremental AST sync on dirty working-tree files, maps git diff hunks to touched AST symbols, evaluates YAML policies and ADR claims in net-new diff scope, and emits a deterministic **Self-Repair Prompt** on `BLOCK`.
+  - `garuda talon run -- <agent-cmd>`: Supervisor loop that executes an autonomous coding agent, intercepts working-tree changes, runs `talon guard`, and automatically loops the agent with the self-repair prompt until `ALLOW` is reached and Merkle-sealed.
+- **Active MCP Server Enforcement (`cmd/garuda-mcp/main.go`, `cmd/garuda-mcp/tools_talon.go`)**:
+  - Added MCP `prompts/list` & `prompts/get` (`garuda.architectural_contract`) and `resources/list` & `resources/read` (`garuda://workspace/contract`, `garuda://workspace/adr-guardrails`).
+  - Added `garuda.talon_pre_edit` and `garuda.talon_verify_edit` MCP tools (expanding the registry to **23 MCP tools**).
+  - Added active session-level contract injection (`GARUDA_TALON_ENFORCE=true` default): the first tool call in any MCP session automatically injects the workspace's active ADR `MUST`/`MUST_NOT` rules and YAML policy guardrails into the response payload so agents are bound even if they skip `garuda.briefing`.
+- **Git-Diff Native Targeting (`internal/diff/diff.go`, `cmd/garuda/check_cmd.go`)**:
+  - Added `ParseUnifiedDiff`, `CollectGitDeltas`, and `ResolveTouchedEntities` to map `git diff --unified=0` hunks (`--staged`, `--diff <rev>`, `--files`) directly to affected AST entities (`[line_start, line_end]`) and compute union transitive blast radius across all modified symbols.
+- **Net-New vs. Baseline Violation Filtering (`internal/policy/types.go`, `evaluator.go`, `engine.go`)**:
+  - Added `DiffScopeFilter` (`TouchedEntityIDs`, `TouchedPackages`, `OnlyNetNew`) to `policy.RunOptions` and `Evaluator.EvaluateWithScope`, partitioning violations touching the active diff (`net_new_violations_count`) from pre-existing legacy debt (`baseline_violations_count`).
+- **Incremental Working-Tree Re-Index (`cmd/garuda/analyze.go`)**:
+  - Added `--incremental` and `--files` flags with shared in-memory package caching so dirty working-tree edits are synchronized into PostgreSQL before `garuda check --diff` or `garuda talon guard` evaluates them.
+- **Python & TypeScript Cross-File Alias & Instance Call Resolution (`internal/ast/python`, `internal/ast/typescript`)**:
+  - Upgraded Python AST parser and integration to resolve `import X as Y`, `from X import Y as Z`, and class instance calls (`self.repo.fetch()`, `local_repo.fetch()`) across files at `0.95` static confidence.
+  - Upgraded TypeScript Tree-sitter parser and integration to resolve named import aliases (`import { X as Y }`), namespace imports (`import * as NS`), `new Class()` instantiations, and instance/field method calls across files at `0.95` static confidence.
+
+## [v1.4.0] - 2026-10-24
+- Redesigned `/dashboard` as a 6-surface Software Intelligence Instrument (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) with global `⌘K` palette, 1-hop/2-hop neighborhood graph, and synchronized 4-tab Inspector Drawer.
+- Fixed Benchmark 024 (`TestBenchmark_024_GoWork_CrossModule_ResolutionAndBlastRadius`) to assign `1.0` exact compiler-verified confidence to cross-module `IMPLEMENTS` edges.
+
 ## [v1.3.0] - 2026-10-24
 
 ### Security & Trust Hardening (GPT-5 Astra Due-Diligence Audit Remediation)

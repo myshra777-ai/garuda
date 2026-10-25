@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/myshra777-ai/garuda/internal/analyzer"
+	"github.com/myshra777-ai/garuda/internal/diff"
 	"github.com/myshra777-ai/garuda/internal/store"
 )
 
@@ -33,12 +34,14 @@ var (
 	repoFlag           string
 	modulePathFlag     string
 	failOnBreakingFlag bool
+	incrementalFlag    bool
+	analyzeFilesFlag   string
 )
 
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze [path...]",
-	Short: "Analyze a Go codebase, extract semantic schema, and optionally persist to ledger",
-	Long:  `Analyzes a single repository or a local path. Use --save to persist the analysis into the cryptographic ledger.`,
+	Short: "Analyze a Go, Python, or TypeScript codebase, extract semantic schema, and persist to ledger",
+	Long:  `Analyzes a single repository or local path. Use --save to persist the analysis into the cryptographic ledger, or --incremental to synchronize uncommitted working-tree modifications before running checks.`,
 	Args:  cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		path := "."
@@ -66,6 +69,8 @@ func init() {
 	analyzeCmd.Flags().StringVar(&repoFlag, "repo", "", "Repository URL (for provenance)")
 	analyzeCmd.Flags().String("commit", "", "Commit SHA (auto-detected if not provided)")
 	analyzeCmd.Flags().StringVar(&modulePathFlag, "module-path", "", "Go module path (auto-detected if not provided)")
+	analyzeCmd.Flags().BoolVar(&incrementalFlag, "incremental", false, "Fast working-tree incremental sync for dirty files (git status / --files)")
+	analyzeCmd.Flags().StringVar(&analyzeFilesFlag, "files", "", "Comma-separated list of modified files for incremental sync")
 
 	diffCmd.Flags().BoolVar(&jsonOutputFlag, "json", false, "Output diff in JSON format")
 	diffCmd.Flags().StringVarP(&outputFileFlag, "output", "o", "", "Write diff to file")
@@ -74,6 +79,9 @@ func init() {
 	rootCmd.AddCommand(analyzeCmd)
 	rootCmd.AddCommand(diffCmd)
 }
+
+// sharedAnalysisCache keeps an in-process package AST cache across incremental runs.
+var sharedAnalysisCache = analyzer.NewMemoryPackageCache()
 
 func handleAnalyze(path string) {
 	info, err := os.Stat(path)
@@ -92,23 +100,32 @@ func handleAnalyze(path string) {
 		os.Exit(1)
 	}
 
+	if incrementalFlag {
+		var explicit []string
+		if analyzeFilesFlag != "" {
+			for _, f := range strings.Split(analyzeFilesFlag, ",") {
+				if trimmed := strings.TrimSpace(f); trimmed != "" {
+					explicit = append(explicit, trimmed)
+				}
+			}
+		}
+		_, deltas, _ := diff.CollectGitDeltas(absPath, false, "", explicit)
+		if len(deltas) == 0 && len(explicit) == 0 {
+			fmt.Printf("⚡ Incremental sync: working tree clean in %s (0 dirty files)\n", absPath)
+			return
+		}
+		fmt.Printf("⚡ Incremental AST sync: %d modified file(s) detected in %s\n", len(deltas), absPath)
+		saveFlag = true
+	}
+
 	ctx := context.Background()
 
 	// ─────────────────────────────────────────────────────────────
-	// Language dispatch: Python vs Go
+	// Language dispatch: Go vs TypeScript vs Python
 	// ─────────────────────────────────────────────────────────────
 	var result *analyzer.Result
 	var language string
 
-	// Priority order (most specific first):
-	//   1. Go         — go.mod at root is an unambiguous module marker
-	//   2. TypeScript — tsconfig.json, or package.json + .ts files
-	//   3. Python     — pyproject.toml, setup.py, or .py files (excluding venv)
-	//
-	// Rationale: requirements.txt alone is NOT a Python signal. It is a
-	// dependency-pin file that can appear in any repo with tooling scripts.
-	// A Go repo that vendors Python helpers must still be dispatched as Go.
-	// A Go module is a hard signal, so it takes priority over all heuristics.
 	goModPresent := false
 	if _, err := os.Stat(filepath.Join(absPath, "go.mod")); err == nil {
 		goModPresent = true
@@ -124,7 +141,7 @@ func handleAnalyze(path string) {
 		}
 
 		opts := analyzer.WorkspaceAnalysisOptions{
-			Cache: analyzer.NewMemoryPackageCache(),
+			Cache: sharedAnalysisCache,
 		}
 		if saveFlag || workspaceFlag != "" || repoFlag != "" {
 			if tidStr := os.Getenv("GARUDA_TENANT_ID"); tidStr != "" {
@@ -184,8 +201,9 @@ func handleAnalyze(path string) {
 		fmt.Fprintf(os.Stderr, "   (requirements.txt alone is not sufficient — it can appear in non-Python projects.)\n")
 		os.Exit(1)
 	}
+
 	// ─────────────────────────────────────────────────────────────
-	// JSON output (both languages)
+	// JSON output
 	// ─────────────────────────────────────────────────────────────
 	isJSONRequested := jsonFlag || jsonOutputFlag
 	if outputFlag != "" || isJSONRequested {
@@ -207,7 +225,7 @@ func handleAnalyze(path string) {
 	}
 
 	// ─────────────────────────────────────────────────────────────
-	// Persist to ledger (both languages)
+	// Persist to ledger
 	// ─────────────────────────────────────────────────────────────
 	if saveFlag || workspaceFlag != "" || repoFlag != "" {
 		dbURL := getDBURL()
@@ -258,7 +276,6 @@ func handleAnalyze(path string) {
 		}
 		repoURL = sanitizeGitURL(repoURL)
 
-		// Module path detection: Go reads go.mod, Python reads pyproject.toml
 		modulePath := modulePathFlag
 		if modulePath == "" {
 			switch language {
@@ -292,7 +309,6 @@ func handleAnalyze(path string) {
 					}
 				}
 				if modulePath == "" {
-					// Fall back to directory name
 					modulePath = filepath.Base(absPath)
 				}
 			case "typescript":
@@ -359,15 +375,17 @@ func handleAnalyze(path string) {
 		if out, err := gitCmd.Output(); err == nil {
 			commitSHA = strings.TrimSpace(string(out))
 		}
+		if incrementalFlag {
+			commitSHA = commitSHA[:min(8, len(commitSHA))] + "-dirty"
+		}
 
 		err = st.SaveSemanticGraph(persistCtx, tenantUUID, workspaceID, repoID, revisionID, result, commitSHA)
 		if err != nil {
 			fmt.Printf("⚠️ Failed to save semantic graph: %v\n", err)
 		} else {
 			fmt.Printf("   🧠 Semantic graph saved (%d entities, %d relationships, commit: %s)\n",
-				len(result.Entities), len(result.Relationships), commitSHA[:min(8, len(commitSHA))])
+				len(result.Entities), len(result.Relationships), commitSHA[:min(14, len(commitSHA))])
 			_ = st.UpdateRepositorySyncStatus(persistCtx, tenantIDStr, repoID, commitSHA, "synced")
-
 		}
 	}
 }

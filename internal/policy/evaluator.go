@@ -25,32 +25,46 @@ func NewEvaluator(pool *pgxpool.Pool) *Evaluator {
 	return &Evaluator{pool: pool}
 }
 
-// Evaluate runs one policy against a workspace.
-// Returns the evaluation result (decision + evidence + reason).
-// The evaluation is not persisted here — that's the engine's job.
+// Evaluate runs one policy against a workspace without diff-scoping.
 func (e *Evaluator) Evaluate(
 	ctx context.Context,
 	p *Policy,
 	tenantID, workspaceID uuid.UUID,
 	subjectKind, subjectID, actor string,
 ) (*Evaluation, error) {
+	return e.EvaluateWithScope(ctx, p, tenantID, workspaceID, subjectKind, subjectID, actor, nil)
+}
+
+// EvaluateWithScope runs one policy against a workspace and optionally filters
+// violations to net-new matches intersecting diffScope while tracking baseline
+// violations separately.
+func (e *Evaluator) EvaluateWithScope(
+	ctx context.Context,
+	p *Policy,
+	tenantID, workspaceID uuid.UUID,
+	subjectKind, subjectID, actor string,
+	diffScope *DiffScopeFilter,
+) (*Evaluation, error) {
 
 	ev := &Evaluation{
-		ID:            uuid.New(),
-		TenantID:      tenantID,
-		WorkspaceID:   workspaceID,
-		PolicyVersion: p.Version,
-		SubjectKind:   subjectKind,
-		SubjectID:     subjectID,
-		Actor:         actor,
+		ID:               uuid.New(),
+		TenantID:         tenantID,
+		WorkspaceID:      workspaceID,
+		PolicyExternalID: p.ID,
+		PolicyTitle:      p.Title,
+		PolicyVersion:    p.Version,
+		SubjectKind:      subjectKind,
+		SubjectID:        subjectID,
+		Actor:            actor,
 	}
 
 	// Default: no predicate fired → ALLOW with reason
 	ev.Decision = DecisionAllow
 	ev.Reason = "no predicate matched"
 
-	// All predicates must match (AND). First predicate that fails → stop.
 	allMatched := true
+	suppressedByDiffScope := false
+
 	for i, pred := range p.When {
 		matched, evidence, err := e.evaluatePredicate(ctx, p, &pred, tenantID, workspaceID)
 		if err != nil {
@@ -60,6 +74,24 @@ func (e *Evaluator) Evaluate(
 			allMatched = false
 			break
 		}
+
+		// Apply diff-scoped net-new vs baseline partitioning when active
+		if diffScope != nil && diffScope.OnlyNetNew && pred.Type != "language_matches" {
+			filteredEv, netNewCount, baselineCount := filterEvidenceByDiffScope(pred.Type, evidence, diffScope)
+			ev.NetNewViolationsCount += netNewCount
+			ev.BaselineViolationsCount += baselineCount
+			ev.Evidence.BaselineNotes = append(ev.Evidence.BaselineNotes, filteredEv.BaselineNotes...)
+
+			if netNewCount == 0 {
+				allMatched = false
+				suppressedByDiffScope = baselineCount > 0
+				break
+			}
+			evidence = filteredEv
+		} else if pred.Type != "language_matches" {
+			ev.NetNewViolationsCount += max(len(evidence.ReasoningNotes), 1)
+		}
+
 		ev.Evidence.MatchedPredicates = append(ev.Evidence.MatchedPredicates, pred.Type)
 		ev.Evidence.ClaimIDs = append(ev.Evidence.ClaimIDs, evidence.ClaimIDs...)
 		ev.Evidence.EntityIDs = append(ev.Evidence.EntityIDs, evidence.EntityIDs...)
@@ -70,9 +102,94 @@ func (e *Evaluator) Evaluate(
 	if allMatched {
 		ev.Decision = p.Then.Decision
 		ev.Reason = strings.TrimSpace(p.Then.Reason)
+	} else if suppressedByDiffScope {
+		ev.Decision = DecisionAllow
+		ev.Reason = fmt.Sprintf("0 net-new violations in diff (%d pre-existing baseline findings suppressed)", ev.BaselineViolationsCount)
 	}
 
 	return ev, nil
+}
+
+// filterEvidenceByDiffScope partitions matched evidence into net-new (touching
+// diff entities/packages) vs pre-existing baseline findings.
+func filterEvidenceByDiffScope(predType string, in Evidence, scope *DiffScopeFilter) (Evidence, int, int) {
+	if scope == nil || !scope.OnlyNetNew {
+		n := len(in.ReasoningNotes)
+		if n == 0 && (len(in.EntityIDs) > 0 || len(in.ClaimIDs) > 0 || len(in.ContradictionIDs) > 0) {
+			n = 1
+		}
+		return in, n, 0
+	}
+
+	// Check each reasoning note / entity pair
+	var out Evidence
+	netNew := 0
+	baseline := 0
+
+	// Build a quick lookup of whether any entity in `in.EntityIDs` matches the diff
+	// For predicates that emit 2 entities per note (like claim_exists, transitive_claim_exists, layer_violation)
+	// or 1 entity per note (entity_exists, verification_missing, cycle_exists, blast_radius_exceeds):
+	notesCount := len(in.ReasoningNotes)
+	if notesCount == 0 {
+		for _, eid := range in.EntityIDs {
+			if scope.MatchesEntity(eid, "") {
+				netNew++
+				out.EntityIDs = append(out.EntityIDs, eid)
+			} else {
+				baseline++
+			}
+		}
+		return out, netNew, baseline
+	}
+
+	entitiesPerNote := 1
+	if len(in.EntityIDs) >= notesCount*2 && (predType == "layer_violation" || predType == "claim_exists" || predType == "transitive_claim_exists") {
+		entitiesPerNote = 2
+	}
+
+	for idx, note := range in.ReasoningNotes {
+		noteMatches := false
+		// Check associated entity IDs
+		startEnt := idx * entitiesPerNote
+		endEnt := startEnt + entitiesPerNote
+		if endEnt > len(in.EntityIDs) {
+			endEnt = len(in.EntityIDs)
+		}
+		for j := startEnt; j < endEnt; j++ {
+			if scope.MatchesEntity(in.EntityIDs[j], "") {
+				noteMatches = true
+				break
+			}
+		}
+		// Also check if any touched package name appears in the reasoning note
+		if !noteMatches && len(scope.TouchedPackages) > 0 {
+			for pkg := range scope.TouchedPackages {
+				if pkg != "" && strings.Contains(note, pkg) {
+					noteMatches = true
+					break
+				}
+			}
+		}
+
+		if noteMatches {
+			netNew++
+			out.ReasoningNotes = append(out.ReasoningNotes, note)
+			for j := startEnt; j < endEnt; j++ {
+				out.EntityIDs = append(out.EntityIDs, in.EntityIDs[j])
+			}
+			if idx < len(in.ClaimIDs) {
+				out.ClaimIDs = append(out.ClaimIDs, in.ClaimIDs[idx])
+			}
+			if idx < len(in.ContradictionIDs) {
+				out.ContradictionIDs = append(out.ContradictionIDs, in.ContradictionIDs[idx])
+			}
+		} else {
+			baseline++
+			out.BaselineNotes = append(out.BaselineNotes, note)
+		}
+	}
+
+	return out, netNew, baseline
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,14 +229,6 @@ func (e *Evaluator) evaluatePredicate(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Predicate: entity_exists
-//
-// Fires when at least one entity matches the given filters.
-//
-// Params:
-//   kind              (string, optional)  — entity kind, e.g. "struct"
-//   name_pattern      (string, optional)  — regex against entity.name
-//   exported          (bool,   optional)  — require is_exported = true
-//   limit             (int,    optional)  — cap on evidence collected (default 10)
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalEntityExists(
@@ -132,9 +241,8 @@ func (e *Evaluator) evalEntityExists(
 	kind := paramString(pred.Params, "kind")
 	namePat := paramString(pred.Params, "name_pattern")
 	exported := paramBool(pred.Params, "exported")
-	limit := paramInt(pred.Params, "limit", 10)
+	limit := paramInt(pred.Params, "limit", 25)
 
-	// Compile regex once
 	if namePat != "" {
 		if _, err := regexp.Compile(namePat); err != nil {
 			return false, Evidence{}, fmt.Errorf("invalid name_pattern %q: %w", namePat, err)
@@ -203,14 +311,6 @@ func (e *Evaluator) evalEntityExists(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Predicate: claim_exists
-//
-// Fires when at least one claim matches the given filters.
-//
-// Params:
-//   claim_type         (string, optional) — e.g. "IMPORTS", "CALLS", "INHERITS"
-//   from_name_pattern  (string, optional) — regex against the source entity name
-//   to_name_pattern    (string, optional) — regex against the target entity name
-//   limit              (int,    optional) — default 10
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalClaimExists(
@@ -223,7 +323,7 @@ func (e *Evaluator) evalClaimExists(
 	claimType := paramString(pred.Params, "claim_type")
 	fromPat := paramString(pred.Params, "from_name_pattern")
 	toPat := paramString(pred.Params, "to_name_pattern")
-	limit := paramInt(pred.Params, "limit", 10)
+	limit := paramInt(pred.Params, "limit", 25)
 
 	q := `
 		SELECT c.id, c.from_entity_id, c.to_entity_id,
@@ -290,6 +390,8 @@ func (e *Evaluator) evalClaimExists(
 		ev.EntityIDs = append(ev.EntityIDs, fromID)
 		if toID != nil {
 			ev.EntityIDs = append(ev.EntityIDs, *toID)
+		} else {
+			ev.EntityIDs = append(ev.EntityIDs, fromID)
 		}
 		ev.ReasoningNotes = append(ev.ReasoningNotes,
 			fmt.Sprintf("claim %s: %s -> %s", claimType, fromName, toName))
@@ -303,11 +405,6 @@ func (e *Evaluator) evalClaimExists(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Predicate: contradiction_exists
-//
-// Fires when a CONTRADICTED claim_verification exists in the workspace.
-//
-// Params:
-//   limit (int, optional) — default 5
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalContradictionExists(
@@ -317,7 +414,7 @@ func (e *Evaluator) evalContradictionExists(
 	tenantID, workspaceID uuid.UUID,
 ) (bool, Evidence, error) {
 
-	limit := paramInt(pred.Params, "limit", 5)
+	limit := paramInt(pred.Params, "limit", 25)
 
 	rows, err := e.pool.Query(ctx, `
 		SELECT cv.id, cv.source_entity_id,
@@ -356,14 +453,6 @@ func (e *Evaluator) evalContradictionExists(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Predicate: verification_missing
-//
-// Fires when an entity exists but has no SUPPORTED runtime verification.
-// Used by policies like "exported payment handlers must have runtime evidence".
-//
-// Params:
-//   kind     (string, optional) — entity kind filter
-//   exported (bool,   optional) — require is_exported = true
-//   limit    (int,    optional) — default 10
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalVerificationMissing(
@@ -375,13 +464,8 @@ func (e *Evaluator) evalVerificationMissing(
 
 	kind := paramString(pred.Params, "kind")
 	exported := paramBool(pred.Params, "exported")
-	limit := paramInt(pred.Params, "limit", 10)
+	limit := paramInt(pred.Params, "limit", 25)
 
-	// The NOT EXISTS subquery scopes by cv.workspace_id = e.workspace_id
-	// even though source_entity_id is a PK and correlation alone would
-	// be sufficient. This is defense-in-depth: it makes the workspace
-	// boundary explicit in the query, matching every other predicate
-	// in this file. I-11 audit, 2026-09-16.
 	q := `
 		SELECT e.id, e.name, e.kind, COALESCE(e.package, '')
 		FROM entities e
@@ -434,12 +518,6 @@ func (e *Evaluator) evalVerificationMissing(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Predicate: language_matches
-//
-// Fires when at least one entity in scope uses the given language.
-// Always matches if the policy's Language field is "any".
-//
-// Params:
-//   language (string, required) — e.g. "go", "python", "typescript"
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalLanguageMatches(
@@ -527,10 +605,6 @@ func paramInt(m map[string]any, key string, def int) int {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Predicate: transitive_claim_exists
-//
-// Fires when a multi-hop path of claims (e.g., CALLS/IMPORTS) connects an
-// entity matching from_name_pattern to an entity matching to_name_pattern
-// within max_depth hops (default 5, max 10).
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalTransitiveClaimExists(
@@ -549,7 +623,7 @@ func (e *Evaluator) evalTransitiveClaimExists(
 	if maxDepth <= 0 || maxDepth > 10 {
 		maxDepth = 5
 	}
-	limit := paramInt(pred.Params, "limit", 10)
+	limit := paramInt(pred.Params, "limit", 25)
 
 	if fromPat != "" {
 		if _, err := regexp.Compile(fromPat); err != nil {
@@ -630,6 +704,8 @@ func (e *Evaluator) evalTransitiveClaimExists(
 		ev.EntityIDs = append(ev.EntityIDs, rootID)
 		if targetID != nil {
 			ev.EntityIDs = append(ev.EntityIDs, *targetID)
+		} else {
+			ev.EntityIDs = append(ev.EntityIDs, rootID)
 		}
 		ev.ReasoningNotes = append(ev.ReasoningNotes,
 			fmt.Sprintf("transitive %s (%d hops): %s", claimType, depth, tracePath))
@@ -643,9 +719,6 @@ func (e *Evaluator) evalTransitiveClaimExists(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Predicate: layer_violation
-//
-// Enforces architectural layering by firing when any entity in from_layer
-// (package regex) directly CALLS or IMPORTS an entity in to_layer (package regex).
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalLayerViolation(
@@ -656,7 +729,7 @@ func (e *Evaluator) evalLayerViolation(
 ) (bool, Evidence, error) {
 	fromLayer := paramString(pred.Params, "from_layer")
 	toLayer := paramString(pred.Params, "to_layer")
-	limit := paramInt(pred.Params, "limit", 10)
+	limit := paramInt(pred.Params, "limit", 25)
 
 	if fromLayer == "" || toLayer == "" {
 		return false, Evidence{}, fmt.Errorf("layer_violation requires both from_layer and to_layer")
@@ -709,8 +782,6 @@ func (e *Evaluator) evalLayerViolation(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Predicate: cycle_exists
-//
-// Detects circular package dependencies across IMPORTS or CALLS edges.
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalCycleExists(
@@ -723,7 +794,7 @@ func (e *Evaluator) evalCycleExists(
 	if maxDepth <= 1 || maxDepth > 8 {
 		maxDepth = 5
 	}
-	limit := paramInt(pred.Params, "limit", 5)
+	limit := paramInt(pred.Params, "limit", 10)
 
 	q := `
 		WITH pkg_edges AS (
@@ -798,9 +869,6 @@ func (e *Evaluator) evalCycleExists(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Predicate: blast_radius_exceeds
-//
-// Fires when an entity matching optional name_pattern has more than
-// max_callers transitive inbound callers/dependents.
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalBlastRadiusExceeds(
@@ -811,7 +879,7 @@ func (e *Evaluator) evalBlastRadiusExceeds(
 ) (bool, Evidence, error) {
 	maxCallers := paramInt(pred.Params, "max_callers", 10)
 	namePat := paramString(pred.Params, "name_pattern")
-	limit := paramInt(pred.Params, "limit", 10)
+	limit := paramInt(pred.Params, "limit", 25)
 
 	if namePat != "" {
 		if _, err := regexp.Compile(namePat); err != nil {

@@ -35,7 +35,7 @@ type EntityRecord struct {
 type RelationRecord struct {
 	FromID     string
 	ToID       string
-	ClaimType  string // IMPORTS | INHERITS | IMPLEMENTS
+	ClaimType  string // IMPORTS | INHERITS | IMPLEMENTS | CALLS
 	Confidence float64
 }
 
@@ -89,6 +89,7 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 	moduleIDs := make(map[string]string)    // moduleName → moduleEntityID
 	qualifiedIDs := make(map[string]string) // fullyQualified → entityID
 	classIDs := make(map[string]string)     // bare class name → entityID
+	classModule := make(map[string]string)  // bare class name → moduleName
 	ifaceIDs := make(map[string]string)     // bare interface name → entityID
 	moduleByPath := make(map[string]string) // absolute file path → module name
 
@@ -128,6 +129,7 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 			classID := deterministicID("typescript", "class", moduleName+"."+cls.Name, filePath, cls.LineStart)
 			qualifiedIDs[moduleName+"."+cls.Name] = classID
 			classIDs[cls.Name] = classID
+			classModule[cls.Name] = moduleName
 			result.Entities = append(result.Entities, EntityRecord{
 				ID:         classID,
 				Name:       cls.Name,
@@ -161,7 +163,7 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 			}
 		}
 
-			for _, iface := range m.Interfaces {
+		for _, iface := range m.Interfaces {
 			ifaceID := deterministicID("typescript", "interface", moduleName+"."+iface.Name, filePath, iface.LineStart)
 			qualifiedIDs[moduleName+"."+iface.Name] = ifaceID
 			ifaceIDs[iface.Name] = ifaceID
@@ -219,9 +221,12 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 		moduleName := m.Module
 		moduleID := moduleIDs[moduleName]
 
+		// Build per-file import symbol & namespace alias tables
+		importedNamespaces := make(map[string]string) // localNS → targetModule
+		importedSymbols := make(map[string]string)    // localAlias → targetModule + "." + exportedName
+
 		for _, imp := range m.Imports {
 			var targetModule string
-
 			if strings.HasPrefix(imp.Source, ".") {
 				targetModule = resolveRelativeImport(filepath.Dir(filePath), imp.Source, moduleByPath)
 			} else {
@@ -235,13 +240,54 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 						ClaimType: "IMPORTS", Confidence: 1.0,
 					})
 				}
+				if imp.Namespace != "" {
+					importedNamespaces[imp.Namespace] = targetModule
+				}
+				if imp.Default != "" {
+					importedNamespaces[imp.Default] = targetModule
+					importedSymbols[imp.Default] = targetModule + "." + imp.Default
+				}
+				for localAlias, origName := range imp.NameAliases {
+					importedSymbols[localAlias] = targetModule + "." + origName
+				}
+				for _, origName := range imp.Names {
+					if _, exists := importedSymbols[origName]; !exists {
+						importedSymbols[origName] = targetModule + "." + origName
+					}
+				}
 			}
+		}
+
+		// Collect class-level property types and constructor field bindings
+		classFieldTypes := make(map[string]map[string]string)
+		for _, cls := range m.Classes {
+			ft := make(map[string]string)
+			for _, prop := range cls.Properties {
+				if prop.Name != "" && prop.Type != "" {
+					ft["this."+prop.Name] = prop.Type
+				}
+			}
+			for _, mth := range cls.Methods {
+				for k, v := range mth.LocalTypes {
+					if strings.HasPrefix(k, "this.") {
+						ft[k] = v
+					}
+				}
+			}
+			classFieldTypes[cls.Name] = ft
 		}
 
 		for _, cls := range m.Classes {
 			classID := qualifiedIDs[moduleName+"."+cls.Name]
 			if cls.Extends != "" {
-				if baseID, ok := classIDs[cls.Extends]; ok {
+				if qSym, ok := importedSymbols[cls.Extends]; ok {
+					if baseID, ok := qualifiedIDs[qSym]; ok {
+						result.Relationships = append(result.Relationships, RelationRecord{
+							FromID: classID, ToID: baseID,
+							ClaimType: "INHERITS", Confidence: 0.95,
+						})
+					}
+				} else if baseID, ok := classIDs[cls.Extends]; ok {
 					result.Relationships = append(result.Relationships, RelationRecord{
 						FromID: classID, ToID: baseID,
 						ClaimType: "INHERITS", Confidence: 0.9,
@@ -249,6 +295,15 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 				}
 			}
 			for _, impl := range cls.Implements {
+				if qSym, ok := importedSymbols[impl]; ok {
+					if ifaceID, ok := qualifiedIDs[qSym]; ok {
+						result.Relationships = append(result.Relationships, RelationRecord{
+							FromID: classID, ToID: ifaceID,
+							ClaimType: "IMPLEMENTS", Confidence: 1.0,
+						})
+						continue
+					}
+				}
 				if ifaceID, ok := ifaceIDs[impl]; ok {
 					result.Relationships = append(result.Relationships, RelationRecord{
 						FromID: classID, ToID: ifaceID,
@@ -268,47 +323,133 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 				}
 			}
 		}
-		resolveTSTarget := func(callerClass, rawCallee string) string {
-				if strings.HasPrefix(rawCallee, "this.") && callerClass != "" {
-					mName := strings.TrimPrefix(rawCallee, "this.")
-					if tid, ok := qualifiedIDs[moduleName+"."+callerClass+"."+mName]; ok {
-						return tid
+
+		resolveTSTarget := func(callerClass string, localTypes map[string]string, rawCallee string) (string, float64) {
+			// 1. Direct this.<method>() or this.<field>.<method>()
+			if strings.HasPrefix(rawCallee, "this.") && callerClass != "" {
+				rest := strings.TrimPrefix(rawCallee, "this.")
+				if !strings.Contains(rest, ".") {
+					if tid, ok := qualifiedIDs[moduleName+"."+callerClass+"."+rest]; ok {
+						return tid, 0.95
 					}
-				}
-				if tid, ok := qualifiedIDs[moduleName+"."+rawCallee]; ok {
-					return tid
-				}
-				if tid, ok := qualifiedIDs[rawCallee]; ok {
-					return tid
-				}
-				return ""
-			}
-			for _, fn := range m.Functions {
-				fromID := qualifiedIDs[moduleName+"."+fn.Name]
-				seen := make(map[string]bool)
-				for _, callee := range fn.Calls {
-					if tid := resolveTSTarget("", callee); tid != "" && !seen[tid] {
-						seen[tid] = true
-						result.Relationships = append(result.Relationships, RelationRecord{
-							FromID: fromID, ToID: tid, ClaimType: "CALLS", Confidence: 0.90,
-						})
+				} else {
+					parts := strings.SplitN(rest, ".", 2)
+					fieldKey := "this." + parts[0]
+					mName := parts[1]
+					typeName := localTypes[fieldKey]
+					if typeName == "" && classFieldTypes[callerClass] != nil {
+						typeName = classFieldTypes[callerClass][fieldKey]
 					}
-				}
-			}
-			for _, cls := range m.Classes {
-				for _, mth := range cls.Methods {
-					fromID := qualifiedIDs[moduleName+"."+cls.Name+"."+mth.Name]
-					seen := make(map[string]bool)
-					for _, callee := range mth.Calls {
-						if tid := resolveTSTarget(cls.Name, callee); tid != "" && !seen[tid] {
-							seen[tid] = true
-							result.Relationships = append(result.Relationships, RelationRecord{
-								FromID: fromID, ToID: tid, ClaimType: "CALLS", Confidence: 0.90,
-							})
+					if typeName != "" {
+						if qClass, ok := importedSymbols[typeName]; ok {
+							if tid, ok := qualifiedIDs[qClass+"."+mName]; ok {
+								return tid, 0.95
+							}
+						}
+						if tid, ok := qualifiedIDs[moduleName+"."+typeName+"."+mName]; ok {
+							return tid, 0.95
+						}
+						if cMod, ok := classModule[typeName]; ok {
+							if tid, ok := qualifiedIDs[cMod+"."+typeName+"."+mName]; ok {
+								return tid, 0.95
+							}
 						}
 					}
 				}
 			}
+
+			// 2. Dotted call: `ns.fn()`, `ClassAlias.staticFn()`, or `localInstance.method()`
+			if dotIdx := strings.IndexByte(rawCallee, '.'); dotIdx > 0 {
+				prefix := rawCallee[:dotIdx]
+				member := rawCallee[dotIdx+1:]
+
+				if varType, ok := localTypes[prefix]; ok {
+					if qClass, ok := importedSymbols[varType]; ok {
+						if tid, ok := qualifiedIDs[qClass+"."+member]; ok {
+							return tid, 0.95
+						}
+					}
+					if dotT := strings.IndexByte(varType, '.'); dotT > 0 {
+						nsAlias := varType[:dotT]
+						clsName := varType[dotT+1:]
+						if targetMod, ok := importedNamespaces[nsAlias]; ok {
+							if tid, ok := qualifiedIDs[targetMod+"."+clsName+"."+member]; ok {
+								return tid, 0.95
+							}
+						}
+					}
+					if tid, ok := qualifiedIDs[moduleName+"."+varType+"."+member]; ok {
+						return tid, 0.95
+					}
+					if cMod, ok := classModule[varType]; ok {
+						if tid, ok := qualifiedIDs[cMod+"."+varType+"."+member]; ok {
+							return tid, 0.95
+						}
+					}
+				}
+
+				if targetMod, ok := importedNamespaces[prefix]; ok {
+					if tid, ok := qualifiedIDs[targetMod+"."+member]; ok {
+						return tid, 0.95
+					}
+					if tid, ok := qualifiedIDs[targetMod+"."+member+".constructor"]; ok {
+						return tid, 0.95
+					}
+				}
+
+				if targetSym, ok := importedSymbols[prefix]; ok {
+					if tid, ok := qualifiedIDs[targetSym+"."+member]; ok {
+						return tid, 0.95
+					}
+				}
+			}
+
+			// 3. Named import or alias call: `import { foo as bar } from './mod'; bar()`
+			if targetSym, ok := importedSymbols[rawCallee]; ok {
+				if tid, ok := qualifiedIDs[targetSym]; ok {
+					return tid, 0.95
+				}
+				if tid, ok := qualifiedIDs[targetSym+".constructor"]; ok {
+					return tid, 0.95
+				}
+			}
+
+			// 4. Same-module function/class
+			if tid, ok := qualifiedIDs[moduleName+"."+rawCallee]; ok {
+				return tid, 0.95
+			}
+			if tid, ok := qualifiedIDs[rawCallee]; ok {
+				return tid, 0.95
+			}
+			return "", 0
+		}
+
+		for _, fn := range m.Functions {
+			fromID := qualifiedIDs[moduleName+"."+fn.Name]
+			seen := make(map[string]bool)
+			for _, callee := range fn.Calls {
+				if tid, conf := resolveTSTarget("", fn.LocalTypes, callee); tid != "" && !seen[tid] {
+					seen[tid] = true
+					result.Relationships = append(result.Relationships, RelationRecord{
+						FromID: fromID, ToID: tid, ClaimType: "CALLS", Confidence: conf,
+					})
+				}
+			}
+		}
+		for _, cls := range m.Classes {
+			for _, mth := range cls.Methods {
+				fromID := qualifiedIDs[moduleName+"."+cls.Name+"."+mth.Name]
+				seen := make(map[string]bool)
+				for _, callee := range mth.Calls {
+					if tid, conf := resolveTSTarget(cls.Name, mth.LocalTypes, callee); tid != "" && !seen[tid] {
+						seen[tid] = true
+						result.Relationships = append(result.Relationships, RelationRecord{
+							FromID: fromID, ToID: tid, ClaimType: "CALLS", Confidence: conf,
+						})
+					}
+				}
+			}
+		}
 	}
 
 	// Determinism
@@ -332,8 +473,6 @@ func AnalyzeDirectory(rootPath string) (*Result, error) {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// resolveRelativeImport turns "./foo" or "../bar/baz" into the canonical
-// module name used by moduleByPath, or returns "" if unresolved.
 func resolveRelativeImport(currentDir, importPath string, moduleByPath map[string]string) string {
 	for _, ext := range []string{".tsx", ".ts", ".jsx", ".js"} {
 		importPath = strings.TrimSuffix(importPath, ext)

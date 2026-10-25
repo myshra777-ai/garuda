@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-mcp_verify.py — spec-compliance and graph-intelligence verification for bin/garuda-mcp.
+mcp_verify.py — spec-compliance, graph-intelligence, and Garuda Talon active
+enforcement verification for bin/garuda-mcp.
 
 Dynamically discovers entities and interfaces from the active workspace (no hardcoded
 repository names or magic edge counts) and loads .env automatically if present.
@@ -80,6 +81,7 @@ def main():
         "postgres://test:test@localhost:5433/garuda_test?sslmode=disable",
     )
     env["GARUDA_MCP_QUIET"] = "1"
+    env["GARUDA_TALON_ENFORCE"] = "true"
 
     proc = subprocess.Popen(
         [BINARY],
@@ -99,7 +101,7 @@ def main():
             "params": {
                 "protocolVersion": "2025-06-18",
                 "capabilities": {},
-                "clientInfo": {"name": "python-verify", "version": "0.2"},
+                "clientInfo": {"name": "python-verify", "version": "1.5"},
             },
         })
         init = read_response(proc)
@@ -108,6 +110,9 @@ def main():
             init.get("result", {}).get("protocolVersion") == "2025-06-18",
             "protocolVersion == 2025-06-18",
         ))
+        caps = init.get("result", {}).get("capabilities", {})
+        results.append(expect("prompts" in caps and "resources" in caps,
+                              "initialize advertises prompts and resources capabilities"))
 
         # notifications/initialized MUST NOT receive a response.
         send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
@@ -116,21 +121,22 @@ def main():
         tl = read_response(proc)
         results.append(expect(tl.get("id") == 2, "tools/list id == 2 (no notification response)"))
         tools = tl.get("result", {}).get("tools", [])
-        results.append(expect(len(tools) >= 21, f"tools/list >= 21 tools (got {len(tools)})"))
+        results.append(expect(len(tools) >= 23, f"tools/list >= 23 tools (got {len(tools)})"))
 
         names = {t["name"] for t in tools}
-        results.append(expect("garuda.briefing" in names, "tool garuda.briefing present"))
-        results.append(expect(
-            "garuda.verify_policy_evaluation" in names,
-            "tool garuda.verify_policy_evaluation present"))
-        results.append(expect(
-            "garuda.blast_radius" in names,
-            "tool garuda.blast_radius present"))
-        results.append(expect("garuda.handoff" in names, "tool garuda.handoff present"))
-        results.append(expect("garuda.resume" in names, "tool garuda.resume present"))
         for expected in (
-            "garuda.entities", "garuda.neighbors", "garuda.find_entity",
-            "garuda.subclasses", "garuda.implementers",
+            "garuda.briefing",
+            "garuda.verify_policy_evaluation",
+            "garuda.blast_radius",
+            "garuda.handoff",
+            "garuda.resume",
+            "garuda.entities",
+            "garuda.neighbors",
+            "garuda.find_entity",
+            "garuda.subclasses",
+            "garuda.implementers",
+            "garuda.talon_pre_edit",
+            "garuda.talon_verify_edit",
         ):
             results.append(expect(expected in names, f"tool {expected} present"))
 
@@ -145,6 +151,10 @@ def main():
         fe = read_response(proc)
         results.append(expect(fe.get("id") == 3, "find_entity id == 3"))
         payload = unpack_tool_payload(fe, "garuda.find_entity")
+        results.append(expect(
+            "talon_active_contract" in payload or "talon_enforcement" in payload,
+            "first tool call automatically injects active Talon contract guardrails",
+        ))
         ent_list = payload.get("results", [])
         top_entity = ent_list[0] if ent_list else {}
         for candidate in ent_list:
@@ -160,7 +170,7 @@ def main():
             f"{entity_name} has >= 1 inbound edges (got {inbound_edges})",
         ))
 
-        # 4. Subclasses / Embeds check (with smart server-side fallback)
+        # 4. Subclasses / Embeds check
         send(proc, {
             "jsonrpc": "2.0", "id": 4, "method": "tools/call",
             "params": {
@@ -192,7 +202,7 @@ def main():
             "every neighbor has a direction field",
         ))
 
-        # 6. Implementers check (dynamically discovers interface or uses smart server fallback)
+        # 6. Implementers check
         send(proc, {
             "jsonrpc": "2.0", "id": 6, "method": "tools/call",
             "params": {
@@ -286,13 +296,46 @@ def main():
                               "resume returns status=not_found for unknown checkpoint"))
         results.append(expect("reason" in rsp, "resume includes a reason"))
 
-        # 11. Negative path: unknown tool name
+        # 11. garuda.talon_pre_edit & prompts/list & resources/list
         send(proc, {
-            "jsonrpc": "2.0", "id": 11, "method": "tools/call",
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
+                "name": "garuda.talon_pre_edit",
+                "arguments": {"workspace": WORKSPACE, "target": entity_name},
+            },
+        })
+        tpe = read_response(proc)
+        tpep = unpack_tool_payload(tpe, "garuda.talon_pre_edit")
+        results.append(expect(
+            "mandatory_protocol" in tpep and "active_policies" in tpep,
+            "garuda.talon_pre_edit returns mandatory_protocol and active_policies",
+        ))
+
+        send(proc, {"jsonrpc": "2.0", "id": 12, "method": "prompts/list", "params": {}})
+        pl = read_response(proc)
+        prompts = pl.get("result", {}).get("prompts", [])
+        results.append(expect(
+            any(p.get("name") == "garuda.architectural_contract" for p in prompts),
+            "prompts/list exposes garuda.architectural_contract",
+        ))
+
+        send(proc, {"jsonrpc": "2.0", "id": 13, "method": "resources/list", "params": {}})
+        rl = read_response(proc)
+        resources = rl.get("result", {}).get("resources", [])
+        results.append(expect(
+            any(r.get("uri") == "garuda://workspace/contract" for r in resources),
+            "resources/list exposes garuda://workspace/contract",
+        ))
+
+        # 12. Negative path: unknown tool name
+        send(proc, {
+            "jsonrpc": "2.0", "id": 14, "method": "tools/call",
             "params": {"name": "garuda.nonexistent", "arguments": {}},
         })
         unk = read_response(proc)
-        results.append(expect(unk.get("id") == 11, "unknown tool id == 11"))
+        results.append(expect(unk.get("id") == 14, "unknown tool id == 14"))
         results.append(expect(
             unk.get("error", {}).get("code") == -32601,
             "unknown tool returns -32601"))

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════════════
-# 🦅 GARUDA ONE-COMMAND SMART SETUP & VERIFICATION (setup.sh)
+# 🦅 GARUDA v1.5 ONE-COMMAND SMART SETUP & VERIFICATION (setup.sh)
 # ═══════════════════════════════════════════════════════════════════════════
 # Usage:
 #   ./setup.sh [optional_repo_path_1 optional_repo_path_2 ...]
@@ -11,6 +11,7 @@
 #   • Port Conflict: Automatically detects & stops any container occupying :$PORT
 #   • PostgreSQL:    Starts/creates `garuda-postgres` container if DB not running
 #   • Repositories:  Indexes passed paths, or auto-discovers repos in ~/garuda-validation, or `.`
+#   • Garuda Talon:  Compiles `.garuda/TALON_CONTRACT.md` & installs active MCP/IDE/Git hooks
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -46,16 +47,18 @@ export DATABASE_URL="$DB_URL"
 export CONTROL_DATABASE_URL="${CONTROL_DATABASE_URL:-$DB_URL}"
 export GARUDA_CONTROL_TOKEN="${GARUDA_CONTROL_TOKEN:-devtoken-changeme-please}"
 export GARUDA_WORKSPACE="$WORKSPACE"
+export GARUDA_TALON_ENFORCE="true"
 
 echo "═══════════════════════════════════════════════════════════════════"
-echo "🦅 GARUDA 1-COMMAND SMART ONBOARDING & VERIFICATION"
+echo "🦅 GARUDA v1.5 + TALON 1-COMMAND SMART ONBOARDING & VERIFICATION"
 echo "═══════════════════════════════════════════════════════════════════"
 echo "  • Detected Owner:     ${OWNER_EMAIL}"
 echo "  • Target Workspace:   ${WORKSPACE}"
 echo "  • Gateway Port:       :${API_PORT}"
+echo "  • Active Enforcement: GARUDA_TALON_ENFORCE=true"
 
 # 1. Free Port Dynamically (detects any Docker container or stale process on $API_PORT)
-echo "[1/7] Checking port ${API_PORT} and stopping conflicting services..."
+echo "[1/8] Checking port ${API_PORT} and stopping conflicting services..."
 pkill -9 -f garuda-api 2>/dev/null || true
 if command -v docker >/dev/null 2>&1; then
     CONFLICT_CONTAINERS="$(docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null | grep ":${API_PORT}->" | awk '{print $1}' || true)"
@@ -67,7 +70,7 @@ fi
 sleep 1
 
 # 2. Ensure PostgreSQL is running and accepting connections
-echo "[2/7] Verifying PostgreSQL database..."
+echo "[2/8] Verifying PostgreSQL database..."
 if ! psql "$DB_URL" -c "SELECT 1" >/dev/null 2>&1; then
     if command -v docker >/dev/null 2>&1; then
         if ! docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^garuda-postgres$"; then
@@ -92,15 +95,16 @@ fi
 echo "  ✓ PostgreSQL is online and ready"
 
 # 3. Build all binaries
-echo "[3/7] Compiling Garuda binaries (bin/garuda, bin/garuda-api, bin/garuda-mcp)..."
+echo "[3/8] Compiling Garuda binaries (bin/garuda, bin/garuda-api, bin/garuda-mcp, bin/garuda-talon)..."
 mkdir -p bin
 go build -o bin/garuda ./cmd/garuda
 go build -o bin/garuda-api ./cmd/garuda-api
 go build -o bin/garuda-mcp ./cmd/garuda-mcp
-echo "  ✓ Built bin/garuda, bin/garuda-api, bin/garuda-mcp"
+go build -o bin/garuda-talon ./cmd/garuda-talon
+echo "  ✓ Built bin/garuda, bin/garuda-api, bin/garuda-mcp, bin/garuda-talon"
 
-# 4. Run 1-Click Initialization (Migrations + .env + Owner Account + MCP Config)
-echo "[4/7] Running idempotent migrations, persisting .env, and provisioning owner..."
+# 4. Run 1-Click Initialization (Migrations + .env + Owner Account + Active MCP & Talon Config)
+echo "[4/8] Running idempotent migrations, persisting .env, and provisioning owner..."
 ./bin/garuda init \
     --workspace "$WORKSPACE" \
     --email "$OWNER_EMAIL" \
@@ -108,7 +112,7 @@ echo "[4/7] Running idempotent migrations, persisting .env, and provisioning own
     --skip-scan
 
 # 5. Start Garuda API Gateway and verify /health + /signup
-echo "[5/7] Starting Garuda API Gateway on :${API_PORT}..."
+echo "[5/8] Starting Garuda API Gateway on :${API_PORT}..."
 nohup ./bin/garuda-api > /tmp/api.log 2>&1 &
 for _ in $(seq 1 20); do
     if curl -fsS "http://localhost:${API_PORT}/health" >/dev/null 2>&1; then
@@ -128,13 +132,12 @@ psql "$DATABASE_URL" -c "SELECT id, name FROM tenants;"
 psql "$DATABASE_URL" -c "SELECT id, email, role FROM users;"
 
 # 6. Dynamically Discover & Index Repositories
-echo "[6/7] Indexing repositories into workspace '${WORKSPACE}'..."
+echo "[6/8] Indexing repositories into workspace '${WORKSPACE}'..."
 if [[ $# -gt 0 ]]; then
     for repo_path in "$@"; do
         [[ -d "$repo_path" ]] && ./bin/garuda analyze "$repo_path" --workspace "$WORKSPACE" --save
     done
 elif [[ -d "$HOME/garuda-validation" ]]; then
-    # Dynamically discover Go, Python, and TypeScript repositories under ~/garuda-validation
     for candidate in "$HOME/garuda-validation/go/chi" "$HOME/garuda-validation/py/sqlmodel" "$HOME/garuda-validation/go/cobra"; do
         if [[ -d "$candidate" ]]; then
             ./bin/garuda analyze "$candidate" --workspace "$WORKSPACE" --save
@@ -144,18 +147,25 @@ else
     ./bin/garuda analyze . --workspace "$WORKSPACE" --save
 fi
 
-# 7. Run Summary, Unified Change-Control Check, and MCP Spec Verification
-echo "[7/7] Running Architectural Summary, Change-Control Check & MCP Verification..."
-./bin/garuda summary
+# 7. Compile & Install Active Garuda Talon Contract + IDE/Git Hooks (with indexed graph hubs)
 POLICY_DIR="policies"
 [[ -d "$HOME/garuda-validation/policies" ]] && POLICY_DIR="$HOME/garuda-validation/policies"
+echo "[7/8] Activating Garuda Talon Harness (Contract + Cursor/Claude/Agents/Git Hooks)..."
+./bin/garuda talon init . --workspace "$WORKSPACE" --policies "$POLICY_DIR"
+
+# 8. Run Summary, Diff-Scoped Change-Control Check, Talon Guard, and MCP Spec Verification
+echo "[8/8] Running Architectural Summary, Talon Guard & Active MCP Verification..."
+./bin/garuda summary
 ./bin/garuda check --project "$WORKSPACE" --policy "$POLICY_DIR" --save || true
+./bin/garuda talon guard --workspace "$WORKSPACE" --policies "$POLICY_DIR" || true
 WORKSPACE="$WORKSPACE" python3 scripts/mcp_verify.py
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════════"
-echo "🚀 GARUDA IS 100% CONFIGURED, VERIFIED & ONLINE!"
+echo "🚀 GARUDA v1.5 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
 echo "   • Web Dashboard:  http://localhost:${API_PORT}/login"
 echo "   • Email / Pass:   ${OWNER_EMAIL} / ${OWNER_PASSWORD}"
-echo "   • Change Control: ./bin/garuda check --project ${WORKSPACE} --policy ${POLICY_DIR} --save"
+echo "   • Talon Contract: .garuda/TALON_CONTRACT.md"
+echo "   • Talon Guard:    ./bin/garuda talon guard --workspace ${WORKSPACE}"
+echo "   • Diff Check:     ./bin/garuda check --diff HEAD --project ${WORKSPACE} --policy ${POLICY_DIR} --save"
 echo "═══════════════════════════════════════════════════════════════════"

@@ -27,6 +27,8 @@ var toolArgWhitelist = map[string][]string{
 	"garuda.propose_decision":         {"scope_domain", "scope_system", "tenant_id"},
 	"garuda.handoff":                  {"task_id", "source_agent_id", "target_agent_id"},
 	"garuda.resume":                   {"agent_id", "checkpoint_id"},
+	"garuda.talon_pre_edit":           {"workspace", "target", "tenant_id"},
+	"garuda.talon_verify_edit":        {"workspace", "repo_dir", "staged", "diff", "files", "tenant_id"},
 }
 
 // filterArgs returns a map containing only whitelisted keys for the

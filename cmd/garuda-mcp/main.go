@@ -60,6 +60,7 @@ type MCPServer struct {
 	clientName  string
 	sessionDBID uuid.UUID
 	sessionMu   sync.RWMutex
+	oriented    bool
 }
 
 func main() {
@@ -534,6 +535,34 @@ var allTools = []map[string]interface{}{
 			},
 		},
 	},
+	// ── Active Garuda Talon Harness tools (v1.5) ──
+	{
+		"name":        "garuda.talon_pre_edit",
+		"description": "MANDATORY pre-edit check: call before modifying any file or symbol. Returns transitive blast radius, callers, applicable ADR MUST/MUST_NOT claims, and active policy guardrails.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"target":    map[string]interface{}{"type": "string", "description": "Target symbol name or file path about to be edited"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.talon_verify_edit",
+		"description": "MANDATORY post-edit verification gate: call immediately after modifying code. Runs incremental AST sync, diff-scoped policy evaluation, and ADR verification, anchors the decision to the RFC 6962 Merkle ledger, and returns self-repair instructions if BLOCKED.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"repo_dir":  map[string]interface{}{"type": "string", "description": "Repository root directory (default .)"},
+				"staged":    map[string]interface{}{"type": "boolean", "description": "Check staged git index changes"},
+				"diff":      map[string]interface{}{"type": "string", "description": "Git revision range to check"},
+				"files":     map[string]interface{}{"type": "string", "description": "Comma-separated list of modified files"},
+			},
+		},
+	},
 }
 
 // toolNames is the derived whitelist of valid tool names. Built once
@@ -561,6 +590,14 @@ func (s *MCPServer) handleRequest(req MCPRequest) MCPResponse {
 		return s.handleToolsList(req)
 	case "tools/call":
 		return s.handleToolsCall(req)
+	case "prompts/list":
+		return s.handlePromptsList(req)
+	case "prompts/get":
+		return s.handlePromptsGet(req)
+	case "resources/list":
+		return s.handleResourcesList(req)
+	case "resources/read":
+		return s.handleResourcesRead(req)
 	default:
 		return s.errorResponse(req.ID, -32601, "Method not found: "+req.Method)
 	}
@@ -602,11 +639,14 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 		Result: map[string]interface{}{
 			"protocolVersion": "2025-06-18",
 			"capabilities": map[string]interface{}{
-				"tools": map[string]interface{}{},
+				"tools":     map[string]interface{}{},
+				"prompts":   map[string]interface{}{},
+				"resources": map[string]interface{}{},
 			},
+			"instructions": "Garuda Talon Active Enforcement is enabled. Call garuda.talon_pre_edit before modifying code and garuda.talon_verify_edit immediately after editing to verify 0 net-new policy or ADR violations.",
 			"serverInfo": map[string]interface{}{
 				"name":    "garuda-mcp",
-				"version": "1.0.0",
+				"version": "1.5.0",
 			},
 		},
 	}
@@ -729,6 +769,10 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleResume(args)
 	case "garuda.find_entity":
 		result, err = s.handleFindEntity(args)
+	case "garuda.talon_pre_edit":
+		result, err = s.handleTalonPreEdit(args)
+	case "garuda.talon_verify_edit":
+		result, err = s.handleTalonVerifyEdit(args)
 
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
@@ -755,6 +799,8 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	if err != nil {
 		return s.errorResponse(req.ID, -32000, err.Error())
 	}
+
+	result = s.injectActiveContract(toolName, result)
 
 	return MCPResponse{
 		JSONRPC: "2.0",

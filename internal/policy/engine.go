@@ -34,19 +34,24 @@ func NewEngine(pool *pgxpool.Pool) *Engine {
 
 // RunResult is the aggregate outcome of one policy pass.
 type RunResult struct {
-	WorkspaceID    uuid.UUID     `json:"workspace_id"`
-	Evaluations    []*Evaluation `json:"evaluations"`
-	FinalDecision  Decision      `json:"final_decision"` // highest-severity across all
-	BlockedBy      *uuid.UUID    `json:"blocked_by,omitempty"`
-	Summary        string        `json:"summary"`
-	ReconcileCount int           `json:"reconcile_count"`
-	Preview        bool          `json:"preview"`
+	WorkspaceID             uuid.UUID     `json:"workspace_id"`
+	Evaluations             []*Evaluation `json:"evaluations"`
+	FinalDecision           Decision      `json:"final_decision"` // highest-severity across all
+	BlockedBy               *uuid.UUID    `json:"blocked_by,omitempty"`
+	BlockedByPolicyID       string        `json:"blocked_by_policy_id,omitempty"`
+	BlockedByTitle          string        `json:"blocked_by_title,omitempty"`
+	NetNewViolationsCount   int           `json:"net_new_violations_count"`
+	BaselineViolationsCount int           `json:"baseline_violations_count"`
+	Summary                 string        `json:"summary"`
+	ReconcileCount          int           `json:"reconcile_count"`
+	Preview                 bool          `json:"preview"`
 }
 
 // RunOptions tunes the behavior of one policy pass.
 type RunOptions struct {
 	DryRun    bool
 	Reconcile bool
+	DiffScope *DiffScopeFilter
 }
 
 // Run loads all policies under policyDir, evaluates them against the
@@ -104,13 +109,18 @@ func (e *Engine) Run(
 			}
 		}
 
-		ev, err := e.evaluator.Evaluate(ctx, p, tenantID, workspaceID, subjectKind, subjectID, actor)
+		ev, err := e.evaluator.EvaluateWithScope(ctx, p, tenantID, workspaceID, subjectKind, subjectID, actor, opts.DiffScope)
 		if err != nil {
 			slog.Error("policy evaluation failed (fail-closed)",
 				"policy_id", p.ID, "workspace_id", workspaceID, "error", err)
 			return nil, fmt.Errorf("fail-closed: policy %s evaluation failed: %w", p.ID, err)
 		}
+		ev.PolicyExternalID = p.ID
+		ev.PolicyTitle = p.Title
 		ev.EvaluatedAt = time.Now().UTC()
+
+		result.NetNewViolationsCount += ev.NetNewViolationsCount
+		result.BaselineViolationsCount += ev.BaselineViolationsCount
 
 		if dryRun {
 			if ev.PolicyID == uuid.Nil {
@@ -121,6 +131,8 @@ func (e *Engine) Run(
 				result.FinalDecision = ev.Decision
 				id := ev.PolicyID
 				result.BlockedBy = &id
+				result.BlockedByPolicyID = p.ID
+				result.BlockedByTitle = p.Title
 			}
 			continue
 		}
@@ -153,6 +165,8 @@ func (e *Engine) Run(
 			result.FinalDecision = ev.Decision
 			id := ev.PolicyID
 			result.BlockedBy = &id
+			result.BlockedByPolicyID = p.ID
+			result.BlockedByTitle = p.Title
 		}
 	}
 
@@ -184,8 +198,9 @@ func (e *Engine) Run(
 	}
 
 	result.Summary = fmt.Sprintf(
-		"workspace=%s policies=%d evaluations=%d final=%s",
+		"workspace=%s policies=%d evaluations=%d final=%s net_new=%d baseline=%d",
 		workspaceID, len(parsed), len(result.Evaluations), result.FinalDecision,
+		result.NetNewViolationsCount, result.BaselineViolationsCount,
 	)
 	return result, nil
 }
