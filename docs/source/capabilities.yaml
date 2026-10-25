@@ -8,13 +8,13 @@ categories:
     capabilities:
       - name: "Go Struct, Interface & Field Extraction"
         status: "production"
-        verification_tier: "100% Benchmark (24/24 Strict Suite)"
+        verification_tier: "24/24 strict compiler/AST cases passed; fixture-suite result"
         supported_semantics: "Tags (json, db, validate), line spans, pointer/slice flags, method sets"
         invariant: "ACGM Resolution Invariant"
 
       - name: "Go Method & Receiver Disambiguation"
         status: "production"
-        verification_tier: "100% Benchmark (002-method-identity)"
+        verification_tier: "Method-identity fixture cases passed"
         supported_semantics: "Pointer and value receivers (ReceiverType), exported/unexported"
         invariant: "Canonical UUIDv5"
 
@@ -26,9 +26,9 @@ categories:
 
       - name: "Go Interface Implementation Matching (IMPLEMENTS)"
         status: "production"
-        verification_tier: "100% Benchmark (003, 009, 010, 024)"
+        verification_tier: "Interface and cross-module fixture cases passed"
         supported_semantics: "go/types satisfaction plus cross-module structural method-set matching at 1.0 confidence"
-        invariant: "Full Recall Gate"
+        invariant: "Supported interface cases matched in benchmark fixtures"
 
       - name: "Incremental Working-Tree Re-Index (garuda analyze --incremental)"
         status: "production"
@@ -61,13 +61,13 @@ categories:
         status: "production"
         verification_tier: "Recursive SQL CTEs"
         supported_semantics: "transitive_claim_exists, layer_violation, cycle_exists, blast_radius_exceeds"
-        invariant: "Zero Hidden Coupling"
+        invariant: "Detect configured dependency paths in the indexed graph"
 
       - name: "3-State Edge-Level Runtime Drift & Contradiction Engine"
         status: "implemented"
         verification_tier: "10/10 Controlled Contradiction Suite"
         supported_semantics: "Edge-level caller+callee corroboration (SUPPORTED, UNVERIFIED, CONTRADICTED)"
-        invariant: "Automatic Quarantine"
+        invariant: "Classify injected contradictions within the tested runtime scope"
 
       - name: "RFC 6962 Cryptographic Merkle Verification"
         status: "production"
