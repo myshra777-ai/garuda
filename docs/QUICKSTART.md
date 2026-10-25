@@ -1,6 +1,6 @@
 # Quick start
 
-This guide helps you get from checkout to a first Garuda analysis. Garuda's setup path uses local services and may alter Docker/process state, so read the setup script before running it.
+Go from source code to an architecture-aware agent check. Garuda uses PostgreSQL for persistent workspace state, and Garuda Talon connects that state to supported AI-agent and Git workflows.
 
 ## 1. Get the repository
 
@@ -9,62 +9,90 @@ git clone https://github.com/myshra777-ai/garuda.git
 cd garuda
 ```
 
-Review the setup script and configuration before execution:
+The repository includes a convenience setup script. **Review it before running**: it may start Docker services and stop conflicting local processes or containers.
 
 ```bash
 less setup.sh
+./setup.sh
 ```
 
-The bundled setup path is intended to bootstrap a local development environment. Do not run it unreviewed on a shared or production host.
+The initialization path builds the binaries, initializes a workspace, configures MCP, and attempts to install the active Talon contract and supported hooks. Confirm the terminal output and inspect the generated files in your repository before relying on them.
 
-## 2. Build or bootstrap
-
-If you want to build the CLI and MCP server without running the setup script:
+## 2. Index the repository you want Garuda to check
 
 ```bash
-go build -o bin/garuda ./cmd/garuda
-go build -o bin/garuda-mcp ./cmd/garuda-mcp
+./bin/garuda analyze /path/to/repository --workspace my-app --save
 ```
 
-The full application uses PostgreSQL for persistent state. See [the API reference](API.md) for environment variables, database setup, migrations and the API server. The setup script may perform additional environment-specific initialization.
+Use the same workspace name in your later commands. Analysis scope and resolution depend on the language and supported constructs. See [multi-language coverage](MULTI_LANGUAGE_ROADMAP.md).
 
-## 3. Analyze a repository
-
-After configuring the database and workspace required by your checkout, analyze a target repository:
+## 3. Give the agent context before editing
 
 ```bash
-./bin/garuda analyze /path/to/repository --save
+./bin/garuda talon brief PaymentService \
+  --workspace my-app --policies ./policies
 ```
 
-Consult `./bin/garuda analyze --help` and [the CLI reference](API.md) for supported flags. Analysis coverage depends on the language, syntax and dependencies that Garuda can resolve.
+The briefing can return matching entities, graph-visible blast radius, relevant ADR guardrails, active YAML policies, and a mandatory post-edit verification protocol.
 
-## 4. Check a change
-
-From an initialized workspace, evaluate a Git diff against a configured policy directory. The exact project/workspace flags depend on the current CLI contract:
+To install or refresh the supported Talon integration files for a repository:
 
 ```bash
-./bin/garuda check --diff HEAD --project my-system --policy ./policies --save --fail-on-block
+./bin/garuda talon init /path/to/repository \
+  --workspace my-app --policies ./policies
 ```
 
-Review the full output, including the evaluated scope, unresolved relationships, baseline findings and policy results. Do not treat a passing result as proof that every behavior was discovered.
+See the [Talon guide](TALON.md) for supported Cursor, Claude Code, Codex, Windsurf and Git integration paths and their limits.
 
-## 5. Try Talon
+## 4. Check an edit
 
-Talon provides pre-edit context and post-edit checks for configured agent workflows:
+Check staged edits:
 
 ```bash
-./bin/garuda talon --help
-./bin/garuda talon brief --help
-./bin/garuda talon guard --help
+./bin/garuda talon guard /path/to/repository \
+  --workspace my-app --staged --fail-on-block
 ```
 
-Before relying on Talon as a mandatory gate, confirm the correct client hooks are installed and test that blocked edits, analysis failures and unavailable services behave as intended.
+Or check a Git revision/diff:
+
+```bash
+./bin/garuda talon guard /path/to/repository \
+  --workspace my-app --diff HEAD --fail-on-block
+```
+
+Talon can incrementally re-index dirty source files, evaluate the changed scope against the active policy bundle and document claims, distinguish net-new violations from baseline findings, and return self-repair instructions for a blocking result. Review the output and confirm that the configured hooks and failure path behave as intended.
+
+## 5. Run the change-control gate in CI
+
+```bash
+./bin/garuda check \
+  --project my-app \
+  --diff HEAD \
+  --policy ./policies \
+  --save \
+  --fail-on-block \
+  --json
+```
+
+With `--fail-on-block`, a `BLOCK` outcome exits with code `2`. A CI provider can use that exit status to fail the job; you must still configure the job as a required status check to prevent a protected branch from merging. The workspace/database must contain the intended repository state, and the check must be tested against the exact candidate revision before use as a release gate.
+
+## 6. Verify the reference MCP/Talon surface
+
+With the database and workspace configured:
+
+```bash
+WORKSPACE=my-app python3 scripts/mcp_verify.py
+```
+
+The current evidence record reports 30/30 reference verifier checks. This verifies the covered protocol, tool-discovery, and integration checks; it is not a proof that all semantic outputs are correct.
 
 ## Next steps
 
+- [Garuda Talon guide](TALON.md)
 - [Capabilities and limitations](CAPABILITIES.md)
 - [CLI, MCP and HTTP reference](API.md)
 - [System specifications](SPECS.md)
-- [Walkthrough](WALKTHROUGH.md)
-- [Evidence and verification results](../EVIDENCE.md)
+- [End-to-end walkthrough](WALKTHROUGH.md)
+- [Current evidence and verification](../EVIDENCE.md)
+- [Operational playbook](../PLAYBOOK.md)
 - [Security policy](../SECURITY.md)

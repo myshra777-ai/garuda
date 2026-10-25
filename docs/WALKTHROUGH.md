@@ -42,7 +42,7 @@ Or initialize any specific repository directly:
 
 ## 2. Garuda Talon Active Agent Execution Harness (`garuda talon`)
 
-Standard MCP servers are passive—if an AI agent forgets to query a tool, it writes code blind. **Garuda Talon** enforces architectural boundaries before, during, and after every agent edit.
+A passive MCP server answers when the agent asks. **Garuda Talon adds configured pre-edit and post-edit integration points**: it can compile the workspace contract, provide targeted context, check changed files and return repair instructions. The exact interception boundary depends on the installed client hooks, command wrapper and CI configuration; Talon is not a universal agent sandbox.
 
 ### Pre-Edit Briefing (`garuda talon brief`)
 Before modifying a high-impact struct, interface, or package, inspect its exact blast radius, applicable ADR `MUST`/`MUST_NOT` rules, and active YAML policies:
@@ -131,16 +131,16 @@ Visit `http://localhost:8080/login` (or `http://localhost:8080/dashboard`) and p
 ### The 6 Engineering Surfaces
 1. **Workspace Briefing (`/dashboard#briefing`)**: Clean status strip and health KPIs (Indexed Entities, Policy Posture, Active Contradictions, Merkle Ledger Head) paired with an actionable Needs-Attention queue and recent governance verdicts.
 2. **Architecture Map (`/dashboard#map`)**: **Neighborhood-first 1-hop / 2-hop topology explorer** (`[Selected Caller] ──> [Focal Symbol] ──> [Direct Dependency / Policy Badge]`) with interactive hop-depth (`1 hop`, `2 hops`) and edge-kind filters (`Calls`, `Imports`, `Implements`, `Claims`) plus a synchronized 4-tab Inspector Drawer (`Source`, `Relationships`, `Policy Results`, `Evidence`).
-3. **Change Review Workbench (`/dashboard#workbench`)**: 3-pane pre-merge simulator—select a target symbol and policy bundle on the left, inspect impacted callers and policy rules in the center, and generate a live `ALLOW` / `WARN` / `REVIEW` / `BLOCK` governance gate receipt on the right.
-4. **Policies (`/dashboard#policies`)**: Interactive catalog of all 9 deterministic SQL/CTE policy predicates alongside a live YAML Policy Sandbox to test rules before committing them to CI.
-5. **Contradictions & Evidence (`/dashboard#contradictions`)**: Sentry-style forensic queue for `CONTRADICTED` and `UNVERIFIED` claims, comparing static AST location against live OpenTelemetry runtime trace spans (`trace_id`, `span_id`, service pair) plus an interactive OTel Span Simulator.
+3. **Change Review Workbench (`/dashboard#workbench`)**: A three-pane review surface for selecting a target or saved evaluation, inspecting the target's source/workspace context and graph-visible impact, and reading the recorded policy/evidence result. For a fresh, authoritative check of the current diff, run `garuda talon guard` or `garuda check --diff`; the panel is not a substitute for evaluating the exact candidate revision.
+4. **Policies (`/dashboard#policies`)**: Inspect the supported YAML policy predicates and the policy configuration/evaluation state available in the workspace. To validate or evaluate the actual policy bundle, use `garuda policy validate ./policies` and `garuda policy evaluate ./policies`; a UI catalog is not itself proof that an edited YAML rule was executed.
+5. **Contradictions & Evidence (`/dashboard#contradictions`)**: A forensic queue for `CONTRADICTED` and `UNVERIFIED` claims, correlating indexed structure/document claims with OpenTelemetry observations that have actually been ingested and mapped. Treat observed spans as evidence for the paths they represent—not as coverage of every possible production execution.
 6. **Governance & Audit Ledger (`/dashboard#ledger`)**: Append-only decision table with a bottom **Decision Record Inspector** (`What it did`, `What it looked at`, `What rule applied`, `Epistemic state`, `RFC 6962 Merkle Inclusion Proof`) and 1-click cryptographic verification.
 
 ---
 
 ## 5. 23 Active MCP Tools + Prompts & Resources (`bin/garuda-mcp`)
 
-Garuda speaks JSON-RPC 2.0 over stdio (`protocolVersion: "2025-06-18"`). With `GARUDA_TALON_ENFORCE=true` (enabled by default), the very first MCP tool call in any session automatically injects the workspace's active ADR `MUST`/`MUST_NOT` guardrails and YAML policies into the response payload.
+Garuda speaks JSON-RPC 2.0 over stdio (`protocolVersion: "2025-06-18"`). With `GARUDA_TALON_ENFORCE=true` (the default unless explicitly disabled), MCP responses can include the active workspace contract and its ADR/policy guardrails. This response injection helps the agent see the rules, but is not by itself an unbypassable enforcement boundary.
 
 ### MCP Prompts & Resources
 - **Prompt**: `garuda.architectural_contract` (returns compiled Markdown contract for the workspace)
@@ -186,6 +186,7 @@ npm run compile
 
 ## Where to Go Next
 - **[README.md](../README.md)** — High-level overview and 5-second workflow.
+- **[TALON.md](TALON.md)** — Focused guide to the active agent harness and hook boundaries.
 - **[PLAYBOOK.md](../PLAYBOOK.md)** — Full operational runbook, Garuda Talon setup, and troubleshooting.
 - **[docs/CAPABILITIES.md](CAPABILITIES.md)** — 6-plane capability and verification matrix.
 - **[docs/API.md](API.md)** — Complete CLI, Talon, Policy YAML, MCP, and HTTP API reference.

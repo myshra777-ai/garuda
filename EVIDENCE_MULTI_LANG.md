@@ -1,5 +1,7 @@
 # Garuda Multi-Language Validation
 
+> **Historical snapshot — 2026-09-10.** This file records the early Go + Python Path B milestone and its implementation limits at that time. It is not the current Python/TypeScript capability contract. For current v1.5.0 language support, validation corpora, and limits, use [docs/MULTI_LANGUAGE_ROADMAP.md](docs/MULTI_LANGUAGE_ROADMAP.md), [EVIDENCE.md](EVIDENCE.md), and the v1.5.0 entry in [CHANGELOG.md](CHANGELOG.md).
+
 **Milestone:** Path B Step 1 — Go + Python unified semantic graph
 **Date:** 2026-09-10
 **Workspace:** `go-validation-10`

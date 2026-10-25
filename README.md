@@ -5,8 +5,8 @@
 <h1 align="center">Garuda</h1>
 
 <p align="center">
-  <strong>Architecture-aware change control for AI-written code.</strong><br>
-  Help coding agents work within the constraints your team intends to keep.
+  <strong>Let agents write code. Keep architecture in the loop.</strong><br>
+  Architecture-aware change control and an active execution harness for AI-written software.
 </p>
 
 <p align="center">
@@ -14,23 +14,37 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 License"></a>
 </p>
 
-AI coding agents can produce code that compiles and passes tests while still breaking an architectural rule: a handler reaches directly into a database layer, a dependency cycle appears, or a change to a shared symbol affects far more callers than expected.
+AI coding agents can make a change that compiles, passes tests, and still breaks an architectural rule. A handler may reach directly into a database package. A dependency cycle may appear. A small edit to a widely used symbol may have a much larger impact than the diff suggests.
 
-**Garuda builds a semantic model of a codebase and checks changes against explicit architecture policies and documented constraints.** It brings those checks into a developer's CLI, AI-agent workflow and CI process, with evidence available to inspect and governance decisions that can be recorded and cryptographically verified.
+**Garuda helps teams check those consequences before the change moves forward.** It builds a semantic model of supported code, gives agents architecture-aware context, evaluates changes against explicit rules, and can fail a configured CI gate when a blocking policy is violated.
 
-## See the workflow
+## The workflow: before the edit, after the edit, before the merge
 
-1. **Map the code.** Index supported Go, Python and TypeScript structures and relationships.
-2. **Understand the change.** Use a Git diff to identify touched symbols and estimate their dependency impact.
-3. **Check the rules.** Evaluate supported YAML policies and ingested architecture claims against the indexed model.
-4. **Review the result.** Inspect `ALLOW`, `WARN`, `REVIEW` or `BLOCK` outcomes, including the distinction between new violations and existing baseline issues where supported.
-5. **Keep evidence.** Persist selected governance decisions and verify their Merkle inclusion proofs.
+1. **Before editing — ground the agent.** Garuda Talon can compile workspace ADR claims, YAML policies, and high-impact symbols into an agent-facing contract. `garuda talon brief` and MCP tools provide targeted context and blast radius.
+2. **After editing — check what changed.** Talon can incrementally sync dirty files, map diff hunks to indexed symbols, evaluate changed scope, and return repair-oriented feedback.
+3. **Before merging — run the gate.** `garuda check --diff ... --fail-on-block` evaluates the selected change against configured policies. A `BLOCK` verdict exits with code `2`; when the CI job is configured as a required check, the failed job can prevent a merge.
+4. **Keep the evidence.** With persistence enabled, selected governance evaluations are recorded and can be verified against Garuda's RFC 6962 Merkle ledger.
 
-Garuda is designed to make a defined class of architectural problems easier to detect. It does not prove that every behavior in a program has been discovered or that a passing check means a change is bug-free.
+This is the key distinction: Garuda is not only a graph to inspect. It connects the graph to a change, the change to explicit rules, and the result to a check that teams can run and review.
 
-## Try Garuda
+## Garuda + Talon
 
-The repository includes a setup script for a local stack. Review the script before running it, especially on a machine with existing Docker containers or services.
+Garuda's semantic engine and Talon work together:
+
+| Layer | What it does |
+|---|---|
+| **Semantic model** | Extracts supported entities and relationships from Go, Python, and TypeScript code. Go uses compiler/type information for supported resolution paths; Python and TypeScript use AST-based analysis with selected cross-file alias and instance-call patterns. |
+| **Impact and diff scope** | Maps a Git diff to touched symbols and estimates their graph-visible blast radius. Where diff-scoped evaluation applies, Garuda separates net-new violations from existing baseline findings. |
+| **Policy engine** | Evaluates nine supported YAML predicates, including layer violations, dependency cycles, high blast radius, missing verification, and contradictions. |
+| **Talon agent harness** | Installs supported editor/Git hooks and generated contracts, provides pre-edit context and post-edit checks, and can supervise a CLI coding agent with bounded self-repair attempts. |
+| **Runtime and documentation evidence** | Ingests supported OpenTelemetry spans and extracts supported claims from Markdown/ADRs, then correlates them with the indexed model. |
+| **Governance record** | Persists selected outcomes and offers cryptographic integrity/inclusion verification for recorded evidence. |
+
+Talon supports configured integration points—not every possible agent or every possible edit. Review the [Talon guide](docs/TALON.md) for how the hooks work and how to validate their enforcement boundary.
+
+## Try it
+
+Review `setup.sh` before running it. The convenience setup may change local Docker/process state, so do not run it unreviewed on a shared or production machine.
 
 ```bash
 git clone https://github.com/myshra777-ai/garuda.git
@@ -39,72 +53,92 @@ less setup.sh
 ./setup.sh
 ```
 
-After setup, initialize or index the repository you want to analyze using the CLI commands supported by your checkout. For example:
+After initialization, index the repository and ask Talon for context before editing:
 
 ```bash
-./bin/garuda analyze /path/to/repository --save
-./bin/garuda check --diff HEAD --project my-system --policy ./policies --save --fail-on-block
+./bin/garuda analyze /path/to/repository --workspace my-app --save
+
+./bin/garuda talon brief PaymentService \
+  --workspace my-app --policies ./policies
 ```
 
-The exact flags and required workspace/database configuration can vary by command. Use the [CLI and API reference](docs/API.md) and [quick start](docs/QUICKSTART.md) for setup and command details.
+Check the staged change or the diff against `HEAD`:
 
-## Garuda Talon
+```bash
+./bin/garuda talon guard /path/to/repository \
+  --workspace my-app --diff HEAD --fail-on-block
+```
 
-**Talon connects Garuda's checks to AI-assisted development.** Its implementation includes workspace contract generation, pre-edit context, post-edit diff checks, agent-facing MCP tools and a supervisor loop that can feed repair instructions back to a CLI coding agent.
+For a CI-oriented change-control decision:
 
-Talon can help guide or gate changes at configured integration points. The degree of enforcement depends on the installed hook, client configuration, command, policy scope and failure behavior. An agent instruction or MCP tool alone is not a security boundary, so teams should validate their own workflow before relying on it as a mandatory gate.
+```bash
+./bin/garuda check \
+  --project my-app \
+  --diff HEAD \
+  --policy ./policies \
+  --save \
+  --fail-on-block \
+  --json
+```
 
-## What is included
+A CLI failure is not, by itself, branch protection. Configure the Garuda job as a required repository check in GitHub (or your CI provider), and test the exact revision, database/workspace, policy bundle, permissions, and failure path before relying on it to block merges.
 
-- **Semantic analysis:** Go analysis uses compiler/type information for supported resolution paths; Python and TypeScript analysis use AST-based techniques with language-specific coverage limits.
-- **Impact analysis:** Explore relationships and estimate the downstream or upstream impact of a changed symbol.
-- **Architecture policies:** Evaluate supported declarative rules against the indexed model.
-- **Documentation claims:** Ingest supported Markdown/ADR content and compare extracted architectural claims with modeled code relationships.
-- **Runtime evidence:** Ingest supported OpenTelemetry span data and correlate observations with static entities. This is evidence from observed traces, not complete runtime discovery.
-- **Agent integrations:** Expose tools and context through MCP, with Talon hooks and generated configuration for supported workflows.
-- **Governance records:** Persist selected decisions and verify their cryptographic integrity using the Merkle implementation.
-- **Web dashboard:** Inspect workspace status, architecture neighborhoods, policy outcomes, contradictions and recorded decisions.
+## Give coding agents a source of grounded context
 
-See the [capability matrix](docs/CAPABILITIES.md) for implementation scope, the [walkthrough](docs/WALKTHROUGH.md) for examples, and [EVIDENCE.md](EVIDENCE.md) for reported validation results and their limits.
+Garuda exposes **23 MCP tools**, plus an architectural-contract prompt and workspace-contract resources. The surface includes symbol discovery, neighbors, implementations, blast radius, policy/evidence queries, contradictions, handoff/resume, and Talon's pre-edit/post-edit calls. The server can inject the active contract into tool responses by default; set `GARUDA_TALON_ENFORCE=false` only when intentionally disabling that behavior.
+
+The tenant-facing dashboard gives engineers a way to inspect the workspace model: architecture neighborhoods, change review, policy outcomes, contradictions and decision history.
+
+Garuda also includes a separate **owner Control Plane** at `/_/control`. When explicitly configured with `GARUDA_CONTROL_TOKEN` and a separate `CONTROL_DATABASE_URL`, it provides Business, Tenants, Operations and Internal views, including MCP session/tool-call activity, stalled sessions, tool-error rates, process-local query latency and recent errors. The Control Plane is separate from the tenant Workspace Console and uses a separately configured read-only database role. Some user-activity metrics can remain “not yet measured”; in-process metrics reset when the API process restarts.
+
+![Garuda cryptographic trust and evidence view](assets/screenshots/evidence-cryptographic-trust.png)
+
+## Validation evidence
+
+The current evidence record reports:
+
+- **24/24** strict compiler/AST benchmark cases passed.
+- **30/30** reference MCP/Talon verifier checks passed.
+- **10/10** injected contradictions detected in a controlled runtime-verification test.
+- A **14-repository Go-only corpus** and a separate **9-repository mixed-language workspace**. The latter snapshot records 14,333 entities and 40,956 relationships.
+
+These are results for named test suites and indexed snapshots—not universal recall, real-production drift detection rates, or proof that every relationship has been discovered. See [EVIDENCE.md](EVIDENCE.md) for scope and reproduction details.
 
 ## Evidence, not false certainty
 
-Garuda uses three evidence states:
+- `SUPPORTED`: available evidence supports a claim within the checked scope.
+- `UNVERIFIED`: evidence is insufficient; this does not mean the claim is false.
+- `CONTRADICTED`: available evidence conflicts with a claim.
 
-- `SUPPORTED` — available evidence supports a claim within the checked scope.
-- `UNVERIFIED` — evidence is insufficient; this does not mean the claim is false.
-- `CONTRADICTED` — available evidence conflicts with a claim.
-
-A Merkle inclusion proof can show that a persisted record is consistent with a supplied root and proof path. It does not establish that the original analysis was complete, that a policy was well designed, or that the software is correct.
-
-Benchmark results describe the specific tests and corpora used. They should not be read as universal accuracy guarantees.
+A Merkle proof can verify the integrity and inclusion of a persisted record against a supplied root and proof path. It does not prove the analysis was complete, that a policy was wise, or that the code is bug-free.
 
 ## Documentation
 
-| Start here | What you'll find |
+| Start here | Purpose |
 |---|---|
-| [Quick start](docs/QUICKSTART.md) | Local setup, first analysis and first change check |
-| [Capabilities](docs/CAPABILITIES.md) | Implemented surfaces and known limits |
-| [CLI, MCP and HTTP API](docs/API.md) | Commands, configuration, tools and API reference |
-| [Specifications](docs/SPECS.md) | System architecture, data model, interfaces and boundaries |
+| [Quick start](docs/QUICKSTART.md) | Get a workspace running and try the first checks |
+| [Talon guide](docs/TALON.md) | Contract generation, pre-edit briefing, post-edit guard, hooks and supervisor loop |
+| [Capabilities](docs/CAPABILITIES.md) | Implemented surfaces and important boundaries |
+| [CLI, MCP and HTTP API](docs/API.md) | Commands, policies, configuration, tools and endpoints |
 | [Walkthrough](docs/WALKTHROUGH.md) | End-to-end examples and dashboard tour |
-| [Evidence and verification](EVIDENCE.md) | Benchmarks, validation corpora and methodology notes |
-| [Operational playbook](PLAYBOOK.md) | Running and operating Garuda |
-| [Positioning](docs/POSITIONING.md) | Internal product language and claim discipline |
-| [Security policy](SECURITY.md) | Responsible vulnerability reporting |
+| [Specifications](docs/SPECS.md) | Architecture, data model, contracts and limitations |
+| [Owner Control Plane](docs/specs/control-plane.md) | Operator views, access boundaries and intentionally deferred controls |
+| [Evidence and verification](EVIDENCE.md) | Benchmarks, corpora, reproducible checks and methodology |
+| [Operational playbook](PLAYBOOK.md) | Installation, operating procedures and troubleshooting |
+| [Multi-language coverage](docs/MULTI_LANGUAGE_ROADMAP.md) | Current language support and resolution roadmap |
+| [Security policy](SECURITY.md) | Responsible disclosure and security boundaries |
 
 ## Current boundaries
 
-- Results are limited by the repositories, files, language constructs and relationships Garuda successfully indexes.
-- Static analysis cannot discover every dynamic behavior, reflection path, generated-code edge or runtime configuration.
-- Runtime correlation only reflects telemetry actually ingested and successfully mapped.
-- Policy outcomes depend on the configured rules and the evidence available to the evaluator.
-- Agent hooks and generated instructions have client-specific enforcement limits; validate bypass and failure behavior before treating them as mandatory controls.
-- Garuda is not a coding model, a replacement for tests or code review, or a compliance certification.
+- Results depend on successfully indexed files and the relationship types the analyzer supports. Go resolution is stronger than structural Python/TypeScript analysis; none is a complete model of every dynamic behavior.
+- Runtime correlation reflects telemetry that was captured, ingested, and mapped.
+- Policy outcomes depend on the active rules and evaluation scope. A passing check is not a general correctness guarantee.
+- Talon depends on the installed hooks, client behavior, policy configuration, and exit handling. Validate bypass and failure behavior in your environment.
+- Garuda is not a code-generating model, a replacement for tests or code review, or a compliance certification.
 
 ## Contributing
 
-Contributions and reproducible bug reports are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Please keep documentation claims aligned with tests and measured evidence.
+Contributions and reproducible bug reports are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Please keep documentation claims aligned with implementation, tests and measured evidence.
 
 ---
 

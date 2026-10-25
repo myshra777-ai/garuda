@@ -158,6 +158,36 @@ Extracts normative architectural claims (`MUST` / `MUST_NOT`) from Markdown ADRs
 
 ---
 
+### Additional CLI commands
+
+These utility commands are implemented alongside the main analysis, policy and Talon workflow.
+
+| Command | Purpose | Important behavior |
+|---|---|---|
+| `garuda ci` | Analyze the current repository and compare it with a saved semantic baseline | Use `--baseline <file>`; `--block-on-break` exits non-zero when the assessment is breaking |
+| `garuda diff <before.json> <after.json>` | Compare two serialized analysis snapshots | `--fail-on-breaking` exits non-zero when breaking changes are detected |
+| `garuda self-describe [path]` | Emit a structured JSON product description or Markdown skeleton from source analysis, CLI structure and optional workspace evidence | Use `--markdown`, `--workspace`, and `--output`; product metadata is read from `docs/source/product.yaml` when available |
+| `garuda plan` | Request a structured plan from the configured Garuda API truth graph | Requires the API service and accepts `--scope-domain`, `--scope-system`, `--status`, `--at`, and `--format markdown|json` |
+| `garuda hygiene [path]` | Produce advisory unreferenced-symbol, duplicate-name and standard-library-alternative candidates from the indexed graph | Does not prove code is dead, does not refresh analysis, and does not persist findings; `garuda ponytail` is a deprecated alias |
+
+Examples:
+
+```bash
+# Compare an analysis snapshot with a stored baseline in CI.
+./bin/garuda ci --baseline garuda-baseline.json --block-on-break
+
+# Compare two saved analyzer outputs.
+./bin/garuda diff before.json after.json --fail-on-breaking
+
+# Emit product description metadata as Markdown.
+./bin/garuda self-describe . --markdown --output PRODUCT.md
+
+# Request a scoped plan from the running API.
+./bin/garuda plan --scope-domain infrastructure --format markdown
+```
+
+---
+
 ### `garuda dev` / `garuda up` / `garuda status`
 - `./bin/garuda dev` — Starts the unified Garuda daemon (HTTP API server + 6-surface `/dashboard` Software Intelligence Instrument + 10-second background runtime verification & Merkle epoch worker).
 - `./bin/garuda up` — Starts PostgreSQL container, runs migrations, and launches the gateway stack.
@@ -221,21 +251,72 @@ Expected result: `═══ 30/30 checks passed ═══`.
 
 ---
 
-## 5. Key HTTP Gateway Endpoints (`bin/garuda-api`)
+## 5. Current HTTP routes (`bin/garuda-api`)
 
-All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddleware`) or authenticated session cookies (`garuda_session`).
+This list is cross-checked against `Server.RegisterRoutes` in `internal/api/handler.go`. The live router is the authority for route availability; a URL present only in a generated or historical OpenAPI file is not necessarily registered.
 
-| Method & Path | Auth | Description |
-| :--- | :--- | :--- |
-| `GET /health` | Public | Gateway & database liveness check |
-| `GET /signup`, `POST /signup` | Public | Browser & CLI/API account + tenant + workspace provisioning |
-| `GET /login`, `POST /login` | Public | Session authentication (`garuda_session` cookie) |
-| `GET /dashboard` | Session | 6-surface Software Intelligence Instrument (`Briefing`, `Map`, `Workbench`, `Policies`, `Contradictions`, `Ledger`) |
-| `GET /api/v1/dashboard/instrument` | Session / Bearer | Complete JSON payload powering the 6-surface dashboard instrument |
-| `GET /api/v1/dashboard/neighborhood` | Session / Bearer | 1-hop / 2-hop focal symbol neighborhood graph & 4-tab Inspector Drawer payload |
-| `POST /api/v1/dashboard/workbench/simulate` | Session / Bearer | Live Change Review Workbench pre-merge policy & blast-radius simulator |
-| `GET /graph`, `GET /api/v1/graph` | Session / Bearer | Interactive D3 force graph & JSON graph payload |
-| `POST /api/v1/telemetry/spans` | Bearer / Session | OpenTelemetry runtime span ingestion & synchronous edge-level contradiction detection |
-| `GET /api/v1/decisions/{id}/verify-evidence` | Bearer / Session | RFC 6962 cryptographic Merkle inclusion proof verification for a decision |
-| `GET /api/v1/merkle/state` | Bearer / Session | Current tenant Merkle root hash and epoch block height |
-| `GET /admin` | Control Token | Multi-tenant operator Control Plane dashboard |
+### Public and browser-session routes
+
+| Method & path | Access | Purpose |
+|---|---|---|
+| `GET /health`, `GET /healthz` | Public | Liveness |
+| `GET /readyz`, `GET /api/v1/system/health` | Public | Readiness; checks the configured database connection when available |
+| `GET /favicon.ico` | Public | Empty favicon response |
+| `GET /login`, `POST /login` | Public entry; POST validates credentials | Browser sign-in |
+| `GET /signup`, `POST /signup` | Public entry; POST provisions the account/tenant/workspace path | Browser sign-up |
+| `POST /logout` | Browser session | End the tenant browser session |
+| `GET /dashboard` | Tenant session | Workspace Software Intelligence Instrument |
+| `GET /api/v1/dashboard/stats` | Tenant session | Workspace dashboard stats |
+| `GET /api/v1/dashboard/search` | Tenant session | Workspace search |
+| `GET /api/v1/dashboard/sessions` | Tenant session | Session view data |
+| `GET /api/v1/dashboard/decisions`, `GET /api/v1/dashboard/decisions/{id}` | Tenant session | Decision list and detail |
+| `GET /api/v1/dashboard/policies`, `GET /api/v1/dashboard/policies/verify` | Tenant session | Policy view and verification |
+| `GET /api/v1/graph` | Tenant session | Interactive graph data |
+| `GET /api/v1/events` | Tenant session | Live events/SSE path |
+| `GET /api/v1/workspaces` | Tenant session | Workspace list |
+| `GET /system/discover` | Tenant session | System endpoint discovery |
+| `GET /admin` | Tenant session plus `GARUDA_ADMIN_EMAILS` allowlist | Legacy deployment-admin dashboard; returns 404 when the allowlist disables it |
+
+### Authenticated API routes
+
+The `/api/v1` API subrouter accepts the configured Ed25519 JWT/token path and the authenticated tenant session cookie, subject to each handler's own access checks.
+
+| Method & path | Purpose |
+|---|---|
+| `POST /api/v1/decisions/propose` | Propose a scoped governance decision |
+| `GET /api/v1/evidence/verify/{id}` | Verify the recorded evidence/Merkle proof for a decision |
+| `GET /api/v1/agent/warmup` | Agent context/bootstrap path |
+| `POST /api/v1/agents/checkpoint` | Persist an agent checkpoint |
+| `POST /api/v1/agents/handoff` | Handoff task ownership |
+| `POST /api/v1/agents/resume` | Resume from a checkpoint |
+| `GET /api/v1/tasks/{task_id}/lineage` | Read decision/task lineage |
+| `POST /api/v1/router/evaluate` | Evaluate the configured routing request |
+| `GET /api/v1/telemetry/stream` | Event stream |
+| `POST /api/v1/telemetry/spans`, `POST /api/v1/runtime/spans` | Ingest OpenTelemetry runtime spans and correlate observations |
+| `GET /api/v1/runtime/coverage` | Read runtime evidence coverage |
+| `GET /api/v1/merkle/state` | Read the current Merkle state |
+
+### Owner Control Plane
+
+The operator Control Plane is **separate from** the tenant dashboard and is not under `/api/v1`.
+
+| Method & path | Access / purpose |
+|---|---|
+| `GET /_/control/login`, `POST /_/control/login` | Token login page and submission |
+| `POST /_/control/logout` | Clear the owner Control Plane session |
+| `GET /_/control?tab=business` | Owner aggregate business/workspace metrics |
+| `GET /_/control?tab=tenants` | Tenant summary and derived health |
+| `GET /_/control?tab=operations` | MCP activity, stalled sessions, errors and process-local metrics |
+| `GET /_/control?tab=internal` | Internal status view |
+
+The owner Control Plane is served only when `GARUDA_CONTROL_TOKEN` and `CONTROL_DATABASE_URL` are configured and a separate read-only Control Plane pool is available. Unauthenticated/disabled control routes return 404 by design. The older `/admin` route is separate and uses the tenant session plus `GARUDA_ADMIN_EMAILS` allowlist.
+
+### Development-only route
+
+| Method & path | Access / purpose |
+|---|---|
+| `GET /debug/token` | Debug token helper; deliberately returns 404 when `GARUDA_ENV=production` |
+
+### API contract boundary
+
+The route inventory above describes the current Gorilla router. It does not imply that every endpoint has a stable, fully typed request/response schema. The dashboard workbench and policy UI should not be described as performing a live server-side simulation unless a route and implementation for that operation are present in the release being documented. The top-level [`openapi.yaml`](../openapi.yaml) lists registered routes; `internal/api/openapi.yaml` remains a separate generated-client schema and is not the authoritative inventory of live routes.

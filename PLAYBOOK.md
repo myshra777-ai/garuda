@@ -788,47 +788,69 @@ Free-form query and business-context fields should not be recorded in argument s
 
 ## Running in CI
 
-### Block policy violations
+Use the gate that matches the question being asked. Garuda has more than one CI-oriented path; they compare different things.
+
+### Check a proposed change against architecture policies
 
 ```bash
-./bin/garuda policy evaluate ./policies --fail-on-block
+./bin/garuda check \
+  --project my-app \
+  --diff main...HEAD \
+  --policy ./policies \
+  --save \
+  --fail-on-block \
+  --json
 ```
 
-`--fail-on` accepts `BLOCK`, `REVIEW`, `WARN`, or `ALLOW`. The command exits non-zero when an evaluation reaches the selected threshold or higher.
+Diff mode maps changed source hunks to indexed symbols and evaluates the configured change-control rules. Where diff-scope filtering applies, the output distinguishes net-new violations from baseline findings. The default auto-index path attempts to synchronize dirty source files; verify the output and workspace are for the exact candidate checkout.
 
-### Annotate pull requests with impact
+With `--fail-on-block`, a `BLOCK` decision exits with code `2`. Configure the CI job as a required status check in repository branch-protection/ruleset settings if it must prevent merges. The Garuda CLI does not configure that repository setting.
+
+### Evaluate the policy bundle
 
 ```bash
-./bin/garuda impact --target <changed-symbol>
+./bin/garuda policy validate ./policies
+./bin/garuda policy evaluate ./policies \
+  --workspace my-app --save --fail-on-block
 ```
 
-The GitHub format emits annotations for graph-visible callers and impact results.
+The CLI policy evaluation is preview-only unless `--save` is passed. The `--fail-on-block` option returns a non-zero exit status when a policy returns `BLOCK`. If reconciliation is enabled, review the scope carefully; it changes the active registered policy set and requires a saved evaluation.
 
-GitHub-specific PR annotation output is not part of the current verified CLI contract. Use the JSON or human-readable impact report as a CI artifact.
-
-### Compare semantic snapshots
+### Compare a repository against a semantic baseline
 
 ```bash
-git stash
-./bin/garuda analyze . --save -o /tmp/before.json
-git stash pop
-./bin/garuda analyze . --save -o /tmp/after.json
-./bin/garuda diff /tmp/before.json /tmp/after.json
+./bin/garuda ci \
+  --baseline garuda-baseline.json \
+  --block-on-break
 ```
 
-### Recommended CI sequence
+This command analyzes the current repository and compares it with a previously saved analyzer result. It is a semantic snapshot/breaking-change assessment, not the same operation as evaluating a YAML policy bundle against the current workspace.
 
-```text
-1. Start PostgreSQL.
-2. Apply migrations.
-3. Resolve the tenant and target workspace.
-4. Analyze the repository with --save.
-5. Validate policies.
-* **Impact reporting:** Exposes topological impact and blast-radius results through the CLI for use in CI workflows. GitHub-specific PR annotation output is not part of the current verified CLI contract.
-7. Verify documentation or runtime evidence when relevant.
-8. Publish semantic diff, impact, and verification artifacts.
+### Compare two saved snapshots
+
+```bash
+./bin/garuda diff /tmp/before.json /tmp/after.json --fail-on-breaking
 ```
 
+Use this path when you have explicit before/after analyzer outputs and want a structured entity/relationship difference report.
+
+### Publish impact results
+
+```bash
+./bin/garuda impact --target <changed-symbol> --json
+```
+
+Use the human-readable or JSON report as a CI artifact. GitHub-specific pull-request annotation output is not part of the current verified CLI contract.
+
+### Recommended sequence
+
+1. Provision PostgreSQL and apply the current migrations.
+2. Resolve the intended tenant and workspace.
+3. Analyze or incrementally synchronize the candidate repository state.
+4. Validate the policy directory and run the diff-scoped change-control check.
+5. Fail the job on a blocking result; configure the job as a required check if it must block merges.
+6. Publish the decision JSON, touched-symbol report and relevant evidence/proof artifacts.
+7. Test failure cases: invalid policy, unavailable database, stale/mismatched index, unresolved diff symbols and a deliberate policy violation.
 ---
 
 ## Troubleshooting

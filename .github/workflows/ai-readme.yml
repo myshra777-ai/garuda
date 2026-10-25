@@ -1,45 +1,50 @@
-name: AI README Updater
+name: AI README Draft
 
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:
 
-# Grant write access to push README changes
+# AI-generated copy is never pushed straight to main. Review the artifact first.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  update-readme:
+  draft-readme:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-          token: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
       - name: Install dependencies
         run: |
           pip install google-generativeai pyyaml
-      
-      - name: Run AI README updater
+      - name: Generate README draft
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          chmod +x scripts/update_readme_ai.py
-          python scripts/update_readme_ai.py || echo "Script failed, continuing..."
-      
-      - name: Commit and push changes
+          if [ ! -f scripts/update_readme_ai.py ]; then
+            echo "No AI README generator is present in this revision."
+            exit 0
+          fi
+          if [ -z "${GEMINI_API_KEY}" ]; then
+            echo "GEMINI_API_KEY is required for this manual draft workflow."
+            exit 1
+          fi
+          python scripts/update_readme_ai.py
+      - name: Package draft for review
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git diff --staged --quiet || git commit -m "🤖 Auto-update README from AI [skip ci]"
-          git push origin main
+          git diff --binary -- README.md > README-generated.patch
+          git diff -- README.md > README-generated.diff
+          cp README.md README-generated.md
+      - name: Upload README draft
+        uses: actions/upload-artifact@v4
+        with:
+          name: garuda-readme-draft
+          path: |
+            README-generated.patch
+            README-generated.diff
+            README-generated.md
+          if-no-files-found: error
+          retention-days: 14

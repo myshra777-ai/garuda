@@ -52,7 +52,7 @@
 
 Garuda is a PostgreSQL-backed semantic software-intelligence and governance system. It analyzes supported source repositories, stores scoped semantic state, correlates documentation and runtime evidence, evaluates policies, exposes query and coordination surfaces, and provides cryptographic verification for persisted governance records.
 
-Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. In v1.5.0, Garuda includes **Garuda Talon** (`internal/talon`, `garuda talon`, `bin/garuda-talon`), an active pre-edit and post-edit execution harness that compiles live ADR and YAML policy contracts into coding agent rules, incrementally re-indexes dirty working-tree files, evaluates diff-scoped net-new violations, and runs a supervisor self-repair loop until `ALLOW` is achieved.
+Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. In v1.5.0, Garuda includes **Garuda Talon** (`internal/talon`, `garuda talon`, `bin/garuda-talon`), an active pre-edit and post-edit agent-workflow harness that compiles available ADR and YAML policy contracts into coding-agent instructions, incrementally re-indexes dirty working-tree files, evaluates diff-scoped findings, and can feed repair guidance into a supervisor loop for a bounded number of attempts. It does not guarantee convergence to `ALLOW`.
 
 ### Current product questions
 
@@ -537,8 +537,11 @@ The Merkle and semantic core do not require an LLM provider. MCP clients and fut
 
 ### Autonomous harness boundary
 
-No current release guarantee is made for sandbox escape prevention, automatic remediation, automatic merge, loop prevention, or LLM reasoning correctness. Those belong to a separate execution-harness design and validation arc.
+Garuda Talon is implemented in v1.5.0 as a configured agent-integration and supervisor layer. Current code paths include contract compilation, supported client/Git hook installation, pre-edit briefing, diff-scoped post-edit checks, repair-prompt generation, active MCP contract injection and a bounded loop around a CLI coding-agent command.
 
+That is not the same as an isolated execution sandbox or a guarantee of successful automatic repair. No release guarantee is made for sandbox escape prevention, universal interception of every agent edit, convergence to `ALLOW`, model reasoning correctness, automatic merge, or protection against a deliberately bypassed local hook. The supervisor's retry count is bounded; teams must test the exact client, command, policy and failure behavior they rely on.
+
+For mandatory merge control, run the diff-scoped change-control command in CI against the candidate revision, propagate its exit code, and configure the CI job as a required repository check. The team must verify that the analyzed workspace is current and corresponds to the revision under review.
 ---
 
 ## 20. Hygiene
@@ -671,22 +674,20 @@ A capability claim should identify:
 
 ## 23. Roadmap
 
-The following are planned or require a separate design and verification arc:
+The current v1.5.0 product includes the semantic analysis layer, diff-scoped policy checks, the Talon agent harness, MCP integrations, dashboard/IDE surfaces, runtime/document evidence correlation, and verification for persisted governance records.
 
-1. Hygiene evidence and contract expansion.
-2. Optional read-only Hygiene MCP exposure.
-3. Analysis freshness and workspace reanalysis contract.
-4. External read-only MCP execution harness.
-5. Patch artifacts and disposable worktrees.
-6. Sandboxed single-agent execution loop.
-7. Durable harness state and replay.
-8. Human review and explicit merge authorization.
-9. Multi-agent orchestration after the single-agent path is reliable.
-10. Suppression, baselines, and persisted Hygiene observations.
-11. Expanded language analyzers and larger multi-repository benchmarks.
+The following are hardening or expansion areas, not claims of complete current behavior:
 
-The execution harness must not bypass Garuda’s tenant, workspace, evidence, policy, and transaction boundaries.
+1. Strengthen error propagation and fail-closed handling for every migration, query, indexing and evaluation failure path.
+2. Make index freshness and candidate revision identity explicit in change-control results.
+3. Expand independently labeled ground-truth corpora, including precision/recall measurement for Python and TypeScript constructs.
+4. Harden Talon supervisor lifecycle controls, timeout/cancellation behavior, and optional isolated worktree/sandbox execution.
+5. Add clear human approval and explicit merge authorization paths; do not infer that `ALLOW` means automatic merge.
+6. Mature hygiene findings with freshness metadata, persisted observations, baselines and suppressions.
+7. Expand language coverage only when the corresponding parser/resolver and verification corpus support the claim.
+8. Continue deployment and tenant-isolation hardening and document per-environment validation requirements.
 
+Any future autonomous or multi-agent orchestration must preserve tenant/workspace scope, evidence provenance, policy evaluation boundaries, and the distinction between a suggested repair and an authorized change.
 ---
 
 ## 24. Versioning
@@ -747,7 +748,10 @@ Breaking changes should state which surface changed, how compatibility is handle
 - [`docs/invariants.md`](docs/invariants.md) — invariant contract.
 - [`docs/adr/`](docs/adr/) — architecture decision records.
 - [`scripts/mcp_verify.py`](scripts/mcp_verify.py) — MCP reference verifier.
-- [`openapi.yaml`](openapi.yaml) — HTTP contract.
+- [`openapi.yaml`](../openapi.yaml) — Current registered HTTP route inventory.
+- [`specs/control-plane.md`](specs/control-plane.md) — Owner Control Plane and access/configuration boundaries.
+- [`specs/control-plane-metrics.md`](specs/control-plane-metrics.md) — Implemented and not-yet-measured operator metrics.
+- [`specs/mcp-sessions.md`](specs/mcp-sessions.md) — MCP session/tool-call records and retention design.
 - [`vscode-extension/`](vscode-extension/) — VS Code integration.
 
 ---
