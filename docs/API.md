@@ -189,7 +189,7 @@ Examples:
 ---
 
 ### `garuda dev` / `garuda up` / `garuda status`
-- `./bin/garuda dev` — Starts the unified Garuda daemon (HTTP API server + 6-surface `/dashboard` Software Intelligence Instrument + 10-second background runtime verification & Merkle epoch worker).
+- `./bin/garuda dev` — Starts the unified Garuda daemon (HTTP API server + six core `/dashboard` engineering surfaces plus ADR Decision Lineage + 10-second background runtime verification & Merkle epoch worker).
 - `./bin/garuda up` — Starts PostgreSQL container, runs migrations, and launches the gateway stack.
 - `./bin/garuda status` — Verifies gateway health (`/health`).
 
@@ -197,7 +197,7 @@ Examples:
 
 ## 3. Declarative Policy Predicates (`policies/*.yaml`)
 
-Every policy file specifies `when` predicates evaluated against the workspace graph in PostgreSQL. If any `.yaml`/`.yml` file in the policy directory is malformed or references an unknown predicate, Garuda **fails closed** immediately.
+Every policy file specifies `when` predicates evaluated against the workspace graph in PostgreSQL. The policy engine rejects malformed YAML and unknown predicate types rather than treating them as valid rules. Confirm that the CLI/CI caller propagates these errors as a failed check; the exact failure behavior still depends on the command path.
 
 | Predicate | Parameters | Description |
 | :--- | :--- | :--- |
