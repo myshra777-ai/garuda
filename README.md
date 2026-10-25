@@ -87,7 +87,9 @@ A CLI failure is not, by itself, branch protection. Configure the Garuda job as 
 
 Garuda exposes **23 MCP tools**, plus an architectural-contract prompt and workspace-contract resources. The surface includes symbol discovery, neighbors, implementations, blast radius, policy/evidence queries, contradictions, handoff/resume, and Talon's pre-edit/post-edit calls. The server can inject the active contract into tool responses by default; set `GARUDA_TALON_ENFORCE=false` only when intentionally disabling that behavior.
 
-The dashboard gives people a way to inspect the same workspace model, including architecture neighborhoods, change review, policy outcomes, contradictions, and decision history.
+The tenant-facing dashboard gives engineers a way to inspect the workspace model: architecture neighborhoods, change review, policy outcomes, contradictions and decision history.
+
+Garuda also includes a separate **owner Control Plane** at `/_/control`. When explicitly configured with `GARUDA_CONTROL_TOKEN` and a separate `CONTROL_DATABASE_URL`, it provides Business, Tenants, Operations and Internal views, including MCP session/tool-call activity, stalled sessions, tool-error rates, process-local query latency and recent errors. The Control Plane is separate from the tenant Workspace Console and uses a separately configured read-only database role. Some user-activity metrics can remain “not yet measured”; in-process metrics reset when the API process restarts.
 
 ![Garuda cryptographic trust and evidence view](assets/screenshots/evidence-cryptographic-trust.png)
 
@@ -120,6 +122,7 @@ A Merkle proof can verify the integrity and inclusion of a persisted record agai
 | [CLI, MCP and HTTP API](docs/API.md) | Commands, policies, configuration, tools and endpoints |
 | [Walkthrough](docs/WALKTHROUGH.md) | End-to-end examples and dashboard tour |
 | [Specifications](docs/SPECS.md) | Architecture, data model, contracts and limitations |
+| [Owner Control Plane](docs/specs/control-plane.md) | Operator views, access boundaries and intentionally deferred controls |
 | [Evidence and verification](EVIDENCE.md) | Benchmarks, corpora, reproducible checks and methodology |
 | [Operational playbook](PLAYBOOK.md) | Installation, operating procedures and troubleshooting |
 | [Multi-language coverage](docs/MULTI_LANGUAGE_ROADMAP.md) | Current language support and resolution roadmap |
