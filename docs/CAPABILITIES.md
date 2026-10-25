@@ -1,71 +1,76 @@
 # Garuda capabilities
 
-This document describes the main implemented capability areas and the boundaries users should understand. It is not a certification of production readiness. Feature availability depends on the current checkout, configuration, supported input and integration path.
+Garuda connects source-code structure, architecture intent, change scope, runtime observations and governance records. The highest-value workflow is not simply viewing a graph: it is using the graph and explicit rules to guide an agent edit, check the resulting diff, and fail a configured CI job when a blocking condition is found.
+
+This is a current capability guide—not a certification of production readiness. Feature behavior depends on the current binary, database migrations, workspace state, supported syntax, configured rules and integration path.
 
 ## At a glance
 
-| Area | What is implemented | Important boundary |
+| Capability | What is implemented | Boundary to keep in mind |
 |---|---|---|
-| Go analysis | Compiler/type-aware extraction for supported packages, calls, interfaces and embedding | Resolution is limited to code the Go toolchain can load and analyze; dynamic behavior is not fully represented |
-| Python analysis | AST-based extraction for modules, classes, functions and selected alias/instance-call patterns | Structural analysis is not equivalent to complete Python runtime resolution |
-| TypeScript analysis | Tree-sitter-based extraction for supported syntax, imports, classes and selected call patterns | Coverage depends on parser support and implemented resolution rules |
-| Workspace graph | Persisted entities and typed relationships, including supported cross-repository mappings | Graph completeness depends on indexing scope and resolution success |
-| Impact analysis | Neighborhood, caller/dependency and transitive blast-radius queries | Results are based on relationships present in the graph |
-| Git diff targeting | Maps supported diff hunks to source entities and evaluates change-scoped policy outcomes | Line mapping and entity resolution can be incomplete; inspect results for generated or unusual diffs |
-| Architecture policies | YAML-configured predicates for layers, cycles, claims, entities, contradictions and related conditions | Only implemented predicates and configured scopes are evaluated |
-| Documentation claims | Ingests supported Markdown/ADR content and checks extracted claims against the model | Claim extraction does not establish that a document is correct or complete |
-| Runtime evidence | Ingests supported OpenTelemetry spans and correlates observations with static entities | Traces show observed execution, not every possible production path |
-| Garuda Talon | Contract generation, pre-edit briefing, post-edit guard, MCP integration and a CLI-agent supervisor loop | Enforcement depends on installed hooks, client behavior, configured policies and fail-closed behavior |
-| MCP | Agent-facing query, impact, policy, evidence and handoff tools, plus prompts/resources | Tool availability and behavior depend on the built server and connected client |
-| Dashboard | Workspace briefing, architecture map, change review, policies, evidence and governance views | UI presence alone does not establish that every metric is populated or operationally complete |
-| Merkle verification | Hash-based integrity and inclusion-proof verification for persisted records | Proves consistency with the supplied root/proof, not semantic truth or external timestamping |
-| Hygiene analysis | Structural candidates for dead ends, orphaned symbols and other cleanup | Findings are candidates for review, not proof that code is safe to delete |
+| Go semantic analysis | Compiler/type-aware extraction for supported packages, calls, interfaces, embeddings and multi-module workspaces | Resolution depends on what the Go toolchain can load; dynamic behavior and unsupported build configurations may be absent |
+| Python analysis | AST-based modules, classes, functions, imports and selected cross-file alias/instance-call patterns | Not a full Python type checker; dynamic dispatch and unresolved references remain uncertain |
+| TypeScript analysis | Tree-sitter extraction, imports, classes and selected cross-file alias/instance-call patterns | Not a replacement for the TypeScript compiler or language server |
+| Workspace graph | Persisted entities and typed relationships with supported cross-repository mappings | Completeness depends on indexed repositories, parser support and resolution success |
+| Blast-radius analysis | Caller/dependency neighborhoods, interface relationships and confidence-weighted multi-hop impact | Impact is only as complete as the indexed relationships and chosen scope |
+| Incremental indexing | Re-index dirty files or selected files to refresh working-tree state before a check | Validate the repository root, files and workspace match the candidate change |
+| Diff-scoped change control | Maps Git diff hunks to touched AST entities and evaluates changed scope | Unusual/generated diffs or unresolved source spans can yield incomplete target mapping; inspect touched files/symbols |
+| Baseline separation | Distinguishes net-new violations in the active diff from pre-existing findings where diff-scoped filtering applies | Existing violations remain visible; this is not a blanket waiver for legacy debt |
+| YAML policy engine | Nine predicates for layers, transitive paths, cycles, blast radius, claims, entities, contradictions, missing verification and language scope | Only implemented predicates, supported graph semantics and configured scope are evaluated |
+| Documentation claims | Extracts supported claim shapes from Markdown/ADRs and checks them against the indexed model | Deterministic extraction is deliberately narrower than natural-language understanding; a document can still be wrong |
+| Runtime evidence | Ingests supported OpenTelemetry spans and correlates observations with static entities | Runtime evidence reflects telemetry actually captured, ingested and mapped |
+| Garuda Talon | Compiles an agent-facing contract; provides pre-edit context, post-edit guard, MCP calls and a bounded CLI-agent supervisor/self-repair loop | Hooks are client-specific and can be misconfigured or bypassed; validate failure semantics and the exact enforcement boundary |
+| MCP surface | 23 tools plus an architectural-contract prompt and workspace contract/guardrail resources | Tool schemas are defined by the live server; a protocol check does not establish semantic accuracy of every tool |
+| Multi-agent continuity | Handoff, resume and checkpoint paths for structured task/state transfer | Not a general-purpose multi-agent planner or model runtime |
+| Governance and Merkle verification | Records selected evaluations/decisions and verifies integrity/inclusion against a supplied Merkle root/proof | Does not prove source-analysis completeness, policy wisdom, external timestamping or software correctness |
+| Dashboard and IDE | Six dashboard workspaces and a VS Code extension for evidence, graph, diagnostics and selected symbol workflows | UI presence is not proof that each panel is populated or that every path is continuously refreshed |
+| Hygiene report | Advisory static unreferenced candidates, duplicate symbol-name candidates and naming-based standard-library suggestions | No finding is proof of dead code or safe deletion; the report does not mutate code or persist a finding lifecycle |
+| Snapshot/plan utilities | Semantic snapshot comparison, baseline CI assessment, and structured plan/self-description endpoints or reports | These utilities have their own input and server prerequisites; use the API reference for exact flags |
 
-## Change-control workflow
+## Garuda's differentiator: connect the loop
 
-A typical workflow connects these capabilities:
+### 1. Before the edit
+Talon can compile active ADR claims, YAML policies and high-impact symbols into a workspace contract. A pre-edit briefing gives the agent or developer relevant rules and graph-visible impact before a change is made.
 
-1. Index the repository and inspect unresolved or high-impact relationships.
-2. Define architecture constraints in the supported policy format and document relevant decisions.
-3. Use `garuda check` or Talon to scope evaluation to a target or Git diff.
-4. Review the verdict and the difference between new findings and baseline findings, when available.
-5. Persist the decision when needed, then verify the record through the supported Merkle verification path.
-6. Run the same checks in CI only after the team has tested expected behavior, failure modes and bypass paths.
+### 2. After the edit
+Talon can re-index dirty files, target the Git diff, check net-new violations, verify relevant ADR claims, and return a structured verdict plus repair-oriented instructions. Its supervisor command can rerun a CLI coding agent with that feedback for a configured number of attempts.
 
-## Garuda Talon
+### 3. Before the merge
+`garuda check` or a policy evaluation can be wired into CI. With `--fail-on-block`, a `BLOCK` verdict exits with code `2`; the CI provider can fail the job and a required branch-protection check can stop the merge. Garuda does not configure repository branch protection on its own.
 
-Talon includes code paths for:
+### 4. After the decision
+When a decision is persisted, the Merkle implementation can supply an inclusion proof. That receipt lets reviewers verify the integrity and inclusion of recorded decision data; it does not make the original analysis complete by itself.
 
-- Compiling workspace ADR claims, YAML policies and selected high-impact symbols into an agent-facing contract.
-- Producing pre-edit context and impact information.
-- Re-indexing changed files and evaluating post-edit changes.
-- Returning repair-oriented feedback for blocked changes.
-- Registering MCP tools and generating client-specific configuration/hooks.
-- Running a supervisor loop around a CLI coding agent.
-
-These are distinct from a guarantee that all agent edits are intercepted. Generated rules can be ignored by an agent; hooks can be misconfigured or bypassed; and a wrapper's behavior depends on the command and environment. Teams should verify the exact enforcement boundary in their chosen editor, agent, Git workflow and CI environment.
-
-## Evidence and terminology
+## Evidence terminology
 
 | Term | Meaning |
 |---|---|
-| `SUPPORTED` | Available evidence supports the claim within the checked scope |
+| `SUPPORTED` | Available evidence supports a claim within the checked scope |
 | `UNVERIFIED` | Evidence is insufficient; not proof of a defect |
-| `CONTRADICTED` | Available evidence conflicts with the claim |
-| `ALLOW` | The configured evaluator found no blocking condition in its evaluated scope |
-| `WARN` / `REVIEW` | The configured evaluator returned a non-blocking warning or review outcome |
-| `BLOCK` | The configured evaluator found a blocking condition under the active rules |
+| `CONTRADICTED` | Available evidence conflicts with a claim |
+| `ALLOW` | The configured evaluator found no blocking condition in the evaluated scope |
+| `WARN` / `REVIEW` | A non-blocking warning or review outcome |
+| `BLOCK` | An active policy/evidence condition produced a blocking outcome |
 
-A clean result is only as complete as the input model, supported semantics, active policies and evaluation scope. It is not a general proof of correctness.
+A passing result applies to the scope actually evaluated. Confirm index freshness, touched-symbol mapping, policy files, telemetry availability and integration failure behavior before using it as a mandatory merge gate.
 
-## Validation evidence
+## Current validation record
 
-See [EVIDENCE.md](../EVIDENCE.md) for reported benchmarks, corpus sizes, MCP verification and runtime contradiction tests. Treat each result as scoped to the named test or corpus. Before using a number in external materials, reproduce it from the documented command and preserve the environment, commit and output.
+The current [evidence report](../EVIDENCE.md) records:
+
+- 24/24 strict compiler/AST benchmark cases passed.
+- 30/30 reference MCP/Talon verifier checks passed.
+- 10/10 injected contradictions detected in the controlled runtime test.
+- A 14-repository Go-only validation corpus and a separate 9-repository mixed-language workspace.
+
+The 14-repository Go corpus and 9-repository mixed-language workspace are separate datasets. The 14,333-entity / 40,956-relationship figure belongs to the documented mixed-language workspace snapshot, not the 14-repository Go-only corpus. These counts are snapshot facts, not universal product limits or complete-graph accuracy scores.
 
 ## Related documentation
 
 - [Quick start](QUICKSTART.md)
+- [Talon guide](TALON.md)
 - [CLI, MCP and HTTP API](API.md)
 - [System specifications](SPECS.md)
 - [End-to-end walkthrough](WALKTHROUGH.md)
+- [Multi-language coverage](MULTI_LANGUAGE_ROADMAP.md)
 - [Evidence and verification](../EVIDENCE.md)
