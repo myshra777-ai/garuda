@@ -1,9 +1,9 @@
-# MCP Sessions — design
+# MCP Sessions and Tool-Call Tracking
 
-**Status:** agreed 2026-09-17. Not yet implemented.
-**Scope:** session and tool-call tracking for the MCP server.
-**Depends on:** nothing. This is the foundation spec.
-**Blocks:** `tenant-tabs.md`, `control-plane-metrics.md`, `control-plane.md`.
+**Status:** Implemented baseline in the current v1.5.0 tree; retained design details document the schema and operational contract.
+**Scope:** MCP session lifecycle, tool-call records, retention/job state, and the observability data consumed by the owner-facing Control Plane.
+**Implementation anchors:** `cmd/garuda-mcp/session_tracking.go`, `migrations/088_mcp_sessions.sql`, `migrations/089_control_plane_readonly_role.sql`, and `internal/api/control_plane_operations.go`.
+**Related:** [Control Plane design and implementation notes](control-plane.md), [metric definitions](control-plane-metrics.md), [Garuda specifications](../SPECS.md).
 
 ---
 
@@ -18,11 +18,13 @@ is a separate product with a separate privacy review.
 
 ## Purpose
 
-The MCP server currently executes tool calls without persisting that they
-happened. The Control Plane cannot answer "is anyone using this?" and the
-Workspace Console's Agents tab cannot answer "which client is failing?"
-This spec adds the three tables and the write path that make those
-questions answerable.
+The current MCP server has a best-effort session and tool-call write path.
+It records session start, tool-call status/duration and session closure for
+the owner-facing Control Plane. Session creation or call-record failures are
+logged and do not block the MCP handshake/tool response; when session creation
+fails, tool events can be recorded against the seeded orphaned-session sentinel.
+This preserves agent availability but means a database outage can reduce
+session-level attribution.
 
 The purpose is observability, not analytics. We record what happened so
 that an operator can see it. We do not derive behavioral profiles, track
@@ -461,44 +463,36 @@ INSERT INTO mcp_tool_calls (
    'garuda.briefing', 88, 'error', 'workspace not found',
    NOW() - INTERVAL '5 minutes');
 ```
-Definition of done
-□ Migration creates mcp_sessions, mcp_tool_calls, job_state, all
-six indexes, and the sentinel session row. Re-applying it is a no-op.
-□ A live initialize handshake inserts exactly one row into
-mcp_sessions with client_name populated from
-clientInfo.name.
-□ The value written to session_token on initialize matches the
-sessionID field the same process writes into its own structured
-logs.
-□ A tools/call for garuda.briefing inserts exactly one row into
-mcp_tool_calls and increments the parent session's
-tool_call_count by 1.
-□ A tools/call that returns an error inserts a row with
-status = 'error', increments request_count, and does not
-increment tool_call_count.
-□ A graceful shutdown sets closed_at and close_reason = 'graceful'.
-□ A simulated crash (kill -9) leaves closed_at IS NULL; the stale
-job closes it with close_reason = 'stale' on the next run.
-□ A session marked stale that receives a subsequent tool call has
-closed_at cleared and close_reason = 'reactivated'.
-□ If the initial session insert is forced to fail (invalid
-DATABASE_URL at startup), the next tool call is recorded against
-the sentinel session and does not error.
-□ args_summary for garuda.query contains no keys (the query string
-is omitted).
-□ args_summary for garuda.policy.evaluate contains workspace but
-not policy_dir.
-□ The whitelist test fails the build when a ToolDefinition is added
-to allTools without a whitelist entry, and when a tool is removed
-from allTools while its whitelist entry remains.
-□ Two consecutive hourly runs of mcp_sessions.prune within the same
-hour result in exactly one delete pass — the second run reads
-job_state and skips.
-□ The pruning job deletes tool calls older than 30 days and sessions
-closed more than 90 days ago, and leaves active sessions and the
-sentinel untouched.
-□ scripts/mcp_verify.py passes 19/19 after the write path is added —
-the write path must not change any observable behavior of the tools.
+## Current implementation and verification boundaries
+
+The original Definition of Done below was the design acceptance checklist for
+the implementation. It is retained in Git history rather than presented as a
+current test report. The current repository's reference MCP/Talon verifier is
+documented as 30/30 checks in [EVIDENCE.md](../../EVIDENCE.md); that verifier
+covers protocol and integration behavior, not every persistence lifecycle,
+retention schedule, or outage scenario listed in this historical checklist.
+
+Implementation entry points:
+
+- `recordSessionStart`, `recordToolCall`, and `closeSession` in
+  `cmd/garuda-mcp/session_tracking.go`.
+- Tables, indexes and the orphaned-session sentinel in
+  `migrations/088_mcp_sessions.sql`.
+- The read-only Control Plane database role in
+  `migrations/089_control_plane_readonly_role.sql`.
+- Session and tool-call views in
+  `internal/api/control_plane.go` and
+  `internal/api/control_plane_operations.go`.
+
+**Operational boundary:** tracking writes are best effort. They must not
+block MCP operation, but an unavailable database can leave a session row
+missing and route subsequent tool-call records through the sentinel.
+
+### Historical acceptance checklist (pre-implementation)
+
+The checklist and 19/19 count below describe the original design stage. Do
+not use that check count as the current verifier result.
+
 Revision history
 Date	Change
 2026-09-17	Initial draft
