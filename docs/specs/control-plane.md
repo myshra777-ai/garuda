@@ -442,10 +442,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 The password is supplied via CONTROL_DATABASE_URL and is separate from
 the tenant DATABASE_URL.
 
-Definition of done
-□ /_/control unauthenticated returns 404, not 401.
-□ /_/control with a valid token renders the Business tab.
-□ /_/control?tab=tenants with a valid token renders the Tenants tab
+Verification checklist (regression expectations)
+- /_/control unauthenticated returns 404, not 401.
+- /_/control with a valid token renders the Business tab.
+-  /_/control?tab=tenants with a valid token renders the Tenants tab
 directly.
 □ /_/control/login renders the token form; a valid token sets a
 24-hour HttpOnly cookie scoped to /_/control.
