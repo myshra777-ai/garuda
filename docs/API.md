@@ -167,7 +167,7 @@ These utility commands are implemented alongside the main analysis, policy and T
 | `garuda ci` | Analyze the current repository and compare it with a saved semantic baseline | Use `--baseline <file>`; `--block-on-break` exits non-zero when the assessment is breaking |
 | `garuda diff <before.json> <after.json>` | Compare two serialized analysis snapshots | `--fail-on-breaking` exits non-zero when breaking changes are detected |
 | `garuda self-describe [path]` | Emit a structured JSON product description or Markdown skeleton from source analysis, CLI structure and optional workspace evidence | Use `--markdown`, `--workspace`, and `--output`; product metadata is read from `docs/source/product.yaml` when available |
-| `garuda plan` | Request a structured plan from the configured Garuda API truth graph | Requires the API service and accepts `--scope-domain`, `--scope-system`, `--status`, `--at`, and `--format markdown|json` |
+| `garuda plan` | CLI command is present, but not currently usable end-to-end | The CLI requests `/api/v1/plan`; that route is not registered in the current `Server.RegisterRoutes`. Expect an API error until a matching handler/route is implemented. Flags include `--scope-domain`, `--scope-system`, `--status`, `--at`, and `--format markdown|json`. |
 | `garuda hygiene [path]` | Produce advisory unreferenced-symbol, duplicate-name and standard-library-alternative candidates from the indexed graph | Does not prove code is dead, does not refresh analysis, and does not persist findings; `garuda ponytail` is a deprecated alias |
 
 Examples:
@@ -182,8 +182,9 @@ Examples:
 # Emit product description metadata as Markdown.
 ./bin/garuda self-describe . --markdown --output PRODUCT.md
 
-# Request a scoped plan from the running API.
-./bin/garuda plan --scope-domain infrastructure --format markdown
+# `garuda plan` is present but its /api/v1/plan route is not registered yet.
+# Do not rely on this command until the matching server handler is implemented.
+# ./bin/garuda plan --scope-domain infrastructure --format markdown
 ```
 
 ---
@@ -319,4 +320,4 @@ The owner Control Plane is served only when `GARUDA_CONTROL_TOKEN` and `CONTROL_
 
 ### API contract boundary
 
-The route inventory above describes the current Gorilla router. It does not imply that every endpoint has a stable, fully typed request/response schema. The dashboard workbench and policy UI should not be described as performing a live server-side simulation unless a route and implementation for that operation are present in the release being documented. The top-level [`openapi.yaml`](../openapi.yaml) lists registered routes; `internal/api/openapi.yaml` remains a separate generated-client schema and is not the authoritative inventory of live routes.
+`garuda plan` is a known CLI/router mismatch: `cmd/garuda/plan_cli.go` calls `/api/v1/plan`, but `Server.RegisterRoutes` does not register that route in the current tree. It is documented as a known gap, not a working API capability.\n\nThe route inventory above describes the current Gorilla router. It does not imply that every endpoint has a stable, fully typed request/response schema. The dashboard workbench and policy UI should not be described as performing a live server-side simulation unless a route and implementation for that operation are present in the release being documented. The top-level [`openapi.yaml`](../openapi.yaml) lists registered routes; `internal/api/openapi.yaml` remains a separate generated-client schema and is not the authoritative inventory of live routes.
