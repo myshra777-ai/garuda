@@ -238,9 +238,9 @@ Cadence: on page load
 
 Error rate
 
-Formula: errors / total requests over the last hour, from an in-process counter
+Formula: errors / total requests in the rolling 60-minute in-process counter, bucketed per minute. The counter is local to the API process and resets on process restart.
 
-Empty state: 0%
+Empty state: 0% when no requests have been recorded in the current process window.
 
 Recent errors
 
