@@ -3,8 +3,12 @@ info:
   title: Garuda Engine API Gateway
   version: 1.0.0
   description: |
-    Garuda is the deterministic governance, multi-agent state handoff, and cryptographic audit layer for enterprise AI swarms.
-    It provides a dual-engine protocol: high-ergonomics REST for humans and MCP Tool Manifests for autonomous agents.
+    Garuda exposes HTTP endpoints for workspace/software intelligence, runtime
+    telemetry ingestion, policy and decision governance, agent coordination,
+    and proof verification. The API works alongside the Garuda MCP server and
+    Talon agent-integration layer. Recorded Merkle proofs establish integrity
+    and inclusion against the applicable proof and root; they do not prove
+    analysis completeness or guarantee that every agent action is intercepted.
 servers:
   - url: http://localhost:8080/api/v1
     description: Local development
