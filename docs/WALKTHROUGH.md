@@ -79,7 +79,7 @@ Incrementally re-indexes dirty working-tree files in milliseconds, maps git diff
 ```
 
 ### Autonomous Supervisor Loop (`garuda talon run`)
-Wrap any CLI coding agent (`claude`, `aider`, `codex`) in a closed self-repair loop that automatically feeds policy/ADR violation fixes back to the agent (up to `--max-retries 3`) until `ALLOW` is achieved:
+Wrap a compatible CLI coding agent (`claude`, `aider`, `codex`) in a bounded feedback loop. When a guard returns `BLOCK`, Talon can feed repair instructions back to the agent for up to `--max-retries 3` attempts. The final result can still be `BLOCK`; this is not a guarantee of automatic repair or a sandbox:
 
 ```bash
 ./bin/garuda talon run --max-retries 3 -- claude "Refactor CheckoutHandler to use OrderService"
@@ -116,7 +116,7 @@ Add `--json` inside CI/CD pipelines to emit a machine-readable JSON decision pay
 
 ---
 
-## 4. 6-Surface Software Intelligence Instrument (`/dashboard`)
+## 4. Software Intelligence Instrument: Six Core Surfaces + Decision Lineage (`/dashboard`)
 
 Garuda v1.5 ships a redesigned Software Intelligence Instrument at `http://localhost:8080/dashboard` inspired by Linear, Vercel, Sentry, and Neo4j Bloom.
 
@@ -128,13 +128,14 @@ Garuda v1.5 ships a redesigned Software Intelligence Instrument at `http://local
 
 Visit `http://localhost:8080/login` (or `http://localhost:8080/dashboard`) and press `⌘K` / `Ctrl+K` at any time to open the global command palette.
 
-### The 6 Engineering Surfaces
+### The six core engineering surfaces
 1. **Workspace Briefing (`/dashboard#briefing`)**: Clean status strip and health KPIs (Indexed Entities, Policy Posture, Active Contradictions, Merkle Ledger Head) paired with an actionable Needs-Attention queue and recent governance verdicts.
 2. **Architecture Map (`/dashboard#map`)**: **Neighborhood-first 1-hop / 2-hop topology explorer** (`[Selected Caller] ──> [Focal Symbol] ──> [Direct Dependency / Policy Badge]`) with interactive hop-depth (`1 hop`, `2 hops`) and edge-kind filters (`Calls`, `Imports`, `Implements`, `Claims`) plus a synchronized 4-tab Inspector Drawer (`Source`, `Relationships`, `Policy Results`, `Evidence`).
 3. **Change Review Workbench (`/dashboard#workbench`)**: A three-pane review surface for selecting a target or saved evaluation, inspecting the target's source/workspace context and graph-visible impact, and reading the recorded policy/evidence result. For a fresh, authoritative check of the current diff, run `garuda talon guard` or `garuda check --diff`; the panel is not a substitute for evaluating the exact candidate revision.
 4. **Policies (`/dashboard#policies`)**: Inspect the supported YAML policy predicates and the policy configuration/evaluation state available in the workspace. To validate or evaluate the actual policy bundle, use `garuda policy validate ./policies` and `garuda policy evaluate ./policies`; a UI catalog is not itself proof that an edited YAML rule was executed.
 5. **Contradictions & Evidence (`/dashboard#contradictions`)**: A forensic queue for `CONTRADICTED` and `UNVERIFIED` claims, correlating indexed structure/document claims with OpenTelemetry observations that have actually been ingested and mapped. Treat observed spans as evidence for the paths they represent—not as coverage of every possible production execution.
 6. **Governance & Audit Ledger (`/dashboard#ledger`)**: Append-only decision table with a bottom **Decision Record Inspector** (`What it did`, `What it looked at`, `What rule applied`, `Epistemic state`, `RFC 6962 Merkle Inclusion Proof`) and 1-click cryptographic verification.
+7. **ADR Decision Lineage**: A separate governance-record view for canonical decisions and their revision/supersession history. Treat the listed records and their ledger status as the current persisted workspace data; verify a Merkle proof rather than inferring integrity from an `APPROVED` badge alone.
 
 ---
 
