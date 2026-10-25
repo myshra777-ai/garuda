@@ -465,12 +465,12 @@ INSERT INTO mcp_tool_calls (
 ```
 ## Current implementation and verification boundaries
 
-The original Definition of Done below was the design acceptance checklist for
-the implementation. It is retained in Git history rather than presented as a
-current test report. The current repository's reference MCP/Talon verifier is
-documented as 30/30 checks in [EVIDENCE.md](../../EVIDENCE.md); that verifier
-covers protocol and integration behavior, not every persistence lifecycle,
-retention schedule, or outage scenario listed in this historical checklist.
+The original Definition of Done and its 19/19 verifier count belonged to the
+pre-implementation design record and are not reproduced here as current test
+results. The current repository's reference MCP/Talon verifier is documented
+as 30/30 checks in [EVIDENCE.md](../../EVIDENCE.md). It covers protocol and
+integration behavior, not every persistence lifecycle, retention schedule, or
+outage scenario.
 
 Implementation entry points:
 
@@ -496,11 +496,4 @@ not use that check count as the current verifier result.
 Revision history
 Date	Change
 2026-09-17	Initial draft
-2026-09-18	job_state table, sentinel session, session_token source made explicit, error_message privacy acknowledgment, whitelist test reads from variable, client_name != 'orphaned' guards on Operations queries 
-
-
----
-
-## `docs/specs/tenant-tabs.md`
-
-```markdown
+2026-09-18	job_state table, sentinel session, session_token source made explicit, error_message privacy acknowledgment, whitelist test reads from variable, client_name != 'orphaned' guards on Operations queries
