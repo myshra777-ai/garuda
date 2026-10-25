@@ -1,196 +1,62 @@
-schema_version: '1.0'
 schema_version: "1.0"
-
 roadmap:
-  current_phase: "P2"
+  current_phase: "P4"
+  next_phase: "P5"
   current_phase_status: "active"
 
   strategic_sequence:
-    - "Understand one repository"
-    - "Connect 10–25 repositories"
-    - "Detect cross-repo contradictions"
-    - "Ground AI in evidence"
-    - "Reconcile code with runtime"
-    - "Govern decisions and policies"
-    - "Expand into trusted business state"
+    - "Analyze supported source code into a scoped semantic model"
+    - "Map a Git diff to touched symbols and graph-visible blast radius"
+    - "Give agents pre-edit context from policies, ADRs and high-impact symbols"
+    - "Re-index edits and check net-new violations after editing"
+    - "Fail a configured CI job when a blocking policy outcome is returned"
+    - "Correlate available documentation claims and runtime observations"
+    - "Persist selected governance decisions and verify their Merkle inclusion"
+    - "Improve freshness, failure-path coverage, language resolution and deployment safety"
 
   phases:
-
     P0:
-      name: "Trust Cleanup"
+      name: "Trust and Data Foundations"
       status: "complete"
-      focus:
-        - "Schemas"
-        - "Authentication"
-        - "Error model"
-        - "Artifact IDs"
-        - "Threat model"
-      exit_gate:
-        - "No critical integrity or security failures"
-
     P1:
-      name: "Semantic Core"
+      name: "Semantic Model and Workspace Graph"
       status: "complete"
-      focus:
-        - "Claims"
-        - "Evidence"
-        - "Fingerprints"
-        - "Lineage"
-        - "CAS"
-        - "Redaction"
-      exit_gate:
-        - "Deterministic evidence-backed snapshots"
-
     P2:
-      name: "Go Analyzer"
-      status: "active"
-      focus:
-        - "AST extraction"
-        - "Type extraction"
-        - "API extraction"
-        - "Schema extraction"
-        - "Benchmarking"
-      exit_gate:
-        - "Measured useful extraction"
-      current_priorities:
-        - "Improve Go semantic extraction"
-        - "Build benchmark corpus"
-        - "Measure entity precision and recall"
-        - "Measure edge precision and recall"
-        - "Measure lineage accuracy"
-        - "Measure evidence accuracy"
-
+      name: "Supported Language Analysis"
+      status: "implemented-with-ongoing-validation"
     P3:
-      name: "CLI and Artifacts"
-      status: "next"
-      focus:
-        - "garuda analyze"
-        - "garuda inspect"
-        - "garuda explain"
-        - "garuda diff"
-        - "garuda self-describe"
-        - "garuda graph"
-      exit_gate:
-        - "Developer can understand one repository"
-
+      name: "Policy and Diff-Scoped Change Control"
+      status: "implemented"
     P4:
-      name: "Multi-repository Intelligence"
-      status: "planned"
-      focus:
-        - "10–25 repositories"
-        - "Bounded workers"
-        - "Incremental synchronization"
-        - "Cross-repository resolution"
-        - "Cross-repo claims"
-        - "garuda deps"
-        - "Workspace graph"
-      exit_gate:
-        - "Reliable workspace graph with cross-repo dependencies"
-
+      name: "Talon Active Agent Harness"
+      status: "active"
     P5:
-      name: "Contract Intelligence"
-      status: "planned"
-      focus:
-        - "Ghost dependencies"
-        - "Contractual holes"
-        - "Impact analysis"
-        - "API contract extraction"
-        - "garuda contract"
-      exit_gate:
-        - "Real mismatches with evidence"
-
+      name: "Reliability, Freshness and CI Enforcement Hardening"
+      status: "next"
     P6:
-      name: "Company Brain"
+      name: "Resolution Quality and Language Coverage"
       status: "planned"
-      focus:
-        - "Company summary"
-        - "Meeting mode"
-        - "Graph drill-down"
-        - "garuda overview"
-        - "garuda graph --company"
-      exit_gate:
-        - "Architecture understood quickly by humans and agents"
-
     P7:
-      name: "Runtime and CI"
+      name: "Team Deployment and Operational Readiness"
       status: "planned"
-      focus:
-        - "OpenTelemetry integration"
-        - "Runtime correlation"
-        - "PR impact analysis"
-        - "Advisory policy"
-        - "garuda ci"
-      exit_gate:
-        - "Static/runtime reconciliation"
-
-    P8:
-      name: "Governance"
-      status: "planned"
-      focus:
-        - "Policies"
-        - "Decisions"
-        - "Conflicts"
-        - "Corrections"
-        - "Drift detection"
-        - "garuda justify"
-        - "garuda judge"
-        - "garuda policy"
-      exit_gate:
-        - "Evidence-backed governance loop"
-
-    P9:
-      name: "Enterprise"
-      status: "planned"
-      focus:
-        - "Compliance exports"
-        - "Retention"
-        - "Time travel"
-        - "Read projections"
-        - "Business-state extensions"
-        - "garuda time-travel"
-        - "garuda compliance"
-      exit_gate:
-        - "Enterprise pilot readiness"
 
   deferred:
-    - "Unlimited repositories"
-    - "Every programming language"
-    - "Multiple graph databases"
-    - "Autonomous code changes"
-    - "Full compliance automation"
-    - "Universal payments/refunds/booking enforcement"
-    - "Complex multi-agent orchestration"
-    - "Zero-knowledge proofs"
+    - "Universal dynamic call-graph discovery"
+    - "Universal enforcement across every AI agent and editor"
+    - "Sandbox escape prevention or arbitrary untrusted-code execution"
+    - "Automatic merge authorization without a separate team-controlled gate"
+    - "Every programming language or complete compiler-grade resolution everywhere"
+    - "Compliance certification or proof that software is bug-free"
+    - "Persistent Hygiene finding lifecycle, suppression and baseline management"
 
   strategic_moats:
-    - name: "Evidence-backed Company Graph"
-      horizon: "MVP"
+    - name: "Semantic code model tied to change scope"
       status: "active"
-
-    - name: "Contractual Hole Detection"
-      horizon: "MVP+"
-      status: "planned"
-
-    - name: "Knowledge Drift Detection"
-      horizon: "MVP+"
-      status: "planned"
-
-    - name: "Static Runtime Reconciliation"
-      horizon: "post-MVP"
-      status: "planned"
-
-    - name: "Cryptographic Time Travel"
-      horizon: "post-MVP"
-      status: "planned"
-
-    - name: "Decision-to-Code Contradiction"
-      horizon: "post-MVP"
-      status: "planned"
-
-    - name: "Permission-aware AI Context"
-      horizon: "MVP"
+    - name: "Diff-scoped policy checks with net-new versus baseline reporting"
       status: "active"
-
-    - name: "Human Correction Ledger"
-      horizon: "post-MVP"
-      status: "planned"
+    - name: "Talon pre-edit and post-edit agent workflow"
+      status: "active"
+    - name: "Correlated static, documentation and runtime evidence"
+      status: "implemented-with-coverage-boundaries"
+    - name: "Verifiable records for persisted governance decisions"
+      status: "active"
