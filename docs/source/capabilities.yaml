@@ -168,8 +168,8 @@ categories:
         supported_semantics: "Compare saved analyzer snapshots, summarize entity/relationship changes and optionally return non-zero for configured breaking-change criteria"
         invariant: "Snapshot comparison is distinct from YAML policy evaluation and depends on compatible, current input snapshots"
 
-      - name: "Structured Product Description and Plan Utilities"
+      - name: "Structured Product Description (garuda self-describe)"
         status: "implemented"
-        verification_tier: "cmd/garuda/self_describe.go and cmd/garuda/plan_cli.go"
-        supported_semantics: "Emit a product description from available source/metadata and request a scoped plan from the configured Garuda API"
-        invariant: "Self-description reflects available source/metadata; plan requests require the configured API service and graph state"
+        verification_tier: "cmd/garuda/self_describe.go"
+        supported_semantics: "Emit a structured JSON product description or Markdown report from source analysis, CLI structure, product metadata and optional workspace evidence"
+        invariant: "The report reflects available source, metadata and workspace evidence; it is not a proof of all product behavior"
