@@ -664,7 +664,7 @@ A capability claim should identify:
 - An MCP protocol pass does not prove every semantic result is correct.
 - Tenant isolation must be enforced by the server and store, not configuration strings alone.
 - A dashboard panel does not prove that every underlying metric is fully instrumented.
-- The current system is not an autonomous execution harness.
+- Garuda Talon includes an agent execution harness, but its enforcement is bounded by the configured client hooks, command wrapper, policies and failure behavior; it must not be described as universally intercepting or controlling every agent edit.
 - The current system does not provide universal language coverage or complete dynamic call-graph resolution.
 
 ---
