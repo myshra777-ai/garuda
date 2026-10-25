@@ -187,8 +187,7 @@ constraints.
 
 Consequences
 Positive: Independent verifiability. Standard Merkle construction. No
-JSON dependency. Proofs are O(log n). Roots are typographically guaranteed
-to be 32 bytes. Historical data is preserved but distinguished.
+JSON dependency. Proofs are O(log n). Roots are constrained to the expected 32-byte SHA-256 digest length. Historical data is preserved but distinguished.
 
 Negative: The v0 verification code path must be preserved for
 historical proofs — it cannot be deleted. This adds ~150 lines of dead
