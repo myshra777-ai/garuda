@@ -126,6 +126,7 @@ A Merkle proof can verify the integrity and inclusion of a persisted record agai
 | [Evidence and verification](EVIDENCE.md) | Benchmarks, corpora, reproducible checks and methodology |
 | [Operational playbook](PLAYBOOK.md) | Installation, operating procedures and troubleshooting |
 | [Multi-language coverage](docs/MULTI_LANGUAGE_ROADMAP.md) | Current language support and resolution roadmap |
+| [Documentation audit](docs/DOCUMENTATION_AUDIT.md) | Source-of-truth map, capability checks and claim boundaries |
 | [Security policy](SECURITY.md) | Responsible disclosure and security boundaries |
 
 ## Current boundaries
