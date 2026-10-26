@@ -134,25 +134,30 @@ type Result struct {
 	Source          string         `json:"source,omitempty"`
 	Stats           Stats          `json:"stats"`
 	TypeDiagnostics []string       `json:"type_diagnostics,omitempty"`
+	BuildContext    *BuildContext  `json:"build_context,omitempty"`
 }
 
 // RevisionSummary is the lightweight summary stored in canonical revisions.
 type RevisionSummary struct {
-	Fingerprint string     `json:"fingerprint"`
-	Stats       Stats      `json:"stats"`
-	PayloadHash string     `json:"payload_hash"`
-	Provenance  Provenance `json:"provenance,omitempty"`
-	Source      string     `json:"source,omitempty"`
-	Entities    int        `json:"entities"`
-	Claims      int        `json:"claims"`
+	Fingerprint  string        `json:"fingerprint"`
+	Stats        Stats         `json:"stats"`
+	PayloadHash  string        `json:"payload_hash"`
+	Provenance   Provenance    `json:"provenance,omitempty"`
+	Source       string        `json:"source,omitempty"`
+	Entities     int           `json:"entities"`
+	Claims       int           `json:"claims"`
+	BuildContext *BuildContext `json:"build_context,omitempty"`
 }
 
 // Provenance tracks source metadata and execution context.
 type Provenance struct {
-	WorkspaceID  string `json:"workspace_id,omitempty"`
-	RepositoryID string `json:"repository_id,omitempty"`
-	CommitSHA    string `json:"commit_sha,omitempty"`
-	SourcePath   string `json:"source_path,omitempty"`
+	WorkspaceID    string   `json:"workspace_id,omitempty"`
+	RepositoryID   string   `json:"repository_id,omitempty"`
+	CommitSHA      string   `json:"commit_sha,omitempty"`
+	SourcePath     string   `json:"source_path,omitempty"`
+	TargetPlatform string   `json:"target_platform,omitempty"`
+	BuildTags      []string `json:"build_tags,omitempty"`
+	CGOEnabled     bool     `json:"cgo_enabled,omitempty"`
 }
 
 // ----------------------------------------------------------------------------

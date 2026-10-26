@@ -15,13 +15,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/myshra777-ai/garuda/internal/analyzer"
 	"github.com/myshra777-ai/garuda/internal/merkle"
 )
 
 // SaveAnalysisDecision persists an analysis result into the immutable ledger.
-// It stores the full AST in evidence_store (content‑addressed) and a lightweight
-// summary (with payload_hash) in decision_revisions, then updates the Merkle root.
+// It stores the full AST in evidence_store (content-addressed) and a lightweight
+// summary (with payload_hash and BuildContext receipt) in decision_revisions, then updates the Merkle root.
 // Returns: decisionID (string), revisionID (uuid.UUID), revisionNumber (int), error
 func (s *PostgresStore) SaveAnalysisDecision(
 	ctx context.Context,
@@ -37,7 +38,15 @@ func (s *PostgresStore) SaveAnalysisDecision(
 		return "", uuid.Nil, 0, fmt.Errorf("cannot store empty analysis result into cryptographic ledger")
 	}
 
-	// 1. Marshal full AST and compute its SHA‑256 (content address)
+	// Ensure BuildContext is populated on the result before marshaling
+	if result.BuildContext == nil {
+		result.BuildContext = analyzer.ResolveBuildContext(result.Source, "", "default", nil)
+		result.BuildContext.GraphFingerprint = result.Fingerprint
+		result.BuildContext.ActiveFilesCount = result.Stats.Files
+		result.BuildContext.ReceiptHash = result.BuildContext.ComputeReceiptHash()
+	}
+
+	// 1. Marshal full AST and compute its SHA-256 (content address)
 	fullASTJSON, err := json.Marshal(result)
 	if err != nil {
 		return "", uuid.Nil, 0, fmt.Errorf("failed to marshal full AST payload: %w", err)
@@ -45,12 +54,22 @@ func (s *PostgresStore) SaveAnalysisDecision(
 	astHashBytes := sha256.Sum256(fullASTJSON)
 	astHashHex := fmt.Sprintf("%x", astHashBytes[:])
 
-	// 2. Build lightweight revision summary (includes payload_hash)
+	// 2. Build lightweight revision summary (includes payload_hash and BuildContext)
 	summary := analyzer.RevisionSummary{
-		Fingerprint: result.Fingerprint,
-		Source:      result.Source,
-		Stats:       result.Stats,
-		PayloadHash: astHashHex,
+		Fingerprint:  result.Fingerprint,
+		Source:       result.Source,
+		Stats:        result.Stats,
+		PayloadHash:  astHashHex,
+		Entities:     len(result.Entities),
+		Claims:       len(result.Relationships),
+		BuildContext: result.BuildContext,
+		Provenance: analyzer.Provenance{
+			CommitSHA:      result.BuildContext.CommitSHA,
+			SourcePath:     result.Source,
+			TargetPlatform: result.BuildContext.TargetPlatform,
+			BuildTags:      result.BuildContext.BuildTags,
+			CGOEnabled:     result.BuildContext.CGOEnabled,
+		},
 	}
 	summaryJSON, err := json.Marshal(summary)
 	if err != nil {
@@ -64,13 +83,14 @@ func (s *PostgresStore) SaveAnalysisDecision(
 	}
 	defer tx.Rollback(ctx)
 
-	// 4. Deterministic decision ID (v5 SHA‑1)
+	// 4. Deterministic decision ID (v5 SHA-1)
 	decisionID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("analysis:"+tenantID.String()+":"+result.Fingerprint))
 
 	// 5. Create parent decision row (so foreign keys can be satisfied)
-	title := fmt.Sprintf("Repository AST Schema Snapshot [%s]", result.Fingerprint[:8])
-	statement := fmt.Sprintf("Extracted %d packages, %d structs, %d interfaces, %d functions",
-		result.Stats.Packages, result.Stats.Structs, result.Stats.Interfaces, result.Stats.Functions)
+	title := fmt.Sprintf("Repository AST Schema Snapshot [%s]", result.Fingerprint[:min(8, len(result.Fingerprint))])
+	statement := fmt.Sprintf("Extracted %d packages, %d structs, %d interfaces, %d functions (%s)",
+		result.Stats.Packages, result.Stats.Structs, result.Stats.Interfaces, result.Stats.Functions,
+		result.BuildContext.SummaryLine())
 	scopeJSON := []byte(`{"domain":"architecture","system":"ast-analyzer"}`)
 
 	_, err = tx.Exec(ctx, `
@@ -156,7 +176,6 @@ func (s *PostgresStore) SaveAnalysisDecision(
 	}
 
 	// 10. Update Merkle root
-	// 10. Update Merkle root (using BYTEA binary representation)
 	var currentRootBytes []byte
 	err = tx.QueryRow(ctx, `
 		SELECT root_hash FROM merkle_roots WHERE tenant_id = $1 FOR UPDATE
@@ -188,4 +207,56 @@ func (s *PostgresStore) SaveAnalysisDecision(
 	}
 
 	return decisionID.String(), revisionID, revNumber, nil
+}
+
+// GetLatestRecordedBuildContext retrieves the most recent BuildContext stored in
+// decision_revisions (or falls back to repositories metadata) for a tenant/workspace.
+func GetLatestRecordedBuildContext(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	tenantID, workspaceID uuid.UUID,
+) *analyzer.BuildContext {
+	if pool == nil {
+		return nil
+	}
+
+	var canonicalJSON []byte
+	err := pool.QueryRow(ctx, `
+		SELECT canonical_json
+		FROM decision_revisions
+		WHERE tenant_id = $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, tenantID).Scan(&canonicalJSON)
+	if err == nil && len(canonicalJSON) > 0 {
+		var rev analyzer.RevisionSummary
+		if json.Unmarshal(canonicalJSON, &rev) == nil && rev.BuildContext != nil {
+			if rev.BuildContext.GraphFingerprint == "" {
+				rev.BuildContext.GraphFingerprint = rev.Fingerprint
+			}
+			return rev.BuildContext
+		}
+	}
+
+	// Fallback: inspect repositories table for last_commit_sha and language
+	var lang, commitSHA string
+	err = pool.QueryRow(ctx, `
+		SELECT COALESCE(language, 'go'), COALESCE(last_commit_sha, '')
+		FROM repositories
+		WHERE workspace_id = $1
+		ORDER BY updated_at DESC NULLS LAST
+		LIMIT 1
+	`, workspaceID).Scan(&lang, &commitSHA)
+	if err == nil && commitSHA != "" {
+		bc := analyzer.ResolveBuildContext(".", lang, "", nil)
+		bc.CommitSHA = commitSHA
+		if len(commitSHA) >= 12 {
+			bc.CommitShort = commitSHA[:12]
+		} else {
+			bc.CommitShort = commitSHA
+		}
+		bc.ReceiptHash = bc.ComputeReceiptHash()
+		return bc
+	}
+	return nil
 }

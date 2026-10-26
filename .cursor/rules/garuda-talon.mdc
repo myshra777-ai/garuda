@@ -6,8 +6,8 @@ alwaysApply: true
 
 # GARUDA TALON — ACTIVE ARCHITECTURAL CONTRACT
 
-- **Workspace**: `evidence-corpus-14` (`4ccd1077-ca6f-4182-9b8f-79e1b301bf26`)
-- **Graph Scale**: 0 AST entities | 0 verified edges
+- **Workspace**: `default` (`48416063-0cb2-40ea-b89e-0c92ae6d4c13`)
+- **Graph Scale**: 3730 AST entities | 11064 verified edges
 - **Enforcement Mode**: `ACTIVE (FAIL-CLOSED)`
 
 ## 1. Mandatory Agent Execution Protocol (Non-Negotiable)
@@ -30,8 +30,8 @@ before merge. Add a smoke test or confirm the handler is exercised.
 
 ## 3. Ingested ADR & Documentation Claims (`document_claims`)
 
-- **`[MUST_NOT]`** `HandleDashboard` **MUST_NOT CALLS** `DirectBankAPI` *(source: ADR-0004: Zero-Trust Agent Execution & Pre-Edit Gate, current status: UNVERIFIED)*
-- **`[MUST_NOT]`** `RefundHandler` **MUST_NOT CALLS** `DirectBankAPI` *(source: ADR 0001: Payment Refund Processing, current status: UNVERIFIED)*
+- **`[MUST_NOT]`** `HandleDashboard` **MUST_NOT CALLS** `DirectBankAPI` *(source: ADR-0004: Zero-Trust Agent Execution & Pre-Edit Gate, current status: SUPPORTED)*
+- **`[MUST_NOT]`** `RefundHandler` **MUST_NOT CALLS** `DirectBankAPI` *(source: ADR 0001: Payment Refund Processing, current status: SUPPORTED)*
 - **`[MUST]`** `AppendLeafAndSealTx` **MUST IDEMPOTENT** `IdempotencyKey` *(source: ADR-0004: Zero-Trust Agent Execution & Pre-Edit Gate, current status: UNVERIFIED)*
 - **`[MUST]`** `RefundHandler` **MUST CALLS** `IdempotencyStore` *(source: ADR 0001: Payment Refund Processing, current status: UNVERIFIED)*
 - **`[MUST]`** `RefundHandler` **MUST IDEMPOTENT** `IdempotencyKey` *(source: ADR 0001: Payment Refund Processing, current status: UNVERIFIED)*
@@ -39,4 +39,13 @@ before merge. Add a smoke test or confirm the handler is exercised.
 
 ## 4. High-Blast-Radius Architectural Hubs (Modify With Caution)
 
-- Run `./bin/garuda analyze . --save` to populate workspace hub rankings.
+- **`sqlmodel.main.SQLModel`** (class, 171 inbound edges) — `/home/rohit/garuda-validation/py/sqlmodel/sqlmodel/main.py`
+- **`github.com/myshra777-ai/garuda/internal/store.Pool`** (method, 55 inbound edges) — `/home/rohit/garuda/internal/store/postgres.go`
+- **`github.com/spf13/cobra.Command`** (struct, 49 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
+- **`github.com/myshra777-ai/garuda/internal/api.Valid`** (method, 40 inbound edges) — `/home/rohit/garuda/internal/api/generated.go`
+- **`github.com/spf13/cobra.Name`** (method, 36 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
+- **`github.com/myshra777-ai/garuda/internal/api.RespondWithError`** (method, 33 inbound edges) — `/home/rohit/garuda/internal/api/error.go`
+- **`docs_src.tutorial.fastapi.update.tutorial002_py310.HeroBase`** (class, 30 inbound edges) — `/home/rohit/garuda-validation/py/sqlmodel/docs_src/tutorial/fastapi/update/tutorial002_py310.py`
+- **`github.com/spf13/cobra.Flags`** (method, 29 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
+- **`github.com/spf13/cobra.HasParent`** (method, 26 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
+- **`github.com/myshra777-ai/garuda/test/benchmark/truth_fixtures/020-large-ish/store.PostgresStore`** (struct, 25 inbound edges) — `/home/rohit/garuda/test/benchmark/truth_fixtures/020-large-ish/store/postgres.go`

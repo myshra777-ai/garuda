@@ -775,6 +775,7 @@
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button class="btn-secondary" onclick="openContractModal()">📄 View TALON_CONTRACT.md</button>
                         <button class="btn-secondary" onclick="installTalonHooksFromUI()">🔧 Sync All 6 IDE &amp; Git Hooks</button>
+                        <button class="btn-secondary" onclick="runTalonCheckFromUI('simulate_drift')">🔀 Simulate CI-vs-Editor Drift</button>
                         <button class="btn-secondary" onclick="runTalonCheckFromUI('simulate_violation')">⚡ Simulate Violation &amp; Self-Repair</button>
                         <button class="btn-primary" onclick="runTalonCheckFromUI('run_guard')">▶ Run Diff-Scoped Check (HEAD)</button>
                     </div>
@@ -885,6 +886,86 @@ All active YAML policies (architecture-no-api-to-store-bypass, payment-no-direct
                         </div>
                         <div class="panel-body">
                             <div id="talon-hooks-list" style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deterministic Build-Context Receipt & Cross-Platform Matrix (Theo Valmis Invariant) -->
+                <div class="panel" style="margin-bottom:16px;">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Deterministic Build-Context Receipt &amp; CI-vs-Editor Reproducibility</div>
+                            <div class="panel-subtitle">Every policy gate &amp; Merkle receipt binds Target Platform (`GOOS/GOARCH`), `CGO_ENABLED`, Build Tags (`-tags`), Exact Commit SHA, and Graph Fingerprint so two builds exposing different conditional edges are 100% reproducible.</div>
+                        </div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <span class="badge-pill success" id="talon-drift-badge">0 ENV DRIFT</span>
+                            <button class="btn-secondary" style="height:28px; font-size:11.5px;" onclick="runTalonCheckFromUI('simulate_drift')">🔀 Simulate CI vs Local Editor Disagreement</button>
+                            <button class="btn-secondary" style="height:28px; font-size:11.5px;" onclick="runTalonCheckFromUI('matrix_check')">🌐 Verify Cross-Platform Matrix</button>
+                            <button class="btn-primary" style="height:28px; font-size:11.5px;" onclick="copyReproduceCommand()">📋 Copy 1-Line Reproduce Command</button>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-bottom:12px;">
+                            <div class="hook-card">
+                                <div class="hook-card-top">
+                                    <span class="hook-card-title">Target Platform &amp; CGO</span>
+                                    <span class="badge-pill neutral mono" id="receipt-lang-badge">go</span>
+                                </div>
+                                <div class="mono" style="font-size:13px; font-weight:700; color:var(--text);" id="receipt-platform-val">linux/amd64 · CGO=false</div>
+                                <div style="font-size:11px; color:var(--muted);" id="receipt-compiler-val">go/build constraint filter active</div>
+                            </div>
+                            <div class="hook-card">
+                                <div class="hook-card-top">
+                                    <span class="hook-card-title">Build Tags &amp; File Scope</span>
+                                    <span class="badge-pill neutral mono" id="receipt-skipped-badge">3 excluded</span>
+                                </div>
+                                <div class="mono" style="font-size:12.5px; font-weight:700; color:var(--text);" id="receipt-tags-val">tags: [default / purego]</div>
+                                <div style="font-size:11px; color:var(--muted);" id="receipt-files-val">148 active files · 3 conditional skipped</div>
+                            </div>
+                            <div class="hook-card">
+                                <div class="hook-card-top">
+                                    <span class="hook-card-title">Exact Git Commit &amp; Tree</span>
+                                    <span class="badge-pill success mono" id="receipt-tree-badge">CLEAN TREE</span>
+                                </div>
+                                <div class="mono" style="font-size:12.5px; font-weight:700; color:var(--text);" id="receipt-commit-val">HEAD @ 9f8bc3fa41e2</div>
+                                <div style="font-size:11px; color:var(--muted);" id="receipt-manifest-val">go.mod/sum lock: e7a1c904b2d81f30</div>
+                            </div>
+                            <div class="hook-card">
+                                <div class="hook-card-top">
+                                    <span class="hook-card-title">Graph &amp; Receipt Digest</span>
+                                    <span class="merkle-chip" id="receipt-hash-chip">SHA-256</span>
+                                </div>
+                                <div class="mono" style="font-size:12px; font-weight:700; color:var(--text);" id="receipt-fp-val">fp: e4b89c1d3a7f0e29…</div>
+                                <div style="font-size:11px; color:var(--muted);" id="receipt-sha-val">receipt: 6d92a4f01b8e3c71…</div>
+                            </div>
+                        </div>
+
+                        <div id="talon-drift-alert-box" style="display:none; margin-bottom:12px; padding:10px 14px; border-radius:6px; border:1px solid var(--amber-border); background:var(--amber-bg); color:var(--text); font-size:12px;"></div>
+
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px; border-radius:6px; background:var(--surface-2); border:1px solid var(--border); margin-bottom:12px;">
+                            <div style="overflow-x:auto;">
+                                <span style="font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-right:8px;">Deterministic Reproduce Verdict Command:</span>
+                                <code class="mono" style="font-size:12px; font-weight:650; color:var(--text);" id="receipt-reproduce-cmd">GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --commit 9f8bc3fa41e2 --workspace default</code>
+                            </div>
+                            <button class="btn-secondary" style="height:26px; font-size:11px; flex-shrink:0;" onclick="copyReproduceCommand()">Copy Command</button>
+                        </div>
+
+                        <div style="overflow-x:auto;">
+                            <table class="audit-table">
+                                <thead>
+                                    <tr>
+                                        <th>Target Platform (`GOOS/GOARCH`)</th>
+                                        <th>CGO &amp; Build Tags</th>
+                                        <th>Included vs Excluded Files</th>
+                                        <th>Extracted Graph Scale</th>
+                                        <th>Graph Fingerprint (`SHA-256`)</th>
+                                        <th>Gate Verdict &amp; Reproduce</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="talon-matrix-tbody">
+                                    <tr><td colspan="6" style="color:var(--muted); padding:12px;">Loading cross-platform build matrix…</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

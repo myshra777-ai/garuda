@@ -150,3 +150,7 @@ docs/archive/
 docs/TRACKING.md
 docs/specs/README.md
 docs/specs/tenant-tabs.md
+
+# Demo recording scratch artifacts
+garuda_video_build/
+internal/api/bad_violation.go

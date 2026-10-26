@@ -1,3 +1,25 @@
+## [v1.8.0] - 2026-10-26 — Deterministic BuildContext Receipts, Build-Tag/Platform AST Filtering, CI-vs-Editor Drift Detector & Cross-Platform Matrix Gate
+
+### Added
+- **Polyglot Deterministic `BuildContext` Provenance Receipts (`internal/analyzer/build_context.go`)**:
+  - Every `garuda analyze`, `garuda check`, `garuda policy eval`, and `garuda talon guard` execution resolves and records a cryptographic `BuildContext` receipt (`receipt_hash` & `graph_fingerprint`) capturing:
+    - **Git Working-Tree State**: `commit_sha`, `branch`, `worktree_dirty`, `dirty_files_count`, and `dirty_files_hash`.
+    - **Go Build Constraints**: `target_os` (`GOOS`), `target_arch` (`GOARCH`), `cgo_enabled` (`CGO_ENABLED`), `build_tags` (`-tags`), `compiler_version`, `go_mod_hash`, `active_files_count`, and `skipped_by_build_tags_count`.
+    - **Python & TypeScript Environment Hashes**: `python_version`, `sys_platform`, `pyproject.toml`/`requirements.txt` lock hash, `tsconfig.json` hash, `module_resolution`, and `target_es`.
+    - **1-Line Deterministic Reproduction Command (`reproduce_command`)**: Exact `CGO_ENABLED=... GOOS=... GOARCH=... ./bin/garuda talon guard ...` invocation required to reproduce the exact AST graph and policy verdict on any machine or CI runner.
+- **`go/build.Context` Conditional Compilation & Build-Tag Filtering (`internal/analyzer/workspace_analyzer.go`)**:
+  - Evaluates `//go:build`, `// +build`, `_linux.go`, `_darwin.go`, `_windows.go`, and `cgo` file constraints using `go/build.Context.MatchFile` during AST ingestion so conditional edges are accurately included or excluded per target platform.
+  - Verified by `TestTwoBuildsExposeDifferentEdges` (`internal/analyzer/build_context_test.go`), proving two builds of the same commit (`cgo=0` vs `cgo=1 -tags cgo,enterprise`) produce distinct graph fingerprints and edge sets.
+- **CI-vs-Editor Environment Drift Detector (`DetectEnvironmentDrift` in `internal/analyzer/build_context.go` & `internal/policy/engine.go`)**:
+  - Automatically compares the active CLI/IDE/CI execution environment against the recorded workspace graph receipt and flags `TARGET_PLATFORM_MISMATCH`, `CGO_MISMATCH`, `BUILD_TAGS_MISMATCH`, `COMMIT_DRIFT`, `WORKTREE_DIRTY_DRIFT`, and `LANG_CONFIG_DRIFT` before silent false-ALLOW verdicts can occur.
+- **Cross-Platform Build Matrix Verification (`--matrix` on `garuda check` & `garuda talon guard`)**:
+  - Evaluates `linux/amd64 (cgo=0)`, `linux/amd64 (cgo=1, tags=cgo)`, `darwin/arm64 (cgo=1)`, and `windows/amd64 (cgo=0)` in a single pass so developers on macOS/Windows can catch Linux CI or CGO-specific architectural violations locally before pushing.
+- **Merkle-Sealed Build Provenance & Dashboard UI (`internal/merkle/canonical.go`, `internal/api/dashboard_docs_talon.go`, `dashboard.html`, `dashboard.js`)**:
+  - Canonical Merkle leaf encoding (`policy.Evidence.BuildContext`) now cryptographically binds the `BuildContext` receipt into RFC 6962 Merkle blocks and `.garuda/LAST_DECISION.env` Git commit trailers.
+  - Added the **Deterministic Build-Context Provenance Receipt & CI-vs-Editor Drift Check** banner and **Cross-Platform Build Matrix** table to `05 — Talon & Risk Hub` with 1-click **Copy Reproduce Cmd**.
+- **Precision Diff-Scope Symbol Filtering (`internal/policy/evaluator.go` & `internal/talon/talon.go`)**:
+  - Refined `filterEvidenceByDiffScope` and `RunGuard` so modifying a clean symbol in a package or committing documentation changes never reclassifies untouched baseline findings in the same package as net-new violations.
+
 ## [v1.7.0] - 2026-10-26 — Docs & Rules Lineage Graph, Talon & Risk Hub Dashboard, Zero-CDN Offline Engine
 
 ### Added

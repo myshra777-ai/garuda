@@ -16,8 +16,11 @@
 //     .windsurfrules, and .git/hooks/pre-commit + commit-msg).
 //  3. Pre-Flight Context Injection (PreEditBrief) before any file or symbol is edited.
 //  4. Post-Edit Guard & Deterministic Self-Repair Loop (RunGuard & RunHarnessLoop)
-//     that blocks violating edits and feeds structured refactoring instructions
-//     back to the coding agent until ALLOW is reached and Merkle-sealed.
+//     that blocks violating edits, attaches a BuildContext receipt (build tags,
+//     target platform, CGO state, exact commit, graph fingerprint, and 1-command
+//     reproduce string), detects CI-vs-Editor environment drift, and feeds
+//     structured refactoring instructions back to the coding agent until ALLOW
+//     is reached and Merkle-sealed.
 package talon
 
 import (
@@ -34,6 +37,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/myshra777-ai/garuda/internal/analyzer"
 	"github.com/myshra777-ai/garuda/internal/diff"
 	"github.com/myshra777-ai/garuda/internal/impact"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
@@ -73,17 +77,34 @@ type HubSummary struct {
 	InboundEdges int    `json:"inbound_edges"`
 }
 
+// MatrixTargetVerdict summarizes a single build-target evaluation in a multi-platform matrix pass.
+type MatrixTargetVerdict struct {
+	TargetPlatform          string   `json:"target_platform"`
+	CGOEnabled              bool     `json:"cgo_enabled"`
+	BuildTags               []string `json:"build_tags"`
+	ActiveFilesCount        int      `json:"active_files_count"`
+	SkippedByBuildTagsCount int      `json:"skipped_by_build_tags_count"`
+	SkippedFilesSample      []string `json:"skipped_files_sample,omitempty"`
+	EntitiesCount           int      `json:"entities_count"`
+	EdgesCount              int      `json:"edges_count"`
+	GraphFingerprint        string   `json:"graph_fingerprint"`
+	ReceiptHash             string   `json:"receipt_hash"`
+	Outcome                 string   `json:"outcome"`
+	ReproduceCommand        string   `json:"reproduce_command"`
+}
+
 // WorkspaceContract is the compiled architectural contract injected into coding agents.
 type WorkspaceContract struct {
-	WorkspaceName string            `json:"workspace_name"`
-	WorkspaceID   string            `json:"workspace_id"`
-	CompiledAt    string            `json:"compiled_at"`
-	EntityCount   int               `json:"entity_count"`
-	ClaimCount    int               `json:"claim_count"`
-	ADRGuardrails []ADRGuardrail    `json:"adr_guardrails"`
-	Policies      []PolicyGuardrail `json:"policies"`
-	TopHubs       []HubSummary      `json:"top_hubs"`
-	Markdown      string            `json:"markdown"`
+	WorkspaceName string                 `json:"workspace_name"`
+	WorkspaceID   string                 `json:"workspace_id"`
+	CompiledAt    string                 `json:"compiled_at"`
+	EntityCount   int                    `json:"entity_count"`
+	ClaimCount    int                    `json:"claim_count"`
+	ADRGuardrails []ADRGuardrail         `json:"adr_guardrails"`
+	Policies      []PolicyGuardrail      `json:"policies"`
+	TopHubs       []HubSummary           `json:"top_hubs"`
+	BuildContext  *analyzer.BuildContext `json:"build_context,omitempty"`
+	Markdown      string                 `json:"markdown"`
 }
 
 // CompileContract queries PostgreSQL and the policy directory to synthesize the
@@ -94,10 +115,23 @@ func CompileContract(
 	tenantID, workspaceID uuid.UUID,
 	workspaceName, policyDir string,
 ) (*WorkspaceContract, error) {
+	repoDir := "."
+	if policyDir != "" {
+		repoDir = filepath.Dir(policyDir)
+	}
+	buildCtx := analyzer.ResolveBuildContext(repoDir, "", workspaceName, nil)
+	if pool != nil {
+		if rec := store.GetLatestRecordedBuildContext(ctx, pool, tenantID, workspaceID); rec != nil && rec.GraphFingerprint != "" {
+			buildCtx.GraphFingerprint = rec.GraphFingerprint
+			buildCtx.ReceiptHash = buildCtx.ComputeReceiptHash()
+		}
+	}
+
 	c := &WorkspaceContract{
 		WorkspaceName: workspaceName,
 		WorkspaceID:   workspaceID.String(),
 		CompiledAt:    time.Now().UTC().Format(time.RFC3339),
+		BuildContext:  buildCtx,
 	}
 
 	if pool != nil {
@@ -183,6 +217,10 @@ func RenderContractMarkdown(c *WorkspaceContract) string {
 	b.WriteString("# GARUDA TALON — ACTIVE ARCHITECTURAL CONTRACT\n\n")
 	b.WriteString(fmt.Sprintf("- **Workspace**: `%s` (`%s`)\n", c.WorkspaceName, c.WorkspaceID))
 	b.WriteString(fmt.Sprintf("- **Graph Scale**: %d AST entities | %d verified edges\n", c.EntityCount, c.ClaimCount))
+	if c.BuildContext != nil {
+		b.WriteString(fmt.Sprintf("- **Build Receipt**: `%s`\n", c.BuildContext.SummaryLine()))
+		b.WriteString(fmt.Sprintf("- **Reproduce Command**: `%s`\n", c.BuildContext.ReproduceCommand))
+	}
 	b.WriteString("- **Enforcement Mode**: `ACTIVE (FAIL-CLOSED)`\n\n")
 
 	b.WriteString("## 1. Mandatory Agent Execution Protocol (Non-Negotiable)\n\n")
@@ -273,6 +311,7 @@ func InstallHooks(
 			WorkspaceName: workspaceName,
 			WorkspaceID:   "auto",
 			CompiledAt:    time.Now().UTC().Format(time.RFC3339),
+			BuildContext:  analyzer.ResolveBuildContext(absRoot, "", workspaceName, nil),
 		})
 	}
 
@@ -377,7 +416,7 @@ fi
 
 		commitMsgPath := filepath.Join(gitHooksDir, "commit-msg")
 		commitMsgScript := `#!/usr/bin/env bash
-# Garuda Talon Cryptographic Provenance Trailer
+# Garuda Talon Cryptographic & Build-Context Provenance Trailer
 COMMIT_MSG_FILE="$1"
 if [ -f ".garuda/LAST_DECISION.env" ]; then
   source ".garuda/LAST_DECISION.env"
@@ -385,6 +424,8 @@ if [ -f ".garuda/LAST_DECISION.env" ]; then
     echo "" >> "$COMMIT_MSG_FILE"
     echo "Garuda-Governance-Outcome: ${GARUDA_LAST_OUTCOME}" >> "$COMMIT_MSG_FILE"
     [ -n "${GARUDA_LAST_MERKLE_BLOCK:-}" ] && echo "Garuda-Merkle-Block: #${GARUDA_LAST_MERKLE_BLOCK}" >> "$COMMIT_MSG_FILE"
+    [ -n "${GARUDA_BUILD_RECEIPT:-}" ] && echo "Garuda-Build-Receipt: ${GARUDA_BUILD_RECEIPT}" >> "$COMMIT_MSG_FILE"
+    [ -n "${GARUDA_REPRODUCE_CMD:-}" ] && echo "Garuda-Reproduce: ${GARUDA_REPRODUCE_CMD}" >> "$COMMIT_MSG_FILE"
   fi
 fi
 `
@@ -422,14 +463,15 @@ func upsertMarkedSection(filePath, sectionContent string) {
 
 // PreEditBriefing is the structured pre-flight guidance returned before an agent edits a file or symbol.
 type PreEditBriefing struct {
-	Workspace         string            `json:"workspace"`
-	Target            string            `json:"target"`
-	MatchedEntities   []HubSummary      `json:"matched_entities"`
-	BlastRadiusTotal  int               `json:"blast_radius_total"`
-	BySeverity        map[string]int    `json:"by_severity"`
-	ApplicableADRs    []ADRGuardrail    `json:"applicable_adrs"`
-	ActivePolicies    []PolicyGuardrail `json:"active_policies"`
-	MandatoryProtocol []string          `json:"mandatory_protocol"`
+	Workspace         string                 `json:"workspace"`
+	Target            string                 `json:"target"`
+	MatchedEntities   []HubSummary           `json:"matched_entities"`
+	BlastRadiusTotal  int                    `json:"blast_radius_total"`
+	BySeverity        map[string]int         `json:"by_severity"`
+	ApplicableADRs    []ADRGuardrail         `json:"applicable_adrs"`
+	ActivePolicies    []PolicyGuardrail      `json:"active_policies"`
+	BuildContext      *analyzer.BuildContext `json:"build_context,omitempty"`
+	MandatoryProtocol []string               `json:"mandatory_protocol"`
 }
 
 // BuildPreEditBriefing computes targeted pre-edit context for a file path or symbol name.
@@ -449,6 +491,7 @@ func BuildPreEditBriefing(
 		Target:         target,
 		BySeverity:     map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
 		ActivePolicies: contract.Policies,
+		BuildContext:   contract.BuildContext,
 		MandatoryProtocol: []string{
 			"1. Do not introduce direct edges that violate active layer_violation or transitive_claim_exists policies.",
 			"2. Respect all MUST and MUST_NOT ADR claims applicable to the target symbol/package.",
@@ -532,30 +575,37 @@ type GuardOptions struct {
 	NetNewOnly    bool
 	SaveLedger    bool
 	HookMode      bool
+	BuildTarget   *analyzer.BuildTargetSpec
+	Matrix        bool
 }
 
 // GuardVerdict is the structured outcome of `garuda talon guard` or `garuda.talon_verify_edit`.
 type GuardVerdict struct {
-	Workspace               string         `json:"workspace"`
-	Outcome                 string         `json:"outcome"` // ALLOW | WARN | REVIEW | BLOCK
-	AgentShouldProceed      bool           `json:"agent_should_proceed"`
-	TouchedFiles            []string       `json:"touched_files"`
-	TouchedSymbols          []string       `json:"touched_symbols"`
-	TouchedPackages         []string       `json:"touched_packages"`
-	BlastRadiusAffected     int            `json:"blast_radius_affected"`
-	BySeverity              map[string]int `json:"by_severity"`
-	NetNewViolationsCount   int            `json:"net_new_violations_count"`
-	BaselineViolationsCount int            `json:"baseline_violations_count"`
-	ADRContradictionsCount  int            `json:"adr_contradictions_count"`
-	Violations              []string       `json:"violations"`
-	SelfRepairInstructions  []string       `json:"self_repair_instructions"`
-	SelfRepairPrompt        string         `json:"self_repair_prompt,omitempty"`
-	MerkleBlockHeight       *int64         `json:"merkle_block_height,omitempty"`
-	DurationMs              int64          `json:"duration_ms"`
+	Workspace               string                           `json:"workspace"`
+	Outcome                 string                           `json:"outcome"` // ALLOW | WARN | REVIEW | BLOCK
+	AgentShouldProceed      bool                             `json:"agent_should_proceed"`
+	TouchedFiles            []string                         `json:"touched_files"`
+	TouchedSymbols          []string                         `json:"touched_symbols"`
+	TouchedPackages         []string                         `json:"touched_packages"`
+	BlastRadiusAffected     int                              `json:"blast_radius_affected"`
+	BySeverity              map[string]int                   `json:"by_severity"`
+	NetNewViolationsCount   int                              `json:"net_new_violations_count"`
+	BaselineViolationsCount int                              `json:"baseline_violations_count"`
+	ADRContradictionsCount  int                              `json:"adr_contradictions_count"`
+	Violations              []string                         `json:"violations"`
+	SelfRepairInstructions  []string                         `json:"self_repair_instructions"`
+	SelfRepairPrompt        string                           `json:"self_repair_prompt,omitempty"`
+	MerkleBlockHeight       *int64                           `json:"merkle_block_height,omitempty"`
+	BuildContext            *analyzer.BuildContext           `json:"build_context,omitempty"`
+	EnvironmentDrift        *analyzer.EnvironmentDriftReport `json:"environment_drift,omitempty"`
+	MatrixResults           []MatrixTargetVerdict            `json:"matrix_results,omitempty"`
+	ReproduceCommand        string                           `json:"reproduce_command,omitempty"`
+	DurationMs              int64                            `json:"duration_ms"`
 }
 
 // RunGuard executes the full Talon verification pass on the current working tree
-// or diff, returning a deterministic GuardVerdict and writing `.garuda/LAST_DECISION.env`.
+// or diff, returning a deterministic GuardVerdict with full BuildContext receipt
+// and writing `.garuda/LAST_DECISION.env`.
 func RunGuard(
 	ctx context.Context,
 	st *store.PostgresStore,
@@ -570,6 +620,13 @@ func RunGuard(
 	policyDir := opts.PolicyDir
 	if policyDir == "" {
 		policyDir = filepath.Join(absRepo, "policies")
+	}
+
+	activeBuildCtx := analyzer.ResolveBuildContext(absRepo, "", opts.WorkspaceName, opts.BuildTarget)
+	recordedBuildCtx := store.GetLatestRecordedBuildContext(ctx, st.Pool(), tenantID, workspaceID)
+	if recordedBuildCtx != nil && activeBuildCtx.GraphFingerprint == "" {
+		activeBuildCtx.GraphFingerprint = recordedBuildCtx.GraphFingerprint
+		activeBuildCtx.ReceiptHash = activeBuildCtx.ComputeReceiptHash()
 	}
 
 	mode, deltas, _ := diff.CollectGitDeltas(absRepo, opts.Staged, opts.DiffRev, opts.ExplicitFiles)
@@ -600,44 +657,18 @@ func RunGuard(
 		}
 	}
 
-	// Verify ADR document_claims against current AST
-	adrContradictions := 0
-	var violations []string
-	var repairs []string
-
-	ke := knowledge.NewEvaluator(st.Pool())
-	if kStats, _, kErr := ke.EvaluateWorkspace(ctx, tenantID, workspaceID); kErr == nil && kStats != nil {
-		adrContradictions = kStats.Contradicted
-	}
-	if adrContradictions > 0 {
-		rows, rErr := st.Pool().Query(ctx, `
-			SELECT COALESCE(document_title, 'ADR'), subject, modality, predicate, object, COALESCE(contradiction_reason, '')
-			FROM document_claims
-			WHERE tenant_id = $1 AND workspace_id = $2 AND status = 'CONTRADICTED'
-		`, tenantID, workspaceID)
-		if rErr == nil {
-			for rows.Next() {
-				var doc, subj, mod, pred, obj, rsn string
-				if rows.Scan(&doc, &subj, &mod, &pred, &obj, &rsn) == nil {
-					msg := fmt.Sprintf("[ADR:%s] %s %s %s %s (%s)", doc, subj, mod, pred, obj, rsn)
-					violations = append(violations, msg)
-					repairs = append(repairs, fmt.Sprintf("Remove forbidden %s edge from `%s` to `%s` to satisfy %s.", pred, subj, obj, doc))
-				}
-			}
-			rows.Close()
-		}
-	}
-
-	// Build diff scope filter whenever NetNewOnly is active (including when 0 AST symbols
-	// are touched, e.g. documentation/config-only commits or clean trees, so pre-existing
-	// baseline findings are classified as Baseline rather than Net-New).
 	var scopeFilter *policy.DiffScopeFilter
+	touchedNames := make(map[string]bool)
 	if opts.NetNewOnly {
 		entMap := make(map[uuid.UUID]bool)
 		pkgMap := make(map[string]bool)
 		if diffRes != nil {
 			for _, te := range diffRes.TouchedEntities {
 				entMap[te.ID] = true
+				touchedNames[te.Name] = true
+				if te.Package != "" {
+					touchedNames[te.Package+"."+te.Name] = true
+				}
 			}
 			for _, p := range diffRes.TouchedPackages {
 				pkgMap[p] = true
@@ -650,6 +681,45 @@ func RunGuard(
 		}
 	}
 
+	// Verify ADR document_claims against current AST
+	adrContradictions := 0
+	baselineADRContradictions := 0
+	var violations []string
+	var repairs []string
+
+	ke := knowledge.NewEvaluator(st.Pool())
+	_, _, _ = ke.EvaluateWorkspace(ctx, tenantID, workspaceID)
+	rows, rErr := st.Pool().Query(ctx, `
+		SELECT matched_entity_id, COALESCE(document_title, 'ADR'), subject, modality, predicate, object, COALESCE(contradiction_reason, '')
+		FROM document_claims
+		WHERE tenant_id = $1 AND workspace_id = $2 AND status = 'CONTRADICTED'
+	`, tenantID, workspaceID)
+	if rErr == nil {
+		for rows.Next() {
+			var matchedID *uuid.UUID
+			var doc, subj, mod, pred, obj, rsn string
+			if rows.Scan(&matchedID, &doc, &subj, &mod, &pred, &obj, &rsn) == nil {
+				isNetNew := !opts.NetNewOnly
+				if opts.NetNewOnly {
+					if matchedID != nil && scopeFilter != nil && scopeFilter.MatchesEntity(*matchedID, "") {
+						isNetNew = true
+					} else if touchedNames[subj] || touchedNames[obj] {
+						isNetNew = true
+					}
+				}
+				if isNetNew {
+					adrContradictions++
+					msg := fmt.Sprintf("[ADR:%s] %s %s %s %s (%s)", doc, subj, mod, pred, obj, rsn)
+					violations = append(violations, msg)
+					repairs = append(repairs, fmt.Sprintf("Remove forbidden %s edge from `%s` to `%s` to satisfy %s.", pred, subj, obj, doc))
+				} else {
+					baselineADRContradictions++
+				}
+			}
+		}
+		rows.Close()
+	}
+
 	eng := policy.NewEngine(st.Pool())
 	runRes, err := eng.Run(
 		ctx,
@@ -660,8 +730,11 @@ func RunGuard(
 		opts.WorkspaceName,
 		"garuda-talon",
 		policy.RunOptions{
-			DryRun:    !opts.SaveLedger,
-			DiffScope: scopeFilter,
+			DryRun:       !opts.SaveLedger,
+			DiffScope:    scopeFilter,
+			RepoDir:      absRepo,
+			BuildTarget:  opts.BuildTarget,
+			BuildContext: activeBuildCtx,
 		},
 	)
 	if err != nil {
@@ -686,6 +759,11 @@ func RunGuard(
 		outcome = string(policy.DecisionBlock)
 	}
 
+	var matrixResults []MatrixTargetVerdict
+	if opts.Matrix {
+		matrixResults, _ = RunMatrixVerification(ctx, absRepo, opts.WorkspaceName, nil)
+	}
+
 	verdict := &GuardVerdict{
 		Workspace:               opts.WorkspaceName,
 		Outcome:                 outcome,
@@ -693,11 +771,15 @@ func RunGuard(
 		BlastRadiusAffected:     affectedCount,
 		BySeverity:              sevMap,
 		NetNewViolationsCount:   runRes.NetNewViolationsCount + adrContradictions,
-		BaselineViolationsCount: runRes.BaselineViolationsCount,
+		BaselineViolationsCount: runRes.BaselineViolationsCount + baselineADRContradictions,
 		ADRContradictionsCount:  adrContradictions,
 		Violations:              violations,
 		SelfRepairInstructions:  repairs,
 		MerkleBlockHeight:       latestBlock,
+		BuildContext:            runRes.BuildContext,
+		EnvironmentDrift:        runRes.EnvironmentDrift,
+		MatrixResults:           matrixResults,
+		ReproduceCommand:        activeBuildCtx.ReproduceCommand,
 		DurationMs:              time.Since(start).Milliseconds(),
 	}
 
@@ -714,16 +796,78 @@ func RunGuard(
 		verdict.SelfRepairPrompt = BuildSelfRepairPrompt(verdict)
 	}
 
-	// Persist last decision state for git commit-msg trailer hook
+	// Persist last decision state + build context receipt for git commit-msg trailer hook
 	garudaDir := filepath.Join(absRepo, ".garuda")
 	_ = os.MkdirAll(garudaDir, 0755)
 	envLines := fmt.Sprintf("GARUDA_LAST_OUTCOME=%s\n", verdict.Outcome)
 	if verdict.MerkleBlockHeight != nil {
 		envLines += fmt.Sprintf("GARUDA_LAST_MERKLE_BLOCK=%d\n", *verdict.MerkleBlockHeight)
 	}
+	if verdict.BuildContext != nil {
+		envLines += fmt.Sprintf("GARUDA_BUILD_RECEIPT=%q\n", verdict.BuildContext.SummaryLine())
+		envLines += fmt.Sprintf("GARUDA_REPRODUCE_CMD=%q\n", verdict.BuildContext.ReproduceCommand)
+	}
 	_ = os.WriteFile(filepath.Join(garudaDir, "LAST_DECISION.env"), []byte(envLines), 0644)
 
 	return verdict, nil
+}
+
+// RunMatrixVerification evaluates a repository across standard cross-platform & CGO build
+// targets (linux/amd64 cgo=0, linux/amd64 cgo=1, darwin/arm64 cgo=1, windows/amd64 cgo=0)
+// to verify whether conditional compilation or OS-specific files expose hidden edges.
+func RunMatrixVerification(
+	ctx context.Context,
+	repoDir, workspaceName string,
+	customTargets []analyzer.BuildTargetSpec,
+) ([]MatrixTargetVerdict, error) {
+	absRepo, err := filepath.Abs(repoDir)
+	if err != nil {
+		absRepo = repoDir
+	}
+	wsMeta, err := analyzer.DiscoverWorkspace(absRepo)
+	if err != nil {
+		return nil, err
+	}
+
+	cgoFalse := false
+	cgoTrue := true
+	targets := customTargets
+	if len(targets) == 0 {
+		targets = []analyzer.BuildTargetSpec{
+			{TargetOS: "linux", TargetArch: "amd64", CGOEnabled: &cgoFalse, BuildTags: nil},
+			{TargetOS: "linux", TargetArch: "amd64", CGOEnabled: &cgoTrue, BuildTags: []string{"cgo"}},
+			{TargetOS: "darwin", TargetArch: "arm64", CGOEnabled: &cgoTrue, BuildTags: nil},
+			{TargetOS: "windows", TargetArch: "amd64", CGOEnabled: &cgoFalse, BuildTags: nil},
+		}
+	}
+
+	var out []MatrixTargetVerdict
+	for i := range targets {
+		spec := targets[i]
+		res, aErr := analyzer.AnalyzeWorkspaceWithOptions(ctx, wsMeta, analyzer.WorkspaceAnalysisOptions{
+			WorkspaceName: workspaceName,
+			BuildTarget:   &spec,
+		})
+		if aErr != nil || res == nil || res.BuildContext == nil {
+			continue
+		}
+		bc := res.BuildContext
+		out = append(out, MatrixTargetVerdict{
+			TargetPlatform:          bc.TargetPlatform,
+			CGOEnabled:              bc.CGOEnabled,
+			BuildTags:               bc.BuildTags,
+			ActiveFilesCount:        bc.ActiveFilesCount,
+			SkippedByBuildTagsCount: bc.SkippedByBuildTagsCount,
+			SkippedFilesSample:      bc.SkippedFilesSample,
+			EntitiesCount:           len(res.Entities),
+			EdgesCount:              len(res.Relationships),
+			GraphFingerprint:        bc.GraphFingerprint,
+			ReceiptHash:             bc.ReceiptHash,
+			Outcome:                 "ALLOW",
+			ReproduceCommand:        bc.ReproduceCommand,
+		})
+	}
+	return out, nil
 }
 
 // BuildSelfRepairPrompt synthesizes a direct, deterministic prompt that an AI coding
@@ -731,8 +875,13 @@ func RunGuard(
 func BuildSelfRepairPrompt(v *GuardVerdict) string {
 	var b strings.Builder
 	b.WriteString("GARUDA TALON ENFORCEMENT GATE: CHANGE BLOCKED\n")
-	b.WriteString(fmt.Sprintf("Workspace: %s | Outcome: %s | Net-New Violations: %d | ADR Contradictions: %d\n\n",
+	b.WriteString(fmt.Sprintf("Workspace: %s | Outcome: %s | Net-New Violations: %d | ADR Contradictions: %d\n",
 		v.Workspace, v.Outcome, v.NetNewViolationsCount, v.ADRContradictionsCount))
+	if v.BuildContext != nil {
+		b.WriteString(fmt.Sprintf("Build Receipt: %s\n", v.BuildContext.SummaryLine()))
+		b.WriteString(fmt.Sprintf("Reproduce Verdict: %s\n", v.BuildContext.ReproduceCommand))
+	}
+	b.WriteString("\n")
 
 	if len(v.TouchedSymbols) > 0 {
 		b.WriteString("Touched Symbols in Your Diff:\n")

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/analyzer"
 )
 
 // Decision is the outcome of evaluating a policy against a workspace.
@@ -81,7 +82,7 @@ type Predicate struct {
 // Outcome is what happens when all predicates match.
 type Outcome struct {
 	Decision Decision `yaml:"decision" json:"decision"`
-	Reason   string   `yaml:"reason"   json:"reason"`
+	Reason   string   `json:"reason"`
 }
 
 // DiffScopeFilter restricts policy evaluation to net-new violations touching
@@ -110,34 +111,36 @@ func (f *DiffScopeFilter) MatchesEntity(entityID uuid.UUID, pkg string) bool {
 
 // Evaluation is the immutable record of a policy run.
 type Evaluation struct {
-	ID                      uuid.UUID `json:"id"`
-	TenantID                uuid.UUID `json:"tenant_id"`
-	WorkspaceID             uuid.UUID `json:"workspace_id"`
-	PolicyID                uuid.UUID `json:"policy_id"`
-	PolicyExternalID        string    `json:"policy_external_id,omitempty"`
-	PolicyTitle             string    `json:"policy_title,omitempty"`
-	PolicyVersion           string    `json:"policy_version"`
-	Decision                Decision  `json:"decision"`
-	Reason                  string    `json:"reason"`
-	Evidence                Evidence  `json:"evidence"`
-	NetNewViolationsCount   int       `json:"net_new_violations_count"`
-	BaselineViolationsCount int       `json:"baseline_violations_count"`
-	EvaluatedAt             time.Time `json:"evaluated_at"`
-	MerkleBlockHeight       *int64    `json:"merkle_block_height,omitempty"`
-	MerkleProof             []byte    `json:"merkle_proof,omitempty"`
-	SubjectKind             string    `json:"subject_kind,omitempty"`
-	SubjectID               string    `json:"subject_id,omitempty"`
-	Actor                   string    `json:"actor,omitempty"`
+	ID                      uuid.UUID              `json:"id"`
+	TenantID                uuid.UUID              `json:"tenant_id"`
+	WorkspaceID             uuid.UUID              `json:"workspace_id"`
+	PolicyID                uuid.UUID              `json:"policy_id"`
+	PolicyExternalID        string                 `json:"policy_external_id,omitempty"`
+	PolicyTitle             string                 `json:"policy_title,omitempty"`
+	PolicyVersion           string                 `json:"policy_version"`
+	Decision                Decision               `json:"decision"`
+	Reason                  string                 `json:"reason"`
+	Evidence                Evidence               `json:"evidence"`
+	NetNewViolationsCount   int                    `json:"net_new_violations_count"`
+	BaselineViolationsCount int                    `json:"baseline_violations_count"`
+	EvaluatedAt             time.Time              `json:"evaluated_at"`
+	MerkleBlockHeight       *int64                 `json:"merkle_block_height,omitempty"`
+	MerkleProof             []byte                 `json:"merkle_proof,omitempty"`
+	SubjectKind             string                 `json:"subject_kind,omitempty"`
+	SubjectID               string                 `json:"subject_id,omitempty"`
+	Actor                   string                 `json:"actor,omitempty"`
+	BuildContext            *analyzer.BuildContext `json:"build_context,omitempty"`
 }
 
-// Evidence is the set of graph objects that justified the decision.
+// Evidence is the set of graph objects and build provenance that justified the decision.
 // Empty evidence + non-ALLOW decision = the policy fired on absence (e.g., missing verification).
 type Evidence struct {
-	ClaimIDs          []uuid.UUID `json:"claim_ids,omitempty"`
-	EntityIDs         []uuid.UUID `json:"entity_ids,omitempty"`
-	ContradictionIDs  []uuid.UUID `json:"contradiction_ids,omitempty"`
-	MatchedPredicates []string    `json:"matched_predicates"`
-	SnapshotID        *uuid.UUID  `json:"snapshot_id,omitempty"`
-	ReasoningNotes    []string    `json:"reasoning_notes,omitempty"`
-	BaselineNotes     []string    `json:"baseline_notes,omitempty"`
+	ClaimIDs          []uuid.UUID            `json:"claim_ids,omitempty"`
+	EntityIDs         []uuid.UUID            `json:"entity_ids,omitempty"`
+	ContradictionIDs  []uuid.UUID            `json:"contradiction_ids,omitempty"`
+	MatchedPredicates []string               `json:"matched_predicates"`
+	SnapshotID        *uuid.UUID             `json:"snapshot_id,omitempty"`
+	ReasoningNotes    []string               `json:"reasoning_notes,omitempty"`
+	BaselineNotes     []string               `json:"baseline_notes,omitempty"`
+	BuildContext      *analyzer.BuildContext `json:"build_context,omitempty"`
 }

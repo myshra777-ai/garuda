@@ -15,11 +15,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/analyzer"
 	"github.com/myshra777-ai/garuda/internal/diff"
 	"github.com/myshra777-ai/garuda/internal/impact"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
 	"github.com/myshra777-ai/garuda/internal/policy"
 	"github.com/myshra777-ai/garuda/internal/store"
+	"github.com/myshra777-ai/garuda/internal/talon"
 	"github.com/spf13/cobra"
 )
 
@@ -35,42 +37,52 @@ var (
 	checkFilesFlag       string
 	checkNetNewOnlyFlag  bool
 	checkAutoIndexFlag   bool
+	checkTagsFlag        string
+	checkPlatformFlag    string
+	checkCGOFlag         bool
+	checkCommitFlag      string
+	checkMatrixFlag      bool
 )
 
 // ChangeControlDecision represents the unified governance decision across
-// software state, blast radius, runtime/intent evidence, and policy evaluation.
+// software state, blast radius, runtime/intent evidence, build-context receipt,
+// and policy evaluation.
 type ChangeControlDecision struct {
-	Workspace              string             `json:"workspace"`
-	TargetSymbol           string             `json:"target_symbol"`
-	DiffMode               string             `json:"diff_mode,omitempty"`
-	TouchedFiles           []string           `json:"touched_files,omitempty"`
-	TouchedSymbols         []string           `json:"touched_symbols,omitempty"`
-	TouchedPackages        []string           `json:"touched_packages,omitempty"`
-	AffectedEntities       int                `json:"affected_entities"`
-	BySeverity             map[string]int     `json:"by_severity"`
-	EvidenceState          map[string]int64   `json:"evidence_state"`
-	ADRContradictions      int                `json:"adr_contradictions"`
-	PoliciesEvaluated      int                `json:"policies_evaluated"`
-	NetNewViolations       int                `json:"net_new_violations"`
-	BaselineViolations     int                `json:"baseline_violations"`
-	Violations             []string           `json:"violations,omitempty"`
-	SelfRepairInstructions []string           `json:"self_repair_instructions,omitempty"`
-	BlockedBy              *string            `json:"blocked_by,omitempty"`
-	BlockedByPolicy        string             `json:"blocked_by_policy,omitempty"`
-	GovernanceOutcome      string             `json:"governance_outcome"`
-	MerkleBlockHeight      *int64             `json:"merkle_block_height,omitempty"`
-	DurationMs             int64              `json:"duration_ms"`
+	Workspace              string                           `json:"workspace"`
+	TargetSymbol           string                           `json:"target_symbol"`
+	DiffMode               string                           `json:"diff_mode,omitempty"`
+	TouchedFiles           []string                         `json:"touched_files,omitempty"`
+	TouchedSymbols         []string                         `json:"touched_symbols,omitempty"`
+	TouchedPackages        []string                         `json:"touched_packages,omitempty"`
+	AffectedEntities       int                              `json:"affected_entities"`
+	BySeverity             map[string]int                   `json:"by_severity"`
+	EvidenceState          map[string]int64                 `json:"evidence_state"`
+	ADRContradictions      int                              `json:"adr_contradictions"`
+	PoliciesEvaluated      int                              `json:"policies_evaluated"`
+	NetNewViolations       int                              `json:"net_new_violations"`
+	BaselineViolations     int                              `json:"baseline_violations"`
+	Violations             []string                         `json:"violations,omitempty"`
+	SelfRepairInstructions []string                         `json:"self_repair_instructions,omitempty"`
+	BlockedBy              *string                          `json:"blocked_by,omitempty"`
+	BlockedByPolicy        string                           `json:"blocked_by_policy,omitempty"`
+	GovernanceOutcome      string                           `json:"governance_outcome"`
+	MerkleBlockHeight      *int64                           `json:"merkle_block_height,omitempty"`
+	BuildContext           *analyzer.BuildContext           `json:"build_context,omitempty"`
+	EnvironmentDrift       *analyzer.EnvironmentDriftReport `json:"environment_drift,omitempty"`
+	MatrixResults          []talon.MatrixTargetVerdict      `json:"matrix_results,omitempty"`
+	ReproduceCommand       string                           `json:"reproduce_command,omitempty"`
+	DurationMs             int64                            `json:"duration_ms"`
 }
 
 var checkCmd = &cobra.Command{
 	Use:   "check [dir]",
-	Short: "Turn a proposed software change or git diff into an evidence-backed governance decision",
-	Long: `Connects all five Garuda planes in a single change-control decision:
-  01 ANALYZE    — Resolve software state, git-diff touched symbols, and union blast radius
+	Short: "Turn a proposed software change or git diff into an evidence-backed, build-reproducible governance decision",
+	Long: `Connects all five Garuda planes in a single change-control decision with deterministic BuildContext provenance:
+  01 ANALYZE    — Resolve software state, build constraints (GOOS/GOARCH/CGO/BuildTags), git-diff touched symbols, and blast radius
   02 CORRELATE  — Link ADR intent (document_claims), static claims, and runtime evidence
   03 POLICY     — Evaluate declarative and transitive policies (with net-new vs baseline filtering)
-  04 GOVERN     — Determine final outcome (ALLOW, WARN, REVIEW, or BLOCK) + self-repair plan
-  05 VERIFY     — Anchor the decision into the RFC 6962 SHA-256 Merkle ledger`,
+  04 GOVERN     — Determine final outcome (ALLOW, WARN, REVIEW, or BLOCK) + CI-vs-Editor environment drift + self-repair plan
+  05 VERIFY     — Anchor the decision + BuildContext receipt into the RFC 6962 SHA-256 Merkle ledger`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		start := time.Now()
@@ -82,6 +94,22 @@ var checkCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		// Handle --target when passed as os/arch (e.g. --target linux/amd64) vs symbol name
+		platformStr := checkPlatformFlag
+		symbolStr := checkSymbolFlag
+		if platformStr == "" && strings.Contains(symbolStr, "/") &&
+			(strings.HasPrefix(symbolStr, "linux/") || strings.HasPrefix(symbolStr, "darwin/") || strings.HasPrefix(symbolStr, "windows/")) {
+			platformStr = symbolStr
+			symbolStr = ""
+		}
+
+		cgoChanged := cmd.Flags().Changed("cgo") || os.Getenv("CGO_ENABLED") != ""
+		cgoVal := checkCGOFlag
+		if !cmd.Flags().Changed("cgo") && os.Getenv("CGO_ENABLED") != "" {
+			cgoVal = os.Getenv("CGO_ENABLED") == "1" || strings.EqualFold(os.Getenv("CGO_ENABLED"), "true")
+		}
+		targetSpec := buildTargetFromFlags(platformStr, checkTagsFlag, cgoChanged, cgoVal)
 
 		ctx := context.Background()
 		dbURL := getDBURL()
@@ -120,10 +148,12 @@ var checkCmd = &cobra.Command{
 		if isDiffMode {
 			mode, deltas, dErr := diff.CollectGitDeltas(absDir, checkStagedFlag, checkDiffFlag, explicitFiles)
 			if dErr == nil && diff.HasSourceFileDeltas(deltas) && checkAutoIndexFlag {
-				// Synchronize uncommitted working-tree changes before running graph evaluation
 				workspaceFlag = wsName
 				incrementalFlag = true
 				saveFlag = true
+				analyzeTargetFlag = platformStr
+				analyzeTagsFlag = checkTagsFlag
+				analyzeCGOFlag = cgoVal
 				if !checkJSONFlag {
 					handleAnalyze(absDir)
 				}
@@ -137,7 +167,7 @@ var checkCmd = &cobra.Command{
 		// 1. Blast Radius for target symbol(s) or union of diff-touched symbols
 		affectedCount := 0
 		sevMap := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-		targetDisplay := checkSymbolFlag
+		targetDisplay := symbolStr
 		if targetDisplay == "" {
 			if diffRes != nil && len(diffRes.TouchedEntities) > 0 {
 				names := make([]string, 0, min(4, len(diffRes.TouchedEntities)))
@@ -174,13 +204,13 @@ var checkCmd = &cobra.Command{
 			for _, sev := range seenAffected {
 				sevMap[string(sev)]++
 			}
-		} else if idxErr == nil && checkSymbolFlag != "" {
+		} else if idxErr == nil && symbolStr != "" {
 			var entityIDStr string
 			_ = st.Pool().QueryRow(ctx, `
 				SELECT id::text FROM entities
 				WHERE workspace_id = $1 AND name = $2 AND kind != 'external'
 				ORDER BY is_exported DESC LIMIT 1
-			`, wsID, checkSymbolFlag).Scan(&entityIDStr)
+			`, wsID, symbolStr).Scan(&entityIDStr)
 
 			if entityIDStr != "" {
 				br := impact.ComputeBlastRadius(idx, entityIDStr, impact.BlastRadiusConfig{
@@ -266,7 +296,15 @@ var checkCmd = &cobra.Command{
 			}
 		}
 
-		// 4. Evaluate Policies & Seal Merkle Receipt
+		// 4. Evaluate Policies & Seal Merkle Receipt (with BuildContext)
+		activeBuildCtx := analyzer.ResolveBuildContext(absDir, "", wsName, targetSpec)
+		if checkCommitFlag != "" {
+			activeBuildCtx.CommitSHA = checkCommitFlag
+			activeBuildCtx.CommitShort = checkCommitFlag[:min(12, len(checkCommitFlag))]
+			activeBuildCtx.ReproduceCommand = activeBuildCtx.FormatReproduceCommand(wsName)
+			activeBuildCtx.ReceiptHash = activeBuildCtx.ComputeReceiptHash()
+		}
+
 		policyDir := checkPoliciesDirFlag
 		if policyDir == "" {
 			policyDir = filepath.Join(absDir, "policies")
@@ -281,8 +319,11 @@ var checkCmd = &cobra.Command{
 			wsName,
 			"garuda-check-cli",
 			policy.RunOptions{
-				DryRun:    !checkSaveFlag,
-				DiffScope: scopeFilter,
+				DryRun:       !checkSaveFlag,
+				DiffScope:    scopeFilter,
+				RepoDir:      absDir,
+				BuildTarget:  targetSpec,
+				BuildContext: activeBuildCtx,
 			},
 		)
 		if err != nil {
@@ -322,6 +363,11 @@ var checkCmd = &cobra.Command{
 			blockedByStr = &s
 		}
 
+		var matrixResults []talon.MatrixTargetVerdict
+		if checkMatrixFlag {
+			matrixResults, _ = talon.RunMatrixVerification(ctx, absDir, wsName, nil)
+		}
+
 		decision := ChangeControlDecision{
 			Workspace:              wsName,
 			TargetSymbol:           targetDisplay,
@@ -338,7 +384,13 @@ var checkCmd = &cobra.Command{
 			BlockedByPolicy:        runRes.BlockedByPolicyID,
 			GovernanceOutcome:      outcome,
 			MerkleBlockHeight:      latestBlock,
+			BuildContext:           runRes.BuildContext,
+			EnvironmentDrift:       runRes.EnvironmentDrift,
+			MatrixResults:          matrixResults,
 			DurationMs:             time.Since(start).Milliseconds(),
+		}
+		if runRes.BuildContext != nil {
+			decision.ReproduceCommand = runRes.BuildContext.ReproduceCommand
 		}
 		if diffRes != nil {
 			decision.DiffMode = diffRes.Mode
@@ -359,6 +411,20 @@ var checkCmd = &cobra.Command{
 			fmt.Println("║               GARUDA CHANGE-CONTROL DECISION                      ║")
 			fmt.Println("╚═══════════════════════════════════════════════════════════════════╝")
 			fmt.Printf("  Change:      %s (workspace: %s)\n", decision.TargetSymbol, decision.Workspace)
+			if decision.BuildContext != nil {
+				bc := decision.BuildContext
+				fmt.Printf("  Build Env:   %s\n", bc.SummaryLine())
+				if bc.ReceiptHash != "" {
+					fmt.Printf("  Receipt SHA: %s\n", bc.ReceiptHash[:min(16, len(bc.ReceiptHash))])
+				}
+				fmt.Printf("  Reproduce:   %s\n", bc.ReproduceCommand)
+			}
+			if decision.EnvironmentDrift != nil && decision.EnvironmentDrift.DriftDetected {
+				fmt.Printf("  Env Drift:   ⚠️  %s\n", decision.EnvironmentDrift.Summary)
+				for _, d := range decision.EnvironmentDrift.Discrepancies {
+					fmt.Printf("               • %s\n", d)
+				}
+			}
 			if len(decision.TouchedFiles) > 0 {
 				fmt.Printf("  Diff Scope:  %d file(s), %d touched symbol(s)\n",
 					len(decision.TouchedFiles), len(decision.TouchedSymbols))
@@ -371,6 +437,17 @@ var checkCmd = &cobra.Command{
 				decision.PoliciesEvaluated, decision.DurationMs, decision.NetNewViolations, decision.BaselineViolations)
 			if decision.MerkleBlockHeight != nil {
 				fmt.Printf("  Merkle Seal: RFC 6962 block #%d\n", *decision.MerkleBlockHeight)
+			}
+			if len(decision.MatrixResults) > 0 {
+				fmt.Println("  Build Matrix:")
+				for _, mr := range decision.MatrixResults {
+					fpShort := mr.GraphFingerprint
+					if len(fpShort) > 10 {
+						fpShort = fpShort[:10]
+					}
+					fmt.Printf("    • %-14s cgo=%-5t tags=%-8v files=%d (skipped=%d) edges=%d fp=%s [%s]\n",
+						mr.TargetPlatform, mr.CGOEnabled, mr.BuildTags, mr.ActiveFilesCount, mr.SkippedByBuildTagsCount, mr.EdgesCount, fpShort, mr.Outcome)
+				}
 			}
 			fmt.Println("───")
 			fmt.Printf("  GOVERNANCE OUTCOME: %s\n", decision.GovernanceOutcome)
@@ -410,7 +487,12 @@ func sevRank(s impact.SeverityLevel) int {
 
 func init() {
 	checkCmd.Flags().StringVar(&checkSymbolFlag, "symbol", "", "Target symbol or service name being modified")
-	checkCmd.Flags().StringVar(&checkSymbolFlag, "target", "", "Alias for --symbol")
+	checkCmd.Flags().StringVar(&checkSymbolFlag, "target", "", "Target symbol OR target platform (e.g. linux/amd64)")
+	checkCmd.Flags().StringVar(&checkPlatformFlag, "platform", "", "Target platform in os/arch format (e.g. linux/amd64, darwin/arm64, windows/amd64)")
+	checkCmd.Flags().StringVar(&checkTagsFlag, "tags", "", "Comma-separated build tags / environment markers (e.g. integration,purego)")
+	checkCmd.Flags().BoolVar(&checkCGOFlag, "cgo", false, "Enable CGO when evaluating Go //go:build cgo constraints")
+	checkCmd.Flags().StringVar(&checkCommitFlag, "commit", "", "Exact git commit SHA for build-context receipt verification")
+	checkCmd.Flags().BoolVar(&checkMatrixFlag, "matrix", false, "Verify graph across cross-platform build matrix (linux/amd64, darwin/arm64, windows/amd64, cgo/purego)")
 	checkCmd.Flags().StringVar(&checkDiffFlag, "diff", "", "Git revision or range to target (e.g. HEAD~1..HEAD or main...HEAD)")
 	checkCmd.Flags().BoolVar(&checkStagedFlag, "staged", false, "Target staged git index changes (git diff --cached)")
 	checkCmd.Flags().StringVar(&checkFilesFlag, "files", "", "Comma-separated list of modified files to target")

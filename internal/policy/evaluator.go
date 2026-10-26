@@ -161,8 +161,8 @@ func filterEvidenceByDiffScope(predType string, in Evidence, scope *DiffScopeFil
 				break
 			}
 		}
-		// Also check if any touched package name appears in the reasoning note
-		if !noteMatches && len(scope.TouchedPackages) > 0 {
+		// Only fall back to package-name matching for package-level cycle_exists predicates
+		if !noteMatches && predType == "cycle_exists" && len(scope.TouchedPackages) > 0 {
 			for pkg := range scope.TouchedPackages {
 				if pkg != "" && strings.Contains(note, pkg) {
 					noteMatches = true

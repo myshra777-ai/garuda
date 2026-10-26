@@ -17,14 +17,17 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 // WorkspaceAnalysisOptions configures workspace analysis parameters.
 type WorkspaceAnalysisOptions struct {
-	TenantID uuid.UUID
-	Cache    PackageCache
+	TenantID      uuid.UUID
+	WorkspaceName string
+	Cache         PackageCache
+	BuildTarget   *BuildTargetSpec
 }
 
 // AnalyzeWorkspace orchestrates analysis with default options.
@@ -32,26 +35,35 @@ func AnalyzeWorkspace(ctx context.Context, ws *WorkspaceContext) (*Result, error
 	return AnalyzeWorkspaceWithOptions(ctx, ws, WorkspaceAnalysisOptions{})
 }
 
-// AnalyzeWorkspaceWithOptions orchestrates full AST parsing, cross-module type checking,
-// and semantic relationship extraction with incremental caching support.
+// AnalyzeWorkspaceWithOptions orchestrates full AST parsing, go/build constraint filtering,
+// cross-module type checking, and semantic relationship extraction with incremental caching support.
 func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts WorkspaceAnalysisOptions) (*Result, error) {
 	if ws == nil || len(ws.Modules) == 0 {
 		return nil, fmt.Errorf("cannot analyze empty workspace context")
 	}
+
+	buildCtx := ResolveBuildContext(ws.RootPath, "go", opts.WorkspaceName, opts.BuildTarget)
+	goBuildCtx := buildCtx.NewGoBuildContext()
 
 	fset := token.NewFileSet()
 	imp := NewMultiModuleImporter(fset, ws)
 
 	result := &Result{
 		Source:        ws.RootPath,
+		AnalyzedAt:    time.Now().UTC(),
 		Entities:      make([]Entity, 0),
 		Relationships: make([]Relationship, 0),
 		Stats:         Stats{},
+		BuildContext:  buildCtx,
 	}
 
 	packageFiles := make(map[string][]*ast.File)
 	packageHashes := make(map[string][]byte)
 	repoHasher := sha256.New()
+	// Bind target platform, CGO state, and build tags into the graph fingerprint
+	// so two builds of the same repo with different build constraints produce distinct fingerprints.
+	repoHasher.Write(fmt.Appendf(nil, "build:%s/%s:cgo=%t:tags=%s:",
+		buildCtx.TargetOS, buildCtx.TargetArch, buildCtx.CGOEnabled, strings.Join(buildCtx.BuildTags, ",")))
 
 	var sortedPkgPaths []string
 	for pkgPath := range ws.PackageRoots {
@@ -63,10 +75,16 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 
 	for _, pkgPath := range sortedPkgPaths {
 		dirPath := ws.PackageRoots[pkgPath]
-		treeHash, err := ComputePackageTreeHash(dirPath)
+		rawTreeHash, err := ComputePackageTreeHash(dirPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compute tree hash for %s: %w", pkgPath, err)
 		}
+		// Mix build context into package cache hash so cached packages never leak across GOOS/GOARCH/BuildTags
+		pkgCtxHasher := sha256.New()
+		pkgCtxHasher.Write(rawTreeHash)
+		pkgCtxHasher.Write(fmt.Appendf(nil, "|%s/%s|cgo=%t|tags=%s",
+			buildCtx.TargetOS, buildCtx.TargetArch, buildCtx.CGOEnabled, strings.Join(buildCtx.BuildTags, ",")))
+		treeHash := pkgCtxHasher.Sum(nil)
 		packageHashes[pkgPath] = treeHash
 
 		repoHasher.Write(fmt.Appendf(nil, "%s:%x:", pkgPath, treeHash))
@@ -86,7 +104,9 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		}
 	}
 
-	result.Fingerprint = fmt.Sprintf("%x", repoHasher.Sum(nil))
+	skippedCount := 0
+	var skippedSample []string
+	const maxSkippedSample = 12
 
 	for _, pkgPath := range packagesToParse {
 		dirPath := ws.PackageRoots[pkgPath]
@@ -98,6 +118,19 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		var goFileNames []string
 		for _, entry := range entries {
 			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".go") && !strings.HasSuffix(entry.Name(), "_test.go") {
+				// Enforce go/build constraints (//go:build, // +build, GOOS/GOARCH filename suffixes, cgo)
+				match, matchErr := goBuildCtx.MatchFile(dirPath, entry.Name())
+				if matchErr == nil && !match {
+					skippedCount++
+					if len(skippedSample) < maxSkippedSample {
+						relPath := entry.Name()
+						if rel, rErr := filepath.Rel(ws.RootPath, filepath.Join(dirPath, entry.Name())); rErr == nil {
+							relPath = filepath.ToSlash(rel)
+						}
+						skippedSample = append(skippedSample, relPath)
+					}
+					continue
+				}
 				goFileNames = append(goFileNames, entry.Name())
 			}
 		}
@@ -123,6 +156,16 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 			packageFiles[pkgPath] = parsedFiles
 		}
 	}
+
+	// Include active matched file count in fingerprint
+	repoHasher.Write(fmt.Appendf(nil, "active_files=%d:skipped=%d", result.Stats.Files, skippedCount))
+	result.Fingerprint = fmt.Sprintf("%x", repoHasher.Sum(nil))
+	buildCtx.ActiveFilesCount = result.Stats.Files
+	buildCtx.SkippedByBuildTagsCount = skippedCount
+	buildCtx.SkippedFilesSample = skippedSample
+	buildCtx.GraphFingerprint = result.Fingerprint
+	buildCtx.ReceiptHash = buildCtx.ComputeReceiptHash()
+	buildCtx.ReproduceCommand = buildCtx.FormatReproduceCommand(opts.WorkspaceName)
 
 	typeErrors := 0
 	var typeDiagnostics []string

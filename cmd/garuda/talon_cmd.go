@@ -32,6 +32,10 @@ var (
 	talonJSONFlag        bool
 	talonMaxRetriesFlag  int
 	talonAutoIndexFlag   bool
+	talonTagsFlag        string
+	talonPlatformFlag    string
+	talonCGOFlag         bool
+	talonMatrixFlag      bool
 )
 
 var talonCmd = &cobra.Command{
@@ -44,7 +48,7 @@ Subcommands:
   init      Compile .garuda/TALON_CONTRACT.md and install active IDE & Git hooks
   contract  Print or regenerate the active workspace architectural & ADR contract
   brief     Generate deterministic pre-edit briefing for a file or symbol
-  guard     Run incremental AST sync + diff-scoped policy & ADR check + self-repair output
+  guard     Run incremental AST sync + diff-scoped policy & ADR check + build receipt + self-repair output
   run       Supervisor loop: run an agent command and auto-loop self-repair until ALLOW`,
 }
 
@@ -225,6 +229,9 @@ var talonBriefCmd = &cobra.Command{
 		}
 
 		fmt.Printf("🦅 GARUDA TALON PRE-EDIT BRIEFING (workspace: %s, target: %s)\n", brief.Workspace, brief.Target)
+		if brief.BuildContext != nil {
+			fmt.Printf("  • Build Receipt:   %s\n", brief.BuildContext.SummaryLine())
+		}
 		fmt.Printf("  • Transitive Blast Radius: %d entities (CRITICAL=%d, HIGH=%d)\n",
 			brief.BlastRadiusTotal, brief.BySeverity["CRITICAL"], brief.BySeverity["HIGH"])
 		for _, me := range brief.MatchedEntities {
@@ -245,7 +252,7 @@ var talonBriefCmd = &cobra.Command{
 
 var talonGuardCmd = &cobra.Command{
 	Use:   "guard [repo_dir]",
-	Short: "Run incremental AST re-indexing + diff-scoped policy & ADR verification + self-repair output",
+	Short: "Run incremental AST re-indexing + diff-scoped policy & ADR verification + build receipt + self-repair output",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repoDir := "."
@@ -256,6 +263,13 @@ var talonGuardCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		cgoChanged := cmd.Flags().Changed("cgo") || os.Getenv("CGO_ENABLED") != ""
+		cgoVal := talonCGOFlag
+		if !cmd.Flags().Changed("cgo") && os.Getenv("CGO_ENABLED") != "" {
+			cgoVal = os.Getenv("CGO_ENABLED") == "1" || strings.EqualFold(os.Getenv("CGO_ENABLED"), "true")
+		}
+		targetSpec := buildTargetFromFlags(talonPlatformFlag, talonTagsFlag, cgoChanged, cgoVal)
 
 		ctx := context.Background()
 		dbURL := getDBURL()
@@ -295,6 +309,9 @@ var talonGuardCmd = &cobra.Command{
 				workspaceFlag = wsName
 				incrementalFlag = true
 				saveFlag = true
+				analyzeTargetFlag = talonPlatformFlag
+				analyzeTagsFlag = talonTagsFlag
+				analyzeCGOFlag = cgoVal
 				if !talonJSONFlag && !talonHookFlag {
 					handleAnalyze(absRepo)
 				}
@@ -312,6 +329,8 @@ var talonGuardCmd = &cobra.Command{
 			NetNewOnly:    true,
 			SaveLedger:    true,
 			HookMode:      talonHookFlag,
+			BuildTarget:   targetSpec,
+			Matrix:        talonMatrixFlag,
 		})
 		if err != nil {
 			return err
@@ -333,6 +352,13 @@ var talonGuardCmd = &cobra.Command{
 			fmt.Println("║                  GARUDA TALON ACTIVE GUARD                        ║")
 			fmt.Println("╚═══════════════════════════════════════════════════════════════════╝")
 			fmt.Printf("  Workspace:   %s\n", verdict.Workspace)
+			if verdict.BuildContext != nil {
+				fmt.Printf("  Build Env:   %s\n", verdict.BuildContext.SummaryLine())
+				fmt.Printf("  Reproduce:   %s\n", verdict.BuildContext.ReproduceCommand)
+			}
+			if verdict.EnvironmentDrift != nil && verdict.EnvironmentDrift.DriftDetected {
+				fmt.Printf("  Env Drift:   ⚠️  %s\n", verdict.EnvironmentDrift.Summary)
+			}
 			fmt.Printf("  Diff Scope:  %d file(s), %d touched symbol(s)\n",
 				len(verdict.TouchedFiles), len(verdict.TouchedSymbols))
 			fmt.Printf("  Blast Radius:%d affected entities (CRITICAL=%d, HIGH=%d)\n",
@@ -341,6 +367,17 @@ var talonGuardCmd = &cobra.Command{
 				verdict.NetNewViolationsCount, verdict.BaselineViolationsCount, verdict.ADRContradictionsCount)
 			if verdict.MerkleBlockHeight != nil {
 				fmt.Printf("  Merkle Seal: RFC 6962 block #%d\n", *verdict.MerkleBlockHeight)
+			}
+			if len(verdict.MatrixResults) > 0 {
+				fmt.Println("  Build Matrix:")
+				for _, mr := range verdict.MatrixResults {
+					fpShort := mr.GraphFingerprint
+					if len(fpShort) > 10 {
+						fpShort = fpShort[:10]
+					}
+					fmt.Printf("    • %-14s cgo=%-5t tags=%-8v files=%d (skipped=%d) edges=%d fp=%s [%s]\n",
+						mr.TargetPlatform, mr.CGOEnabled, mr.BuildTags, mr.ActiveFilesCount, mr.SkippedByBuildTagsCount, mr.EdgesCount, fpShort, mr.Outcome)
+				}
 			}
 			fmt.Printf("  OUTCOME:     %s\n", verdict.Outcome)
 			if verdict.SelfRepairPrompt != "" {
@@ -433,6 +470,10 @@ func init() {
 	talonGuardCmd.Flags().BoolVar(&talonStagedFlag, "staged", false, "Check staged git index changes")
 	talonGuardCmd.Flags().StringVar(&talonDiffFlag, "diff", "", "Git revision or range to check")
 	talonGuardCmd.Flags().StringVar(&talonFilesFlag, "files", "", "Comma-separated list of modified files")
+	talonGuardCmd.Flags().StringVar(&talonTagsFlag, "tags", "", "Comma-separated build tags / environment markers")
+	talonGuardCmd.Flags().StringVar(&talonPlatformFlag, "platform", "", "Target platform (os/arch, e.g. linux/amd64)")
+	talonGuardCmd.Flags().BoolVar(&talonCGOFlag, "cgo", false, "Enable CGO when evaluating Go //go:build constraints")
+	talonGuardCmd.Flags().BoolVar(&talonMatrixFlag, "matrix", false, "Run cross-platform build matrix verification")
 	talonGuardCmd.Flags().BoolVar(&talonHookFlag, "hook", false, "Run in IDE/Claude hook mode (exits 2 with self-repair prompt on BLOCK)")
 	talonGuardCmd.Flags().BoolVar(&talonFailOnBlockFlag, "fail-on-block", false, "Exit with code 2 when outcome is BLOCK")
 	talonGuardCmd.Flags().BoolVar(&talonAutoIndexFlag, "auto-index", true, "Incrementally re-index dirty files before evaluating")

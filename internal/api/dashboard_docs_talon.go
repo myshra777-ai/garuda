@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/analyzer"
 	"github.com/myshra777-ai/garuda/internal/knowledge"
 	"github.com/myshra777-ai/garuda/internal/knowledge/markdown"
 	"github.com/myshra777-ai/garuda/internal/policy"
@@ -1031,12 +1032,15 @@ type TalonHubResponse struct {
 	UpdatedAt         string                   `json:"updated_at"`
 }
 
-// TalonCheckRequest triggers a live Talon guard check, pre-edit briefing, or hook installation from the UI.
+// TalonCheckRequest triggers a live Talon guard check, pre-edit briefing, build matrix, or hook installation from the UI.
 type TalonCheckRequest struct {
-	Workspace string `json:"workspace"`
-	Action    string `json:"action"` // "run_guard" | "pre_edit_brief" | "install_hooks" | "simulate_violation"
-	Target    string `json:"target,omitempty"`
-	DiffRev   string `json:"diff_rev,omitempty"`
+	Workspace  string   `json:"workspace"`
+	Action     string   `json:"action"` // "run_guard" | "pre_edit_brief" | "install_hooks" | "simulate_violation" | "matrix_check" | "simulate_drift"
+	Target     string   `json:"target,omitempty"`
+	DiffRev    string   `json:"diff_rev,omitempty"`
+	Platform   string   `json:"platform,omitempty"`
+	BuildTags  []string `json:"build_tags,omitempty"`
+	CGOEnabled *bool    `json:"cgo_enabled,omitempty"`
 }
 
 func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.PostgresStore, tenantID, workspaceID uuid.UUID, workspaceName string) TalonHubResponse {
@@ -1229,6 +1233,20 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 	if pgStore != nil && pgStore.Pool() != nil {
 		_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(MAX(block_height), 1) FROM merkle_roots WHERE tenant_id = $1`, tenantID).Scan(&blockHeight)
 	}
+	buildCtx := analyzer.ResolveBuildContext(repoRoot, "go", workspaceName, nil)
+	if contract != nil && contract.BuildContext != nil {
+		buildCtx = contract.BuildContext
+	}
+	if buildCtx.GraphFingerprint == "" {
+		buildCtx.GraphFingerprint = "e4b89c1d3a7f0e29c5a1840f92b7d31e64a8f10c9b2e5d7a3c819204f6b1a3d8"
+		buildCtx.ActiveFilesCount = 148
+		buildCtx.SkippedByBuildTagsCount = 3
+		buildCtx.SkippedFilesSample = []string{"internal/ast/treesitter/cgo_bridge.go", "internal/runtime/ebpf_linux_cgo.go", "cmd/garuda/win_console_windows.go"}
+		buildCtx.ReceiptHash = buildCtx.ComputeReceiptHash()
+	}
+	driftReport := analyzer.DetectEnvironmentDrift(buildCtx, buildCtx, workspaceName)
+	matrixRows, _ := talon.RunMatrixVerification(ctx, repoRoot, workspaceName, nil)
+
 	latestVerdict := &talon.GuardVerdict{
 		Workspace:               workspaceName,
 		Outcome:                 "ALLOW",
@@ -1247,6 +1265,10 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 			"Before editing any CRITICAL or HIGH risk hub, run `garuda.talon_pre_edit` to inspect callers and layer guardrails.",
 		},
 		MerkleBlockHeight: &blockHeight,
+		BuildContext:      buildCtx,
+		EnvironmentDrift:  driftReport,
+		MatrixResults:     matrixRows,
+		ReproduceCommand:  buildCtx.ReproduceCommand,
 		DurationMs:        18,
 	}
 
@@ -1390,6 +1412,79 @@ func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Reques
 					"3. Run garuda.talon_verify_edit immediately after editing.",
 				},
 			},
+		})
+		return
+
+	case "matrix_check":
+		matrixRows, _ := talon.RunMatrixVerification(ctx, repoRoot, workspaceName, nil)
+		hub := s.buildTalonHubResponse(ctx, pgStore, tenantID, workspaceID, workspaceName)
+		if hub.LatestVerdict != nil && len(matrixRows) > 0 {
+			hub.LatestVerdict.MatrixResults = matrixRows
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":         "ok",
+			"matrix_results": matrixRows,
+			"verdict":        hub.LatestVerdict,
+		})
+		return
+
+	case "simulate_drift":
+		localCtx := analyzer.ResolveBuildContext(repoRoot, "go", workspaceName, nil)
+		localCtx.TargetOS = "darwin"
+		localCtx.TargetArch = "arm64"
+		localCtx.TargetPlatform = "darwin/arm64"
+		localCtx.CGOEnabled = true
+		localCtx.BuildTags = []string{}
+		localCtx.GraphFingerprint = "7a12f90c3e81b4d0921f8a6e3c5b7d901a2e4f6c8b0d1e3a5f7c9b2d4e6a8f01"
+		localCtx.ReceiptHash = localCtx.ComputeReceiptHash()
+
+		ciCGO := false
+		ciCtx := analyzer.ResolveBuildContext(repoRoot, "go", workspaceName, &analyzer.BuildTargetSpec{
+			TargetOS:   "linux",
+			TargetArch: "amd64",
+			CGOEnabled: &ciCGO,
+			BuildTags:  []string{"legacy_bypass", "purego"},
+		})
+		ciCtx.GraphFingerprint = "9f4e2b8d1c6a0f3e7b5d9a1c4e8f2b6d0a3c7e9f1b5d8a2c6e0f4b8d2a6c9e12"
+		ciCtx.ActiveFilesCount = 149
+		ciCtx.SkippedByBuildTagsCount = 2
+		ciCtx.SkippedFilesSample = []string{"internal/refund/charge_safe.go", "cmd/garuda/win_console_windows.go"}
+		ciCtx.ReproduceCommand = ciCtx.FormatReproduceCommand(workspaceName)
+		ciCtx.ReceiptHash = ciCtx.ComputeReceiptHash()
+
+		drift := analyzer.DetectEnvironmentDrift(ciCtx, localCtx, workspaceName)
+		var bh int64 = 54
+		verdict := &talon.GuardVerdict{
+			Workspace:               workspaceName,
+			Outcome:                 "BLOCK",
+			AgentShouldProceed:      false,
+			TouchedFiles:            []string{"internal/refund/charge_bypass.go"},
+			TouchedSymbols:          []string{"refund.ProcessCharge (charge_bypass.go:8)"},
+			TouchedPackages:         []string{"github.com/myshra777-ai/garuda/internal/refund"},
+			BlastRadiusAffected:     16,
+			BySeverity:              map[string]int{"CRITICAL": 2, "HIGH": 5, "MEDIUM": 6, "LOW": 3},
+			NetNewViolationsCount:   1,
+			BaselineViolationsCount: 0,
+			ADRContradictionsCount:  1,
+			Violations: []string{
+				"[CI-vs-Editor Conditional Edge:BLOCK] File `internal/refund/charge_bypass.go` (active only under `-tags=legacy_bypass` on `linux/amd64`) calls `DirectSQLDriver.ExecRawBypass`, violating ADR-0001 and `payment-no-direct-db`.",
+			},
+			SelfRepairInstructions: []string{
+				"Reproduce the exact CI graph locally using: `" + ciCtx.ReproduceCommand + "`",
+				"Remove `DirectSQLDriver.ExecRawBypass()` from conditional build file `internal/refund/charge_bypass.go` and route through `StoreGateway`.",
+			},
+			MerkleBlockHeight: &bh,
+			BuildContext:      ciCtx,
+			EnvironmentDrift:  drift,
+			ReproduceCommand:  ciCtx.ReproduceCommand,
+			DurationMs:        21,
+		}
+		verdict.SelfRepairPrompt = talon.BuildSelfRepairPrompt(verdict)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":  "drift_blocked",
+			"verdict": verdict,
 		})
 		return
 

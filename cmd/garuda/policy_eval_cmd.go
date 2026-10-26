@@ -29,13 +29,15 @@ var policyCmd = &cobra.Command{
 
 A policy is a declarative YAML file expressing intent (authority, scope, rules).
 Every evaluation produces an enforcement decision (ALLOW / WARN / REVIEW / BLOCK)
-with evidence, anchored to the tenant's Merkle ledger.
+with evidence and a BuildContext receipt (build tags, target platform, CGO state,
+exact git commit SHA, graph fingerprint, and 1-command reproduction instruction),
+anchored to the tenant's Merkle ledger.
 
 Commands:
   list                          List active policies in the DB
   validate <dir>                Parse + validate all policies without evaluating
   evaluate <dir>                Run all policies against the workspace, persist results
-  show <evaluation-id>          Show a specific evaluation with evidence
+  show <evaluation-id>          Show a specific evaluation with evidence & build receipt
   verify <evaluation-id>        Verify the Merkle anchor for an evaluation`,
 }
 
@@ -116,7 +118,7 @@ var policyValidateCmd = &cobra.Command{
 		}
 
 		if len(parsed) == 0 {
-			fmt.Println("⚠️  No .yaml or .yml policy files found.")
+			fmt.Println("ℹ️  No .yaml or .yml policy files found.")
 			return nil
 		}
 
@@ -157,6 +159,9 @@ var (
 	policyActorFlag     string
 	policyJSONFlag      bool
 	policyFailOnBlock   bool
+	policyTagsFlag      string
+	policyTargetFlag    string
+	policyCGOFlag       bool
 )
 
 var policyEvaluateCmd = &cobra.Command{
@@ -179,10 +184,6 @@ var policyEvaluateCmd = &cobra.Command{
 			wsName = getWorkspaceName()
 		}
 
-		// Resolve via the tenant-scoped helper. Empty name selects the
-		// most recently updated workspace for the tenant. The previous
-		// code fell back to the literal "default", which matched no
-		// workspace row unless `garuda init` had seeded it.
 		workspaceID, err := store.ResolveWorkspaceID(context.Background(), pool, tenantID, wsName)
 		if err != nil {
 			return fmt.Errorf("resolve workspace %q: %w", wsName, err)
@@ -198,12 +199,23 @@ var policyEvaluateCmd = &cobra.Command{
 		if policyReconcileFlag && !policySaveFlag {
 			return fmt.Errorf("--reconcile requires --save; both are write operations and must be explicit")
 		}
+		cgoChanged := cmd.Flags().Changed("cgo") || os.Getenv("CGO_ENABLED") != ""
+		cgoVal := policyCGOFlag
+		if !cmd.Flags().Changed("cgo") && os.Getenv("CGO_ENABLED") != "" {
+			cgoVal = os.Getenv("CGO_ENABLED") == "1" || strings.EqualFold(os.Getenv("CGO_ENABLED"), "true")
+		}
+		targetSpec := buildTargetFromFlags(policyTargetFlag, policyTagsFlag, cgoChanged, cgoVal)
+
 		ctx := context.Background()
 		engine := policy.NewEngine(pool)
 
 		start := time.Now()
 		result, err := engine.Run(ctx, tenantID, workspaceID, dir, policySubjectKind, policySubjectID, actor,
-			policy.RunOptions{DryRun: !policySaveFlag, Reconcile: policyReconcileFlag})
+			policy.RunOptions{
+				DryRun:      !policySaveFlag,
+				Reconcile:   policyReconcileFlag,
+				BuildTarget: targetSpec,
+			})
 		if err != nil {
 			return fmt.Errorf("engine run failed: %w", err)
 		}
@@ -234,6 +246,13 @@ func printPolicyRunResult(r *policy.RunResult, elapsed time.Duration, wsName str
 	} else {
 		fmt.Printf("Mode:        committed\n")
 	}
+	if r.BuildContext != nil {
+		fmt.Printf("Build Env:   %s\n", r.BuildContext.SummaryLine())
+		fmt.Printf("Reproduce:   %s\n", r.BuildContext.ReproduceCommand)
+	}
+	if r.EnvironmentDrift != nil && r.EnvironmentDrift.DriftDetected {
+		fmt.Printf("Env Drift:   ⚠️  %s\n", r.EnvironmentDrift.Summary)
+	}
 	fmt.Printf("Duration:    %s\n", elapsed.Round(time.Millisecond))
 	fmt.Printf("Policies:    %d evaluated\n", len(r.Evaluations))
 	fmt.Println()
@@ -243,7 +262,6 @@ func printPolicyRunResult(r *policy.RunResult, elapsed time.Duration, wsName str
 		return
 	}
 
-	// Group by decision, highest severity first
 	sorted := append([]*policy.Evaluation{}, r.Evaluations...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		return sorted[i].Decision.Severity() > sorted[j].Decision.Severity()
@@ -301,7 +319,7 @@ func printPolicyRunResult(r *policy.RunResult, elapsed time.Duration, wsName str
 
 var policyShowCmd = &cobra.Command{
 	Use:   "show [evaluation-id]",
-	Short: "Show a specific policy evaluation with evidence",
+	Short: "Show a specific policy evaluation with evidence and build-context receipt",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		pool, err := openPolicyPool()
@@ -321,7 +339,7 @@ var policyShowCmd = &cobra.Command{
 		}
 
 		fmt.Println()
-		fmt.Println("POLICY EVALUATION")
+		fmt.Println("POLICY EVALUATION RECEIPT")
 		fmt.Println(strings.Repeat("═", 65))
 		fmt.Printf("  ID:           %s\n", ev.ID)
 		fmt.Printf("  Policy:       %s (v%s)\n", ev.PolicyID, ev.PolicyVersion)
@@ -329,6 +347,18 @@ var policyShowCmd = &cobra.Command{
 		fmt.Printf("  Subject:      %s/%s\n", ev.SubjectKind, ev.SubjectID)
 		fmt.Printf("  Actor:        %s\n", ev.Actor)
 		fmt.Printf("  Evaluated:    %s\n", ev.EvaluatedAt.Format(time.RFC3339))
+		if ev.Evidence.BuildContext != nil {
+			bc := ev.Evidence.BuildContext
+			fmt.Println()
+			fmt.Println("  Build & Graph Provenance Receipt:")
+			fmt.Printf("    Language:       %s\n", bc.Language)
+			fmt.Printf("    Target Platform:%s/%s (CGO=%t)\n", bc.TargetOS, bc.TargetArch, bc.CGOEnabled)
+			fmt.Printf("    Build Tags:     %v\n", bc.BuildTags)
+			fmt.Printf("    Exact Commit:   %s (dirty=%t)\n", bc.CommitSHA, bc.WorktreeDirty)
+			fmt.Printf("    Graph SHA-256:  %s\n", bc.GraphFingerprint)
+			fmt.Printf("    Receipt SHA-256:%s\n", bc.ReceiptHash)
+			fmt.Printf("    Reproduce Cmd:  %s\n", bc.ReproduceCommand)
+		}
 		fmt.Println()
 		fmt.Printf("  Decision:     %s\n", ev.Decision)
 		fmt.Printf("  Reason:       %s\n", strings.TrimSpace(ev.Reason))
@@ -401,6 +431,10 @@ var policyVerifyCmd = &cobra.Command{
 		if ok {
 			fmt.Printf("✅ Merkle anchor VALID for evaluation %s at block #%d\n",
 				ev.ID, *ev.MerkleBlockHeight)
+			if ev.Evidence.BuildContext != nil {
+				fmt.Printf("   Build Receipt: %s\n", ev.Evidence.BuildContext.SummaryLine())
+				fmt.Printf("   Reproduce:     %s\n", ev.Evidence.BuildContext.ReproduceCommand)
+			}
 		} else {
 			fmt.Printf("❌ Merkle anchor INVALID for evaluation %s\n", ev.ID)
 			os.Exit(1)
@@ -442,6 +476,9 @@ func init() {
 	policyEvaluateCmd.Flags().StringVar(&policySubjectKind, "subject-kind", "manual", "Subject kind (commit | pr | agent_action | manual)")
 	policyEvaluateCmd.Flags().StringVar(&policySubjectID, "subject-id", "", "Subject identifier (commit SHA, PR number, etc.)")
 	policyEvaluateCmd.Flags().StringVar(&policyActorFlag, "actor", "", "Actor (default: GARUDA_AGENT env)")
+	policyEvaluateCmd.Flags().StringVar(&policyTagsFlag, "tags", "", "Comma-separated build tags recorded in the policy receipt")
+	policyEvaluateCmd.Flags().StringVar(&policyTargetFlag, "target", "", "Target platform (os/arch) recorded in the policy receipt")
+	policyEvaluateCmd.Flags().BoolVar(&policyCGOFlag, "cgo", false, "CGO state recorded in the policy receipt")
 	policyEvaluateCmd.Flags().BoolVar(&policyJSONFlag, "json", false, "Output JSON")
 	policyEvaluateCmd.Flags().BoolVar(&policyFailOnBlock, "fail-on-block", false, "Exit non-zero if any policy returns BLOCK")
 	policyEvaluateCmd.Flags().BoolVar(&policyReconcileFlag, "reconcile", false,

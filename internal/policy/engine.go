@@ -10,11 +10,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/myshra777-ai/garuda/internal/analyzer"
+	"github.com/myshra777-ai/garuda/internal/store"
 )
 
 // Engine coordinates policy loading, evaluation, and persistence.
@@ -34,29 +37,36 @@ func NewEngine(pool *pgxpool.Pool) *Engine {
 
 // RunResult is the aggregate outcome of one policy pass.
 type RunResult struct {
-	WorkspaceID             uuid.UUID     `json:"workspace_id"`
-	Evaluations             []*Evaluation `json:"evaluations"`
-	FinalDecision           Decision      `json:"final_decision"` // highest-severity across all
-	BlockedBy               *uuid.UUID    `json:"blocked_by,omitempty"`
-	BlockedByPolicyID       string        `json:"blocked_by_policy_id,omitempty"`
-	BlockedByTitle          string        `json:"blocked_by_title,omitempty"`
-	NetNewViolationsCount   int           `json:"net_new_violations_count"`
-	BaselineViolationsCount int           `json:"baseline_violations_count"`
-	Summary                 string        `json:"summary"`
-	ReconcileCount          int           `json:"reconcile_count"`
-	Preview                 bool          `json:"preview"`
+	WorkspaceID             uuid.UUID                        `json:"workspace_id"`
+	Evaluations             []*Evaluation                    `json:"evaluations"`
+	FinalDecision           Decision                         `json:"final_decision"` // highest-severity across all
+	BlockedBy               *uuid.UUID                       `json:"blocked_by,omitempty"`
+	BlockedByPolicyID       string                           `json:"blocked_by_policy_id,omitempty"`
+	BlockedByTitle          string                           `json:"blocked_by_title,omitempty"`
+	NetNewViolationsCount   int                              `json:"net_new_violations_count"`
+	BaselineViolationsCount int                              `json:"baseline_violations_count"`
+	Summary                 string                           `json:"summary"`
+	ReconcileCount          int                              `json:"reconcile_count"`
+	Preview                 bool                             `json:"preview"`
+	BuildContext            *analyzer.BuildContext           `json:"build_context,omitempty"`
+	EnvironmentDrift        *analyzer.EnvironmentDriftReport `json:"environment_drift,omitempty"`
 }
 
 // RunOptions tunes the behavior of one policy pass.
 type RunOptions struct {
-	DryRun    bool
-	Reconcile bool
-	DiffScope *DiffScopeFilter
+	DryRun       bool
+	Reconcile    bool
+	DiffScope    *DiffScopeFilter
+	RepoDir      string
+	BuildTarget  *analyzer.BuildTargetSpec
+	BuildContext *analyzer.BuildContext
 }
 
 // Run loads all policies under policyDir, evaluates them against the
-// workspace, persists the evaluations, and anchors them to the Merkle
-// ledger.
+// workspace, attaches the deterministic BuildContext receipt (build tags,
+// target platform, CGO state, exact commit SHA, graph fingerprint, and
+// 1-command reproduction string), persists the evaluations, and anchors
+// them to the Merkle ledger.
 //
 // Fail-Closed Invariant: Any policy parse error, predicate evaluation error,
 // or non-dry-run persistence/Merkle anchoring error aborts the pass and returns
@@ -75,16 +85,42 @@ func (e *Engine) Run(
 		return nil, fmt.Errorf("load policies: %w", err)
 	}
 
+	// Resolve active BuildContext and compare against recorded graph BuildContext
+	repoDir := opts.RepoDir
+	if repoDir == "" && policyDir != "" {
+		repoDir = filepath.Dir(policyDir)
+	}
+	if repoDir == "" {
+		repoDir = "."
+	}
+	wsLabel := subjectID
+	if wsLabel == "" {
+		wsLabel = "default"
+	}
+
+	activeBuildCtx := opts.BuildContext
+	if activeBuildCtx == nil {
+		activeBuildCtx = analyzer.ResolveBuildContext(repoDir, "", wsLabel, opts.BuildTarget)
+	}
+	recordedBuildCtx := store.GetLatestRecordedBuildContext(ctx, e.pool, tenantID, workspaceID)
+	if recordedBuildCtx != nil && activeBuildCtx.GraphFingerprint == "" {
+		activeBuildCtx.GraphFingerprint = recordedBuildCtx.GraphFingerprint
+		activeBuildCtx.ReceiptHash = activeBuildCtx.ComputeReceiptHash()
+	}
+	driftReport := analyzer.DetectEnvironmentDrift(recordedBuildCtx, activeBuildCtx, wsLabel)
+
 	// Sort by priority descending (higher = evaluated first)
 	sort.SliceStable(parsed, func(i, j int) bool {
 		return parsed[i].Policy.Priority > parsed[j].Policy.Priority
 	})
 
 	result := &RunResult{
-		WorkspaceID:   workspaceID,
-		FinalDecision: DecisionAllow,
+		WorkspaceID:      workspaceID,
+		FinalDecision:    DecisionAllow,
+		Preview:          dryRun,
+		BuildContext:     activeBuildCtx,
+		EnvironmentDrift: driftReport,
 	}
-	result.Preview = dryRun
 
 	seenStatements := make(map[string]bool, len(parsed))
 
@@ -118,6 +154,8 @@ func (e *Engine) Run(
 		ev.PolicyExternalID = p.ID
 		ev.PolicyTitle = p.Title
 		ev.EvaluatedAt = time.Now().UTC()
+		ev.BuildContext = activeBuildCtx
+		ev.Evidence.BuildContext = activeBuildCtx
 
 		result.NetNewViolationsCount += ev.NetNewViolationsCount
 		result.BaselineViolationsCount += ev.BaselineViolationsCount
@@ -198,9 +236,10 @@ func (e *Engine) Run(
 	}
 
 	result.Summary = fmt.Sprintf(
-		"workspace=%s policies=%d evaluations=%d final=%s net_new=%d baseline=%d",
+		"workspace=%s policies=%d evaluations=%d final=%s net_new=%d baseline=%d (%s)",
 		workspaceID, len(parsed), len(result.Evaluations), result.FinalDecision,
 		result.NetNewViolationsCount, result.BaselineViolationsCount,
+		activeBuildCtx.SummaryLine(),
 	)
 	return result, nil
 }

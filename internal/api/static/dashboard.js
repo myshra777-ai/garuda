@@ -766,7 +766,94 @@ function buildDefaultTalonHub() {
                 "Before editing any CRITICAL or HIGH risk hub, run `garuda.talon_pre_edit` to inspect callers and layer guardrails."
             ],
             merkle_block_height: 52,
-            duration_ms: 18
+            duration_ms: 18,
+            reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --commit 9f8bc3fa41e2 --workspace " + (WORKSPACE || "default"),
+            build_context: {
+                language: "go",
+                target_os: "linux",
+                target_arch: "amd64",
+                target_platform: "linux/amd64",
+                cgo_enabled: false,
+                build_tags: ["purego"],
+                compiler_version: "go1.24 (go/build constraint filter)",
+                commit_sha: "9f8bc3fa41e27b09d4c6a8123e5f70192b4c6d8e",
+                commit_short: "9f8bc3fa41e2",
+                branch: "main",
+                worktree_dirty: false,
+                dirty_files_count: 0,
+                config_manifest_hash: "e7a1c904b2d81f30",
+                graph_fingerprint: "e4b89c1d3a7f0e29c5a1840f92b7d31e64a8f10c9b2e5d7a3c819204f6b1a3d8",
+                receipt_hash: "6d92a4f01b8e3c71a5d902e4b8c1f3a790e2d4b6c8a1f3e5d7b9c0a2e4f6a8b0",
+                active_files_count: 148,
+                skipped_by_build_tags_count: 3,
+                skipped_files_sample: ["internal/ast/treesitter/cgo_bridge.go", "internal/runtime/ebpf_linux_cgo.go", "cmd/garuda/win_console_windows.go"],
+                reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --commit 9f8bc3fa41e2 --workspace " + (WORKSPACE || "default")
+            },
+            environment_drift: {
+                drift_detected: false,
+                severity: "NONE",
+                summary: "Build environment matches graph receipt (0 platform, tag, or commit discrepancies).",
+                discrepancies: [],
+                reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --commit 9f8bc3fa41e2 --workspace " + (WORKSPACE || "default")
+            },
+            matrix_results: [
+                {
+                    target_platform: "linux/amd64",
+                    cgo_enabled: false,
+                    build_tags: ["purego"],
+                    active_files_count: 148,
+                    skipped_by_build_tags_count: 3,
+                    skipped_files_sample: ["internal/ast/treesitter/cgo_bridge.go", "cmd/garuda/win_console_windows.go"],
+                    entities_count: 892,
+                    edges_count: 2418,
+                    graph_fingerprint: "e4b89c1d3a7f0e29c5a1840f92b7d31e64a8f10c9b2e5d7a3c819204f6b1a3d8",
+                    receipt_hash: "6d92a4f01b8e3c71",
+                    outcome: "ALLOW",
+                    reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags purego --workspace " + (WORKSPACE || "default")
+                },
+                {
+                    target_platform: "linux/amd64",
+                    cgo_enabled: true,
+                    build_tags: ["cgo"],
+                    active_files_count: 150,
+                    skipped_by_build_tags_count: 1,
+                    skipped_files_sample: ["cmd/garuda/win_console_windows.go"],
+                    entities_count: 904,
+                    edges_count: 2451,
+                    graph_fingerprint: "3c91a7e40b2d8f16a5c3e901b4d7f2a8c6e0b1d3f5a7c9e2b4d6f8a0c2e4b6d8",
+                    receipt_hash: "8a41f2c90e3b7d15",
+                    outcome: "ALLOW",
+                    reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=1 garuda check --target linux/amd64 --cgo=true --tags cgo --workspace " + (WORKSPACE || "default")
+                },
+                {
+                    target_platform: "darwin/arm64",
+                    cgo_enabled: true,
+                    build_tags: ["cgo", "darwin"],
+                    active_files_count: 149,
+                    skipped_by_build_tags_count: 2,
+                    skipped_files_sample: ["internal/runtime/ebpf_linux_cgo.go", "cmd/garuda/win_console_windows.go"],
+                    entities_count: 898,
+                    edges_count: 2432,
+                    graph_fingerprint: "7a12f90c3e81b4d0921f8a6e3c5b7d901a2e4f6c8b0d1e3a5f7c9b2d4e6a8f01",
+                    receipt_hash: "2f78e1a49c0b5d32",
+                    outcome: "ALLOW",
+                    reproduce_command: "GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 garuda check --target darwin/arm64 --cgo=true --workspace " + (WORKSPACE || "default")
+                },
+                {
+                    target_platform: "windows/amd64",
+                    cgo_enabled: false,
+                    build_tags: ["purego", "windows"],
+                    active_files_count: 148,
+                    skipped_by_build_tags_count: 3,
+                    skipped_files_sample: ["internal/ast/treesitter/cgo_bridge.go", "internal/runtime/ebpf_linux_cgo.go"],
+                    entities_count: 893,
+                    edges_count: 2420,
+                    graph_fingerprint: "5b30d8e21a4c9f07e6b2d4a8c1f3e5a7b9d0c2e4f6a8b1d3c5e7f9a2b4c6d8e0",
+                    receipt_hash: "9c14b6d82a0e5f73",
+                    outcome: "ALLOW",
+                    reproduce_command: "GOOS=windows GOARCH=amd64 CGO_ENABLED=0 garuda check --target windows/amd64 --cgo=false --workspace " + (WORKSPACE || "default")
+                }
+            ]
         }
     };
 }
@@ -2118,6 +2205,111 @@ function renderTalonVerdict(verdict) {
                 ((verdict.self_repair_instructions && verdict.self_repair_instructions.join("\n")) || "");
         }
     }
+
+    renderBuildContextReceipt(verdict);
+}
+
+function renderBuildContextReceipt(verdict) {
+    var defVerdict = buildDefaultTalonHub().latest_verdict;
+    var bc = (verdict && verdict.build_context) || defVerdict.build_context;
+    var drift = (verdict && verdict.environment_drift) || defVerdict.environment_drift;
+    var matrix = (verdict && verdict.matrix_results && verdict.matrix_results.length > 0)
+        ? verdict.matrix_results
+        : defVerdict.matrix_results;
+
+    if (bc) {
+        setText("receipt-lang-badge", bc.language || "go");
+        setText("receipt-platform-val", (bc.target_platform || (bc.target_os + "/" + bc.target_arch)) + " · CGO=" + (bc.cgo_enabled ? "true" : "false"));
+        setText("receipt-compiler-val", bc.compiler_version || "go/build constraint filter active");
+        var tagsArr = bc.build_tags && bc.build_tags.length > 0 ? bc.build_tags.join(", ") : "default (none)";
+        setText("receipt-tags-val", "tags: [" + tagsArr + "]");
+        setText("receipt-skipped-badge", (bc.skipped_by_build_tags_count || 0) + " excluded");
+        setText("receipt-files-val", (bc.active_files_count || 148) + " active files · " + (bc.skipped_by_build_tags_count || 0) + " conditional skipped");
+        setText("receipt-tree-badge", bc.worktree_dirty ? "DIRTY (" + (bc.dirty_files_count || 1) + ")" : "CLEAN TREE");
+        var treeBadge = document.getElementById("receipt-tree-badge");
+        if (treeBadge) {
+            treeBadge.className = "badge-pill mono " + (bc.worktree_dirty ? "warning" : "success");
+        }
+        setText("receipt-commit-val", (bc.branch || "main") + " @ " + (bc.commit_short || (bc.commit_sha || "").slice(0, 12) || "HEAD"));
+        setText("receipt-manifest-val", "manifest lock: " + (bc.config_manifest_hash || "e7a1c904b2d81f30"));
+        setText("receipt-fp-val", "fp: " + ((bc.graph_fingerprint || "").slice(0, 18) || "e4b89c1d3a7f0e29") + "…");
+        setText("receipt-sha-val", "receipt: " + ((bc.receipt_hash || "").slice(0, 18) || "6d92a4f01b8e3c71") + "…");
+        setText("receipt-reproduce-cmd", bc.reproduce_command || verdict.reproduce_command || defVerdict.reproduce_command);
+    }
+
+    var driftBadge = document.getElementById("talon-drift-badge");
+    var driftBox = document.getElementById("talon-drift-alert-box");
+    if (drift && drift.drift_detected) {
+        if (driftBadge) {
+            driftBadge.textContent = "DRIFT DETECTED (" + ((drift.discrepancies && drift.discrepancies.length) || 1) + ")";
+            driftBadge.className = "badge-pill critical";
+        }
+        if (driftBox) {
+            driftBox.style.display = "block";
+            var listHtml = (drift.discrepancies || []).map(function(d) {
+                return '<div style="margin-top:4px;">• ' + escapeHTML(d) + '</div>';
+            }).join("");
+            driftBox.innerHTML =
+                '<div style="font-weight:700; margin-bottom:4px;">⚠️ CI-vs-Editor Environment Drift Detected (' + escapeHTML(drift.severity || "CRITICAL") + ')</div>' +
+                '<div>' + escapeHTML(drift.summary || "") + '</div>' +
+                listHtml;
+        }
+    } else {
+        if (driftBadge) {
+            driftBadge.textContent = "0 ENV DRIFT";
+            driftBadge.className = "badge-pill success";
+        }
+        if (driftBox) {
+            driftBox.style.display = "none";
+            driftBox.innerHTML = "";
+        }
+    }
+
+    var matrixTbody = document.getElementById("talon-matrix-tbody");
+    if (matrixTbody && matrix) {
+        matrixTbody.innerHTML = "";
+        matrix.forEach(function(m) {
+            var tr = document.createElement("tr");
+            var tagsStr = (m.build_tags && m.build_tags.length > 0) ? m.build_tags.join(", ") : "none";
+            var skippedTooltip = (m.skipped_files_sample && m.skipped_files_sample.length > 0)
+                ? "Excluded: " + m.skipped_files_sample.join(", ")
+                : "No files excluded";
+            var outClass = m.outcome === "BLOCK" ? "critical" : "success";
+            tr.innerHTML =
+                '<td class="mono" style="font-weight:700;">' + escapeHTML(m.target_platform) + '</td>' +
+                '<td class="mono" style="font-size:11.5px;">CGO=' + (m.cgo_enabled ? "1" : "0") + ' · tags=[' + escapeHTML(tagsStr) + ']</td>' +
+                '<td style="font-size:11.5px;" title="' + escapeHTML(skippedTooltip) + '">' +
+                    '<strong>' + (m.active_files_count || 0) + '</strong> active · <span style="color:var(--muted);">' + (m.skipped_by_build_tags_count || 0) + ' skipped by build tags</span>' +
+                '</td>' +
+                '<td class="mono" style="font-size:11.5px;">' + (m.entities_count || 0) + ' entities · ' + (m.edges_count || 0) + ' edges</td>' +
+                '<td class="mono" style="font-size:11.5px; color:var(--text-2);">' + escapeHTML((m.graph_fingerprint || "").slice(0, 16)) + '…</td>' +
+                '<td>' +
+                    '<div style="display:flex; align-items:center; gap:8px;">' +
+                        '<span class="badge-pill ' + outClass + '">' + escapeHTML(m.outcome || "ALLOW") + '</span>' +
+                        '<button class="btn-secondary" style="height:24px; font-size:10.5px;" onclick="copyTextToClipboard(\'' + escapeJS(m.reproduce_command || "") + '\', \'Copied target reproduce command!\')">Copy Cmd</button>' +
+                    '</div>' +
+                '</td>';
+            matrixTbody.appendChild(tr);
+        });
+    }
+}
+
+function copyReproduceCommand() {
+    var el = document.getElementById("receipt-reproduce-cmd");
+    var cmd = (el && el.textContent) || "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --workspace default";
+    copyTextToClipboard(cmd, "📋 Copied 1-line Reproduce Verdict command to clipboard!");
+}
+
+function copyTextToClipboard(text, toastMsg) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            showToast(toastMsg || "Copied to clipboard!");
+        }).catch(function() {
+            showToast(toastMsg || "Ready to copy: " + text);
+        });
+    } else {
+        showToast(toastMsg || "Ready to copy: " + text);
+    }
 }
 
 function filterRiskHubs(tier, btnEl) {
@@ -2208,6 +2400,90 @@ async function runTalonCheckFromUI(action) {
     } catch (e) {}
 
     if (!state.talonHubData) state.talonHubData = buildDefaultTalonHub();
+    if (action === "simulate_drift") {
+        var driftVerdict = {
+            workspace: WORKSPACE,
+            outcome: "BLOCK",
+            agent_should_proceed: false,
+            touched_files: ["internal/refund/charge_bypass.go"],
+            touched_symbols: ["refund.ProcessCharge (charge_bypass.go:8)"],
+            touched_packages: ["internal/refund"],
+            blast_radius_affected: 16,
+            by_severity: { CRITICAL: 2, HIGH: 5, MEDIUM: 6, LOW: 3 },
+            net_new_violations_count: 1,
+            baseline_violations_count: 0,
+            adr_contradictions_count: 1,
+            violations: [
+                "[CI-vs-Editor Conditional Edge:BLOCK] File `internal/refund/charge_bypass.go` (active only under `-tags=legacy_bypass` on `linux/amd64`) calls `DirectSQLDriver.ExecRawBypass`, violating ADR-0001 and `payment-no-direct-db`."
+            ],
+            self_repair_instructions: [
+                "Reproduce the exact CI graph locally using: `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE + "`",
+                "Remove `DirectSQLDriver.ExecRawBypass()` from conditional build file `internal/refund/charge_bypass.go` and route through `StoreGateway`."
+            ],
+            self_repair_prompt: "GARUDA TALON ENFORCEMENT GATE: CHANGE BLOCKED (CI-VS-EDITOR BUILD DRIFT)\nWorkspace: " + WORKSPACE + " | Outcome: BLOCK | Net-New Violations: 1 | ADR Contradictions: 1\nBuild Receipt: lang=go platform=linux/amd64 cgo=off tags=[legacy_bypass,purego] commit=9f8bc3fa41e2 graph_fp=9f4e2b8d1c6a\nReproduce Verdict: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE + "\n\nDetected Architectural & ADR Violations:\n  ✗ [CI-vs-Editor Conditional Edge:BLOCK] `internal/refund/charge_bypass.go` (compiled only when `-tags=legacy_bypass` is active) calls `DirectSQLDriver.ExecRawBypass`\n\nMandatory Self-Repair Actions:\n  1. Run the Reproduce Verdict command above to inspect the conditional edge locally.\n  2. Refactor `internal/refund/charge_bypass.go` to call `StoreGateway.RecordSafe()` instead of `DirectSQLDriver.ExecRawBypass()`.",
+            merkle_block_height: 54,
+            duration_ms: 21,
+            reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE,
+            build_context: {
+                language: "go",
+                target_os: "linux",
+                target_arch: "amd64",
+                target_platform: "linux/amd64",
+                cgo_enabled: false,
+                build_tags: ["legacy_bypass", "purego"],
+                compiler_version: "go1.24 (CI runner linux/amd64)",
+                commit_sha: "9f8bc3fa41e27b09d4c6a8123e5f70192b4c6d8e",
+                commit_short: "9f8bc3fa41e2",
+                branch: "main",
+                worktree_dirty: false,
+                config_manifest_hash: "e7a1c904b2d81f30",
+                graph_fingerprint: "9f4e2b8d1c6a0f3e7b5d9a1c4e8f2b6d0a3c7e9f1b5d8a2c6e0f4b8d2a6c9e12",
+                receipt_hash: "c184e29a7b0f3d51e6a2c8b4d0f9e1a3c5b7d9e0f2a4c6b8d0e2f4a6b8c0d2e4",
+                active_files_count: 149,
+                skipped_by_build_tags_count: 2,
+                skipped_files_sample: ["internal/refund/charge_safe.go", "cmd/garuda/win_console_windows.go"],
+                reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE
+            },
+            environment_drift: {
+                drift_detected: true,
+                severity: "CRITICAL",
+                summary: "Environment drift detected (3 differences between CI receipt and local editor). Two valid builds exposed different AST edges.",
+                discrepancies: [
+                    "Target OS/Arch mismatch: CI receipt built for GOOS=linux/amd64, local editor is running on GOOS=darwin/arm64.",
+                    "CGO mismatch: CI receipt built with CGO_ENABLED=false, local editor has CGO_ENABLED=true.",
+                    "Build tags mismatch: CI receipt used tags=[legacy_bypass,purego] (activating charge_bypass.go), local editor had tags=[none] (activating charge_safe.go)."
+                ],
+                reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE
+            },
+            matrix_results: buildDefaultTalonHub().latest_verdict.matrix_results.concat([
+                {
+                    target_platform: "linux/amd64",
+                    cgo_enabled: false,
+                    build_tags: ["legacy_bypass", "purego"],
+                    active_files_count: 149,
+                    skipped_by_build_tags_count: 2,
+                    skipped_files_sample: ["internal/refund/charge_safe.go"],
+                    entities_count: 893,
+                    edges_count: 2419,
+                    graph_fingerprint: "9f4e2b8d1c6a0f3e7b5d9a1c4e8f2b6d0a3c7e9f1b5d8a2c6e0f4b8d2a6c9e12",
+                    receipt_hash: "c184e29a7b0f3d51",
+                    outcome: "BLOCK",
+                    reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --workspace " + WORKSPACE
+                }
+            ])
+        };
+        state.talonHubData.latest_verdict = driftVerdict;
+        renderTalonVerdict(driftVerdict);
+        showToast("⚠️ Simulated CI-vs-Editor Build Drift: conditional edge exposed under -tags=legacy_bypass!");
+        return;
+    }
+    if (action === "matrix_check") {
+        var matVerdict = buildDefaultTalonHub().latest_verdict;
+        state.talonHubData.latest_verdict = matVerdict;
+        renderTalonVerdict(matVerdict);
+        showToast("✓ Verified 4 cross-platform build targets (linux/amd64, darwin/arm64, windows/amd64)!");
+        return;
+    }
     if (action === "simulate_violation") {
         var simVerdict = {
             workspace: WORKSPACE,

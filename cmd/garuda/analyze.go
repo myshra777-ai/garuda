@@ -25,23 +25,27 @@ import (
 )
 
 var (
-	outputFlag         string
-	outputFileFlag     string
-	jsonFlag           bool
-	jsonOutputFlag     bool
-	saveFlag           bool
-	workspaceFlag      string
-	repoFlag           string
-	modulePathFlag     string
-	failOnBreakingFlag bool
-	incrementalFlag    bool
-	analyzeFilesFlag   string
+	outputFlag            string
+	outputFileFlag        string
+	jsonFlag              bool
+	jsonOutputFlag        bool
+	saveFlag              bool
+	workspaceFlag         string
+	repoFlag              string
+	modulePathFlag        string
+	failOnBreakingFlag    bool
+	incrementalFlag       bool
+	analyzeFilesFlag      string
+	analyzeTagsFlag       string
+	analyzeTargetFlag     string
+	analyzeCGOFlag        bool
+	analyzeCommitOverride string
 )
 
 var analyzeCmd = &cobra.Command{
 	Use:   "analyze [path...]",
 	Short: "Analyze a Go, Python, or TypeScript codebase, extract semantic schema, and persist to ledger",
-	Long:  `Analyzes a single repository or local path. Use --save to persist the analysis into the cryptographic ledger, or --incremental to synchronize uncommitted working-tree modifications before running checks.`,
+	Long:  `Analyzes a single repository or local path with deterministic build-context awareness (GOOS/GOARCH, CGO_ENABLED, build tags, and exact git commit SHA). Use --save to persist the analysis into the cryptographic ledger, or --incremental to synchronize uncommitted working-tree modifications before running checks.`,
 	Args:  cobra.ArbitraryArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		path := "."
@@ -67,10 +71,13 @@ func init() {
 	analyzeCmd.Flags().BoolVarP(&saveFlag, "save", "s", false, "Save analysis snapshot into PostgreSQL ledger")
 	analyzeCmd.Flags().StringVar(&workspaceFlag, "workspace", "", "Workspace name (for provenance)")
 	analyzeCmd.Flags().StringVar(&repoFlag, "repo", "", "Repository URL (for provenance)")
-	analyzeCmd.Flags().String("commit", "", "Commit SHA (auto-detected if not provided)")
+	analyzeCmd.Flags().StringVar(&analyzeCommitOverride, "commit", "", "Commit SHA (auto-detected if not provided)")
 	analyzeCmd.Flags().StringVar(&modulePathFlag, "module-path", "", "Go module path (auto-detected if not provided)")
 	analyzeCmd.Flags().BoolVar(&incrementalFlag, "incremental", false, "Fast working-tree incremental sync for dirty files (git status / --files)")
 	analyzeCmd.Flags().StringVar(&analyzeFilesFlag, "files", "", "Comma-separated list of modified files for incremental sync")
+	analyzeCmd.Flags().StringVar(&analyzeTagsFlag, "tags", "", "Comma-separated build tags / environment markers (e.g. integration,purego)")
+	analyzeCmd.Flags().StringVar(&analyzeTargetFlag, "target", "", "Target platform in os/arch format (e.g. linux/amd64, darwin/arm64, windows/amd64)")
+	analyzeCmd.Flags().BoolVar(&analyzeCGOFlag, "cgo", false, "Enable CGO when evaluating Go //go:build cgo constraints")
 
 	diffCmd.Flags().BoolVar(&jsonOutputFlag, "json", false, "Output diff in JSON format")
 	diffCmd.Flags().StringVarP(&outputFileFlag, "output", "o", "", "Write diff to file")
@@ -82,6 +89,24 @@ func init() {
 
 // sharedAnalysisCache keeps an in-process package AST cache across incremental runs.
 var sharedAnalysisCache = analyzer.NewMemoryPackageCache()
+
+func buildTargetFromFlags(targetFlag, tagsFlag string, cgoChanged, cgoVal bool) *analyzer.BuildTargetSpec {
+	osStr, archStr := analyzer.ParseTargetFlag(targetFlag)
+	tags := analyzer.SplitBuildTagsFlag(tagsFlag)
+	if osStr == "" && archStr == "" && len(tags) == 0 && !cgoChanged {
+		return nil
+	}
+	spec := &analyzer.BuildTargetSpec{
+		TargetOS:   osStr,
+		TargetArch: archStr,
+		BuildTags:  tags,
+	}
+	if cgoChanged {
+		c := cgoVal
+		spec.CGOEnabled = &c
+	}
+	return spec
+}
 
 func handleAnalyze(path string) {
 	info, err := os.Stat(path)
@@ -119,6 +144,12 @@ func handleAnalyze(path string) {
 	}
 
 	ctx := context.Background()
+	cgoChanged := analyzeCmd.Flags().Changed("cgo") || os.Getenv("CGO_ENABLED") != ""
+	cgoVal := analyzeCGOFlag
+	if !analyzeCmd.Flags().Changed("cgo") && os.Getenv("CGO_ENABLED") != "" {
+		cgoVal = os.Getenv("CGO_ENABLED") == "1" || strings.EqualFold(os.Getenv("CGO_ENABLED"), "true")
+	}
+	targetSpec := buildTargetFromFlags(analyzeTargetFlag, analyzeTagsFlag, cgoChanged, cgoVal)
 
 	// ─────────────────────────────────────────────────────────────
 	// Language dispatch: Go vs TypeScript vs Python
@@ -140,8 +171,14 @@ func handleAnalyze(path string) {
 			os.Exit(1)
 		}
 
+		wsName := workspaceFlag
+		if wsName == "" {
+			wsName = getWorkspaceName()
+		}
 		opts := analyzer.WorkspaceAnalysisOptions{
-			Cache: sharedAnalysisCache,
+			Cache:         sharedAnalysisCache,
+			WorkspaceName: wsName,
+			BuildTarget:   targetSpec,
 		}
 		if saveFlag || workspaceFlag != "" || repoFlag != "" {
 			if tidStr := os.Getenv("GARUDA_TENANT_ID"); tidStr != "" {
@@ -202,6 +239,19 @@ func handleAnalyze(path string) {
 		os.Exit(1)
 	}
 
+	if result.BuildContext != nil {
+		if analyzeCommitOverride != "" {
+			result.BuildContext.CommitSHA = analyzeCommitOverride
+			result.BuildContext.CommitShort = analyzeCommitOverride[:min(12, len(analyzeCommitOverride))]
+			result.BuildContext.ReceiptHash = result.BuildContext.ComputeReceiptHash()
+		}
+		fmt.Printf("   🧭 Build Receipt: %s\n", result.BuildContext.SummaryLine())
+		if result.BuildContext.SkippedByBuildTagsCount > 0 {
+			fmt.Printf("   🏷️  Conditional Build: %d active file(s), %d file(s) excluded by build tags/platform\n",
+				result.BuildContext.ActiveFilesCount, result.BuildContext.SkippedByBuildTagsCount)
+		}
+	}
+
 	// ─────────────────────────────────────────────────────────────
 	// JSON output
 	// ─────────────────────────────────────────────────────────────
@@ -256,6 +306,10 @@ func handleAnalyze(path string) {
 		fmt.Printf("   Decision ID: %s\n", decisionID)
 		fmt.Printf("   Revision ID: %s\n", revisionID)
 		fmt.Printf("   Revision:    #%d\n", rev)
+		if result.BuildContext != nil {
+			fmt.Printf("   Receipt SHA: %s\n", result.BuildContext.ReceiptHash[:min(16, len(result.BuildContext.ReceiptHash))])
+			fmt.Printf("   Reproduce:   %s\n", result.BuildContext.ReproduceCommand)
+		}
 		fmt.Printf("   Status:      COMMITTED ✓\n")
 		fmt.Printf("   🔗 Run `./garuda explain %s` to inspect.\n", decisionID)
 
@@ -370,13 +424,16 @@ func handleAnalyze(path string) {
 			fmt.Printf("   Module path: %s\n", modulePath)
 		}
 
-		commitSHA := "local-uncommitted"
-		gitCmd := exec.Command("git", "-C", path, "rev-parse", "HEAD")
-		if out, err := gitCmd.Output(); err == nil {
-			commitSHA = strings.TrimSpace(string(out))
-		}
-		if incrementalFlag {
-			commitSHA = commitSHA[:min(8, len(commitSHA))] + "-dirty"
+		commitSHA := analyzeCommitOverride
+		if commitSHA == "" {
+			commitSHA = "local-uncommitted"
+			gitCmd := exec.Command("git", "-C", path, "rev-parse", "HEAD")
+			if out, err := gitCmd.Output(); err == nil {
+				commitSHA = strings.TrimSpace(string(out))
+			}
+			if incrementalFlag {
+				commitSHA = commitSHA[:min(8, len(commitSHA))] + "-dirty"
+			}
 		}
 
 		err = st.SaveSemanticGraph(persistCtx, tenantUUID, workspaceID, repoID, revisionID, result, commitSHA)

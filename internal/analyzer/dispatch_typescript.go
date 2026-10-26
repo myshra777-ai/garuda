@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/ast/typescript"
@@ -51,15 +52,24 @@ func AnalyzeTypeScriptWorkspace(ctx context.Context, absPath string) (*Result, e
 		return nil, err
 	}
 
+	buildCtx := ResolveBuildContext(absPath, "typescript", "", nil)
+	buildCtx.ActiveFilesCount = tsResult.Stats.Files
+	buildCtx.GraphFingerprint = tsResult.Fingerprint
+	buildCtx.ReceiptHash = buildCtx.ComputeReceiptHash()
+
 	result := &Result{
-		Fingerprint: tsResult.Fingerprint,
+		Fingerprint:  tsResult.Fingerprint,
+		AnalyzedAt:   time.Now().UTC(),
+		Source:       absPath,
+		BuildContext: buildCtx,
 		Stats: Stats{
-			Files:      tsResult.Stats.Files,
-			Packages:   countUniquePackagesTS(tsResult.Entities),
-			Structs:    tsResult.Stats.Classes,
-			Interfaces: tsResult.Stats.Interfaces,
-			Functions:  tsResult.Stats.Functions + tsResult.Stats.Methods,
-			Imports:    tsResult.Stats.Imports,
+			Files:            tsResult.Stats.Files,
+			Packages:         countUniquePackagesTS(tsResult.Entities),
+			Structs:          tsResult.Stats.Classes,
+			Interfaces:       tsResult.Stats.Interfaces,
+			Functions:        tsResult.Stats.Functions + tsResult.Stats.Methods,
+			Imports:          tsResult.Stats.Imports,
+			AnalysisComplete: true,
 		},
 	}
 
@@ -87,7 +97,10 @@ func AnalyzeTypeScriptWorkspace(ctx context.Context, absPath string) (*Result, e
 			To:         r.ToID,
 			Type:       r.ClaimType,
 			Confidence: r.Confidence,
-			Evidence:   Evidence{Analyzer: "typescript/tree-sitter"},
+			Evidence: Evidence{
+				Commit:   buildCtx.CommitSHA,
+				Analyzer: "typescript/tree-sitter",
+			},
 		})
 	}
 	// Path A: import resolution.

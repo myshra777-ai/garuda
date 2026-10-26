@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/ast/python"
@@ -64,15 +65,24 @@ func AnalyzePythonWorkspace(ctx context.Context, absPath string) (*Result, error
 		return nil, err
 	}
 
+	buildCtx := ResolveBuildContext(absPath, "python", "", nil)
+	buildCtx.ActiveFilesCount = pyResult.Stats.Files
+	buildCtx.GraphFingerprint = pyResult.Fingerprint
+	buildCtx.ReceiptHash = buildCtx.ComputeReceiptHash()
+
 	result := &Result{
-		Fingerprint: pyResult.Fingerprint,
+		Fingerprint:  pyResult.Fingerprint,
+		AnalyzedAt:   time.Now().UTC(),
+		Source:       absPath,
+		BuildContext: buildCtx,
 		Stats: Stats{
-			Files:      pyResult.Stats.Files,
-			Packages:   countUniquePackages(pyResult.Entities),
-			Structs:    pyResult.Stats.Classes,
-			Interfaces: 0,
-			Functions:  pyResult.Stats.Functions + pyResult.Stats.Methods,
-			Imports:    pyResult.Stats.Imports,
+			Files:            pyResult.Stats.Files,
+			Packages:         countUniquePackages(pyResult.Entities),
+			Structs:          pyResult.Stats.Classes,
+			Interfaces:       0,
+			Functions:        pyResult.Stats.Functions + pyResult.Stats.Methods,
+			Imports:          pyResult.Stats.Imports,
+			AnalysisComplete: true,
 		},
 	}
 
@@ -89,7 +99,7 @@ func AnalyzePythonWorkspace(ctx context.Context, absPath string) (*Result, error
 			LineStart:   e.LineStart,
 			LineEnd:     e.LineEnd,
 			Exported:    e.IsExported,
-			Language:    "python", // NEW
+			Language:    "python",
 			Signature:   e.Signature,
 		})
 	}
@@ -101,17 +111,12 @@ func AnalyzePythonWorkspace(ctx context.Context, absPath string) (*Result, error
 			Type:       r.ClaimType,
 			Confidence: r.Confidence,
 			Evidence: Evidence{
+				Commit:   buildCtx.CommitSHA,
 				Analyzer: "python/structural",
 			},
 		})
 	}
 	// Path A: import resolution.
-	//
-	// Build a name → UUID index from the entities we just extracted,
-	// then walk the source tree to resolve every import statement.
-	// Edges carry ResolutionMethodPythonImport.
-	//
-	// Skip if there are no package entities to correlate against.
 	{
 		pkgIndex := make(map[string]uuid.UUID)
 		for _, e := range result.Entities {
@@ -148,7 +153,6 @@ func mapPythonKindToEntityKind(kind string) EntityKind {
 	case "type":
 		return KindType
 	default:
-		// Preserve unknown kinds as a string-typed EntityKind.
 		return EntityKind(kind)
 	}
 }
