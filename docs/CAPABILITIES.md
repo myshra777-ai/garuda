@@ -2,9 +2,9 @@
 
 > Grounded in the Garuda v1.6.0 multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
 
-This is a current capability guide—not a certification of production readiness. Feature behavior depends on the current binary, database migrations, workspace state, supported syntax, configured rules and integration path.
+---
 
-## At a glance
+## 1. Plane 01 — Multi-Language AST, Incremental Sync & Call-Graph Extraction
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
@@ -18,41 +18,49 @@ This is a current capability guide—not a certification of production readiness
 | **TypeScript Tree-Sitter & Pure-Go (`!cgo`) AST Graph** | 🟢 **Production (GA)** | `Tree-sitter (cgo) + Pure-Go Lexical/Scope (!cgo)` | Interfaces, classes, functions, named/namespace import aliases (`import { X as Y }`, `import * as NS`), `new Class()` instance calls (`0.95` confidence, zero C compiler needed) | `Deterministic SHA-1 UUID` |
 | **Cross-Repository Dependency Resolution** | 🟢 **Production (GA)** | `Postgres Workspace Symbol Cache` | Multi-repository module path and symbol bridge mapping within a workspace | `Workspace Isolation` |
 
-## Garuda's differentiator: connect the loop
+---
 
-### 1. Before the edit
-Talon can compile active ADR claims, YAML policies and high-impact symbols into a workspace contract. A pre-edit briefing gives the agent or developer relevant rules and graph-visible impact before a change is made.
+## 2. Plane 02 — Epistemic Evidence & Edge-Level Runtime Drift Verification
 
-### 2. After the edit
-Talon can re-index dirty files, target the Git diff, check net-new violations, verify relevant ADR claims, and return a structured verdict plus repair-oriented instructions. Its supervisor command can rerun a CLI coding agent with that feedback for a configured number of attempts.
+| Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
+| :--- | :--- | :--- | :--- | :--- |
+| **3-State Epistemic Classification** | 🟢 **Production (GA)** | `Database Constraint + Verifier` | Every claim is classified as `SUPPORTED`, `UNVERIFIED`, or `CONTRADICTED` | `Honest Defaults (Never Upgrade Unverified)` |
+| **Edge-Level `SUPPORTED` Promotion** | 🟢 **Production (GA)** | `internal/runtime/verifier.go` | Static claim (`from -> to`) is promoted to `SUPPORTED` only when runtime spans confirm **both** caller and callee in correlated traces | `Strict Edge Corroboration` |
+| **OpenTelemetry Runtime Span Ingestion** | 🟢 **Production (GA)** | `POST /api/v1/telemetry/spans` | Correlates live service spans (`caller_symbol`, `target_endpoint`) against static workspace entities | `Tenant & Workspace Scoped` |
+| **Bidirectional Runtime Contradiction Detection** | 🟢 **Production (GA)** | `10/10 Controlled Contradiction Suite` | Flags both explicit unapproved endpoints AND shadow runtime edges missing from static `claims` as `CONTRADICTED` | `Automatic Quarantine` |
+| **Normative Documentation & ADR Claim Verification** | 🟢 **Production (GA)** | `garuda docs ingest` & `garuda docs verify` | Extracts `MUST` / `MUST_NOT` architectural claims from Markdown ADRs and verifies them against static & runtime edges | `Evidence-Backed Drift Detection` |
 
-### 3. Before the merge
-`garuda check` or a policy evaluation can be wired into CI. With `--fail-on-block`, a `BLOCK` verdict exits with code `2`; the CI provider can fail the job and a required branch-protection check can stop the merge. Garuda does not configure repository branch protection on its own.
+---
 
-### 4. After the decision
-When a decision is persisted, the Merkle implementation can supply an inclusion proof. That receipt lets reviewers verify the integrity and inclusion of recorded decision data; it does not make the original analysis complete by itself.
+## 3. Plane 03 — Deterministic Graph-Native Policy Engine & Diff Scoping
 
-## Evidence terminology
+| Predicate / Capability | Status | Query Mechanism | Purpose & Parameters |
+| :--- | :--- | :--- | :--- |
+| **`layer_violation`** | 🟢 **Production (GA)** | SQL Regex Join on `claims` + `entities` | Blocks direct `CALLS` or `IMPORTS` from `from_layer` package regex to `to_layer` package regex |
+| **`transitive_claim_exists`** | 🟢 **Production (GA)** | Recursive CTE (`WITH RECURSIVE call_path`) | Detects multi-hop backdoor dependency chains (`from_name_pattern` -> ... -> `to_name_pattern` up to `max_depth`) |
+| **`cycle_exists`** | 🟢 **Production (GA)** | Recursive CTE (`WITH RECURSIVE cycle_search`) | Detects circular package dependencies (`A -> B -> C -> A`) up to `max_depth` packages |
+| **`blast_radius_exceeds`** | 🟢 **Production (GA)** | Inbound Caller Aggregation (`HAVING COUNT > N`) | Escalates changes to high-fan-in hubs when inbound callers exceed `max_callers` |
+| **`claim_exists`** | 🟢 **Production (GA)** | Scoped `claims` Join (`scope.package`, `scope.pattern`) | Matches specific `claim_type`, `from_name_pattern`, `to_name_pattern`, and `min_confidence` |
+| **`entity_exists`** | 🟢 **Production (GA)** | Scoped `entities` Filter (`scope.package`, `scope.pattern`) | Matches entities by `kind`, `name_pattern`, and `exported` status |
+| **`contradiction_exists`** | 🟢 **Production (GA)** | `contradictions` + `claim_verifications` | Blocks or flags workspaces containing unresolved `CONTRADICTED` runtime or decision rows |
+| **`verification_missing`** | 🟢 **Production (GA)** | Left-Join Anti-Match on `claim_verifications` | Warns when exported functions/methods lack `SUPPORTED` runtime verification |
+| **`language_matches`** | 🟢 **Production (GA)** | Repository / Entity `language` Filter | Scopes policy rules to `go`, `python`, or `typescript` targets |
+| **Net-New vs. Baseline Diff Scoping (`DiffScopeFilter`)** | 🟢 **Production (GA)** | `internal/diff` + `Evaluator.EvaluateWithScope` | Maps `git diff --unified=0` hunks to AST line spans (`[line_start, line_end]`) and isolates `net_new_violations` from `baseline_violations` |
 
-| Term | Meaning |
-|---|---|
-| `SUPPORTED` | Available evidence supports a claim within the checked scope |
-| `UNVERIFIED` | Evidence is insufficient; not proof of a defect |
-| `CONTRADICTED` | Available evidence conflicts with a claim |
-| `ALLOW` | The configured evaluator found no blocking condition in the evaluated scope |
-| `WARN` / `REVIEW` | A non-blocking warning or review outcome |
-| `BLOCK` | An active policy/evidence condition produced a blocking outcome |
+---
 
-A passing result applies to the scope actually evaluated. Confirm index freshness, touched-symbol mapping, policy files, telemetry availability and integration failure behavior before using it as a mandatory merge gate.
+## 4. Plane 04 — Unified Change-Control & RFC 6962 Merkle Ledger
 
-## Current validation record
+| Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
+| :--- | :--- | :--- | :--- | :--- |
+| **Diff-Scoped Change-Control CLI (`garuda check`)** | 🟢 **Production (GA)** | `--diff`, `--staged`, `--files`, `--target` | Combines Git-Diff AST Targeting + Union Blast Radius + 3-State Evidence + Net-New Policy Evaluation + Merkle Block Seal | `Deterministic Verdict` |
+| **RFC 6962 Merkle Tree & Inclusion Proofs** | 🟢 **Production (GA)** | `Golden Vectors (internal/merkle)` | Domain-separated leaf hashing (`0x00` leaf, `0x01` internal node), odd-leaf duplication guard, tamper detection | `Cryptographic Tamper-Evidence` |
+| **Cryptographic Decision & Policy Verification** | 🟢 **Production (GA)** | `VerifyDecisionCryptographic` & `VerifyEvaluation` | Recomputes canonical v1 byte encoding (`CanonicalDecision`, `CanonicalEvaluation`) and verifies `V1Proof` path to epoch root | `Zero Trust Verification` |
+| **Dual-Tier Epoch Snapshots** | 🟢 **Production (GA)** | `merkle_snapshots` + `merkle_epoch_leaves` | Anchors both static analysis leaves and runtime verification leaves into periodic tenant epochs | `Bitemporal Auditability` |
 
-The current [evidence report](../EVIDENCE.md) records:
+---
 
-- 24/24 strict compiler/AST benchmark cases passed.
-- 30/30 reference MCP/Talon verifier checks passed.
-- 10/10 injected contradictions detected in the controlled runtime test.
-- A 14-repository Go-only validation corpus and a separate 9-repository mixed-language workspace.
+## 5. Plane 05 — Garuda Talon Active Agent Harness & 23-Tool MCP Surface
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |

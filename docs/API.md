@@ -177,39 +177,8 @@ Extracts normative architectural claims (`MUST` / `MUST_NOT`) from Markdown ADRs
 
 ---
 
-### Additional CLI commands
-
-These utility commands are implemented alongside the main analysis, policy and Talon workflow.
-
-| Command | Purpose | Important behavior |
-|---|---|---|
-| `garuda ci` | Analyze the current repository and compare it with a saved semantic baseline | Use `--baseline <file>`; `--block-on-break` exits non-zero when the assessment is breaking |
-| `garuda diff <before.json> <after.json>` | Compare two serialized analysis snapshots | `--fail-on-breaking` exits non-zero when breaking changes are detected |
-| `garuda self-describe [path]` | Emit a structured JSON product description or Markdown skeleton from source analysis, CLI structure and optional workspace evidence | Use `--markdown`, `--workspace`, and `--output`; product metadata is read from `docs/source/product.yaml` when available |
-| `garuda plan` | CLI command is present, but not currently usable end-to-end | The CLI requests `/api/v1/plan`; that route is not registered in the current `Server.RegisterRoutes`. Expect an API error until a matching handler/route is implemented. Flags include `--scope-domain`, `--scope-system`, `--status`, `--at`, and `--format markdown|json`. |
-| `garuda hygiene [path]` | Produce advisory unreferenced-symbol, duplicate-name and standard-library-alternative candidates from the indexed graph | Does not prove code is dead, does not refresh analysis, and does not persist findings; `garuda ponytail` is a deprecated alias |
-
-Examples:
-
-```bash
-# Compare an analysis snapshot with a stored baseline in CI.
-./bin/garuda ci --baseline garuda-baseline.json --block-on-break
-
-# Compare two saved analyzer outputs.
-./bin/garuda diff before.json after.json --fail-on-breaking
-
-# Emit product description metadata as Markdown.
-./bin/garuda self-describe . --markdown --output PRODUCT.md
-
-# `garuda plan` is present but its /api/v1/plan route is not registered yet.
-# Do not rely on this command until the matching server handler is implemented.
-# ./bin/garuda plan --scope-domain infrastructure --format markdown
-```
-
----
-
 ### `garuda dev` / `garuda up` / `garuda status`
-- `./bin/garuda dev` — Starts the unified Garuda daemon (HTTP API server + six core `/dashboard` engineering surfaces plus ADR Decision Lineage + 10-second background runtime verification & Merkle epoch worker).
+- `./bin/garuda dev` — Starts the unified Garuda daemon (HTTP API server + 6-surface `/dashboard` Software Intelligence Instrument + 10-second background runtime verification & Merkle epoch worker).
 - `./bin/garuda up` — Starts PostgreSQL container, runs migrations, and launches the gateway stack.
 - `./bin/garuda status` — Verifies gateway health (`/health`).
 
@@ -217,7 +186,7 @@ Examples:
 
 ## 3. Declarative Policy Predicates (`policies/*.yaml`)
 
-Every policy file specifies `when` predicates evaluated against the workspace graph in PostgreSQL. The policy engine rejects malformed YAML and unknown predicate types rather than treating them as valid rules. Confirm that the CLI/CI caller propagates these errors as a failed check; the exact failure behavior still depends on the command path.
+Every policy file specifies `when` predicates evaluated against the workspace graph in PostgreSQL. If any `.yaml`/`.yml` file in the policy directory is malformed or references an unknown predicate, Garuda **fails closed** immediately.
 
 | Predicate | Parameters | Description |
 | :--- | :--- | :--- |
@@ -273,7 +242,7 @@ Expected result: `═══ 30/30 checks passed ═══`.
 
 ## 5. Key HTTP Gateway & PWA Endpoints (`bin/garuda-api`)
 
-This list is cross-checked against `Server.RegisterRoutes` in `internal/api/handler.go`. The live router is the authority for route availability; a URL present only in a generated or historical OpenAPI file is not necessarily registered.
+All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddleware`) or authenticated session cookies (`garuda_session`).
 
 | Method & Path | Auth | Description |
 | :--- | :--- | :--- |

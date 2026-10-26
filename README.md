@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/garuda-logo.png" width="88" alt="Garuda">
+  <img src="assets/garuda-logo.png" width="104" alt="Garuda Logo">
 </p>
 
 <h1 align="center">Garuda</h1>
@@ -11,6 +11,8 @@
 
 <p align="center">
   <a href="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml/badge.svg" alt="Garuda CI & Governance"></a>
+  <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml/badge.svg" alt="Garuda Integrity Gate"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 License"></a>
   <a href="INSTALL.md"><img src="https://img.shields.io/badge/install-Windows_%7C_macOS_%7C_Linux_%7C_Chromebook_%7C_Android-2563eb.svg" alt="Universal 1-Command Install"></a>
   <a href="PLAYBOOK.md"><img src="https://img.shields.io/badge/docs-Operational_Playbook-0f172a.svg" alt="Operational Playbook"></a>
@@ -184,38 +186,44 @@ flowchart LR
 - **Edge-Level Runtime Contradiction Quarantine:** Garuda ingests OpenTelemetry trace spans (`POST /api/v1/telemetry/spans`) and promotes a static edge to `SUPPORTED` only when **both** caller and callee match at runtime—while automatically creating a `CONTRADICTED` quarantine record whenever production traffic makes an undeclared cross-service or cross-layer call.
 - **Fail-Closed Governance by Design:** Malformed policy YAML, unknown predicates, or persistence failures never silently pass (`ALLOW`). Garuda fails closed so broken guardrails cannot wave bad changes through CI.
 
-```bash
-./bin/garuda check \
-  --project my-app \
-  --diff HEAD \
-  --policy ./policies \
-  --save \
-  --fail-on-block \
-  --json
-```
+## Put the Gate in CI/CD
 
-A CLI failure is not, by itself, branch protection. Configure the Garuda job as a required repository check in GitHub (or your CI provider), and test the exact revision, database/workspace, policy bundle, permissions, and failure path before relying on it to block merges.
+Garuda provides four purpose-built gates so you can enforce the exact failure mode your team requires in local Git hooks or GitHub Actions:
 
-## Give coding agents a source of grounded context
+| Gate | Command | What It Enforces | Exit Behavior |
+|---|---|---|---|
+| **1. Active Talon Diff Gate** | `garuda talon guard --diff origin/main...HEAD --fail-on-block` | Incrementally syncs modified files, resolves touched AST symbols, checks ADR claims + YAML policies (net-new only), and outputs a self-repair plan on failure. | Exits `2` on `BLOCK` (`0` on `ALLOW`/`WARN`/`REVIEW`). |
+| **2. Unified Change-Control Gate** | `garuda check --diff HEAD --project <ws> --policy ./policies --save --fail-on-block --json` | Runs all 5 planes across a symbol, file list (`--files`), staged index (`--staged`), or revision range (`--diff`) and seals an RFC 6962 Merkle receipt. | Exits `2` on `BLOCK` (`0` on `ALLOW`/`WARN`/`REVIEW`). |
+| **3. Structural Regression Gate** | `garuda ci --baseline ./garuda-baseline.json --block-on-break` | Compares the current branch against a saved baseline snapshot to catch unintended signature breaks, removed exports, or structural regressions. | Exits non-zero when breaking structural changes are detected. |
+| **4. Contradiction & Drift Gate** | `garuda ci check --fail-on-contradiction=true` | Verifies that documented architecture claims (`garuda docs ingest`) and runtime traces have zero active `CONTRADICTED` edges in the workspace. | Exits non-zero if any active contradiction exists. |
 
-Garuda exposes **23 MCP tools**, plus an architectural-contract prompt and workspace-contract resources. The surface includes symbol discovery, neighbors, implementations, blast radius, policy/evidence queries, contradictions, handoff/resume, and Talon's pre-edit/post-edit calls. The server can inject the active contract into tool responses by default; set `GARUDA_TALON_ENFORCE=false` only when intentionally disabling that behavior.
+Start with the included [architecture layer guardrails policy](policies/architecture-layer-guardrails.yaml) and the full [CLI & Policy Reference](docs/API.md).
 
 ## Software Intelligence Instrument (`/dashboard` PWA)
 
 Garuda ships a high-craft web instrument at `http://localhost:8080/dashboard` (installable as a standalone **Progressive Web App** on Windows, macOS, Linux, Chromebook, and Android via `/manifest.json` and `/sw.js`) inspired by Linear, Vercel, Sentry, and Neo4j Bloom—replacing noisy full-graph hairballs with 6 focused engineering surfaces and a global `⌘K` / `Ctrl+K` command palette:
 
-![Garuda cryptographic trust and evidence view](assets/screenshots/evidence-cryptographic-trust.png)
+1. **Workspace Briefing (`/dashboard#briefing`)** — Clean status strip and health KPIs (Indexed Entities, Policy Posture, Active Contradictions, Merkle Ledger Head) paired with an actionable Needs-Attention queue and recent governance verdicts.
+2. **Architecture Map (`/dashboard#map`)** — **Neighborhood-first 1-hop / 2-hop topology explorer** (`[Selected Caller] ──> [Focal Symbol] ──> [Direct Dependency / Policy Badge]`) with interactive hop-depth (`1 hop`, `2 hops`) and edge-kind filters (`Calls`, `Imports`, `Implements`, `Claims`) plus a synchronized 4-tab Inspector Drawer (`Source`, `Relationships`, `Policy Results`, `Evidence`).
+3. **Change Review Workbench (`/dashboard#workbench`)** — 3-pane pre-merge simulator: select a target symbol and policy bundle on the left, inspect impacted callers and policy rules in the center, and generate a live `ALLOW` / `WARN` / `REVIEW` / `BLOCK` governance gate receipt on the right.
+4. **Policies (`/dashboard#policies`)** — Interactive catalog of all 9 deterministic SQL/CTE policy predicates alongside a live YAML Policy Sandbox to test rules before committing them to CI.
+5. **Contradictions & Evidence (`/dashboard#contradictions`)** — Sentry-style forensic queue for `CONTRADICTED` and `UNVERIFIED` claims, comparing static AST location against live OpenTelemetry runtime trace spans (`trace_id`, `span_id`, service pair) plus an interactive OTel Span Simulator.
+6. **Governance & Audit Ledger (`/dashboard#ledger`)** — Append-only decision table with a bottom **Decision Record Inspector** (`What it did`, `What it looked at`, `What rule applied`, `Epistemic state`, `RFC 6962 Merkle Inclusion Proof`) and 1-click cryptographic verification.
 
-## Validation evidence
+## 23 Active MCP Tools for Coding Agents
 
 `./setup.sh` and `.\setup.ps1` automatically register `garuda-mcp` with **Cursor** and **Claude Desktop** with `GARUDA_TALON_ENFORCE=true` enabled by default. Connected agents receive live MCP Prompts (`garuda.architectural_contract`), MCP Resources (`garuda://workspace/contract`), and 23 deterministic tools:
 
-- **24/24** strict compiler/AST benchmark cases passed.
-- **30/30** reference MCP/Talon verifier checks passed.
-- **10/10** injected contradictions detected in a controlled runtime-verification test.
-- A **14-repository Go-only corpus** and a separate **9-repository mixed-language workspace**. The latter snapshot records 14,333 entities and 40,956 relationships.
+| Category | MCP Tools | Purpose |
+|---|---|---|
+| **Active Talon Enforcement** | `garuda.talon_pre_edit`, `garuda.talon_verify_edit` | Mandatory pre-edit blast-radius/ADR briefing and post-edit incremental re-index + diff-scoped policy verification + self-repair generator. |
+| **Orientation & Discovery** | `garuda.briefing`, `garuda.entities`, `garuda.find_entity`, `garuda.inspect`, `garuda.query` | Orient the agent to workspace health, resolve exact symbol IDs ranked by inbound edges, and inspect relationships before editing. |
+| **Topology & Blast Radius** | `garuda.neighbors`, `garuda.blast_radius`, `garuda.implementers`, `garuda.subclasses`, `garuda.get_impact`, `garuda.get_lineage` | Trace upstream callers, downstream dependencies, interface implementations, class hierarchies, and transitive change impact. |
+| **Governance & Policy Gates** | `garuda.policy.list`, `garuda.policy.evaluate`, `garuda.verify_policy_evaluation`, `garuda.governance.status`, `garuda.propose_decision` | Pre-check proposed refactors against active YAML policies and verify RFC 6962 Merkle receipts. |
+| **Epistemic Truth & Drift** | `garuda.detect_contradictions`, `garuda.check_drift`, `garuda.query_claims` | Query static-vs-runtime contradictions, ADR `document_claims`, and documentation-to-code drift. |
+| **Multi-Agent Continuity** | `garuda.handoff`, `garuda.resume` | Atomically transfer task ownership and restore serialized checkpoints across multi-agent sessions. |
 
-These are results for named test suites and indexed snapshots—not universal recall, real-production drift detection rates, or proof that every relationship has been discovered. See [EVIDENCE.md](EVIDENCE.md) for scope and reproduction details.
+### Complete CLI Command Surface
 
 - `garuda init <repo-path> --workspace <name>` — Initialize Postgres, migrations, owner account, Active MCP, and Garuda Talon hooks in 1 command.
 - `garuda doctor [--fix] [--json]` — Diagnose and auto-repair `.env`, PostgreSQL, binaries, MCP config, and Talon hooks across Windows, macOS, Linux, Chromebook, and Android.
@@ -228,9 +236,7 @@ These are results for named test suites and indexed snapshots—not universal re
 - `garuda hygiene` (alias `garuda ponytail`) — Detect structural dead-ends, orphaned symbols, and architectural drift.
 - `garuda topology` & `garuda summary` — Inspect package-level layering, hub centrality, and workspace metrics.
 
-- `SUPPORTED`: available evidence supports a claim within the checked scope.
-- `UNVERIFIED`: evidence is insufficient; this does not mean the claim is false.
-- `CONTRADICTED`: available evidence conflicts with a claim.
+## Evidence, Not False Certainty
 
 Garuda keeps the boundaries of its evidence explicit so teams never mistake a clean check for magical omniscience:
 

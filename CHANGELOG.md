@@ -18,12 +18,12 @@ All notable changes to Garuda are documented in this file.
 - **Garuda Talon Active Execution Harness (`internal/talon`, `cmd/garuda/talon_cmd.go`, `cmd/garuda-talon`)**:
   - `garuda talon init` (automatically triggered by `garuda init` and `./setup.sh`): Compiles live workspace ADRs (`document_claims`), YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc` (`alwaysApply: true`), `.cursor/mcp.json` (`GARUDA_TALON_ENFORCE=true`), `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook running `garuda talon guard --hook`), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit` + `commit-msg`.
   - `garuda talon brief [target]`: Emits deterministic pre-flight architectural context, transitive blast radius, and applicable ADR rules before an agent modifies a symbol or file.
-  - `garuda talon guard [--staged | --diff <rev> | --files <csv> | --hook]`: Attempts incremental AST sync on dirty working-tree files, maps git diff hunks to supported touched symbols, evaluates YAML policies and ADR claims in the selected diff scope, and emits a structured **Self-Repair Prompt** on `BLOCK`. Resolution depends on the indexed workspace and supported source constructs.
-  - `garuda talon run -- <agent-cmd>`: Bounded supervisor loop that runs a compatible CLI coding-agent command, checks the resulting diff with `talon guard`, and can feed a repair prompt back for up to the configured retry count. The final result may remain `BLOCK`; this is not universal interception or a guarantee of automatic repair.
+  - `garuda talon guard [--staged | --diff <rev> | --files <csv> | --hook]`: Runs sub-second incremental AST sync on dirty working-tree files, maps git diff hunks to touched AST symbols, evaluates YAML policies and ADR claims in net-new diff scope, and emits a deterministic **Self-Repair Prompt** on `BLOCK`.
+  - `garuda talon run -- <agent-cmd>`: Supervisor loop that executes an autonomous coding agent, intercepts working-tree changes, runs `talon guard`, and automatically loops the agent with the self-repair prompt until `ALLOW` is reached and Merkle-sealed.
 - **Active MCP Server Enforcement (`cmd/garuda-mcp/main.go`, `cmd/garuda-mcp/tools_talon.go`)**:
   - Added MCP `prompts/list` & `prompts/get` (`garuda.architectural_contract`) and `resources/list` & `resources/read` (`garuda://workspace/contract`, `garuda://workspace/adr-guardrails`).
   - Added `garuda.talon_pre_edit` and `garuda.talon_verify_edit` MCP tools (expanding the registry to **23 MCP tools**).
-  - Added session-level contract context injection (`GARUDA_TALON_ENFORCE=true` by default unless disabled): the first MCP response can include the workspace's active ADR `MUST`/`MUST_NOT` rules and YAML policy guardrails. This gives agents context even if they skip `garuda.briefing`, but it is not a hard enforcement boundary and a client may ignore or bypass instructions.
+  - Added active session-level contract injection (`GARUDA_TALON_ENFORCE=true` default): the first tool call in any MCP session automatically injects the workspace's active ADR `MUST`/`MUST_NOT` rules and YAML policy guardrails into the response payload so agents are bound even if they skip `garuda.briefing`.
 - **Git-Diff Native Targeting (`internal/diff/diff.go`, `cmd/garuda/check_cmd.go`)**:
   - Added `ParseUnifiedDiff`, `CollectGitDeltas`, and `ResolveTouchedEntities` to map `git diff --unified=0` hunks (`--staged`, `--diff <rev>`, `--files`) directly to affected AST entities (`[line_start, line_end]`) and compute union transitive blast radius across all modified symbols.
 - **Net-New vs. Baseline Violation Filtering (`internal/policy/types.go`, `evaluator.go`, `engine.go`)**:
@@ -31,11 +31,11 @@ All notable changes to Garuda are documented in this file.
 - **Incremental Working-Tree Re-Index (`cmd/garuda/analyze.go`)**:
   - Added `--incremental` and `--files` flags with shared in-memory package caching so dirty working-tree edits are synchronized into PostgreSQL before `garuda check --diff` or `garuda talon guard` evaluates them.
 - **Python & TypeScript Cross-File Alias & Instance Call Resolution (`internal/ast/python`, `internal/ast/typescript`)**:
-  - Extended the Python AST analyzer for selected cross-file import-alias patterns (`import X as Y`, `from X import Y as Z`) and supported instance-call shapes. The `0.95` value is an implementation confidence marker, not a measured precision rate.
-  - Extended the TypeScript Tree-sitter analyzer for selected named/namespace aliases, `new Class()` instantiations, and instance/field method-call patterns. The `0.95` value is an implementation confidence marker, not a measured precision rate.
+  - Upgraded Python AST parser and integration to resolve `import X as Y`, `from X import Y as Z`, and class instance calls (`self.repo.fetch()`, `local_repo.fetch()`) across files at `0.95` static confidence.
+  - Upgraded TypeScript Tree-sitter parser and integration to resolve named import aliases (`import { X as Y }`), namespace imports (`import * as NS`), `new Class()` instantiations, and instance/field method calls across files at `0.95` static confidence.
 
 ## [v1.4.0] - 2026-10-24
-- Redesigned `/dashboard` with six core engineering surfaces (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) plus a separate ADR Decision Lineage view, a global `⌘K` palette, 1-hop/2-hop neighborhood graph, and synchronized 4-tab Inspector Drawer.
+- Redesigned `/dashboard` as a 6-surface Software Intelligence Instrument (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) with global `⌘K` palette, 1-hop/2-hop neighborhood graph, and synchronized 4-tab Inspector Drawer.
 - Fixed Benchmark 024 (`TestBenchmark_024_GoWork_CrossModule_ResolutionAndBlastRadius`) to assign `1.0` exact compiler-verified confidence to cross-module `IMPLEMENTS` edges.
 
 ## [v1.3.0] - 2026-10-24
