@@ -9,8 +9,6 @@ from datetime import datetime
 
 STATUS_BADGES = {
     "production": "🟢 **Production (GA)**",
-    "implemented": "🔵 **Implemented**",
-    "implemented-with-ongoing-validation": "🔵 **Implemented · validation ongoing**",
     "beta": "🟡 **Beta (AST Verified)**",
     "experimental": "🟣 **Experimental (Heuristic)**",
     "planned": "⚪ **Planned (Roadmap)**"

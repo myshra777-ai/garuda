@@ -1,3 +1,19 @@
+## [v1.7.0] - 2026-10-26 — Docs & Rules Lineage Graph, Talon & Risk Hub Dashboard, Zero-CDN Offline Engine
+
+### Added
+- **04 — Docs, Specs & Guardrails Lineage Graph (`GET /api/v1/dashboard/docs-graph` & `garuda docs graph`)**:
+  - 4-Tier Visual Lineage Graph connecting **Tier 1 Documents** (ADRs, Design Specs, System Invariants, YAML Policies, `.garudarules`) → **Tier 2 Extracted Normative Rules** (`MUST`, `MUST_NOT`, `BLOCK`, `REVIEW`, `DENY`, `INVARIANT`) → **Tier 3 Active Policy Guardrails** → **Tier 4 AST Code Symbols & Packages**.
+  - Structured **Document Inventory Cards** and **Document-to-Code Component Matrix** with 1-click symbol and rule focus.
+  - **Live Document / ADR / Spec Ingestion (`POST /api/v1/dashboard/docs-ingest`)**: Ingest new ADRs, specs, or guardrail rules directly from the dashboard modal (with built-in templates) or scan repository directories on the fly.
+  - Integrated **`✦ Docs & Rules Graph`** mode (`level=docs`) directly into the `03 — Architecture Map` surface.
+- **05 — Garuda Talon & Architectural Risk Hub (`GET /api/v1/dashboard/talon-hub` & `POST /api/v1/dashboard/talon-check`)**:
+  - Live **Talon Active Guard Terminal** with 1-click diff-scoped verification (`HEAD`), violation & self-repair simulation, and clipboard prompt export.
+  - **Active IDE, MCP & Git Hook Status Panel** tracking all 6 enforcement hooks (`Cursor .mdc`, `Cursor MCP`, `Claude Code PostToolUse`, `CLAUDE.md`, `AGENTS.md / .windsurfrules`, `.git/hooks/pre-commit`) with 1-click hook installation/sync.
+  - **Architectural Risk Hub Leaderboard** ranking high-blast-radius symbols by caller fan-in, transitive impact radius, and governing ADR/policy sensitivity (0–100 score across `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` tiers) with 1-click **Pre-Edit Briefing** drawers.
+- **Zero-Dependency Offline SVG Graph Engine & Full UI Polish**:
+  - Embedded a D3-compatible SVG force & 4-tier DAG layout engine directly into `dashboard.js` so the dashboard works 100% offline/air-gapped with zero external CDN requests.
+  - Auto-populates `02 — Explore Index` with top exported symbols on initial load and adds toast feedback, API/Contract viewer modals, and sandbox-safe theme persistence.
+
 # Changelog
 
 ## [1.6.0] - 2026-10-25 — Universal Zero-Dependency Onboarding (Windows, macOS, Linux, Chromebook & Android)

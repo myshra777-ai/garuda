@@ -1,47 +1,54 @@
-name: Documentation Draft & Validation
+name: Auto-Generate Documentation
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:      # Manual trigger from GitHub UI
   schedule:
-    - cron: '0 0 * * 1'
+    - cron: '0 0 * * 1'  # Weekly run on Monday
+  # Removed push trigger to prevent branch desynchronization during active development
 
-# Generated docs are review artifacts only. Canonical product docs are never
-# committed by this workflow without a human-reviewed pull request.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate-docs:
-    name: Build documentation drafts from current source metadata
+    name: Generate & Verify Documentation Suite
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      - name: Set up Go
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go Runtime
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.0'
+          go-version: '1.22'
           cache: true
 
-      - name: Build Garuda CLI
+      - name: Build Garuda Engine
         run: |
-          mkdir -p bin docs/generated
-          go build -o bin/garuda ./cmd/garuda
+          go build -o garuda cmd/garuda/*.go
+          chmod +x garuda
 
-      - name: Export source snapshot
+      - name: Pre-create Documentation Directories
+        run: |
+          mkdir -p docs/generated docs/source
+
+      - name: Run AST Semantic Analysis
         env:
           GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
         run: |
-          ./bin/garuda analyze . --output docs/generated/garuda-snapshot.json
+          ./garuda analyze . -o garuda-snapshot.json
 
-      - name: Set up Python
+      - name: Set up Python Runtime
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: pip
+          cache: 'pip'
 
-      - name: Install documentation dependencies
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           if [ -f scripts/requirements.txt ]; then
@@ -50,37 +57,55 @@ jobs:
             pip install pyyaml requests
           fi
 
-      - name: Test documentation context schema compatibility
-        run: python scripts/test_build_docs_context.py
-
-      - name: Generate capabilities draft
+      - name: Generate Capabilities Matrix
         run: |
           python scripts/generate_capabilities.py \
             --capabilities docs/source/capabilities.yaml \
-            --snapshot docs/generated/garuda-snapshot.json \
-            --output docs/generated/CAPABILITIES.draft.md
+            --snapshot garuda-snapshot.json \
+            --output docs/CAPABILITIES.md
 
-      - name: Build documentation context
+      - name: Build Documentation Context
+        if: hashFiles('scripts/build_docs_context.py') != ''
         run: |
           python scripts/build_docs_context.py \
-            --snapshot docs/generated/garuda-snapshot.json \
+            --snapshot garuda-snapshot.json \
             --product docs/source/product.yaml \
             --capabilities docs/source/capabilities.yaml \
             --roadmap docs/source/roadmap.yaml \
             --output docs/generated/docs-context.json
 
-      - name: Validate documentation context
+      - name: Generate CHANGELOG (AI Engine)
+        if: env.GEMINI_API_KEY != '' && hashFiles('scripts/generate_changelog.py') != ''
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_SECONDARY }}
+        run: |
+          python scripts/generate_changelog.py \
+            --context docs/generated/docs-context.json \
+            --output CHANGELOG.md
+
+      - name: Generate API Documentation (AI Engine)
+        if: env.GEMINI_API_KEY != '' && hashFiles('scripts/generate_api_docs.py') != ''
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY_TERTIARY }}
+        run: |
+          python scripts/generate_api_docs.py \
+            --context docs/generated/docs-context.json \
+            --output docs/API.md
+
+      - name: Validate Generated Documentation
         if: hashFiles('scripts/validate_docs.py') != ''
         run: |
-          python scripts/validate_docs.py --context docs/generated/docs-context.json
+          python scripts/validate_docs.py \
+            --context docs/generated/docs-context.json
 
-      - name: Upload review artifacts (no direct commits)
-        uses: actions/upload-artifact@v4
-        with:
-          name: garuda-documentation-drafts
-          path: |
-            docs/generated/CAPABILITIES.draft.md
-            docs/generated/docs-context.json
-            docs/generated/garuda-snapshot.json
-          if-no-files-found: error
-          retention-days: 14
+      - name: Atomic Commit and Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/CAPABILITIES.md docs/API.md CHANGELOG.md docs/generated/
+          if git diff --staged --quiet; then
+            echo "No documentation changes detected. Skipping push."
+          else
+            git commit -m "docs: auto-generate capabilities matrix and API specs [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi

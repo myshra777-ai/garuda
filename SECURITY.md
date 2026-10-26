@@ -1,52 +1,99 @@
 # Security Policy
 
-Garuda analyzes source code and stores software-structure, policy, runtime and governance data. Please report suspected vulnerabilities privately so they can be assessed before details become public.
+## Supported Versions
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 0.1.x   | :white_check_mark: |
+
+## Reporting a Vulnerability
+
+Garuda processes AST structures, dependency graphs, and code claims. If you discover a security vulnerability or ingestion isolation issue:
+
+1. **Do not create a public issue.**
+2. Send report details and reproduction steps to `security@garuda-engine.dev` or directly to Rohit Mishra.
+3. You will receive an acknowledgment within 48 hours with an estimated remediation timeline.
+
+# Security Policy
 
 ## Reporting a vulnerability
 
-**Do not open a public issue for an unpatched security vulnerability.**
+Report security issues privately. **Do not open a public GitHub issue.**
 
-Use GitHub's private vulnerability reporting feature for this repository if it is enabled. If it is unavailable, contact the repository maintainer privately through their GitHub profile and request a secure reporting channel. Do not include secrets, customer source code or sensitive production data in a public discussion.
+**Email:** security@garuda.dev
 
-Please include, when possible:
-- A concise description and potential impact.
-- A minimal reproduction or proof of concept.
-- The affected version or commit.
-- Relevant configuration and deployment context.
-- Any proposed mitigation.
+Include:
 
-The project does not currently publish a guaranteed response-time SLA. The maintainer will acknowledge and triage reports as capacity allows. Please coordinate disclosure timing before publishing technical details.
+- A description of the issue and its impact
+- Steps to reproduce, or a proof of concept
+- The version or commit hash where you observed it
+- Your name and contact, if you want credit
+- Whether you intend to publish, and on what timeline
 
-## Scope
+You will receive an acknowledgement within 72 hours. If the issue is valid, we will:
 
-Potentially in-scope areas include:
-- API authentication, authorization and tenant/workspace isolation.
-- CLI, MCP server and agent-integration boundaries.
-- Policy evaluation and change-control gates.
-- Database access, migrations and persisted governance decisions.
-- Merkle proof generation and verification.
-- Installation scripts, generated hooks and deployment configuration.
-- Sensitive information exposure through logs, API responses or dashboard views.
+1. Confirm the affected versions.
+2. Develop and test a fix.
+3. Release the fix and credit you (unless you prefer otherwise).
+4. Publish a short advisory describing the issue and the fix.
 
-Third-party dependency vulnerabilities should include the affected dependency and a reproduction or advisory reference.
-
-## Security design and limits
-
-Garuda includes security-related mechanisms such as Ed25519 JWT support, scoped persistence, policy evaluation and Merkle-based integrity verification. Their presence is not a blanket guarantee that every deployment is secure. Configuration, route-level authorization, tenant scoping, secret management, network exposure and installation practices must be reviewed in context.
-
-A Merkle inclusion proof can verify consistency between a record, proof path and supplied root. Unless an independent trusted anchor is used, it does not by itself prove an external timestamp or protect against every threat to the host or root source.
-
-Agent instructions and MCP tools are not, by themselves, security boundaries. Teams relying on Talon or Git/IDE hooks should test bypass behavior, fail-open/fail-closed behavior and CI enforcement in their own configuration.
-
-## Deployment guidance
-
-- Do not use development credentials or sample secrets in a shared or production environment.
-- Keep JWT signing keys, database credentials and control-plane tokens out of source control and logs.
-- Bind network services only to intended interfaces and apply network-level access controls.
-- Review `setup.sh` before running it on a machine with existing services or Docker containers.
-- Run the available tests and inspect the current API/route authorization before exposing the service to a network.
-- Keep dependencies, database backups and operating-system packages maintained.
+If the issue is not valid, we will explain why and close the report.
 
 ## Supported versions
 
-No formal long-term support matrix or security backport SLA is published in this document. For security-sensitive use, prefer a current reviewed commit and check the repository's release notes and open advisories. Do not assume older versions receive backported fixes unless a release explicitly says so.
+Security fixes are backported to the current minor release and the previous one. Anything older receives fixes only if the issue is critical and the fix is small.
+
+| Version | Supported |
+| :--- | :--- |
+| v0.1.x | Yes |
+| Older | Critical issues only |
+
+## Scope
+
+In scope:
+
+- The Garuda API server (`cmd/garuda-api/`)
+- The Garuda CLI and daemon (`cmd/garuda/`, `internal/api/`)
+- The MCP server (`cmd/garuda-mcp/`)
+- The Merkle trust layer (`internal/merkle/`)
+- The policy engine (`internal/policy/`)
+- The PostgreSQL schema and migrations (`migrations/`)
+
+Out of scope:
+
+- Findings that require an attacker to already have database credentials
+- Findings that require an attacker to already have filesystem access to the host
+- Denial of service from unbounded resource consumption without authentication
+- Missing rate limits on endpoints that already require authentication
+- Findings in third-party dependencies where the maintainer has already published an advisory
+
+## Security model
+
+The following properties are part of the design. Findings that show any of them is violated are in scope and treated as high severity.
+
+**Authentication.** Mutation endpoints are guarded by Ed25519 JWTs. The signing key is loaded from `JWT_PRIVATE_KEY_HEX`. In production, the process refuses to start if the key is not set.
+
+**Integrity.** Every governance decision is anchored to an RFC 6962 Merkle tree with a canonical, language-independent byte encoding. The inclusion proof is a pure function of the leaf hash, the proof path, and the epoch root. It does not depend on Garuda's database, servers, or keys.
+
+**Idempotency.** Decision commits pass through `idempotency_keys`. A duplicate submission is detected and rejected before it is written.
+
+**Isolation.** Every tenant-scoped query filters by `tenant_id`. A workspace belonging to one tenant is not visible to another.
+
+**Non-root runtime.** The API binary runs in a scratch container as a non-root user (`65532:65532`).
+
+## What is not a vulnerability
+
+The following are known limitations, documented so they are not reported as findings:
+
+- The Merkle ledger is anchored locally. Independent verification requires the source of `internal/merkle/`, not an external timestamp authority or a public ledger. If you want external anchoring, the source is available for you to integrate.
+- Call edges at the leaf are sparse (median 1, 90th percentile 4). This is a property of the code under analysis, not a defect in the analyzer.
+- The Python and TypeScript analyzers are structural and have not been validated against a real cross-language workspace. Claims from these analyzers are labelled at the tier they were derived at.
+- Runtime verification correlates static structure with OpenTelemetry spans. The correlation path is exercised against synthetic spans. Production correlation is in beta.
+
+## Credit
+
+We credit reporters in the release notes and the advisory, unless they prefer to remain anonymous.
+
+## History
+
+No advisories have been published as of 2026-09-15.

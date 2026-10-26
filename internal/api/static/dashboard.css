@@ -1764,3 +1764,316 @@ code, pre, .mono { font-family: var(--font-mono); }
     .graph-wrap { height: 480px; }
     .graph-side-panel { width: 100%; min-width: 0; border-left: 0; border-top: 1px solid var(--border); }
 }
+
+/* ============================================================================
+   v1.7 UPGRADES: DOCS & GUARDRAILS GRAPH, TALON & RISK HUB, MODALS & TOASTS
+   ============================================================================ */
+
+.risk-score-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid var(--border);
+}
+.risk-score-pill.CRITICAL {
+    background: var(--red-bg);
+    color: var(--red);
+    border-color: var(--red-border);
+}
+.risk-score-pill.HIGH {
+    background: var(--amber-bg);
+    color: var(--amber);
+    border-color: var(--amber-border);
+}
+.risk-score-pill.MEDIUM {
+    background: var(--brand-accent-soft);
+    color: var(--brand-accent-ink);
+    border-color: var(--brand-accent-border);
+}
+.risk-score-pill.LOW {
+    background: var(--green-bg);
+    color: var(--green);
+    border-color: var(--green-border);
+}
+
+.risk-bar-track {
+    width: 72px;
+    height: 6px;
+    background: var(--surface-3);
+    border-radius: 99px;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: middle;
+}
+.risk-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+}
+
+.doc-type-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+.doc-type-badge.ADR {
+    background: #E6F4EA;
+    color: #137333;
+    border: 1px solid #CEEAD6;
+}
+.doc-type-badge.SPEC, .doc-type-badge.INVARIANT {
+    background: #FEF7E0;
+    color: #B06000;
+    border: 1px solid #FDD663;
+}
+.doc-type-badge.POLICY, .doc-type-badge.GUARDRAIL {
+    background: var(--ink);
+    color: var(--brand-accent);
+    border: 1px solid var(--ink);
+}
+
+.code-ref-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    margin: 2px 3px 2px 0;
+    border-radius: 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.12s;
+}
+.code-ref-chip:hover {
+    background: var(--brand-accent-soft);
+    border-color: var(--ink);
+    color: var(--ink);
+}
+
+.talon-terminal-card {
+    background: #111411;
+    color: #E5E7EB;
+    border: 1px solid #2A312A;
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+    box-shadow: var(--shadow-sm);
+}
+.talon-terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #262B26;
+    color: #D5E66A;
+    font-weight: 700;
+    font-size: 12px;
+}
+.talon-prompt-box {
+    margin-top: 12px;
+    padding: 12px;
+    background: #1A1E1A;
+    border: 1px solid #374137;
+    border-radius: 6px;
+    color: #F3F4F0;
+    white-space: pre-wrap;
+    font-size: 11.5px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.docs-graph-stage {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    height: 520px;
+    overflow: hidden;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow-xs);
+}
+.docs-graph-canvas {
+    flex: 1;
+    position: relative;
+    background: var(--bg);
+    background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
+    background-size: 18px 18px;
+    overflow: hidden;
+}
+.docs-graph-canvas svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.docs-graph-inspector {
+    width: 340px;
+    min-width: 340px;
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.legend-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 8px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-2);
+}
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 550;
+}
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.hook-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+.hook-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: var(--shadow-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.hook-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.hook-card-title {
+    font-weight: 650;
+    font-size: 12.5px;
+    color: var(--text);
+}
+.hook-card-path {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.garuda-toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+}
+.garuda-toast {
+    background: var(--ink);
+    color: var(--surface);
+    border: 1px solid var(--brand-accent);
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 550;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: auto;
+    animation: toastSlideIn 0.18s ease-out;
+}
+@keyframes toastSlideIn {
+    from { transform: translateY(12px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(19, 21, 19, 0.52);
+    backdrop-filter: blur(2px);
+    z-index: 2500;
+    display: none;
+    place-items: center;
+    padding: 20px;
+}
+.modal-backdrop.open {
+    display: grid;
+}
+.modal-card {
+    width: min(680px, 95vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-modal);
+    padding: 22px 24px;
+}
+.form-field {
+    margin-bottom: 14px;
+}
+.form-label {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 650;
+    color: var(--text);
+    margin-bottom: 5px;
+}
+.form-input, .form-textarea, .form-select {
+    width: 100%;
+    border: 1px solid var(--border-strong);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 12.5px;
+    outline: none;
+}
+.form-textarea {
+    font-family: var(--font-mono);
+    min-height: 130px;
+    resize: vertical;
+}
+.form-input:focus, .form-textarea:focus, .form-select:focus {
+    border-color: var(--ink);
+    background: var(--surface);
+}
+
+@media (max-width: 1180px) {
+    .hook-grid { grid-template-columns: 1fr; }
+    .docs-graph-stage { flex-direction: column; height: auto; }
+    .docs-graph-canvas { height: 420px; }
+    .docs-graph-inspector { width: 100%; min-width: 0; border-left: 0; border-top: 1px solid var(--border); }
+}

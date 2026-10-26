@@ -1,8 +1,8 @@
 # Control Plane — metric definitions
 
-**Status:** Core Business, Tenants and Operations metrics are implemented in the current v1.5.0 tree. This document describes the intended formulas and empty states; some values remain unmeasured or deliberately uninstrumented.
-**Implementation anchors:** `internal/api/control_plane_business.go`, `internal/api/control_plane_tenants.go`, `internal/api/control_plane_operations.go`, `internal/api/control_plane.go`, and `migrations/088_mcp_sessions.sql` / `092_errors_log.sql`.
-**Scope:** Metric definitions for the owner-facing Control Plane.
+**Status:** agreed 2026-09-17.
+**Scope:** every metric shown on the Control Plane Business tab and the
+Tenants tab table.
 
 Every metric has a formula, a window, a refresh cadence, and an empty
 state. Two operators looking at this dashboard must see the same number.
@@ -228,9 +228,9 @@ Formula: SELECT pg_database_size(current_database())
 
 Empty state: 0 bytes (cannot occur in practice)
 
-Query latency percentiles
+Average query latency
 
-Formula: P50 / P95 / P99 from the in-process query-duration ring buffer; sample count is shown and the ring resets when the API process restarts
+Formula: P50 / P95 / P99 of the API server's own query durations over the last 5 minutes, from an in-process ring buffer
 
 Empty state: "Not yet measured"
 
@@ -238,15 +238,15 @@ Cadence: on page load
 
 Error rate
 
-Formula: errors / total requests in the rolling 60-minute in-process counter, bucketed per minute. The counter is local to the API process and resets on process restart.
+Formula: errors / total requests over the last hour, from an in-process counter
 
-Empty state: 0% when no requests have been recorded in the current process window.
+Empty state: 0%
 
 Recent errors
 
 Formula: SELECT * FROM errors_log WHERE occurred_at >= NOW() - INTERVAL '24 hours' ORDER BY occurred_at DESC LIMIT 50
 
-The `errors_log` table is created by migration `092_errors_log.sql`. The panel is implemented; query failures are rendered as a measurement error rather than being represented as a fabricated zero.
+Dependency note: the errors_log table does not exist. This metric is blocked on a separate migration. Until that ships, the panel shows: "Error log not yet instrumented."
 
 Empty state: "No errors in the last 24 hours"
 
@@ -287,14 +287,13 @@ change when they hit refresh.
 
 Empty state variants
 
-| Kind | Rendering | Example |
-|---|---|---|
-| Numeric zero | The digit `0` | No tenants on a fresh deployment, when the query succeeded |
-| Not yet measured | Explicit text, never a fabricated zero | Query-latency percentiles before enough samples have been recorded |
-| Query/configuration error | An error or "Not measured" state | The database query failed or the separate read-only connection is not usable |
-| Not instrumented / deferred | Clearly identified unavailable capability | Billing metrics, which are not part of the current Control Plane implementation |
-
-The recent-error log is implemented using the `errors_log` migration. Request error rate and query latency are measured in process-local counters/rings and reset when the API process restarts. A real zero, an insufficient sample, a failed query and a deferred capability are different states; the UI and docs should never represent them as the same green zero.
+Kind	Rendering	Example
+Numeric zero	The digit 0	Tenants on a fresh deployment
+Not yet measured	Italic text in the metric slot	Latency before any query runs
+Not instrumented	Greyed card with a lock icon	Billing, error log
+A 0 is a real number. A "not yet measured" is an honest absence. A
+"not instrumented" is a dependency that has not been built. Rendering
+all three the same way is how dashboards lie.
 
 What is not measured
 Any metric requiring a data source the schema does not contain. The

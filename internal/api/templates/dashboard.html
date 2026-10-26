@@ -19,15 +19,14 @@
   .drawer { width: 100vw !important; max-width: 100vw !important; }
 }
 </style>
-<title>Garuda — Epistemic Software Intelligence</title>
-<script src="https://d3js.org/d3.v7.min.js"></script>
+<title>Garuda — Epistemic Software Intelligence &amp; Active Governance</title>
 <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 
 <body>
 <div class="app">
     <!-- ====================================================================
-         LEFT SIDEBAR: Linear-style restrained hierarchy & workspace context
+         LEFT SIDEBAR: Restrained hierarchy & workspace context
          ==================================================================== -->
     <aside class="sidebar">
         <div class="brand">
@@ -35,7 +34,7 @@
                 <div class="brand-mark">G</div>
                 <div>
                     <div class="brand-name">GARUDA</div>
-                    <div class="brand-subtitle">Software Intelligence</div>
+                    <div class="brand-subtitle">Software Intelligence v1.7</div>
                 </div>
             </div>
             <button class="footer-link-btn" onclick="toggleTheme()" id="theme-toggle-btn" title="Switch Light / Graphite Dark Mode">☀</button>
@@ -71,23 +70,31 @@
                 <span class="nav-btn-left"><span class="nav-num">03</span><span>Architecture Map</span></span>
                 <span class="nav-badge" id="nav-badge-packages">—</span>
             </button>
+            <button class="nav-btn" data-surface="docsgraph" onclick="showView('docsgraph')">
+                <span class="nav-btn-left"><span class="nav-num">04</span><span>Docs &amp; Rules Graph</span></span>
+                <span class="nav-badge" id="nav-badge-docsgraph" style="background:var(--brand-accent-soft); color:var(--brand-accent-ink); border-color:var(--brand-accent-border);">New</span>
+            </button>
+            <button class="nav-btn" data-surface="talon" onclick="showView('talon')">
+                <span class="nav-btn-left"><span class="nav-num">05</span><span>Talon &amp; Risk Hub</span></span>
+                <span class="nav-badge" id="nav-badge-talon">Guard</span>
+            </button>
             <button class="nav-btn" data-surface="review" onclick="showView('review')">
-                <span class="nav-btn-left"><span class="nav-num">04</span><span>Change Review</span></span>
+                <span class="nav-btn-left"><span class="nav-num">06</span><span>Change Review</span></span>
                 <span class="nav-badge" id="nav-badge-review">Gate</span>
             </button>
             <button class="nav-btn" data-surface="governance" onclick="showView('governance')">
-                <span class="nav-btn-left"><span class="nav-num">05</span><span>Evidence &amp; Ledger</span></span>
+                <span class="nav-btn-left"><span class="nav-num">07</span><span>Evidence &amp; Ledger</span></span>
                 <span class="nav-badge" id="nav-badge-ledger">#1</span>
             </button>
             <button class="nav-btn" data-surface="agents" onclick="showView('agents')">
-                <span class="nav-btn-left"><span class="nav-num">06</span><span>Agents &amp; Policies</span></span>
+                <span class="nav-btn-left"><span class="nav-num">08</span><span>Agents &amp; Sessions</span></span>
                 <span class="nav-badge" id="nav-badge-agents">MCP</span>
             </button>
 
             <div class="nav-group-label" style="margin-top:12px;">Governance Records</div>
             <button class="nav-btn" data-surface="decisions" onclick="showView('decisions')">
                 <span class="nav-btn-left"><span class="nav-num">ADR</span><span>Decision Lineage</span></span>
-                <span class="nav-badge" id="nav-badge-decisions">0</span>
+                <span class="nav-badge" id="nav-badge-decisions">3</span>
             </button>
         </nav>
 
@@ -97,7 +104,8 @@
                 <span id="sidebar-trust-label">RFC 6962 Ledger Verified</span>
             </div>
             <div class="sidebar-footer-actions">
-                <a href="/docs" class="footer-link-btn" target="_blank" rel="noopener">API Spec</a>
+                <button type="button" class="footer-link-btn" onclick="openAPISpecModal()">API Spec</button>
+                <button type="button" class="footer-link-btn" onclick="openContractModal()">Talon Contract</button>
                 <form method="POST" action="/logout" style="margin:0;">
                     <button type="submit" class="footer-link-btn">Sign out</button>
                 </form>
@@ -111,7 +119,7 @@
     <section class="main">
         <header class="topbar">
             <div class="topbar-breadcrumbs">
-                <span class="crumb-root">Workspace</span>
+                <span class="crumb-root" style="cursor:pointer;" onclick="showView('workspace')">Workspace</span>
                 <span class="crumb-sep">/</span>
                 <span class="crumb-ws" id="workspace-breadcrumb">{{ .WorkspaceName }}</span>
                 <span class="crumb-sep">/</span>
@@ -120,28 +128,31 @@
 
             <div class="global-search">
                 <span class="search-icon">⌕</span>
-                <input id="global-search" class="search-input" placeholder="Search symbols, packages, policies, or press ⌘K..." autocomplete="off">
-                <span class="search-shortcut">⌘K</span>
+                <input id="global-search" class="search-input" placeholder="Search symbols, ADRs, policies, risk hubs, or press ⌘K..." autocomplete="off">
+                <span class="search-shortcut" style="cursor:pointer;" onclick="openCommandPalette()">⌘K</span>
             </div>
 
             <div class="topbar-right">
-                <div class="live-pill" id="honest-system-pill" title="Separates static AST completeness, runtime trace verification, and cryptographic ledger integrity">
+                <div class="live-pill" id="honest-system-pill" style="cursor:pointer;" onclick="showView('talon')" title="Click to inspect Talon &amp; Risk Hub">
                     <span class="live-dot" id="honest-system-dot"></span>
                     <span id="honest-system-text">Static AST synced</span>
                 </div>
-                <button class="refresh-button" onclick="loadAll()">Refresh</button>
+                <button class="btn-secondary" style="height:30px; font-size:11.5px;" onclick="openIngestDocModal()">+ Ingest Doc / Rule</button>
+                <button class="refresh-button" onclick="refreshAllWithToast()">↻ Refresh</button>
             </div>
         </header>
 
         <!-- Programmatic compatibility tab strip -->
         <nav class="tab-strip" role="tablist">
-            <button class="tab active" data-tab="workspace" role="tab" aria-selected="true" onclick="showView('workspace')">Workspace</button>
-            <button class="tab" data-tab="search" role="tab" aria-selected="false" onclick="showView('search')">Explore</button>
-            <button class="tab" data-tab="graph" role="tab" aria-selected="false" onclick="showView('graph')">Graph</button>
-            <button class="tab" data-tab="review" role="tab" aria-selected="false" onclick="showView('review')">Change Review</button>
-            <button class="tab" data-tab="governance" role="tab" aria-selected="false" onclick="showView('governance')">Evidence</button>
-            <button class="tab" data-tab="agents" role="tab" aria-selected="false" onclick="showView('agents')">Agents</button>
-            <button class="tab" data-tab="decisions" role="tab" aria-selected="false" onclick="showView('decisions')">Decisions</button>
+            <button class="tab active" data-tab="workspace" role="tab" aria-selected="true" onclick="showView('workspace')">01 Overview</button>
+            <button class="tab" data-tab="search" role="tab" aria-selected="false" onclick="showView('search')">02 Explore</button>
+            <button class="tab" data-tab="graph" role="tab" aria-selected="false" onclick="showView('graph')">03 Arch Map</button>
+            <button class="tab" data-tab="docsgraph" role="tab" aria-selected="false" onclick="showView('docsgraph')">04 Docs &amp; Rules Graph</button>
+            <button class="tab" data-tab="talon" role="tab" aria-selected="false" onclick="showView('talon')">05 Talon &amp; Risk Hub</button>
+            <button class="tab" data-tab="review" role="tab" aria-selected="false" onclick="showView('review')">06 Change Review</button>
+            <button class="tab" data-tab="governance" role="tab" aria-selected="false" onclick="showView('governance')">07 Evidence</button>
+            <button class="tab" data-tab="agents" role="tab" aria-selected="false" onclick="showView('agents')">08 Agents</button>
+            <button class="tab" data-tab="decisions" role="tab" aria-selected="false" onclick="showView('decisions')">ADR Lineage</button>
         </nav>
 
         <main class="content">
@@ -160,18 +171,20 @@
                     <div>
                         <h1 class="hero-title">What needs attention in your software system.</h1>
                         <div class="hero-subtitle" id="overview-narrative">
-                            Garuda triangulates compiler ASTs, runtime OpenTelemetry traces, and declarative architecture policies. Semantic evidence status is reported separately from cryptographic ledger integrity.
+                            Garuda connects your architecture docs (ADRs &amp; specs), declarative policies, compiler ASTs, and active AI coding agent guardrails (Talon) into one verifiable graph.
                         </div>
                     </div>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                        <button class="btn-secondary" onclick="showView('graph')">Open Architecture Map</button>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                        <button class="btn-secondary" onclick="showView('docsgraph')">✦ Docs &amp; Rules Graph</button>
+                        <button class="btn-secondary" onclick="showView('talon')">🛡️ Talon &amp; Risk Hub</button>
+                        <button class="btn-secondary" onclick="showView('graph')">Architecture Map</button>
                         <button class="btn-primary" onclick="showView('review')">Change Review Workbench →</button>
                     </div>
                 </div>
 
-                <!-- Unified 4-Column Architectural Pulse Strip (LeonAnd / Linear style) -->
+                <!-- Unified 4-Column Architectural Pulse Strip -->
                 <div class="pulse-strip">
-                    <div class="pulse-cell">
+                    <div class="pulse-cell" style="cursor:pointer;" onclick="showView('graph')">
                         <div class="pulse-label">
                             <span>01 · Indexed Topology</span>
                             <span class="mono" id="stat-repositories">—</span>
@@ -187,14 +200,14 @@
                         </div>
                     </div>
 
-                    <div class="pulse-cell">
+                    <div class="pulse-cell" style="cursor:pointer;" onclick="showView('docsgraph')">
                         <div class="pulse-label">
-                            <span>02 · Epistemic Evidence</span>
+                            <span>02 · Docs, ADRs &amp; Epistemics</span>
                             <span class="badge-pill info" id="epistemic-mode-badge">3-State</span>
                         </div>
                         <div class="pulse-value-row">
                             <span class="pulse-value" id="stat-supported">—</span>
-                            <span class="pulse-delta">supported of <span id="pulse-total-claims">—</span> claims</span>
+                            <span class="pulse-delta">verified of <span id="pulse-total-claims">—</span> claims</span>
                         </div>
                         <div class="pulse-bar-track">
                             <div id="bar-supported" style="background:var(--green); width:0%;"></div>
@@ -207,9 +220,9 @@
                         </div>
                     </div>
 
-                    <div class="pulse-cell">
+                    <div class="pulse-cell" style="cursor:pointer;" onclick="showView('talon')">
                         <div class="pulse-label">
-                            <span>03 · Policy Gate Verdict</span>
+                            <span>03 · Talon &amp; Policy Gate</span>
                             <span class="badge-pill success" id="policy-final-decision-badge">ALLOW</span>
                         </div>
                         <div class="pulse-value-row">
@@ -224,7 +237,7 @@
                         </div>
                     </div>
 
-                    <div class="pulse-cell">
+                    <div class="pulse-cell" style="cursor:pointer;" onclick="showView('governance')">
                         <div class="pulse-label">
                             <span>04 · RFC 6962 Ledger</span>
                             <span class="merkle-chip" id="policy-latest-anchor">block #1</span>
@@ -238,7 +251,7 @@
                         </div>
                         <div class="pulse-foot">
                             <span class="mono" id="overview-merkle-short" style="font-size:10.5px;">Genesis root verified</span>
-                            <button class="inspector-ref-link" onclick="showView('governance')">Audit →</button>
+                            <button class="inspector-ref-link" onclick="event.stopPropagation(); showView('governance')">Audit →</button>
                         </div>
                     </div>
                 </div>
@@ -252,14 +265,16 @@
                                     <div class="panel-title">Recent Change Checks &amp; Policy Evaluations</div>
                                     <div class="panel-subtitle">Click any evaluation to open its 3-pane blast-radius and evidence review.</div>
                                 </div>
-                                <button class="btn-secondary" onclick="showView('review')">Open Change Review →</button>
+                                <div style="display:flex; gap:6px;">
+                                    <button class="btn-secondary" onclick="showView('talon')">Run Talon Check</button>
+                                    <button class="btn-secondary" onclick="showView('review')">Change Review →</button>
+                                </div>
                             </div>
                             <div class="panel-body" style="padding:0;">
                                 <div class="policy-eval-list" id="policy-eval-list" style="border:0; border-radius:0;">
                                     <div class="list-row">
                                         <div class="row-main">
-                                            <div class="row-title">No evaluations recorded yet</div>
-                                            <div class="row-meta">Run <code>./bin/garuda check --project {{ .WorkspaceName }} --policy policies --save</code></div>
+                                            <div class="row-title">Loading policy evaluations…</div>
                                         </div>
                                     </div>
                                 </div>
@@ -291,6 +306,7 @@
                                     <div class="panel-title">Needs Attention: Contradictions &amp; Alerts</div>
                                     <div class="panel-subtitle">Quarantined runtime-vs-static deviations and policy blocks.</div>
                                 </div>
+                                <button class="inspector-ref-link" onclick="showView('talon')">Talon Gate →</button>
                             </div>
                             <div class="list" id="attention-list">
                                 <div class="list-row"><div class="row-main"><div class="row-title">Evaluating system invariants...</div></div></div>
@@ -300,10 +316,13 @@
                         <div class="panel">
                             <div class="panel-header">
                                 <div>
-                                    <div class="panel-title">Highest-Centrality Architectural Hubs</div>
-                                    <div class="panel-subtitle">Symbols with the largest inbound caller blast radius. Click to inspect neighborhood.</div>
+                                    <div class="panel-title">Highest-Centrality Architectural &amp; Risk Hubs</div>
+                                    <div class="panel-subtitle">Symbols with the largest caller blast radius. Click to inspect neighborhood or Risk Hub.</div>
                                 </div>
-                                <button class="inspector-ref-link" onclick="openArchitecture('entity')">Map →</button>
+                                <div style="display:flex; gap:8px;">
+                                    <button class="inspector-ref-link" onclick="showView('talon')">Risk Hub →</button>
+                                    <button class="inspector-ref-link" onclick="openArchitecture('entity')">Map →</button>
+                                </div>
                             </div>
                             <div class="list" id="hub-list">
                                 <div class="list-row"><div class="row-main"><div class="row-title">Loading hubs...</div></div></div>
@@ -313,25 +332,29 @@
                         <div class="panel">
                             <div class="panel-header">
                                 <div>
-                                    <div class="panel-title">Documentation ↔ Code Drift</div>
-                                    <div class="panel-subtitle">Comparison of ADR/spec claims against static and runtime graph edges.</div>
+                                    <div class="panel-title">Documentation ↔ Code Lineage &amp; Drift</div>
+                                    <div class="panel-subtitle">Live correlation of ingested ADRs, design specs, and YAML rules against code symbols.</div>
+                                </div>
+                                <div style="display:flex; gap:6px;">
+                                    <button class="btn-secondary" style="height:26px; font-size:11px;" onclick="openIngestDocModal()">+ Ingest Doc</button>
+                                    <button class="btn-primary" style="height:26px; font-size:11px;" onclick="showView('docsgraph')">Docs Graph →</button>
                                 </div>
                             </div>
                             <div class="panel-body">
                                 <div class="drift-row">
-                                    <span class="drift-row-label">Documented capabilities</span>
+                                    <span class="drift-row-label">Extracted document &amp; policy rules</span>
                                     <span class="drift-row-val" id="drift-total-docs">—</span>
                                 </div>
                                 <div class="drift-row">
-                                    <span class="drift-row-label">Supported by code (<span style="color:var(--green);">SUPPORTED</span>)</span>
+                                    <span class="drift-row-label">Verified &amp; enforced in code (<span style="color:var(--green);">SUPPORTED / ENFORCED</span>)</span>
                                     <span class="drift-row-val" id="drift-doc-supported" style="color:var(--green);">—</span>
                                 </div>
                                 <div class="drift-row">
-                                    <span class="drift-row-label">Unverified at runtime (<span style="color:var(--amber);">UNVERIFIED</span>)</span>
+                                    <span class="drift-row-label">Awaiting runtime telemetry (<span style="color:var(--amber);">UNVERIFIED</span>)</span>
                                     <span class="drift-row-val" id="drift-doc-unverified" style="color:var(--amber);">—</span>
                                 </div>
                                 <div class="drift-row">
-                                    <span class="drift-row-label">Contradicted (<span style="color:var(--red);">CONTRADICTED</span>)</span>
+                                    <span class="drift-row-label">Contradicted by code (<span style="color:var(--red);">CONTRADICTED</span>)</span>
                                     <span class="drift-row-val" id="drift-doc-contradicted" style="color:var(--red);">—</span>
                                 </div>
                                 <div class="drift-row">
@@ -357,10 +380,17 @@
                         <h1 class="hero-title">Explore the semantic index.</h1>
                         <div class="hero-subtitle">Search repositories, packages, functions, methods, structs, and interfaces with instant architectural preview.</div>
                     </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-secondary" onclick="performSearch('')">Show Top Symbols</button>
+                        <button class="btn-primary" onclick="showView('graph')">Open Architecture Map →</button>
+                    </div>
                 </div>
 
                 <div class="start-card">
-                    <input id="search-page-input" class="quick-search" placeholder="Search symbols, packages, files, functions, methods (e.g., Engine, Run, AuthMiddleware, ParseDirectory)...">
+                    <div style="display:flex; gap:8px;">
+                        <input id="search-page-input" class="quick-search" placeholder="Search symbols, packages, files, functions, methods (e.g., Engine, RunGuard, AppendLeafAndSealTx, AuthMiddleware)...">
+                        <button class="btn-primary" style="height:40px; padding:0 18px; flex-shrink:0;" onclick="performSearch(document.getElementById('search-page-input').value)">Search</button>
+                    </div>
                     <input id="quick-search" type="hidden">
                     <div class="arch-pill-bar" style="margin-top:12px;">
                         <div class="pill-group" id="search-kind-filters">
@@ -371,9 +401,11 @@
                         </div>
                         <div class="quick-hints" style="margin-top:0;">
                             <button class="hint" onclick="runHint('Engine')">Engine</button>
+                            <button class="hint" onclick="runHint('RunGuard')">RunGuard</button>
+                            <button class="hint" onclick="runHint('CompileContract')">CompileContract</button>
+                            <button class="hint" onclick="runHint('AppendLeafAndSealTx')">AppendLeafAndSealTx</button>
                             <button class="hint" onclick="runHint('AuthMiddleware')">AuthMiddleware</button>
                             <button class="hint" onclick="runHint('RecomputeWorkspaceVerification')">RecomputeWorkspaceVerification</button>
-                            <button class="hint" onclick="runHint('AnalyzeWorkspace')">AnalyzeWorkspace</button>
                             <button class="hint" onclick="runHint('ParseDirectory')">ParseDirectory</button>
                         </div>
                     </div>
@@ -388,7 +420,7 @@
                             </div>
                         </div>
                         <div class="list" id="search-results">
-                            <div class="list-row"><div class="row-main"><div class="row-title">Type above or click a suggested symbol to search the workspace index.</div></div></div>
+                            <div class="list-row"><div class="row-main"><div class="row-title">Loading workspace symbols…</div></div></div>
                         </div>
                     </div>
 
@@ -396,7 +428,7 @@
                         <div class="panel-header">
                             <div>
                                 <div class="panel-title">Symbol Preview &amp; Neighborhood Actions</div>
-                                <div class="panel-subtitle">Inspect before jumping to the Architecture Map or Change Review.</div>
+                                <div class="panel-subtitle">Inspect before jumping to the Architecture Map, Talon Risk Hub, or Change Review.</div>
                             </div>
                         </div>
                         <div class="panel-body" id="search-preview-pane">
@@ -409,7 +441,7 @@
             </section>
 
             <!-- ============================================================
-                 03 — ARCHITECTURE MAP: GRAPH WITHOUT THE HAIRBALL (Screenshot 3 & 7)
+                 03 — ARCHITECTURE MAP: GRAPH WITHOUT THE HAIRBALL + DOCS MODE
                  ============================================================ -->
             <section id="view-architecture" style="display:none;">
                 <div class="issue-kicker">
@@ -419,39 +451,40 @@
                 <div class="hero">
                     <div>
                         <h1 class="hero-title" id="architecture-title">Architecture Map</h1>
-                        <div class="hero-subtitle" id="architecture-subtitle">Start with context, not every node. Explore 1-hop and 2-hop symbol neighborhoods, package layers, and blast radius.</div>
+                        <div class="hero-subtitle" id="architecture-subtitle">Start with context, not every node. Explore 1-hop and 2-hop symbol neighborhoods, package layers, and the Document-to-Code Guardrails graph.</div>
                     </div>
                     <div class="pill-group">
                         <button class="btn-secondary" onclick="goUpArchitecture()">← Up Level</button>
                         <button class="btn-secondary" onclick="fitGraph()">Fit Canvas</button>
+                        <button class="btn-secondary" onclick="showView('docsgraph')">Open Docs &amp; Rules Table →</button>
                         <button class="btn-primary" onclick="openSelectedInChangeReview()">Inspect in Change Review →</button>
                     </div>
                 </div>
 
                 <div class="arch-map-shell">
-                    <!-- Top Search & Pill Bar modeled directly on Screenshot 7 -->
                     <div class="arch-map-topbar">
                         <div class="arch-search-row">
-                            <input id="arch-symbol-search" class="arch-search-input" placeholder="Search symbols, packages, dependencies to focus neighborhood (press Enter)…" onkeydown="if(event.key==='Enter') focusGraphByQuery(this.value)">
+                            <input id="arch-symbol-search" class="arch-search-input" placeholder="Search symbols, packages, ADRs, or policies to focus neighborhood (press Enter)…" onkeydown="if(event.key==='Enter') focusGraphByQuery(this.value)">
                             <button class="btn-accent" onclick="focusGraphByQuery(document.getElementById('arch-symbol-search').value)">Focus Map</button>
-                            <button class="btn-secondary" onclick="state.graphCache = {}; loadArchitecture(state.currentLevel, state.currentFocus)">Reset</button>
+                            <button class="btn-secondary" onclick="resetArchitectureMap()">Reset</button>
                         </div>
 
                         <div class="arch-pill-bar">
                             <div class="pill-group">
                                 <button class="filter-pill active" id="btn-hop-1" onclick="setHopDepth(1)">1 hop</button>
                                 <button class="filter-pill" id="btn-hop-2" onclick="setHopDepth(2)">2 hops</button>
-                                <button class="filter-pill" id="btn-mode-entity" onclick="setArchitectureMode('entity')">Symbols</button>
+                                <button class="filter-pill active" id="btn-mode-entity" onclick="setArchitectureMode('entity')">Symbols</button>
                                 <button class="filter-pill" id="btn-mode-package" onclick="setArchitectureMode('package')">Packages</button>
                                 <button class="filter-pill" id="btn-mode-repo" onclick="setArchitectureMode('repository')">Repositories</button>
                                 <button class="filter-pill" id="btn-mode-full" onclick="setArchitectureMode('full')">Full Mesh</button>
+                                <button class="filter-pill" id="btn-mode-docs" onclick="setArchitectureMode('docs')" style="border-color:var(--brand-accent-border); font-weight:700;">✦ Docs &amp; Rules Graph</button>
                             </div>
 
                             <div class="pill-group">
                                 <button class="filter-pill active" data-edge-filter="ALL" onclick="setEdgeTypeFilter('ALL')">All Edges</button>
                                 <button class="filter-pill" data-edge-filter="CALLS" onclick="setEdgeTypeFilter('CALLS')">Calls</button>
-                                <button class="filter-pill" data-edge-filter="IMPORTS" onclick="setEdgeTypeFilter('IMPORTS')">Imports</button>
-                                <button class="filter-pill" data-edge-filter="IMPLEMENTS" onclick="setEdgeTypeFilter('IMPLEMENTS')">Implements</button>
+                                <button class="filter-pill" data-edge-filter="IMPORTS" onclick="setEdgeTypeFilter('IMPORTS')">Imports / Deps</button>
+                                <button class="filter-pill" data-edge-filter="GOVERNS" onclick="setEdgeTypeFilter('GOVERNS')">Docs / Rules</button>
                                 <button class="filter-pill" data-edge-filter="CONTRADICTED" onclick="setEdgeTypeFilter('CONTRADICTED')">Contradicted</button>
                             </div>
 
@@ -463,7 +496,7 @@
                         </div>
                     </div>
 
-                    <!-- Screenshot 7 Focused Neighborhood Architectural Diagram -->
+                    <!-- Focused Neighborhood Architectural Diagram -->
                     <div class="neighborhood-stage" id="neighborhood-stage">
                         <div class="neighborhood-diagram">
                             <div class="selected-fn-card" id="nb-selected-card">
@@ -512,7 +545,7 @@
                                 <button class="graph-control" onclick="zoomGraph(0.8)" title="Zoom out">−</button>
                                 <button class="graph-control" onclick="fitGraph()" title="Fit graph">⌂</button>
                             </div>
-                            <div class="graph-help">Click node to inspect · Double-click to focus 1-hop neighborhood · Quiet lines = static AST · Red dashed = runtime contradiction</div>
+                            <div class="graph-help">Click node to inspect · Double-click to focus 1-hop neighborhood · Quiet lines = static AST · Green/Gold = Docs &amp; Rules · Red dashed = contradiction</div>
                         </div>
 
                         <aside class="graph-side-panel">
@@ -524,13 +557,13 @@
                             <div class="inspector-body" id="inspector-body">
                                 <div class="inspector-ref-row">
                                     <span>Incoming references (<strong id="insp-in-count">0</strong>)</span>
-                                    <button class="inspector-ref-link" onclick="expandInspectorList('in')">Details →</button>
+                                    <button class="inspector-ref-link" onclick="expandInspectorList('in')">All Callers →</button>
                                 </div>
                                 <div id="insp-in-list" style="margin-bottom:8px;"></div>
 
                                 <div class="inspector-ref-row">
                                     <span>Outgoing dependencies (<strong id="insp-out-count">0</strong>)</span>
-                                    <button class="inspector-ref-link" onclick="expandInspectorList('out')">Details →</button>
+                                    <button class="inspector-ref-link" onclick="expandInspectorList('out')">All Deps →</button>
                                 </div>
                                 <div id="insp-out-list" style="margin-bottom:12px;"></div>
 
@@ -538,7 +571,7 @@
                             </div>
 
                             <div class="side-panel-header">
-                                <span>MODULES / PACKAGES</span>
+                                <span>MODULES / GROUPS</span>
                                 <span style="font-size:10px; color:var(--text); cursor:pointer; font-weight:700;" onclick="toggleAllCommunities()">Toggle All</span>
                             </div>
                             <div class="side-panel-list" id="communities-list">
@@ -550,12 +583,353 @@
             </section>
 
             <!-- ============================================================
-                 04 — CHANGE REVIEW: GARUDA'S SIGNATURE 3-PART WORKBENCH
+                 04 — DOCS & RULES GRAPH: DOCUMENT-TO-CODE LINEAGE HUB (NEW!)
+                 ============================================================ -->
+            <section id="view-docs-graph" style="display:none;">
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>04 · DOCUMENT-TO-CODE &amp; GUARDRAILS GRAPH · ADR · SPECS · POLICIES · CODE</span>
+                </div>
+                <div class="hero">
+                    <div>
+                        <h1 class="hero-title">Docs, Specs &amp; Guardrails Graph</h1>
+                        <div class="hero-subtitle">
+                            When you ingest ADRs, design specs, invariants, and YAML policies into Garuda, it generates a structured table of document components and connects the dots directly to the code symbols and Talon guardrails that implement or violate them.
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn-secondary" onclick="rescanWorkspaceDocs()">↻ Re-Scan Repo Docs</button>
+                        <button class="btn-secondary" onclick="setArchitectureMode('docs'); showView('graph')">Open in Full Arch Map</button>
+                        <button class="btn-primary" onclick="openIngestDocModal()">+ Ingest Document / ADR / Rule</button>
+                    </div>
+                </div>
+
+                <!-- 4-Column Docs & Rules Summary Strip -->
+                <div class="pulse-strip">
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>01 · Ingested Documents</span>
+                            <span class="badge-pill info" id="dg-stat-doc-breakdown">ADRs · Specs · Policies</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="dg-stat-total-docs">9</span>
+                            <span class="pulse-delta">governed documents indexed</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono" id="dg-stat-docs-foot">3 ADRs · 2 Specs · 4 Policies</span>
+                            <button class="inspector-ref-link" onclick="openIngestDocModal()">+ Add →</button>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>02 · Extracted Components</span>
+                            <span class="badge-pill success">Parsed Rules</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="dg-stat-total-comps">12</span>
+                            <span class="pulse-delta">normative claims &amp; guardrails</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono">MUST · MUST_NOT · BLOCK · INVARIANT</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>03 · Connected Code Dots</span>
+                            <span class="badge-pill info">AST Linked</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="dg-stat-code-nodes">12</span>
+                            <span class="pulse-delta">symbols &amp; packages governed</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono"><span id="dg-stat-edges">32</span> semantic doc-to-code edges</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>04 · Talon Active Guardrails</span>
+                            <span class="badge-pill success" id="dg-stat-verdict-badge">ENFORCED</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="dg-stat-enforced">12</span>
+                            <span class="pulse-delta">verified &amp; enforced rules</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono" style="color:var(--green);">0 unanchored doc contradictions</span>
+                            <button class="inspector-ref-link" onclick="showView('talon')">Talon Hub →</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter Bar for Docs & Rules Graph -->
+                <div class="panel" style="margin-bottom:16px;">
+                    <div class="panel-header" style="border-bottom:0; padding:12px 16px;">
+                        <div class="pill-group" id="docs-graph-filter-group">
+                            <button class="filter-pill active" data-doc-filter="ALL" onclick="filterDocsGraph('ALL', this)">All Docs &amp; Rules</button>
+                            <button class="filter-pill" data-doc-filter="ADR" onclick="filterDocsGraph('ADR', this)">ADRs Only</button>
+                            <button class="filter-pill" data-doc-filter="SPEC" onclick="filterDocsGraph('SPEC', this)">Design Specs &amp; Invariants</button>
+                            <button class="filter-pill" data-doc-filter="POLICY" onclick="filterDocsGraph('POLICY', this)">YAML Policies &amp; .garudarules</button>
+                            <button class="filter-pill" data-doc-filter="ENFORCED" onclick="filterDocsGraph('ENFORCED', this)">Enforced by Talon</button>
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input id="docs-filter-search" class="arch-search-input" style="height:30px; width:240px; font-size:12px;" placeholder="Filter docs, rules, or code symbols…" oninput="renderDocsGraphAndTables()">
+                            <button class="btn-secondary" style="height:30px; font-size:11.5px;" onclick="fitDocsGraph()">Fit Graph</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive 4-Tier Visual Graph Connecting Docs -> Rules -> Policies -> Code -->
+                <div class="docs-graph-stage">
+                    <div class="docs-graph-canvas" id="docs-graph-wrap">
+                        <div class="legend-bar">
+                            <span style="font-weight:700; color:var(--text);">4-Tier Lineage Dots:</span>
+                            <span class="legend-item"><span class="legend-dot" style="background:#137333; border:2px solid #CEEAD6;"></span> 1. Document (ADR / Spec / Policy)</span>
+                            <span class="legend-item"><span class="legend-dot" style="background:#B06000; border:2px solid #FDD663;"></span> 2. Extracted Rule / Claim (MUST / MUST_NOT)</span>
+                            <span class="legend-item"><span class="legend-dot" style="background:#191B19; border:2px solid #D5E66A;"></span> 3. Active Policy Guardrail (Talon)</span>
+                            <span class="legend-item"><span class="legend-dot" style="background:#2E5A44; border:2px solid #FFFFFF;"></span> 4. Governed Code Symbol / Package (AST)</span>
+                        </div>
+                        <svg id="docs-graph-svg"></svg>
+                        <div class="graph-controls" style="bottom:14px; right:14px;">
+                            <button class="graph-control" onclick="zoomDocsGraph(1.25)" title="Zoom in">+</button>
+                            <button class="graph-control" onclick="zoomDocsGraph(0.8)" title="Zoom out">−</button>
+                            <button class="graph-control" onclick="fitDocsGraph()" title="Fit graph">⌂</button>
+                        </div>
+                    </div>
+
+                    <aside class="docs-graph-inspector">
+                        <div class="inspector-header">
+                            <div class="wb-pane-kicker">SELECTED DOT LINEAGE INSPECTOR</div>
+                            <div class="inspector-entity-name" id="dg-insp-title">Select any Doc, Rule, or Code dot</div>
+                            <div class="inspector-sub" id="dg-insp-subtitle">Traces Document → Extracted Rule → Policy Gate → Code Symbol</div>
+                        </div>
+                        <div class="inspector-body" id="dg-insp-body" style="padding:14px 16px;">
+                            <div style="color:var(--muted); font-size:12px;">
+                                Click any node in the graph or any row in the table below to inspect how documentation connects to code and active guardrails.
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+
+                <!-- Structured Cards of Ingested Documents -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Ingested Documents Inventory (ADRs, Design Specs, Invariants &amp; Policies)</div>
+                            <div class="panel-subtitle">Click any document card to filter the graph and component matrix below to that document's connected dots.</div>
+                        </div>
+                        <button class="btn-secondary" onclick="filterDocsGraph('ALL', document.querySelector('[data-doc-filter=ALL]'))">Show All Documents</button>
+                    </div>
+                    <div class="panel-body">
+                        <div id="ingested-docs-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:12px;"></div>
+                    </div>
+                </div>
+
+                <!-- Structured Table of Extracted Document Components -> Code Symbols & Guardrails -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Document Components, Extracted Rules &amp; Connected Code Symbols</div>
+                            <div class="panel-subtitle">Every normative statement extracted from your documents and mapped to concrete AST code symbols and Talon policies.</div>
+                        </div>
+                        <span class="kbd-chip" id="dg-table-count-chip">12 components</span>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="audit-table">
+                            <thead>
+                                <tr>
+                                    <th>Source Document</th>
+                                    <th>Modality / Gate</th>
+                                    <th>Extracted Component (Subject → Predicate → Object)</th>
+                                    <th>Connected Code Symbols &amp; Packages</th>
+                                    <th>Verification &amp; Guardrail</th>
+                                    <th>Graph</th>
+                                </tr>
+                            </thead>
+                            <tbody id="docs-components-tbody">
+                                <tr><td colspan="6" style="color:var(--muted); padding:16px;">Loading document-to-code lineage matrix…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 05 — TALON & RISK HUB: ACTIVE AGENT HARNESS & BLAST RADIUS (NEW!)
+                 ============================================================ -->
+            <section id="view-talon" style="display:none;">
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>05 · GARUDA TALON &amp; RISK HUB · ACTIVE AI AGENT HARNESS &amp; BLAST RADIUS</span>
+                </div>
+                <div class="hero">
+                    <div>
+                        <h1 class="hero-title">Garuda Talon &amp; Architectural Risk Hub</h1>
+                        <div class="hero-subtitle">
+                            Active pre-edit context briefings, high-blast-radius symbol risk rankings, diff-scoped pre-commit &amp; MCP gates, and deterministic self-repair loops for Cursor, Claude Code, Codex, and Windsurf.
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn-secondary" onclick="openContractModal()">📄 View TALON_CONTRACT.md</button>
+                        <button class="btn-secondary" onclick="installTalonHooksFromUI()">🔧 Sync All 6 IDE &amp; Git Hooks</button>
+                        <button class="btn-secondary" onclick="runTalonCheckFromUI('simulate_violation')">⚡ Simulate Violation &amp; Self-Repair</button>
+                        <button class="btn-primary" onclick="runTalonCheckFromUI('run_guard')">▶ Run Diff-Scoped Check (HEAD)</button>
+                    </div>
+                </div>
+
+                <!-- 4-Column Talon & Risk Hub Pulse Strip -->
+                <div class="pulse-strip">
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>01 · Talon Enforcement Mode</span>
+                            <span class="badge-pill success" id="talon-mode-badge">FAIL-CLOSED</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="talon-hooks-count">6 / 6</span>
+                            <span class="pulse-delta">active IDE, MCP &amp; Git hooks</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono">Cursor · Claude · Codex · Windsurf · Git</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>02 · High-Blast-Radius Hubs</span>
+                            <span class="badge-pill critical" id="talon-crit-badge">4 CRITICAL</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="talon-total-hubs">15</span>
+                            <span class="pulse-delta">ranked risk hotspots</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono"><span id="talon-high-count">5</span> HIGH · guarded by Pre-Edit Brief</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>03 · Diff-Scoped Verdict</span>
+                            <span class="badge-pill success" id="talon-verdict-pill">ALLOW</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="talon-netnew-count">0</span>
+                            <span class="pulse-delta">net-new violations (<span id="talon-baseline-count">0</span> baseline)</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono"><span id="talon-adr-contra-count">0</span> ADR contradictions · <span id="talon-duration-ms">18ms</span></span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>04 · Self-Repair Loop</span>
+                            <span class="merkle-chip" id="talon-merkle-chip">block #52</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" style="white-space:nowrap;">Auto-Repair</span>
+                            <span class="pulse-delta">deterministic agent feedback</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono">Feeds repair instructions until ALLOW</span>
+                            <button class="inspector-ref-link" onclick="copyTalonRepairPrompt()">Copy Prompt →</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2-Column Talon Active Gate Terminal + Installed Hooks Status -->
+                <div class="two-column">
+                    <div class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <div class="panel-title">Live Talon Enforcement Gate &amp; Self-Repair Simulator</div>
+                                <div class="panel-subtitle">Test diff-scoped checks (`HEAD`) or simulate a breaking agent edit to inspect the generated self-repair prompt.</div>
+                            </div>
+                            <div style="display:flex; gap:6px;">
+                                <button class="btn-secondary" style="height:28px; font-size:11px;" onclick="runTalonCheckFromUI('run_guard')">Check Clean Diff</button>
+                                <button class="btn-secondary" style="height:28px; font-size:11px; border-color:var(--red-border); color:var(--red);" onclick="runTalonCheckFromUI('simulate_violation')">Simulate BLOCK</button>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            <div class="talon-terminal-card" id="talon-terminal-box">
+                                <div class="talon-terminal-header">
+                                    <span>🦅 GARUDA TALON ACTIVE GUARD</span>
+                                    <span id="talon-term-status" style="color:#4ADE80;">OUTCOME: ALLOW</span>
+                                </div>
+                                <div id="talon-term-body">
+                                    <div>Workspace:    <strong style="color:#FFF;">{{ .WorkspaceName }}</strong></div>
+                                    <div>Diff Scope:   0 file(s), 0 touched symbol(s) (clean working tree)</div>
+                                    <div>Blast Radius: 0 affected entities (CRITICAL=0, HIGH=0)</div>
+                                    <div>Violations:   Net-New=0  |  Baseline=0  |  ADR Contradictions=0</div>
+                                    <div>Merkle Seal:  RFC 6962 verified anchor</div>
+                                </div>
+                                <div class="talon-prompt-box" id="talon-repair-prompt-box">GARUDA TALON ENFORCEMENT GATE: WORKSPACE CLEAN (ALLOW)
+All active YAML policies (architecture-no-api-to-store-bypass, payment-no-direct-db, require-runtime-evidence) and ingested ADR claims (ADR-0001, ADR-0002, ADR-0003) are satisfied.</div>
+                                <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+                                    <button class="btn-secondary" style="background:#212621; color:#F3F4F0; border-color:#3A423A; height:28px; font-size:11.5px;" onclick="copyTalonRepairPrompt()">📋 Copy Self-Repair Prompt</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header">
+                            <div>
+                                <div class="panel-title">Active IDE, MCP &amp; Git Enforcement Hooks</div>
+                                <div class="panel-subtitle">Installed harnesses that force AI coding agents to obey your architecture before &amp; after every edit.</div>
+                            </div>
+                            <button class="btn-primary" style="height:28px; font-size:11.5px;" onclick="installTalonHooksFromUI()">Sync All Hooks</button>
+                        </div>
+                        <div class="panel-body">
+                            <div id="talon-hooks-list" style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Full-Width Risk Hub Leaderboard -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <div class="panel-title">Architectural Risk Hub &amp; Blast-Radius Leaderboard</div>
+                            <div class="panel-subtitle">Highest-risk symbols ranked by caller fan-in, transitive impact radius, and governing ADR/policy sensitivity.</div>
+                        </div>
+                        <div class="pill-group" id="risk-tier-filters">
+                            <button class="filter-pill active" onclick="filterRiskHubs('ALL', this)">All Risk Tiers</button>
+                            <button class="filter-pill" onclick="filterRiskHubs('CRITICAL', this)">Critical (80+)</button>
+                            <button class="filter-pill" onclick="filterRiskHubs('HIGH', this)">High (65–79)</button>
+                            <button class="filter-pill" onclick="filterRiskHubs('MEDIUM', this)">Medium (&lt;65)</button>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="audit-table">
+                            <thead>
+                                <tr>
+                                    <th>Risk Score &amp; Tier</th>
+                                    <th>Symbol / Architectural Hub</th>
+                                    <th>Package &amp; Source File</th>
+                                    <th>Blast Radius (Callers / Transitive)</th>
+                                    <th>Governing ADRs &amp; Policies</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="talon-risk-hubs-tbody">
+                                <tr><td colspan="6" style="color:var(--muted); padding:16px;">Loading risk hubs…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 06 — CHANGE REVIEW: GARUDA'S SIGNATURE 3-PART WORKBENCH
                  ============================================================ -->
             <section id="view-review" style="display:none;">
                 <div class="issue-kicker">
                     <span class="issue-kicker-dot"></span>
-                    <span>04 · CHANGE REVIEW WORKBENCH · ARCHITECTURAL IMPACT &amp; GOVERNANCE</span>
+                    <span>06 · CHANGE REVIEW WORKBENCH · ARCHITECTURAL IMPACT &amp; GOVERNANCE</span>
                 </div>
                 <div class="hero">
                     <div>
@@ -563,7 +937,9 @@
                         <div class="hero-subtitle">Inspect a change check or target symbol across three planes: Change Context, Blast-Radius Neighborhood, and Epistemic &amp; Policy Evidence.</div>
                     </div>
                     <div class="pill-group">
-                        <button class="btn-secondary" onclick="showView('graph')">View Full Architecture Map</button>
+                        <button class="btn-secondary" onclick="showView('talon')">Open Talon Gate</button>
+                        <button class="btn-secondary" onclick="showView('docsgraph')">Open Docs &amp; Rules Graph</button>
+                        <button class="btn-primary" onclick="runLiveReviewCheck()">▶ Run Live Check on Target</button>
                     </div>
                 </div>
 
@@ -606,9 +982,7 @@
                             </div>
                             <span class="kbd-chip" id="rev-blast-summary">0 callers · 0 callees</span>
                         </div>
-                        <div class="wb-pane-body" id="review-impact-stage">
-                            <!-- Dynamically populated with Upstream Callers -> Target -> Downstream Dependencies -->
-                        </div>
+                        <div class="wb-pane-body" id="review-impact-stage"></div>
                     </div>
 
                     <!-- RIGHT PANE: Decision & Evidence -->
@@ -620,7 +994,6 @@
                             </div>
                         </div>
                         <div class="wb-pane-body">
-                            <!-- Never merge Epistemic Status, Policy Verdict, and Ledger Integrity into one generic tick -->
                             <div class="state-triad">
                                 <div class="triad-box">
                                     <div class="triad-label">1. Epistemic</div>
@@ -663,7 +1036,7 @@
                                         <div class="dr-val"><code id="rev-dr-cli">./bin/garuda check --project {{ .WorkspaceName }} --policy policies</code></div>
                                     </div>
                                 </div>
-                                <div style="margin-top:12px; display:flex; gap:8px;" id="rev-dr-actions"></div>
+                                <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;" id="rev-dr-actions"></div>
                             </div>
                         </div>
                     </div>
@@ -671,12 +1044,12 @@
             </section>
 
             <!-- ============================================================
-                 05 — EVIDENCE & LEDGER: VERO-STYLE AUDIT LOG (Screenshot 5)
+                 07 — EVIDENCE & LEDGER: VERO-STYLE AUDIT LOG
                  ============================================================ -->
             <section id="view-trust" class="search-view">
                 <div class="issue-kicker">
                     <span class="issue-kicker-dot"></span>
-                    <span>05 · EVIDENCE &amp; CRYPTOGRAPHIC LEDGER · APPEND-ONLY</span>
+                    <span>07 · EVIDENCE &amp; CRYPTOGRAPHIC LEDGER · APPEND-ONLY</span>
                 </div>
                 <div class="hero">
                     <div>
@@ -707,7 +1080,6 @@
                     </div>
                 </div>
 
-                <!-- Vero-style Audit Log Table (Screenshot 5) -->
                 <div class="panel">
                     <div class="panel-header">
                         <div>
@@ -740,7 +1112,6 @@
                     </div>
                 </div>
 
-                <!-- Bottom Decision Record Panel (Modeled directly on Screenshot 5) -->
                 <div class="decision-record-card" id="audit-decision-record-card" style="margin-bottom:20px;">
                     <div class="dr-header">
                         <div class="dr-title">📄 Decision &amp; Evidence Record</div>
@@ -784,17 +1155,20 @@
             </section>
 
             <!-- ============================================================
-                 06 — AGENTS & POLICIES: SESSIONS, HANDOFFS & TIMELINES (Screenshot 6)
+                 08 — AGENTS & POLICIES: SESSIONS, HANDOFFS & TIMELINES
                  ============================================================ -->
             <section id="view-agents" style="display:none;">
                 <div class="issue-kicker">
                     <span class="issue-kicker-dot"></span>
-                    <span>06 · AGENTS, SESSIONS &amp; COLLABORATION</span>
+                    <span>08 · AGENTS, SESSIONS &amp; COLLABORATION</span>
                 </div>
                 <div class="hero">
                     <div>
                         <h1 class="hero-title">Agent Activity &amp; Session Timeline</h1>
                         <div class="hero-subtitle">MCP client sessions, tool invocations, checkpoints, and multi-agent handoffs in workspace {{ .WorkspaceName }}.</div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-secondary" onclick="showView('talon')">Open Talon Harness →</button>
                     </div>
                 </div>
 
@@ -838,6 +1212,10 @@
                         <h1 class="hero-title">Decision History &amp; Supersession Chain</h1>
                         <div class="hero-subtitle">MADR-compatible architectural decisions, policy overrides, and Merkle revision chains.</div>
                     </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-secondary" onclick="showView('docsgraph')">View Docs-to-Code Graph →</button>
+                        <button class="btn-primary" onclick="openIngestDocModal()">+ Ingest New ADR</button>
+                    </div>
                 </div>
 
                 <div class="panel">
@@ -869,23 +1247,98 @@
     <div class="drawer-body" id="drawer-body"></div>
 </aside>
 
-<!-- Linear-style ⌘K Command Palette Modal (Screenshot 2) -->
+<!-- Linear-style ⌘K Command Palette Modal -->
 <div id="cmdk-backdrop" class="cmdk-backdrop" onclick="if(event.target===this) closeCommandPalette()">
     <div class="cmdk-modal" role="dialog" aria-modal="true" aria-label="Command Palette">
         <div class="cmdk-input-wrap">
             <span style="color:var(--muted);">⌕</span>
-            <input id="cmdk-input" class="cmdk-input" placeholder="Type a command or search symbols, packages, policies…" autocomplete="off">
-            <span class="kbd-chip">ESC</span>
+            <input id="cmdk-input" class="cmdk-input" placeholder="Type a command or search symbols, ADRs, policies, risk hubs…" autocomplete="off">
+            <span class="kbd-chip" style="cursor:pointer;" onclick="closeCommandPalette()">ESC</span>
         </div>
         <div class="cmdk-list" id="cmdk-list"></div>
         <div class="cmdk-footer">
             <span><span class="kbd-chip">↑</span> <span class="kbd-chip">↓</span> navigate</span>
             <span><span class="kbd-chip">↵</span> open</span>
             <span><span class="kbd-chip">esc</span> close</span>
-            <span style="margin-left:auto;">Garuda Command Instrument</span>
+            <span style="margin-left:auto;">Garuda Command Instrument v1.7</span>
         </div>
     </div>
 </div>
+
+<!-- Modal: Ingest Document / ADR / Spec / Rule -->
+<div id="ingest-doc-modal" class="modal-backdrop" onclick="if(event.target===this) closeIngestDocModal()">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Ingest Architectural Document">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div>
+                <div class="wb-pane-kicker">KNOWLEDGE &amp; GUARDRAIL INGESTION</div>
+                <h2 style="margin:2px 0 0; font-size:17px; font-weight:700;">Ingest ADR, Design Spec, or Guardrail Rule</h2>
+            </div>
+            <button class="drawer-close" onclick="closeIngestDocModal()">×</button>
+        </div>
+        <p style="color:var(--text-2); font-size:12px; margin:0 0 14px;">
+            Garuda parses normative statements (<code>MUST</code>, <code>MUST NOT</code>, <code>SHALL</code>, backticked symbols) from your document, generates component nodes, and connects them directly to matching AST code symbols and Talon policies.
+        </p>
+
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
+            <span style="font-size:11px; color:var(--muted); align-self:center; margin-right:4px;">Quick Templates:</span>
+            <button type="button" class="hint" onclick="fillIngestTemplate('adr4')">ADR-0004: Zero-Trust Agent Gate</button>
+            <button type="button" class="hint" onclick="fillIngestTemplate('spec-payment')">Spec: Payment Retry Idempotency</button>
+            <button type="button" class="hint" onclick="fillIngestTemplate('rule-store')">Rule: Store Layer Isolation</button>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 2fr 1fr; gap:10px;">
+            <div class="form-field">
+                <label class="form-label" for="ingest-doc-title">Document Title</label>
+                <input id="ingest-doc-title" class="form-input" placeholder="e.g., ADR-0004: Zero-Trust Agent Execution Gate">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="ingest-doc-type">Document Type</label>
+                <select id="ingest-doc-type" class="form-select">
+                    <option value="ADR">ADR (Decision Record)</option>
+                    <option value="SPEC">Design Specification</option>
+                    <option value="INVARIANT">System Invariant</option>
+                    <option value="POLICY">Declarative Policy Rule</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label" for="ingest-doc-path">Repository File Path</label>
+            <input id="ingest-doc-path" class="form-input mono" placeholder="docs/adr/0004-zero-trust-agent-gate.md">
+        </div>
+
+        <div class="form-field">
+            <label class="form-label" for="ingest-doc-content">Markdown Content (use backticks around code symbols and MUST / MUST NOT)</label>
+            <textarea id="ingest-doc-content" class="form-textarea" placeholder="# ADR-0004: Zero-Trust Agent Execution Gate&#10;&#10;## Decision&#10;- `RunGuard` must call `CompileContract` before evaluating agent diffs.&#10;- `HandleDashboard` must not call `DirectBankAPI` directly."></textarea>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+            <button type="button" class="btn-secondary" onclick="closeIngestDocModal()">Cancel</button>
+            <button type="button" class="btn-primary" onclick="submitIngestDoc()">Ingest &amp; Connect to Code Graph →</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Talon Contract / API Spec Viewer -->
+<div id="info-modal" class="modal-backdrop" onclick="if(event.target===this) closeInfoModal()">
+    <div class="modal-card" role="dialog" aria-modal="true">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+                <div class="wb-pane-kicker" id="info-modal-kicker">GARUDA CONTRACT</div>
+                <h2 style="margin:2px 0 0; font-size:17px; font-weight:700;" id="info-modal-title">Active Contract</h2>
+            </div>
+            <button class="drawer-close" onclick="closeInfoModal()">×</button>
+        </div>
+        <div id="info-modal-body" style="font-size:12px; color:var(--text);"></div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+            <button type="button" class="btn-secondary" onclick="copyInfoModalContent()">📋 Copy Content</button>
+            <button type="button" class="btn-primary" onclick="closeInfoModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification Container -->
+<div id="toast-container" class="garuda-toast-container"></div>
 
 <script>window.GARUDA_WORKSPACE = "{{ .WorkspaceName }}";
 if ("serviceWorker" in navigator) {
