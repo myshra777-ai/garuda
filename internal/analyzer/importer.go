@@ -8,6 +8,7 @@ package analyzer
 import (
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/importer"
 	"go/parser"
 	"go/token"
@@ -26,6 +27,7 @@ type MultiModuleImporter struct {
 	mu         sync.RWMutex
 	fset       *token.FileSet
 	ws         *WorkspaceContext
+	buildCtx   *build.Context
 	packages   map[string]*types.Package
 	inProgress map[string]bool
 	fallback   types.Importer
@@ -40,6 +42,15 @@ func NewMultiModuleImporter(fset *token.FileSet, ws *WorkspaceContext) *MultiMod
 		inProgress: make(map[string]bool),
 		fallback:   importer.Default(),
 	}
+}
+
+// SetBuildContext configures the go/build.Context used to filter conditional
+// files (//go:build, GOOS/GOARCH suffixes, cgo) when importing workspace packages.
+func (imp *MultiModuleImporter) SetBuildContext(bctx build.Context) {
+	imp.mu.Lock()
+	cp := bctx
+	imp.buildCtx = &cp
+	imp.mu.Unlock()
 }
 
 // Import resolves a package import path.
@@ -125,18 +136,29 @@ func (imp *MultiModuleImporter) ImportFrom(path, srcDir string, mode types.Impor
 	return pkg, nil
 }
 
-// parseWorkspacePackageFiles reads and parses all non-test .go files in the directory.
+// parseWorkspacePackageFiles reads and parses all non-test .go files in the directory
+// that satisfy the active go/build.Context constraints.
 func (imp *MultiModuleImporter) parseWorkspacePackageFiles(dirPath string) ([]*ast.File, string, error) {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
 		return nil, "", err
 	}
 
+	imp.mu.RLock()
+	bctx := build.Default
+	if imp.buildCtx != nil {
+		bctx = *imp.buildCtx
+	}
+	imp.mu.RUnlock()
+
 	var files []*ast.File
 	var detectedPkgName string
 
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		if match, matchErr := bctx.MatchFile(dirPath, entry.Name()); matchErr == nil && !match {
 			continue
 		}
 

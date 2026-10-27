@@ -312,6 +312,7 @@ var talonGuardCmd = &cobra.Command{
 				analyzeTargetFlag = talonPlatformFlag
 				analyzeTagsFlag = talonTagsFlag
 				analyzeCGOFlag = cgoVal
+				analyzeCGOExplicit = cgoChanged
 				if !talonJSONFlag && !talonHookFlag {
 					handleAnalyze(absRepo)
 				}

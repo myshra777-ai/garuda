@@ -210,7 +210,7 @@ func hasGoSourceFiles(dirPath string) bool {
 }
 
 func isIgnoredDir(name string) bool {
-	if name == ".git" || name == "vendor" || name == "node_modules" || name == "testdata" {
+	if name == ".git" || name == "vendor" || name == "node_modules" || name == "testdata" || name == "garuda_video_build" || name == "dist" || name == "bin" {
 		return true
 	}
 	if len(name) > 1 && strings.HasPrefix(name, ".") {

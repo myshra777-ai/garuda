@@ -27,6 +27,13 @@ func TestGetBriefing_FirstCallAndSecondCall(t *testing.T) {
 	})
 	_, _ = store.Pool().Exec(ctx, `DELETE FROM mcp_agent_watermarks WHERE tenant_id = $1 AND workspace_id = $2 AND agent_id = $3`, tenantID, workspaceID, agentID)
 
+	// Ensure tenant has a Merkle root row on cold-booted CI test databases.
+	_, _ = store.Pool().Exec(ctx, `
+		INSERT INTO merkle_roots (tenant_id, root_hash, block_height, verification_version, updated_at)
+		VALUES ($1, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 1, 1, NOW())
+		ON CONFLICT (tenant_id) DO NOTHING
+	`, tenantID)
+
 	// First call: no prior briefing.
 	first, err := store.GetBriefing(ctx, tenantID, workspaceID, "go-validation-10", agentID, sessionID)
 	if err != nil {

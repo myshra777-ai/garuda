@@ -44,5 +44,8 @@ func LoadEvaluation(ctx context.Context, pool *pgxpool.Pool, tenantID, evalID uu
 	ev.Decision = Decision(decision)
 	ev.Reason = reason
 	_ = json.Unmarshal(evidenceJSON, &ev.Evidence)
+	if ev.BuildContext == nil && ev.Evidence.BuildContext != nil {
+		ev.BuildContext = ev.Evidence.BuildContext
+	}
 	return &ev, nil
 }

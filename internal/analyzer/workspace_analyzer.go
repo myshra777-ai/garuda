@@ -47,6 +47,7 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 
 	fset := token.NewFileSet()
 	imp := NewMultiModuleImporter(fset, ws)
+	imp.SetBuildContext(goBuildCtx)
 
 	result := &Result{
 		Source:        ws.RootPath,
@@ -157,8 +158,7 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		}
 	}
 
-	// Include active matched file count in fingerprint
-	repoHasher.Write(fmt.Appendf(nil, "active_files=%d:skipped=%d", result.Stats.Files, skippedCount))
+	// Fingerprint is computed over sortedPkgPaths + build context (independent of cache hit/miss state)
 	result.Fingerprint = fmt.Sprintf("%x", repoHasher.Sum(nil))
 	buildCtx.ActiveFilesCount = result.Stats.Files
 	buildCtx.SkippedByBuildTagsCount = skippedCount

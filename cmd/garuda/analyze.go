@@ -39,6 +39,7 @@ var (
 	analyzeTagsFlag       string
 	analyzeTargetFlag     string
 	analyzeCGOFlag        bool
+	analyzeCGOExplicit    bool
 	analyzeCommitOverride string
 )
 
@@ -52,6 +53,7 @@ var analyzeCmd = &cobra.Command{
 		if len(args) == 1 {
 			path = args[0]
 		}
+		analyzeCGOExplicit = cmd.Flags().Changed("cgo")
 		handleAnalyze(path)
 	},
 }
@@ -144,9 +146,9 @@ func handleAnalyze(path string) {
 	}
 
 	ctx := context.Background()
-	cgoChanged := analyzeCmd.Flags().Changed("cgo") || os.Getenv("CGO_ENABLED") != ""
+	cgoChanged := analyzeCGOExplicit || os.Getenv("CGO_ENABLED") != ""
 	cgoVal := analyzeCGOFlag
-	if !analyzeCmd.Flags().Changed("cgo") && os.Getenv("CGO_ENABLED") != "" {
+	if !analyzeCGOExplicit && os.Getenv("CGO_ENABLED") != "" {
 		cgoVal = os.Getenv("CGO_ENABLED") == "1" || strings.EqualFold(os.Getenv("CGO_ENABLED"), "true")
 	}
 	targetSpec := buildTargetFromFlags(analyzeTargetFlag, analyzeTagsFlag, cgoChanged, cgoVal)

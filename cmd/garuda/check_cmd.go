@@ -154,6 +154,7 @@ var checkCmd = &cobra.Command{
 				analyzeTargetFlag = platformStr
 				analyzeTagsFlag = checkTagsFlag
 				analyzeCGOFlag = cgoVal
+				analyzeCGOExplicit = cgoChanged
 				if !checkJSONFlag {
 					handleAnalyze(absDir)
 				}

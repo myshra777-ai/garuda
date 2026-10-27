@@ -24,7 +24,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const version = "v1.6.0-universal"
+const version = "v1.8.0-universal"
 
 var (
 	summaryFlag    bool

@@ -1,5 +1,7 @@
 // Copyright 2026 Rohit Mishra
 // SPDX-License-Identifier: Apache-2.0
+//
+// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
 package analyzer
 
@@ -47,7 +49,7 @@ func ProcessCharge() {
 	gw.RecordSafe()
 }
 `
-	// Conditional build tag (legacy_bypass) that exposes a forbidden edge to DirectSQLDriver.ExecRawBypass
+	// Conditional build tag (legacy_bypass) that exposes a forbidden CALLS edge to DirectSQLDriver.ExecRawBypass
 	bypassGo := `//go:build legacy_bypass
 
 package payment
@@ -68,10 +70,10 @@ func PlatformAuditHook() {
 }
 `
 	for name, body := range map[string]string{
-		"common.go":         commonGo,
-		"charge_safe.go":    safeGo,
-		"charge_bypass.go":  bypassGo,
-		"audit_windows.go":  windowsGo,
+		"common.go":        commonGo,
+		"charge_safe.go":   safeGo,
+		"charge_bypass.go": bypassGo,
+		"audit_windows.go": windowsGo,
 	} {
 		if err := os.WriteFile(filepath.Join(pkgDir, name), []byte(body), 0644); err != nil {
 			t.Fatalf("write %s: %v", name, err)
@@ -126,22 +128,28 @@ func PlatformAuditHook() {
 		t.Fatalf("Analyze windows: %v", err)
 	}
 
-	hasEdgeTo := func(r *Result, targetSubstr string) bool {
+	hasCallEdgeTo := func(r *Result, targetSubstr string) bool {
 		for _, rel := range r.Relationships {
-			if strings.Contains(rel.To, targetSubstr) {
+			if rel.Type == string(RelCalls) && strings.Contains(rel.To, targetSubstr) {
 				return true
 			}
 		}
 		return false
 	}
 
-	if hasEdgeTo(resDefault, "ExecRawBypass") {
+	if !hasCallEdgeTo(resDefault, "RecordSafe") {
+		t.Errorf("default linux build MUST expose RecordSafe call edge")
+	}
+	if hasCallEdgeTo(resDefault, "ExecRawBypass") {
 		t.Errorf("default linux build should NOT expose ExecRawBypass call edge")
 	}
-	if !hasEdgeTo(resBypass, "ExecRawBypass") {
+	if !hasCallEdgeTo(resBypass, "ExecRawBypass") {
 		t.Errorf("legacy_bypass build MUST expose ExecRawBypass call edge")
 	}
-	if !hasEdgeTo(resWindows, "ExecRawBypass") {
+	if hasCallEdgeTo(resBypass, "RecordSafe") {
+		t.Errorf("legacy_bypass build should NOT expose RecordSafe call edge (charge_safe.go excluded)")
+	}
+	if !hasCallEdgeTo(resWindows, "ExecRawBypass") {
 		t.Errorf("windows build MUST expose ExecRawBypass call edge via audit_windows.go")
 	}
 
