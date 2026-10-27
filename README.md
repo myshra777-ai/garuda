@@ -24,7 +24,7 @@ Garuda helps engineering teams use AI coding agents without giving up control of
 **Works with:** Go, Python, and TypeScript repositories · Cursor, Claude Code, Codex, and Windsurf workflows · local dashboard/PWA · Git hooks and CI gates.
 
 <p align="center">
-  <a href="#watch-the-cinematic-demo">Watch the demo</a> ·
+  <a href="#watch-the-dashboard-demo">Watch the demo</a> ·
   <a href="#get-started">Get started</a> ·
   <a href="#how-garuda-works">How it works</a> ·
   <a href="#documentation">Documentation</a>
@@ -32,19 +32,19 @@ Garuda helps engineering teams use AI coding agents without giving up control of
 
 ---
 
-## Watch the Cinematic Demo
+## Watch the Dashboard Demo
 
-See Garuda's dashboard, architecture visibility, change review, Talon enforcement, and evidence workflow in this 39-second product demo.
+Explore Garuda's dashboard, architecture map, change-review workflow, Talon enforcement, and governance evidence.
 
 <p align="center">
-  <a href="assets/garuda_cinematic_demo.mp4">
-    <img src="assets/garuda_cinematic_demo_thumbnail.jpg" alt="Watch the Garuda cinematic product demo" width="100%">
+  <a href="assets/garuda_dashboard_demo_video.mp4" title="Open the Garuda dashboard demo video">
+    <img src="assets/garuda_dashboard_demo_thumbnail.jpg" alt="Click to watch the Garuda dashboard demo" width="100%">
   </a>
   <br>
-  <strong><a href="assets/garuda_cinematic_demo.mp4">▶ Open the 39-second Garuda demo (MP4)</a></strong>
+  <strong><a href="assets/garuda_dashboard_demo_video.mp4">▶ WATCH THE GARUDA DASHBOARD DEMO</a></strong>
 </p>
 
-> **Playback note:** The thumbnail is clickable and the MP4 is included in `assets/`. If you want a native inline player on GitHub, upload the MP4 to a GitHub issue or pull-request comment and use the `github.com/user-attachments/assets/...` URL GitHub generates. A repository-relative MP4 link is the dependable fallback for cloned repositories.
+The image above is a clickable poster for the existing video at `assets/garuda_dashboard_demo_video.mp4`. Commit `assets/garuda_dashboard_demo_thumbnail.jpg` alongside this README so GitHub can render the preview. Selecting the thumbnail or the link opens the video.
 
 ---
 
