@@ -76,7 +76,7 @@ Manages the **Garuda Talon** Active Agent Execution Harness.
 # 4. Run incremental AST sync + diff-scoped policy & ADR check + Self-Repair Prompt output
 ./bin/garuda talon guard . --workspace go-validation-10 --staged --fail-on-block
 
-# 5. Supervisor loop: wrap a CLI coding agent and auto-loop self-repair until ALLOW
+# 5. Supervisor loop: wrap a CLI coding agent and attempt bounded self-repair (up to --max-retries; may remain BLOCK)
 ./bin/garuda talon run --max-retries 3 -- claude "Refactor CheckoutHandler"
 ```
 
