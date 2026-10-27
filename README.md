@@ -32,19 +32,19 @@ Garuda helps engineering teams use AI coding agents without giving up control of
 
 ---
 
-## Watch the Dashboard Demo
+## Watch the Dashboard Demo (23 Seconds)
 
-Explore Garuda's dashboard, architecture map, change-review workflow, Talon enforcement, and governance evidence.
+Explore Garuda's dashboard, architecture map, change-review workflow, Talon enforcement, and governance evidence in this short product demo.
 
 <p align="center">
-  <a href="assets/garuda_dashboard_demo_video.mp4" title="Open the Garuda dashboard demo video">
-    <img src="assets/garuda_dashboard_demo_thumbnail.jpg" alt="Click to watch the Garuda dashboard demo" width="100%">
+  <a href="assets/garuda_dashboard_demo_video.mp4" title="Play the Garuda dashboard demo">
+    <img src="assets/Screenshot%20From%202026-10-25%2002-30-49.png" alt="Garuda dashboard preview — click to play the demo" width="100%">
   </a>
   <br>
-  <strong><a href="assets/garuda_dashboard_demo_video.mp4">▶ WATCH THE GARUDA DASHBOARD DEMO</a></strong>
+  <strong><a href="assets/garuda_dashboard_demo_video.mp4">▶ PLAY THE GARUDA DASHBOARD DEMO (MP4)</a></strong>
 </p>
 
-The image above is a clickable poster for the existing video at `assets/garuda_dashboard_demo_video.mp4`. Commit `assets/garuda_dashboard_demo_thumbnail.jpg` alongside this README so GitHub can render the preview. Selecting the thumbnail or the link opens the video.
+The preview uses a screenshot already tracked in this repository, so no extra thumbnail file is required. Click the image or the link to open the existing 22.7-second video at `assets/garuda_dashboard_demo_video.mp4`. GitHub README pages do not reliably inline-play MP4 files stored in a repository.
 
 ---
 

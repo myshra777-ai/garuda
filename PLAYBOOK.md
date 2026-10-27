@@ -2,7 +2,7 @@
 
 **Zero-Dependency Setup · Active Agent Harness (`Garuda Talon`) · Diff-Scoped Change Control · 6-Surface Dashboard PWA · Reference**
 
-This playbook is the complete operational guide for installing, configuring, and running Garuda v1.6 against real-world Go, Python, and TypeScript codebases across **Windows 10/11 (PowerShell)**, **macOS**, **Linux**, **Chromebook (ChromiumOS)**, and **Android (Termux & Chrome PWA)**.
+This playbook is the complete operational guide for installing, configuring, and running Garuda v1.8.1 against real-world Go, Python, and TypeScript codebases across **Windows 10/11 (PowerShell)**, **macOS**, **Linux**, **Chromebook (ChromiumOS)**, and **Android (Termux & Chrome PWA)**.
 
 ---
 
@@ -34,7 +34,7 @@ AI coding agents (**Cursor**, **Claude Code**, **Codex**, **Devin**, **Windsurf*
 - Modifying a core shared struct or class with 170+ downstream callers without checking blast radius.
 - Violating documented Architecture Decision Records (ADRs) or making undeclared runtime service calls observed in OpenTelemetry spans.
 
-**Garuda v1.6 is the deterministic change-control gate, active AI execution harness (`Garuda Talon`), and software intelligence instrument for AI-written code.**
+**Garuda v1.8.1 is the deterministic change-control gate, active AI execution harness (`Garuda Talon`), and software intelligence instrument for AI-written code.**
 
 ### The 5-Plane Architecture
 
@@ -152,7 +152,7 @@ Incrementally re-indexes dirty working-tree files in milliseconds, maps git diff
 
 ### 5.4 Autonomous Supervisor Loop (`garuda talon run`)
 
-Wrap any CLI coding agent (`claude`, `aider`, `codex`) in a closed self-repair loop that automatically feeds policy/ADR violation fixes back to the agent (up to `--max-retries 3`) until `ALLOW` is achieved:
+Wrap a CLI coding agent (`claude`, `aider`, `codex`) in a bounded self-repair loop. Garuda feeds policy/ADR feedback back to the agent for up to `--max-retries` attempts (default: `3`). If violations remain after the retry limit, the final outcome may still be `BLOCK`:
 
 ```bash
 ./bin/garuda talon run --max-retries 3 -- claude "Refactor CheckoutHandler to use OrderService"

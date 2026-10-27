@@ -53,7 +53,7 @@ The GAP-20 token result belongs to a separate task-specific grounding benchmark.
 ## Historical and intentionally incomplete documents
 
 - [Multi-language history](../EVIDENCE_MULTI_LANG.md) is a historical validation snapshot; use the current [multi-language roadmap](MULTI_LANGUAGE_ROADMAP.md) for the current analyzer contract.
-- [v1.0 benchmark report](../BENCHMARKS_AND_VERIFICATION_v1.0.0.md) is historical; use current [EVIDENCE.md](../EVIDENCE.md) for v1.5.0 evidence.
+- [v1.0 benchmark report](../BENCHMARKS_AND_VERIFICATION_v1.0.0.md) is historical; use the current [EVIDENCE.md](../EVIDENCE.md) for current-release verification evidence.
 - [Workspace snapshot ADR](adr/0003-workspace-state-snapshots.md) remains proposed where the v1 content-addressed snapshot membership-proof path is not implemented.
 - [Invariants](invariants.md) intentionally distinguishes fully enforced invariants from partial database-level protections. Do not remove those caveats simply to make the product sound stronger.
 

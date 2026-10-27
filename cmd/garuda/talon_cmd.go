@@ -49,7 +49,7 @@ Subcommands:
   contract  Print or regenerate the active workspace architectural & ADR contract
   brief     Generate deterministic pre-edit briefing for a file or symbol
   guard     Run incremental AST sync + diff-scoped policy & ADR check + build receipt + self-repair output
-  run       Supervisor loop: run an agent command and auto-loop self-repair until ALLOW`,
+  run       Supervisor loop: run an agent command and attempt bounded self-repair (may remain BLOCK after retry limit)`,
 }
 
 var talonInitCmd = &cobra.Command{
@@ -395,7 +395,7 @@ var talonGuardCmd = &cobra.Command{
 
 var talonRunCmd = &cobra.Command{
 	Use:   "run -- <agent-command> [args...]",
-	Short: "Supervisor harness: run a coding agent command and auto-loop self-repair until ALLOW",
+	Short: "Supervisor harness: run a coding agent command with bounded self-repair attempts",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		absRepo, _ := filepath.Abs(".")
