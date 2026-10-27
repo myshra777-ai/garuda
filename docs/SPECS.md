@@ -738,7 +738,7 @@ Breaking changes should state which surface changed, how compatibility is handle
 
 ## Evidence index
 
-- [`README.md`](README.md) — product overview.
+- [`README.md`](../README.md) — product overview.
 - [PLAYBOOK.md](../PLAYBOOK.md) — installation and operational workflows.
 - [EVIDENCE.md](../EVIDENCE.md) — validation corpus and methodology.
 - [docs/CAPABILITIES.md](CAPABILITIES.md) — capability matrix.
