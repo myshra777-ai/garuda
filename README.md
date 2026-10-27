@@ -1,40 +1,33 @@
-Ah, I see exactly what happened. Look at the very top of your screenshot: there is a ````markdown ```` and at the bottom a ```` ``` ````. 
+&lt;p align=&quot;center&quot;&gt;
+  &lt;img src=&quot;assets/garuda_logo.png&quot; width=&quot;140&quot; alt=&quot;Garuda Logo&quot;&gt;
+&lt;/p&gt;
 
-When you copied my previous message, you accidentally copied the Markdown code block tags along with the text. Because the file starts with ````markdown ````, GitHub thinks the *entire file* is just a plain text code block, so it refuses to render the HTML and images inside it.
+&lt;h1 align=&quot;center&quot;&gt;Garuda&lt;/h1&gt;
 
-**How to fix it:** Open `README.md` in your VS Code, press `Ctrl+A` to select everything, hit `Delete`, and paste the text below. **Do not copy any triple backticks (```) at the top or bottom.**
+&lt;p align=&quot;center&quot;&gt;
+  &lt;strong&gt;AI writes code at 100 mph. Garuda makes sure your architecture survives the ride.&lt;/strong&gt;&lt;br&gt;
+  &lt;em&gt;The local-first change-control gate, active AI agent harness (&lt;code&gt;Garuda Talon&lt;/code&gt;), and visual software intelligence instrument for modern engineering teams.&lt;/em&gt;
+&lt;/p&gt;
 
-Here is the pure, raw text. Just highlight from the first `<p align="center">` down to the very last `</p>` and paste it:
+&lt;p align=&quot;center&quot;&gt;
+  &lt;a href=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml&quot;&gt;&lt;img src=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml/badge.svg&quot; alt=&quot;CI&quot;&gt;&lt;/a&gt;
+  &lt;a href=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml&quot;&gt;&lt;img src=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml/badge.svg&quot; alt=&quot;Garuda CI &amp; Governance&quot;&gt;&lt;/a&gt;
+  &lt;a href=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml&quot;&gt;&lt;img src=&quot;https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml/badge.svg&quot; alt=&quot;Garuda Integrity Gate&quot;&gt;&lt;/a&gt;
+  &lt;a href=&quot;LICENSE&quot;&gt;&lt;img src=&quot;https://img.shields.io/badge/version-v1.8.1-2563eb.svg&quot; alt=&quot;Version v1.8.1&quot;&gt;&lt;/a&gt;
+  &lt;a href=&quot;LICENSE&quot;&gt;&lt;img src=&quot;https://img.shields.io/badge/license-Apache--2.0-blue.svg&quot; alt=&quot;Apache 2.0 License&quot;&gt;&lt;/a&gt;
+  &lt;a href=&quot;INSTALL.md&quot;&gt;&lt;img src=&quot;https://img.shields.io/badge/install-1_Command_%7C_Zero_Dependencies-10b981.svg&quot; alt=&quot;1-Command Universal Install&quot;&gt;&lt;/a&gt;
+  &lt;a href=&quot;EVIDENCE.md&quot;&gt;&lt;img src=&quot;https://img.shields.io/badge/verified-24%2F24_Benchmarks_%7C_30%2F30_MCP_%7C_10%2F10_Runtime-f59e0b.svg&quot; alt=&quot;Verification Evidence&quot;&gt;&lt;/a&gt;
+&lt;/p&gt;
 
-<p align="center">
-  <img src="assets/garuda_logo.png" width="140" alt="Garuda Logo">
-</p>
-
-<h1 align="center">Garuda</h1>
-
-<p align="center">
-  <strong>AI writes code at 100 mph. Garuda makes sure your architecture survives the ride.</strong><br>
-  <em>The local-first change-control gate, active AI agent harness (<code>Garuda Talon</code>), and visual software intelligence instrument for modern engineering teams.</em>
-</p>
-
-<p align="center">
-  <a href="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml/badge.svg" alt="Garuda CI & Governance"></a>
-  <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml/badge.svg" alt="Garuda Integrity Gate"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/version-v1.8.1-2563eb.svg" alt="Version v1.8.1"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 License"></a>
-  <a href="INSTALL.md"><img src="https://img.shields.io/badge/install-1_Command_%7C_Zero_Dependencies-10b981.svg" alt="1-Command Universal Install"></a>
-  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/verified-24%2F24_Benchmarks_%7C_30%2F30_MCP_%7C_10%2F10_Runtime-f59e0b.svg" alt="Verification Evidence"></a>
-</p>
-
-<p align="center">
-  <a href="#watch-the-20-second-cinematic-intro">20s Cinematic Demo</a> ·
-  <a href="#the-story-why-we-built-garuda">Why Garuda Exists</a> ·
-  <a href="#a-visual-tour-of-garuda">Visual Product Tour</a> ·
-  <a href="#install-in-one-command-zero-dependencies">1-Command Install</a> ·
-  <a href="#how-garuda-works-in-plain-english">How It Works</a> ·
-  <a href="#documentation-suite">Full Documentation</a>
-</p>
+&lt;p align=&quot;center&quot;&gt;
+  &lt;a href=&quot;#watch-the-20-second-cinematic-intro&quot;&gt;20s Cinematic Demo&lt;/a&gt; ·
+  &lt;a href=&quot;#the-story-why-we-built-garuda&quot;&gt;Why Garuda Exists&lt;/a&gt; ·
+  &lt;a href=&quot;#a-visual-tour-of-garuda&quot;&gt;Visual Product Tour&lt;/a&gt; ·
+  &lt;a href=&quot;#active-ide-integration-cursor-vs-code-windsurf&quot;&gt;IDE Integration&lt;/a&gt; ·
+  &lt;a href=&quot;#install-in-one-command-zero-dependencies&quot;&gt;1-Command Install&lt;/a&gt; ·
+  &lt;a href=&quot;#how-garuda-works-in-plain-english&quot;&gt;How It Works&lt;/a&gt; ·
+  &lt;a href=&quot;#documentation-suite&quot;&gt;Full Documentation&lt;/a&gt;
+&lt;/p&gt;
 
 ---
 
@@ -42,15 +35,10 @@ Here is the pure, raw text. Just highlight from the first `<p align="center">` d
 
 Experience what Garuda is and how its **Software Intelligence Instrument** turns invisible code structure, architecture rules, and AI agent edits into a living control room:
 
-<div align="center">
-  <video src="assets/garuda_dashboard_demo_video.mp4" controls autoplay loop muted playsinline width="100%">
-    <source src="assets/garuda_dashboard_demo_video.mp4" type="video/mp4">
-    <a href="assets/garuda_dashboard_demo_video.mp4">
-      <img src="assets/dashboard-briefing.png" width="100%" alt="Watch the 20-Second Garuda Introduction Video">
-    </a>
-  </video>
-  <p><em>🎬 <strong>20-Second Product Introduction:</strong> If your browser blocks inline video playback on GitHub, <a href="assets/garuda_dashboard_demo_video.mp4"><strong>click here to play the video</strong></a>.</em></p>
-</div>
+&lt;div align=&quot;center&quot;&gt;
+  &lt;video src=&quot;assets/garuda_dashboard_demo_video.mp4&quot; controls width=&quot;100%&quot;&gt;&lt;/video&gt;
+  &lt;p&gt;&lt;em&gt;🎬 &lt;strong&gt;20-Second Product Introduction:&lt;/strong&gt; If your browser blocks inline video playback on GitHub, &lt;a href=&quot;assets/garuda_dashboard_demo_video.mp4&quot;&gt;&lt;strong&gt;click here to play &lt;code&gt;assets/garuda_dashboard_demo_video.mp4&lt;/code&gt;&lt;/strong&gt;&lt;/a&gt;.&lt;/em&gt;&lt;/p&gt;
+&lt;/div&gt;
 
 ---
 
@@ -90,69 +78,25 @@ We built **Garuda** to be the missing seatbelt for the AI coding era. Instead of
 
 ## A Visual Tour of Garuda
 
-Garuda isn't just a terminal tool—it ships with a local, zero-cloud **Software Intelligence Instrument** (`/dashboard`) that works 100% offline in your browser or as an installable desktop/mobile app. Here is what you see when you open Garuda on your codebase:
+Garuda isn't just a terminal tool—it ships with a local, zero-cloud **Software Intelligence Instrument** (`/dashboard`) that works 100% offline in your browser or as an installable desktop/mobile app:
 
-### 1. Executive Workspace Briefing & Health Strip
-The moment you open Garuda, you get a clean, calm pulse on your entire engineering system: how many entities and relationships are mapped, whether your architecture policies are passing, which high-risk symbols need attention, and the latest cryptographically sealed governance decisions.
+- **Executive Workspace Briefing:** Instant pulse on your codebase—total mapped entities, relationship count, policy compliance health, and high-risk bottleneck symbols.
+- **Neighborhood-First Architecture Map:** No messy hairballs. Renders a focused 1-hop or 2-hop neighborhood around any symbol you inspect with a 4-tab Inspector Drawer (`Source`, `Relationships`, `Policy Results`, `Evidence`).
+- **Docs, Specs & Guardrails Lineage Graph:** Visual 4-tier bridge mapping written **Documents** → **Extracted Rules** → **Active Policy Guardrails** → **Actual Code Symbols**.
+- **Garuda Talon & Architectural Risk Hub:** Real-time status of IDE agent hooks (`Cursor`, `Claude Code`, `Codex`, `Windsurf`), deterministic `BuildContext` provenance receipts, cross-platform matrix gates, and hotspot risk leaderboards.
+- **Pre-Merge Change Review & Policy Sandbox:** Simulate the blast radius of proposed diffs and test new architectural policies interactively before committing.
+- **Forensic Contradictions & Merkle Audit Ledger:** Quarantines undeclared runtime calls and ADR deviations, cryptographically sealed in an RFC 6962 SHA-256 Merkle tree.
 
-<p align="center">
-  <img src="assets/dashboard-briefing.png" width="100%" alt="Garuda Workspace Briefing & System Health">
-</p>
+---
 
-### 2. Explore Index & Instant Symbol Intelligence
-No more grepping through hundreds of files. Garuda automatically surfaces your most critical exported structs, interfaces, functions, and packages ranked by real caller fan-in and blast radius, with instant search (`⌘K` / `Ctrl+K`) and one-click deep inspection.
+## Active IDE Integration (Cursor, VS Code, Windsurf)
 
-<p align="center">
-  <img src="assets/dashboard-explore.png" width="100%" alt="Garuda Explore Index & High-Impact Symbol Directory">
-</p>
+While the dashboard provides an executive overview, **Garuda Talon** lives directly inside your editor. AI agents and developers see live architectural feedback in real time:
 
-### 3. Neighborhood-First Architecture Map
-Instead of dumping a chaotic "hairball" graph of 10,000 nodes on your screen, Garuda renders a clean **1-hop or 2-hop neighborhood map** around the exact package or symbol you are investigating—showing who calls it, what it depends on, and a synchronized 4-tab Inspector Drawer (`Source`, `Relationships`, `Policy Results`, `Evidence`).
-
-<p align="center">
-  <img src="assets/dashboard-map.png" width="100%" alt="Garuda Neighborhood Architecture Map & Inspector Drawer">
-</p>
-
-### 4. Docs, Specs & Guardrails Lineage Graph
-When you ingest your team's Markdown ADRs, design specs, and YAML policies into Garuda, it builds a **4-tier visual lineage graph** that connects the dots from **Documents** → **Extracted Rules (`MUST` / `MUST_NOT`)** → **Active Policy Guardrails** → **Actual Code Symbols**, complete with an interactive Document-to-Code matrix and live in-browser ADR ingestion.
-
-<p align="center">
-  <img src="assets/dashboard-docs.png" width="100%" alt="Garuda Docs, Specs & Guardrails 4-Tier Lineage Graph">
-</p>
-
-### 5. Garuda Talon Active Harness, Risk Hub & Build-Context Matrix
-See every active AI coding hook (`Cursor`, `Claude Code`, `Codex`, `Windsurf`, `Git Pre-Commit`), inspect your **Deterministic `BuildContext` Provenance Receipt** and **4-Target Cross-Platform Matrix (`linux`, `darwin`, `windows`, `cgo`)**, review the **Architectural Risk Hub Leaderboard**, and test live self-repair prompts in one place.
-
-<p align="center">
-  <img src="assets/dashboard-talon.png" width="100%" alt="Garuda Talon Active Agent Harness & Architectural Risk Hub">
-</p>
-
-### 6. Pre-Merge Change Review Workbench & Live Policy Sandbox
-Before you or an AI agent merge a change to a core symbol, simulate the impact in the 3-pane **Change Review Workbench** or test new architectural rules live in the **YAML Policy Sandbox** to get an instant `ALLOW`, `WARN`, `REVIEW`, or `BLOCK` verdict.
-
-<p align="center">
-  <img src="assets/dashboard-workbench.png" width="100%" alt="Garuda Change Review Workbench & Policy Sandbox">
-</p>
-
-### 7. Forensic Contradictions Queue & RFC 6962 Cryptographic Audit Ledger
-When code breaks an ADR rule or production OpenTelemetry traces reveal an undeclared runtime call, Garuda quarantines it in the **Contradictions & Evidence** view—and seals every committed check into a tamper-evident **RFC 6962 SHA-256 Merkle Audit Ledger** with one-click proof verification.
-
-<p align="center">
-  <img src="assets/dashboard-ledger.png" width="100%" alt="Garuda Contradictions Forensic Queue & Cryptographic Audit Ledger">
-</p>
-
-<details>
-<summary><strong>🔍 Click to view IDE Integration & Additional Workspace Views (VS Code / Cursor)</strong></summary>
-<br>
-
-| IDE Graph View | IDE Contradictions Panel |
+| Real-Time Knowledge Graph in IDE | Live Contradiction & Rule Violation Alerts |
 | :---: | :---: |
-| <img src="assets/screenshots/ide-graph-view.png" width="100%" alt="IDE Graph View"> | <img src="assets/screenshots/ide-contradictions.png" width="100%" alt="IDE Contradictions View"> |
-
-<p align="center">
-  <img src="assets/workspace-overview.png" width="100%" alt="Garuda Workspace Overview Artifact">
-</p>
-</details>
+| &lt;img src=&quot;assets/screenshots/ide-graph-view.png&quot; width=&quot;100%&quot; alt=&quot;Garuda IDE Graph View&quot;&gt; | &lt;img src=&quot;assets/screenshots/ide-contradictions.png&quot; width=&quot;100%&quot; alt=&quot;Garuda IDE Contradictions Alert&quot;&gt; |
+| *Visualize callers, blast radius, and governing policies right beside your code.* | *Instant warning when an agent's diff breaks an ADR rule or introduces a cycle.* |
 
 ---
 
@@ -243,17 +187,17 @@ We keep this `README` clean and human-friendly while providing exhaustive, produ
 | Document | Audience | What You'll Find Inside |
 | :--- | :--- | :--- |
 | **[`INSTALL.md`](INSTALL.md)** | Everyone (PMs, Founders, Engineers) | Step-by-step 1-command zero-dependency setup for Windows, macOS, Linux, Chromebook, and Android + 13-item troubleshooting reference. |
-| **[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md)** | Engineers, Architects & Evaluators | Visual, screen-by-screen walkthrough of the 8-surface `/dashboard` PWA, `garuda talon`, `BuildContext` receipts, `--matrix` gates, and IDE extensions. |
-| **[PLAYBOOK.md](PLAYBOOK.md)** | Engineering Teams & DevOps | Day-to-day operational runbooks: onboarding brownfield repos, authoring YAML policies, ingesting ADRs, CI/CD gates, and OpenTelemetry runtime verification. |
-| **[docs/CAPABILITIES.md](docs/CAPABILITIES.md)** | Staff Architects & Technical Due Diligence | Deep technical matrix across all 6 planes: Go/Python/TypeScript AST compilers, `go/build` tag filtering, 9 SQL/CTE policy predicates, and Merkle proofs. |
-| **[docs/API.md](docs/API.md)** | Tooling Authors & Platform Engineers | Exhaustive CLI flag reference (`init`, `doctor`, `talon`, `check`, `analyze`, `docs`), all 23 MCP tool schemas, YAML policy syntax, and HTTP REST endpoints. |
-| **[docs/SPECS.md](docs/SPECS.md)** | Systems Engineers & Security Auditors | Formal system specifications, PostgreSQL relational & graph schemas, `BuildContext` canonical hashing, Ed25519 JWT auth, and RFC 6962 Merkle tree internals. |
-| **[EVIDENCE.md](EVIDENCE.md)** | Technical Reviewers & Investors | Reproducible benchmark suites (`24/24` compiler benchmarks, `30/30` MCP checks, `10/10` runtime contradiction tests, `TestTwoBuildsExposeDifferentEdges`). |
+| **[docs/WALKTHROUGH.md](https://www.google.com/search?q=docs/WALKTHROUGH.md)** | Engineers, Architects & Evaluators | Visual, screen-by-screen walkthrough of the 8-surface `/dashboard` PWA, `garuda talon`, `BuildContext` receipts, `--matrix` gates, and IDE extensions. |
+| **[PLAYBOOK.md](https://www.google.com/search?q=PLAYBOOK.md)** | Engineering Teams & DevOps | Day-to-day operational runbooks: onboarding brownfield repos, authoring YAML policies, ingesting ADRs, CI/CD gates, and OpenTelemetry runtime verification. |
+| **[docs/CAPABILITIES.md](https://www.google.com/search?q=docs/CAPABILITIES.md)** | Staff Architects & Technical Due Diligence | Deep technical matrix across all 6 planes: Go/Python/TypeScript AST compilers, `go/build` tag filtering, 9 SQL/CTE policy predicates, and Merkle proofs. |
+| **[docs/API.md](https://www.google.com/search?q=docs/API.md)** | Tooling Authors & Platform Engineers | Exhaustive CLI flag reference (`init`, `doctor`, `talon`, `check`, `analyze`, `docs`), all 23 MCP tool schemas, YAML policy syntax, and HTTP REST endpoints. |
+| **[docs/SPECS.md](https://www.google.com/search?q=docs/SPECS.md)** | Systems Engineers & Security Auditors | Formal system specifications, PostgreSQL relational & graph schemas, `BuildContext` canonical hashing, Ed25519 JWT auth, and RFC 6962 Merkle tree internals. |
+| **[EVIDENCE.md](https://www.google.com/search?q=EVIDENCE.md)** | Technical Reviewers & Investors | Reproducible benchmark suites (`24/24` compiler benchmarks, `30/30` MCP checks, `10/10` runtime contradiction tests, `TestTwoBuildsExposeDifferentEdges`). |
 | **[`CHANGELOG.md`](CHANGELOG.md)** | Everyone | Full release history from `v1.0.0` through **`v1.8.1`** (Deterministic `BuildContext` receipts, Docs-to-Code Lineage Graph, Talon & Risk Hub, Universal Installer). |
 
 ---
 
-<p align="center">
-  <strong>Let agents write fast. Let Garuda keep the architecture whole.</strong><br>
-  Released under the <a href="LICENSE">Apache 2.0 License</a>.
-</p>
+&lt;p align=&quot;center&quot;&gt;
+  &lt;strong&gt;Let agents write fast. Let Garuda keep the architecture whole.&lt;/strong&gt;&lt;br&gt;
+  Released under the &lt;a href=&quot;LICENSE&quot;&gt;Apache 2.0 License&lt;/a&gt;.
+&lt;/p&gt;
