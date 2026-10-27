@@ -20,7 +20,7 @@ Every number below is a measured result, a snapshot value, or an explicitly labe
 
 ## Evidence at a Glance
 
-| Area | Current evidence (v1.6.0) |
+| Area | Current evidence (v1.8.1) |
 |---|---|
 | Ground-Truth Compiler & AST Benchmark Suite | `24/24` strict benchmarks passed (`make benchmark-strict`, including `TestDoubleRunDeterminism` and `024-go-work` at `1.0` confidence) |
 | Reference MCP & Talon Active Verifier | `30/30` dynamic checks passed (`scripts/mcp_verify.py`) |
@@ -454,15 +454,15 @@ psql "$DATABASE_URL" -c "
 ## Evidence Sources
 
 - [`README.md`](README.md) — Product claims and public positioning.
-- [PLAYBOOK.md](https://www.google.com/search?q=PLAYBOOK.md) — Operational workflows and command reference.
-- [docs/SPECS.md](https://www.google.com/search?q=docs/SPECS.md) — Detailed product and system specification.
-- [docs/CAPABILITIES.md](https://www.google.com/search?q=docs/CAPABILITIES.md) — Capability maturity and analyzer matrix.
-- [docs/WALKTHROUGH.md](https://www.google.com/search?q=docs/WALKTHROUGH.md) — Visual interface and screenshot tour.
-- [docs/adr/](https://www.google.com/search?q=docs/adr/) — Architecture decision records.
-- [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md) — Invariant contract.
-- [scripts/mcp\_verify.py](https://www.google.com/search?q=scripts/mcp_verify.py) — MCP reference verifier.
-- [scripts/runtime\_contradiction\_test.py](https://www.google.com/search?q=scripts/runtime_contradiction_test.py) — Controlled runtime contradiction test.
-- [scripts/doc\_verify\_test.py](https://www.google.com/search?q=scripts/doc_verify_test.py) — Documentation extraction and verification test.
-- [vscode-extension/](https://www.google.com/search?q=vscode-extension/) — VS Code integration source and manifest.
+- [PLAYBOOK.md](PLAYBOOK.md) — Operational workflows and command reference.
+- [docs/SPECS.md](docs/SPECS.md) — Detailed product and system specification.
+- [docs/CAPABILITIES.md](docs/CAPABILITIES.md) — Capability maturity and analyzer matrix.
+- [docs/WALKTHROUGH.md](docs/WALKTHROUGH.md) — Visual interface and screenshot tour.
+- [docs/adr/](docs/adr/) — Architecture decision records.
+- [docs/invariants.md](docs/invariants.md) — Invariant contract.
+- [scripts/mcp\_verify.py](scripts/mcp_verify.py) — MCP reference verifier.
+- [scripts/runtime\_contradiction\_test.py](scripts/runtime_contradiction_test.py) — Controlled runtime contradiction test.
+- [scripts/doc\_verify\_test.py](scripts/doc_verify_test.py) — Documentation extraction and verification test.
+- [vscode-extension/](vscode-extension/) — VS Code integration source and manifest.
 
 Historical evidence documents may contain earlier corpus sizes or MCP check totals. Such entries should be read as historical milestones; the current MCP & Talon reference result is `30/30` (`scripts/mcp_verify.py`) alongside `24/24` strict ground-truth compiler benchmarks (`make benchmark-strict`) and the current public product surface is documented in `README.md`, `PLAYBOOK.md`, and `docs/SPECS.md`.
