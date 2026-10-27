@@ -1,3 +1,17 @@
+# Changelog
+
+All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented in this file.
+
+## [v1.8.1] - 2026-10-27 — Deterministic Package-Cache Fingerprinting, Cold-Boot CI Merkle Seeding & Visual Documentation Suite
+
+### Added & Fixed
+- **Relative-Path Deterministic Package Cache Fingerprinting (`internal/analyzer/workspace_analyzer.go`)**:
+  - Updated `computeFilesFingerprint` to hash normalized repository-relative paths (`filepath.Rel(absRoot, f)`) paired with file sizes and SHA-256 content digests, ensuring identical `BuildContext` cache fingerprints across distinct filesystem checkout paths and temp directories (`TestDoubleRunDeterminism` 24/24 green).
+- **Cold-Boot CI Merkle Root Seeding (`internal/store/postgres_merkle.go` & `.github/workflows/garuda-gate.yml`)**:
+  - Ensures fresh ephemeral CI containers automatically initialize and verify the Genesis RFC 6962 Merkle block during cold-boot workspace analysis and diff-scoped gate execution.
+- **Redesigned Visual Documentation Suite (`README.md`, `INSTALL.md`, `PLAYBOOK.md`, `EVIDENCE.md`, `docs/WALKTHROUGH.md`, `docs/CAPABILITIES.md`, `docs/SPECS.md`, `docs/API.md`)**:
+  - Integrated the new Garuda visual identity (`assets/garuda_logo.png`), the 20-second cinematic product introduction video (`assets/garuda_dashboard_demo_video.mp4`), and the complete 8-surface dashboard & IDE screenshot gallery across a human-centered `README.md` paired with deep v1.8.1 technical specifications.
+
 ## [v1.8.0] - 2026-10-26 — Deterministic BuildContext Receipts, Build-Tag/Platform AST Filtering, CI-vs-Editor Drift Detector & Cross-Platform Matrix Gate
 
 ### Added

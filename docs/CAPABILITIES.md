@@ -1,6 +1,6 @@
-# 🧠 Garuda Capabilities & Verification Matrix (v1.6.0 Universal)
+# 🧠 Garuda Capabilities & Verification Matrix (v1.8.1 Universal)
 
-> Grounded in the Garuda v1.6.0 multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
+> Grounded in the Garuda v1.8.1 multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
 
 ---
 
@@ -80,3 +80,18 @@
 | **Windows PowerShell Zero-Dependency Installer (`install.ps1` / `setup.ps1`)** | 🟢 **Production (GA)** | `Windows 10/11 PowerShell` | Auto-provisions Portable PostgreSQL 16 (`$HOME\.garuda\runtime\postgres`) and Portable Go (`$HOME\.garuda\toolchain\go`) without Admin or GCC | `1-Command Windows Onboarding` |
 | **macOS / Linux / Chromebook / Android Installer (`install.sh` / `setup.sh`)** | 🟢 **Production (GA)** | `POSIX / Darwin / Crostini / Termux` | Auto-provisions Portable Go, user-space PostgreSQL (`~/.garuda/data/pg`), and compiles in Pure-Go (`CGO_ENABLED=0`) when `gcc`/`clang` is absent | `1-Command Universal Onboarding` |
 | **Self-Diagnosis & Auto-Repair CLI (`garuda doctor`)** | 🟢 **Production (GA)** | `cmd/garuda/doctor_cmd.go` (`--fix`, `--json`) | Verifies and repairs `.env`, PostgreSQL & migrations, all 4 binaries, Talon hooks, and `/dashboard` gateway health | `Self-Healing Local Runtime` |
+
+
+---
+
+## 7. Plane 07 — Deterministic `BuildContext` Provenance, Conditional Build-Tag AST & Docs-to-Code Lineage (`v1.7`–`v1.8.1`)
+
+| Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
+| :--- | :--- | :--- | :--- | :--- |
+| **Polyglot `BuildContext` Provenance Receipts** | 🟢 **Production (GA)** | `internal/analyzer/build_context_test.go` | Captures Git SHA/dirty hash, `GOOS`, `GOARCH`, `CGO_ENABLED`, `-tags`, `go.mod` hash, Python lock hash, `tsconfig.json` hash, and 1-line `reproduce_command` | `Canonical Merkle Leaf Binding` |
+| **`go/build.Context` Conditional Build-Tag & OS Filtering** | 🟢 **Production (GA)** | `TestTwoBuildsExposeDifferentEdges` | Evaluates `//go:build`, `// +build`, `_linux.go`, `_darwin.go`, `_windows.go`, and `cgo` constraints via `go/build.Context.MatchFile` | `Platform-Accurate Edge Graph` |
+| **CI-vs-Editor Environment Drift Detector** | 🟢 **Production (GA)** | `TestDetectEnvironmentDrift` | Detects `TARGET_PLATFORM_MISMATCH`, `CGO_MISMATCH`, `BUILD_TAGS_MISMATCH`, `COMMIT_DRIFT`, `WORKTREE_DIRTY_DRIFT`, and `LANG_CONFIG_DRIFT` | `Zero Silent False-ALLOW` |
+| **4-Profile Cross-Platform Build Matrix Gate (`--matrix`)** | 🟢 **Production (GA)** | `TestEvaluateBuildMatrix` | Evaluates `linux/amd64 (cgo=0)`, `linux/amd64 (cgo=1, tags=cgo)`, `darwin/arm64 (cgo=1)`, and `windows/amd64 (cgo=0)` in one pass | `Pre-Push Cross-OS Parity` |
+| **Relative-Path Package Cache Determinism (`v1.8.1`)** | 🟢 **Production (GA)** | `TestDoubleRunDeterminism (24/24)` | Hashes repository-relative paths (`filepath.Rel`) + file sizes + SHA-256 digests so cache fingerprints are checkout-path invariant | `100% Deterministic Fingerprints` |
+| **4-Tier Docs, Specs & Guardrails Lineage Graph** | 🟢 **Production (GA)** | `GET /api/v1/dashboard/docs-graph` & `garuda docs graph` | Connects Documents (ADRs/Specs/Policies) → Extracted Rules (`MUST`/`MUST_NOT`) → Active Guardrails → Governed AST Symbols | `Traceable Normative Lineage` |
+| **Architectural Risk Hub & Blast-Radius Leaderboard** | 🟢 **Production (GA)** | `GET /api/v1/dashboard/talon-hub` | Ranks symbols `0–100` (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`) by caller fan-in, transitive blast radius, and ADR sensitivity | `Pre-Edit Risk Visibility` |

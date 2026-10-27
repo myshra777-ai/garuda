@@ -1,9 +1,9 @@
 # Garuda Specifications
 
-**Version:** 1.6.0  
+**Version:** 1.8.1  
 **Document status:** Current-state reference draft
 
-**Updated:** 2026-10-25
+**Updated:** 2026-10-27
 **Scope:** Verified repository capabilities, validation boundaries, and explicitly marked future work.
 
 > This document describes Garuda as implemented and verified in the current repository state. A capability is not considered current merely because it appears in a roadmap, design document, dashboard label, or generated artifact.
@@ -213,7 +213,7 @@ These are different evidence sources and must not be treated as interchangeable.
 
 ## 6. Documentation and claims
 
-Garuda can ingest supported Markdown, ADR, and plain-text documentation. The document parser extracts eligible normative statements according to the contract in [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md).
+Garuda can ingest supported Markdown, ADR, and plain-text documentation. The document parser extracts eligible normative statements according to the contract in [docs/DOCUMENT\_FORMATS.md](https://www.google.com/search?q=docs/DOCUMENT_FORMATS.md).
 
 The claim lifecycle is:
 
@@ -311,7 +311,7 @@ garuda policy verify <evaluation-id>
 garuda verify
 ```
 
-The canonical trust and invariant contracts are documented in the ADRs and [`docs/invariants.md`](docs/invariants.md).
+The canonical trust and invariant contracts are documented in the ADRs and [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md).
 
 ---
 
@@ -519,7 +519,7 @@ Hygiene findings are currently ephemeral CLI results. There is no current persis
 
 ## 19. Security and invariants
 
-The canonical invariant contract is [`docs/invariants.md`](docs/invariants.md). This document records the practical boundaries relevant to current interfaces.
+The canonical invariant contract is [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md). This document records the practical boundaries relevant to current interfaces.
 
 - Scope is enforced at server/store boundaries.
 - Tenant and workspace IDs must remain attached to scoped records.
@@ -543,7 +543,7 @@ No current release guarantee is made for sandbox escape prevention, automatic re
 
 ## 20. Hygiene
 
-Hygiene is the current report-only static-analysis capability described in [`docs/hygiene.md`](docs/hygiene.md).
+Hygiene is the current report-only static-analysis capability described in [docs/hygiene.md](https://www.google.com/search?q=docs/hygiene.md).
 
 ### Commands
 
@@ -739,20 +739,37 @@ Breaking changes should state which surface changed, how compatibility is handle
 ## Evidence index
 
 - [`README.md`](README.md) — product overview.
-- [`PLAYBOOK.md`](PLAYBOOK.md) — installation and operational workflows.
-- [`EVIDENCE.md`](EVIDENCE.md) — validation corpus and methodology.
-- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — capability matrix.
-- [`docs/hygiene.md`](docs/hygiene.md) — Hygiene command and report contract.
-- [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) — documentation ingestion contract.
-- [`docs/invariants.md`](docs/invariants.md) — invariant contract.
-- [`docs/adr/`](docs/adr/) — architecture decision records.
-- [`scripts/mcp_verify.py`](scripts/mcp_verify.py) — MCP reference verifier.
-- [`openapi.yaml`](openapi.yaml) — HTTP contract.
-- [`vscode-extension/`](vscode-extension/) — VS Code integration.
+- [PLAYBOOK.md](https://www.google.com/search?q=PLAYBOOK.md) — installation and operational workflows.
+- [EVIDENCE.md](https://www.google.com/search?q=EVIDENCE.md) — validation corpus and methodology.
+- [docs/CAPABILITIES.md](https://www.google.com/search?q=docs/CAPABILITIES.md) — capability matrix.
+- [docs/hygiene.md](https://www.google.com/search?q=docs/hygiene.md) — Hygiene command and report contract.
+- [docs/DOCUMENT\_FORMATS.md](https://www.google.com/search?q=docs/DOCUMENT_FORMATS.md) — documentation ingestion contract.
+- [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md) — invariant contract.
+- [docs/adr/](https://www.google.com/search?q=docs/adr/) — architecture decision records.
+- [scripts/mcp\_verify.py](https://www.google.com/search?q=scripts/mcp_verify.py) — MCP reference verifier.
+- [openapi.yaml](https://www.google.com/search?q=openapi.yaml) — HTTP contract.
+- [vscode-extension/](https://www.google.com/search?q=vscode-extension/) — VS Code integration.
 
 ---
 
-<p align="center">
-  <strong>Garuda</strong><br>
+&lt;p align=&quot;center&quot;&gt;
+  &lt;strong&gt;Garuda&lt;/strong&gt;&lt;br&gt;
   Analyze · Verify · Govern
-</p>
+&lt;/p&gt;
+
+---
+
+## 26. v1.8.1 Deterministic Build-Context Provenance & Docs-to-Code Lineage Specification
+
+### 26.1 Polyglot `BuildContext` Canonical Hashing (`internal/analyzer/build_context.go`)
+Every static analysis graph and policy evaluation depends not only on source file contents, but on the compiler/interpreter build context that selects which files and conditional branches participate in compilation. Garuda `v1.8.1` formalizes this via `analyzer.BuildContext`:
+1. **Go Build Context (`go/build.Context`)**: Evaluates `//go:build`, `// +build`, filename OS/Arch suffixes (`_linux.go`, `_darwin.go`, `_windows.go`, `_amd64.go`, `_arm64.go`), and `cgo` constraints before AST parsing.
+2. **Checkout-Path-Invariant Package Cache Fingerprint (`computeFilesFingerprint`)**: Computes a deterministic SHA-256 digest over sorted repository-relative file paths (`filepath.Rel(repoRoot, filePath)`), file byte lengths, and content hashes—plus `GOOS`, `GOARCH`, `CGO_ENABLED`, and sorted `-tags`—ensuring `TestDoubleRunDeterminism` holds across any checkout directory or CI runner.
+3. **RFC 6962 Merkle Leaf Binding (`internal/merkle/canonical.go`)**: When a governance evaluation is persisted (`--save`), the canonical Merkle leaf payload includes `Evidence.BuildContext` (`receipt_hash`, `graph_fingerprint`, `commit_sha`, `target_os`, `target_arch`, `cgo_enabled`, `build_tags`, `reproduce_command`) so cryptographic inclusion proofs attest to both the policy verdict and the exact build configuration under which it was evaluated.
+
+### 26.2 4-Tier Docs, Specs & Guardrails Lineage Model (`internal/api/dashboard_docs_talon.go`)
+Garuda connects prose documentation to executable AST enforcement across four explicit graph tiers:
+- **Tier 1 (`doc`)**: Ingested Markdown ADRs, Design Specs, System Invariants, YAML Policy files, and `.garudarules`.
+- **Tier 2 (`rule`)**: Normative clauses (`MUST`, `MUST_NOT`, `DENY`, `BLOCK`, `REVIEW`, `INVARIANT`) extracted with source document provenance and confidence scores.
+- **Tier 3 (`guardrail`)**: Active policy engine predicates (`layer_violation`, `cycle_exists`, `blast_radius_exceeds`, `contradiction_exists`, etc.) enforcing those clauses.
+- **Tier 4 (`symbol` / `package`)**: Concrete AST entities matched by package regex, symbol pattern, or explicit claim references.

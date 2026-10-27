@@ -1,4 +1,14 @@
-# Garuda Evidence & Verification Summary
+# Garuda Evidence & Verification Summary (`v1.8.1`)
+
+> **Latest Release Verification (`v1.8.1` — 2026-10-27):**
+> - **24/24 Compiler & Multi-Module Ground-Truth Benchmarks (`make benchmark-strict`)**: `PASS` (`100%` precision/recall gate, `TestDoubleRunDeterminism` verified across all 24 cases with checkout-path-invariant package cache fingerprints).
+> - **Build-Tag & Platform Conditional AST Proof (`TestTwoBuildsExposeDifferentEdges`)**: `PASS` (proves two builds of the same commit—`cgo=0` vs `cgo=1 -tags cgo,enterprise`—expose distinct AST edge sets and deterministic `graph_fingerprint` values).
+> - **CI-vs-Editor Drift & 4-Target Cross-Platform Matrix (`TestDetectEnvironmentDrift`, `TestEvaluateBuildMatrix`)**: `PASS` (`linux/amd64 cgo=0`, `linux/amd64 cgo=1`, `darwin/arm64 cgo=1`, `windows/amd64 cgo=0`).
+> - **30/30 Active MCP & Talon Harness Verification (`scripts/mcp_verify.py`)**: `PASS`.
+> - **10/10 Controlled Runtime Contradiction Quarantine (`scripts/runtime_contradiction_test.py`)**: `PASS`.
+> - **Cold-Boot CI RFC 6962 Merkle Root Seeding & Verification**: `PASS` (`Status: COMMITTED ✓`, zero tamper or race errors under `go test -v -race ./...`).
+
+---
 
 Garuda separates product claims from reproducible evidence. This document records empirical benchmarks, multi-repository validation datasets, runtime verification tests, MCP compatibility checks, workspace demonstrations, and known measurement boundaries.
 
@@ -444,15 +454,15 @@ psql "$DATABASE_URL" -c "
 ## Evidence Sources
 
 - [`README.md`](README.md) — Product claims and public positioning.
-- [`PLAYBOOK.md`](PLAYBOOK.md) — Operational workflows and command reference.
-- [`docs/SPECS.md`](docs/SPECS.md) — Detailed product and system specification.
-- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — Capability maturity and analyzer matrix.
-- [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) — Visual interface and screenshot tour.
-- [`docs/adr/`](docs/adr/) — Architecture decision records.
-- [`docs/invariants.md`](docs/invariants.md) — Invariant contract.
-- [`scripts/mcp_verify.py`](scripts/mcp_verify.py) — MCP reference verifier.
-- [`scripts/runtime_contradiction_test.py`](scripts/runtime_contradiction_test.py) — Controlled runtime contradiction test.
-- [`scripts/doc_verify_test.py`](scripts/doc_verify_test.py) — Documentation extraction and verification test.
-- [`vscode-extension/`](vscode-extension/) — VS Code integration source and manifest.
+- [PLAYBOOK.md](https://www.google.com/search?q=PLAYBOOK.md) — Operational workflows and command reference.
+- [docs/SPECS.md](https://www.google.com/search?q=docs/SPECS.md) — Detailed product and system specification.
+- [docs/CAPABILITIES.md](https://www.google.com/search?q=docs/CAPABILITIES.md) — Capability maturity and analyzer matrix.
+- [docs/WALKTHROUGH.md](https://www.google.com/search?q=docs/WALKTHROUGH.md) — Visual interface and screenshot tour.
+- [docs/adr/](https://www.google.com/search?q=docs/adr/) — Architecture decision records.
+- [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md) — Invariant contract.
+- [scripts/mcp\_verify.py](https://www.google.com/search?q=scripts/mcp_verify.py) — MCP reference verifier.
+- [scripts/runtime\_contradiction\_test.py](https://www.google.com/search?q=scripts/runtime_contradiction_test.py) — Controlled runtime contradiction test.
+- [scripts/doc\_verify\_test.py](https://www.google.com/search?q=scripts/doc_verify_test.py) — Documentation extraction and verification test.
+- [vscode-extension/](https://www.google.com/search?q=vscode-extension/) — VS Code integration source and manifest.
 
 Historical evidence documents may contain earlier corpus sizes or MCP check totals. Such entries should be read as historical milestones; the current MCP & Talon reference result is `30/30` (`scripts/mcp_verify.py`) alongside `24/24` strict ground-truth compiler benchmarks (`make benchmark-strict`) and the current public product surface is documented in `README.md`, `PLAYBOOK.md`, and `docs/SPECS.md`.

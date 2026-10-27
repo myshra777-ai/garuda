@@ -1,4 +1,4 @@
-# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (v1.6.0 Universal)
+# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (v1.8.1 Universal)
 
 This reference documents the complete command-line interface (`bin/garuda` and `bin/garuda-talon`), the **Garuda Talon** active agent harness, declarative policy specification (`policies/*.yaml`), Model Context Protocol surface (`bin/garuda-mcp` with 23 active tools), and HTTP REST / PWA gateway (`bin/garuda-api`).
 
@@ -259,3 +259,48 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 | `GET /api/v1/evidence/verify/{id}` | Bearer / Session | RFC 6962 cryptographic Merkle inclusion proof verification for a decision |
 | `GET /api/v1/merkle/state` | Bearer / Session | Current tenant Merkle root hash and epoch block height |
 | `GET /admin` | Control Token | Multi-tenant operator Control Plane dashboard |
+
+
+---
+
+## 6. v1.7–v1.8.1 New CLI Flags, Dashboard Lineage Endpoints & BuildContext Schema
+
+### 6.1 Cross-Platform Build Matrix & Build-Tag Flags (`garuda analyze`, `garuda check`, `garuda talon guard`)
+- `--tags string` — Comma-separated Go build tags (e.g., `--tags cgo,enterprise`) applied via `go/build.Context` during conditional AST file matching.
+- `--target-os string` — Override target `GOOS` (`linux`, `darwin`, `windows`) for conditional compilation analysis.
+- `--target-arch string` — Override target `GOARCH` (`amd64`, `arm64`) for conditional compilation analysis.
+- `--matrix` — Execute the 4-profile cross-platform build matrix (`linux/amd64 cgo=0`, `linux/amd64 cgo=1 tags=cgo`, `darwin/arm64 cgo=1`, `windows/amd64 cgo=0`) in a single pass and report per-profile active/skipped files, graph fingerprints, and policy verdicts.
+
+### 6.2 Docs-to-Code Lineage & Talon Risk Hub HTTP Endpoints (`bin/garuda-api`)
+
+| Method & Path | Description |
+| :--- | :--- |
+| `GET /api/v1/dashboard/docs-graph?workspace=<ws>` | Returns the 4-tier Docs, Specs & Guardrails lineage graph (`documents`, `rules`, `guardrails`, `code_nodes`, `edges`, `component_matrix`, and `summary` counts). |
+| `POST /api/v1/dashboard/docs-ingest` | Ingests a new Markdown ADR/spec payload (`title`, `path`, `doc_type`, `content`) or triggers a repository directory scan, extracts normative `MUST`/`MUST_NOT` rules, and links them to matching workspace code symbols. |
+| `GET /api/v1/dashboard/talon-hub?workspace=<ws>` | Returns the active `Garuda Talon` contract, 6 IDE/Git hook statuses, top high-blast-radius `risk_hubs` (0–100 risk score), the active `build_context` receipt, `environment_drift` report, and 4-target `build_matrix` results. |
+| `POST /api/v1/dashboard/talon-check` | Executes a live diff-scoped `talon guard` check (`mode: "guard"`), simulates a layer violation with self-repair output (`mode: "simulate"`), or re-syncs all 6 IDE/Git hooks (`mode: "init"`). |
+
+### 6.3 Deterministic `BuildContext` Receipt JSON Schema (`internal/analyzer/build_context.go`)
+
+```json
+{
+  "receipt_hash": "bc_9f82d4a1e7c03b12",
+  "graph_fingerprint": "gf_4e19a82c01b7d3ef",
+  "captured_at": "2026-10-27T07:15:00Z",
+  "commit_sha": "df3f897248a7a0",
+  "branch": "main",
+  "worktree_dirty": false,
+  "dirty_files_count": 0,
+  "go_context": {
+    "target_os": "linux",
+    "target_arch": "amd64",
+    "cgo_enabled": false,
+    "build_tags": [],
+    "compiler_version": "go1.24.0",
+    "go_mod_hash": "sha256:8a4f...",
+    "active_files_count": 142,
+    "skipped_by_build_tags_count": 4
+  },
+  "reproduce_command": "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 ./bin/garuda talon guard --workspace default --diff HEAD --fail-on-block"
+}
+```

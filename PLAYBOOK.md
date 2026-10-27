@@ -1,4 +1,4 @@
-# Garuda Operational Playbook (v1.6 Universal)
+# Garuda Operational Playbook (v1.8.1 Universal)
 
 **Zero-Dependency Setup · Active Agent Harness (`Garuda Talon`) · Diff-Scoped Change Control · 6-Surface Dashboard PWA · Reference**
 
@@ -307,3 +307,32 @@ Add Garuda to GitHub Actions (`.github/workflows/garuda-gate.yml`) or GitLab CI:
 ## 15. Troubleshooting & Common Error Reference
 
 For platform-specific installation errors (Windows PowerShell ExecutionPolicy, missing GCC/Xcode, stopped PostgreSQL, port conflicts, Chromebook port forwarding, Android Termux storage, or `git push origin main` non-fast-forward rejections), run `./bin/garuda doctor --fix` or consult the complete 13-item table in **[`INSTALL.md`](INSTALL.md)**.
+
+---
+
+## 16. v1.8.1 Operational Workflows: Docs-to-Code Lineage Graph, Talon Risk Hub & Deterministic BuildContext Matrix
+
+### 16.1 Exploring & Ingesting into the 4-Tier Docs, Specs & Guardrails Graph
+Every Markdown ADR (`docs/adr/*.md`), design spec (`docs/specs/*.md`), system invariant (`docs/invariants.md`), and YAML policy (`policies/*.yaml`) is automatically parsed into a 4-tier lineage graph (`Document -> Normative Rule -> Active Guardrail -> Code Symbol`):
+
+```bash
+# Ingest Markdown ADRs and design specs from the CLI
+./bin/garuda docs ingest ./docs/adr --workspace default
+
+# Inspect the 4-tier Docs-to-Code lineage graph as JSON or in the dashboard
+curl -s http://localhost:8080/api/v1/dashboard/docs-graph?workspace=default | jq .summary
+```
+Or open **`http://localhost:8080/dashboard#docs-graph`** (`04 — Docs & Rules Graph`) to visually trace any ADR rule directly to the Go, Python, or TypeScript symbols it governs, or click **`+ Ingest ADR / Spec`** to author and bind a new architectural rule live in your browser.
+
+### 16.2 Verifying Deterministic `BuildContext` Receipts & Catching CI-vs-Editor Drift
+When a check passes in a developer's local IDE (`darwin/arm64`, `CGO_ENABLED=1`) but fails or behaves differently in Linux CI (`linux/amd64`, `CGO_ENABLED=0`), Garuda's `BuildContext` provenance receipt pinpoints the exact environmental difference and gives you a 1-line reproduction command:
+
+```bash
+# Run diff-scoped Talon guard with cross-platform matrix verification
+./bin/garuda talon guard --workspace default --diff HEAD --matrix --fail-on-block
+
+# Run unified check across all 4 OS/CGO matrix profiles and emit JSON receipt
+./bin/garuda check --diff HEAD --project default --policy ./policies --matrix --save --json
+```
+
+If environment drift is detected between the indexed workspace graph and the active check runner (`TARGET_PLATFORM_MISMATCH`, `CGO_MISMATCH`, `BUILD_TAGS_MISMATCH`, `COMMIT_DRIFT`, or `WORKTREE_DIRTY_DRIFT`), Garuda surfaces the exact drift code and outputs the deterministic `reproduce_command` (`CGO_ENABLED=... GOOS=... GOARCH=... ./bin/garuda talon guard ...`) so any engineer or CI runner can reproduce the exact graph and verdict.
