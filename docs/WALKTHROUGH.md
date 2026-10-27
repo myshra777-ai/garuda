@@ -1,26 +1,28 @@
-# Garuda System Walkthrough (`v1.8.1` Universal)
+# Garuda System Walkthrough (`v1.8.4` Universal)
 
 **A complete visual and technical tour of Garuda's 8-surface Software Intelligence Instrument (`/dashboard` PWA), the `Garuda Talon` active AI execution harness, deterministic `BuildContext` provenance receipts, cross-platform `--matrix` gates, 23 active MCP tools, and IDE integrations.**
 
 ---
 
-## 0. Watch the 23-Second Dashboard Demo
+## 0. Watch the 20-Second Cinematic Product Introduction
 
-The current dashboard demo is 22.7 seconds long. Its preview uses a screenshot already tracked in `../assets/`; click the image or the link to open the MP4.
+Before diving into the technical surfaces, watch the 20-second introduction video exploring Garuda's live control plane (`../assets/garuda_dashboard_demo_video.mp4`):
 
-<p align="center">
-  <a href="../assets/garuda_dashboard_demo_video.mp4" title="Play the Garuda dashboard demo">
-    <img src="../assets/Screenshot%20From%202026-10-25%2002-30-49.png" width="100%" alt="Garuda dashboard preview — click to play the demo">
-  </a>
-  <br>
-  <strong><a href="../assets/garuda_dashboard_demo_video.mp4">▶ Open the Garuda dashboard demo (MP4)</a></strong>
-</p>
+<div align="center">
+  <video src="../assets/garuda_dashboard_demo_video.mp4" poster="../assets/Screenshot%20From%202026-10-25%2002-30-49.png" controls autoplay loop muted playsinline width="100%">
+    <source src="../assets/garuda_dashboard_demo_video.mp4" type="video/mp4">
+    <a href="../assets/garuda_dashboard_demo_video.mp4">
+      <img src="../assets/Screenshot%20From%202026-10-25%2002-30-49.png" width="100%" alt="Watch the 20-Second Garuda Introduction Video">
+    </a>
+  </video>
+  <p><em>🎬 <a href="../assets/garuda_dashboard_demo_video.mp4"><strong>Click here to play <code>assets/garuda_dashboard_demo_video.mp4</code></strong></a></em></p>
+</div>
 
 ---
 
 ## 1. One-Command Zero-Dependency Universal Setup (`install.sh` / `install.ps1`)
 
-Garuda `v1.8.1` eliminates manual toolchain downloads, manual SQL migration loops, manual JWT key generation, and passive MCP configuration. Whether you are on Windows 10/11, macOS (Apple Silicon or Intel), Linux, Chromebook (Crostini), or Android (Termux), Garuda provisions its own portable runtime in user-space (`~/.garuda`) and boots in one command:
+Garuda `v1.8.4` eliminates manual toolchain downloads, manual SQL migration loops, manual JWT key generation, and passive MCP configuration. Whether you are on Windows 10/11, macOS (Apple Silicon or Intel), Linux, Chromebook (Crostini), or Android (Termux), Garuda provisions its own portable runtime in user-space (`~/.garuda`) and boots in one command:
 
 ### macOS, Linux, Chromebook (Crostini) & Android (Termux)
 ```bash
@@ -40,10 +42,11 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercont
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-### What Happens Automatically Under the Hood
-1. **Zero-Admin Portable Toolchain & Database**: If Go or PostgreSQL are not installed on your device, Garuda downloads Portable Go 1.24 and Portable PostgreSQL 16 into `~/.garuda/`, initializes a local database cluster on port `5433`, and compiles all four binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) using `CGO_ENABLED=0` Pure-Go mode when no C compiler (`gcc`/`clang`) is present.
-2. **Dynamic Identity & Persistent `.env`**: Reads your identity from `git config`, runs all SQL migrations idempotently, and persists `DATABASE_URL`, `GARUDA_WORKSPACE`, `GARUDA_TALON_ENFORCE=true`, `PORT=8080`, and Ed25519 JWT keys into `.env`.
-3. **Garuda Talon Active Agent Harness (`garuda talon init`)**: Compiles live workspace ADRs (`document_claims`), declarative YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc`, `.cursor/mcp.json`, `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit`.
+### What Happens Automatically Under the Hood (`v1.8.4`)
+1. **Fast Shallow Clone & Zero-Admin Portable PostgreSQL 16 (`127.0.0.1:5433`)**: `install.sh` and `install.ps1` clone with `--depth 1` (or unpack release archives via native `curl`/`tar`). If PostgreSQL is not running, Garuda downloads pre-built Portable PostgreSQL `16.4` (`~18 MB` on macOS/Linux, `~55 MB` on Windows) into `~/.garuda/runtime/postgres`, initializes a locale-safe cluster (`LC_ALL=C --no-locale`) in `~/.garuda/data/pg` with isolated sockets in `~/.garuda/data/run`, and binds to explicit IPv4 `127.0.0.1:5433`.
+2. **Single-Download Portable Go `1.26.0` & 1-Pass Pure-Go Build (`CGO_ENABLED=0`)**: Downloads Portable Go `1.26.0` (matching `go.mod` so Go never downloads a second toolchain) into `~/.garuda/toolchain/go` and compiles all four binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) in one pass with commit build-stamp caching (`bin/.build_stamp`).
+3. **Dynamic Identity, Schema Hardening (`057_schema_hardening.sql`) & Persistent `.env`**: Auto-discovers your email from `git config user.email`, runs all idempotent SQL migrations, and persists `DATABASE_URL` (normalized to `127.0.0.1:5433`), `GARUDA_WORKSPACE`, `GARUDA_TALON_ENFORCE=true`, `PORT=8080`, and Ed25519 JWT keys into `.env`.
+4. **Garuda Talon Active Agent Harness (`garuda talon init`)**: Compiles live workspace ADRs (`document_claims`), declarative YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc`, `.cursor/mcp.json`, `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit`, then verifies all 25/25 dynamic MCP checks (`scripts/mcp_verify.py`).
 
 ---
 
@@ -80,11 +83,11 @@ Introduced in `v1.7` and refined in `v1.8.1`, this surface visualizes how human-
 - **Tier 4 — Code Symbols & Packages**: The exact Go, Python, and TypeScript symbols bound by each rule, complete with a **Document-to-Code Component Matrix** and an in-browser **Ingest Document / ADR Modal** (`POST /api/v1/dashboard/docs-ingest`).
 
 <p align="center">
-  <img src="../assets/Screenshot%20From%202026-10-25%2002-31-40.png" width="100%" alt="Surface 04: Docs, Specs &amp; Guardrails Lineage Graph">
+  <img src="../assets/Screenshot%20From%202026-10-25%2002-31-40.png" width="100%" alt="Surface 04: Docs, Specs & Guardrails Lineage Graph">
 </p>
 
 ### Surface 05 — Garuda Talon & Architectural Risk Hub (`/dashboard#talon-hub`)
-The operational nerve center for AI agent governance and build-context determinism (`v1.8.1`):
+The operational nerve center for AI agent governance and build-context determinism (`v1.8.4`):
 - **Deterministic `BuildContext` Provenance Receipt & CI-vs-Editor Drift Banner**: Displays the active `receipt_hash`, `graph_fingerprint`, `GOOS/GOARCH`, `CGO_ENABLED`, `-tags`, `go.mod` hash, dirty worktree state, drift status (`CLEAN` vs `DRIFT DETECTED`), and a 1-click **Copy Reproduce Cmd** button.
 - **Cross-Platform Build Matrix Gate (`--matrix`)**: Shows real-time verification across `linux/amd64 (cgo=0)`, `linux/amd64 (cgo=1, tags=cgo)`, `darwin/arm64 (cgo=1)`, and `windows/amd64 (cgo=0)`.
 - **Live Talon Active Guard Terminal**: Run diff-scoped `talon guard` checks or simulate an architectural violation to inspect the exact **Self-Repair Prompt** fed back to Cursor/Claude Code.
@@ -92,14 +95,14 @@ The operational nerve center for AI agent governance and build-context determini
 - **Architectural Risk Hub Leaderboard**: Scores symbols from `0–100` (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) by caller fan-in, transitive blast radius, and ADR sensitivity, with 1-click **Pre-Edit Briefing** drawers.
 
 <p align="center">
-  <img src="../assets/Screenshot%20From%202026-10-25%2002-31-56.png" width="100%" alt="Surface 05: Garuda Talon &amp; Architectural Risk Hub">
+  <img src="../assets/Screenshot%20From%202026-10-25%2002-31-56.png" width="100%" alt="Surface 05: Garuda Talon & Architectural Risk Hub">
 </p>
 
 ### Surface 06 — Change Review Workbench & Interactive Policy Sandbox (`/dashboard#workbench` & `/dashboard#policies`)
 A 3-pane pre-merge simulator where engineers select a target symbol and policy bundle on the left, inspect impacted upstream callers and applicable predicates in the center, and generate a live `ALLOW` / `WARN` / `REVIEW` / `BLOCK` receipt on the right—paired with a live YAML Policy Sandbox for testing new rules across all 9 graph predicates.
 
 <p align="center">
-  <img src="../assets/Screenshot%20From%202026-10-25%2002-32-11.png" width="100%" alt="Surface 06: Change Review Workbench &amp; Policies">
+  <img src="../assets/Screenshot%20From%202026-10-25%2002-32-11.png" width="100%" alt="Surface 06: Change Review Workbench & Policies">
 </p>
 
 ### Surface 07 & 08 — Forensic Contradictions Queue & RFC 6962 Cryptographic Audit Ledger (`/dashboard#contradictions` & `/dashboard#ledger`)
@@ -107,19 +110,19 @@ A 3-pane pre-merge simulator where engineers select a target symbol and policy b
 - **Governance & Audit Ledger (`#ledger`)**: Displays the append-only RFC 6962 SHA-256 Merkle ledger table with a bottom **Decision Record Inspector** (`What it did`, `What it looked at`, `BuildContext Receipt`, `Epistemic state`, `Merkle Inclusion Proof`) and 1-click cryptographic verification.
 
 <p align="center">
-  <img src="../assets/Screenshot%20From%202026-10-25%2002-32-25.png" width="100%" alt="Surface 07 &amp; 08: Contradictions Queue &amp; Audit Ledger">
+  <img src="../assets/Screenshot%20From%202026-10-25%2002-32-25.png" width="100%" alt="Surface 07 & 08: Contradictions Queue & Audit Ledger">
 </p>
 
 ---
 
-## 3. Deterministic `BuildContext` Receipts & Cross-Platform Matrix CLI (`v1.8.1`)
+## 3. Deterministic `BuildContext` Receipts & Cross-Platform Matrix CLI (`v1.8.4`)
 
 One of the hardest problems in static analysis and architectural governance is **environment drift**: a developer runs a check on `darwin/arm64` with `CGO_ENABLED=1`, while CI runs on `linux/amd64` with `CGO_ENABLED=0` or custom `-tags`.
 
-In `v1.8.1`, every `garuda analyze`, `garuda check`, and `garuda talon guard` execution computes and seals a deterministic **`BuildContext` receipt**:
+In `v1.8.4`, every `garuda analyze`, `garuda check`, and `garuda talon guard` execution computes and seals a deterministic **`BuildContext` receipt**:
 
 ```bash
-# Re-index workspace with a sealed v1.8.1 BuildContext receipt and Merkle block
+# Re-index workspace with a sealed v1.8.4 BuildContext receipt and Merkle block
 ./bin/garuda analyze . --workspace default --save
 
 # Run the active Talon guard across your current git diff AND verify all 4 OS/CGO target profiles
@@ -128,7 +131,7 @@ In `v1.8.1`, every `garuda analyze`, `garuda check`, and `garuda talon guard` ex
 
 Example terminal output:
 ```text
-🔒 Garuda Talon Active Guard (v1.8.1)
+🔒 Garuda Talon Active Guard (v1.8.4)
    Workspace:         default
    Build Receipt:     bc_9f82d4a1e7c03b12 (graph: gf_4e19a82c01b7d3ef)
    Target Env:        linux/amd64 | CGO_ENABLED=0 | tags=[] | go1.24

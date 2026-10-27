@@ -1,8 +1,8 @@
-# Garuda Operational Playbook (v1.8.1 Universal)
+# Garuda Operational Playbook (`v1.8.4` Universal)
 
 **Zero-Dependency Setup · Active Agent Harness (`Garuda Talon`) · Diff-Scoped Change Control · 6-Surface Dashboard PWA · Reference**
 
-This playbook is the complete operational guide for installing, configuring, and running Garuda v1.8.1 against real-world Go, Python, and TypeScript codebases across **Windows 10/11 (PowerShell)**, **macOS**, **Linux**, **Chromebook (ChromiumOS)**, and **Android (Termux & Chrome PWA)**.
+This playbook is the complete operational guide for installing, configuring, and running Garuda `v1.8.4` against real-world Go, Python, and TypeScript codebases across **Windows 10/11 (PowerShell)**, **macOS**, **Linux**, **Chromebook (ChromiumOS)**, and **Android (Termux & Chrome PWA)**.
 
 ---
 
@@ -34,7 +34,7 @@ AI coding agents (**Cursor**, **Claude Code**, **Codex**, **Devin**, **Windsurf*
 - Modifying a core shared struct or class with 170+ downstream callers without checking blast radius.
 - Violating documented Architecture Decision Records (ADRs) or making undeclared runtime service calls observed in OpenTelemetry spans.
 
-**Garuda v1.8.1 is the deterministic change-control gate, active AI execution harness (`Garuda Talon`), and software intelligence instrument for AI-written code.**
+**Garuda `v1.8.4` is the deterministic change-control gate, active AI execution harness (`Garuda Talon`), and software intelligence instrument for AI-written code.**
 
 ### The 5-Plane Architecture
 
@@ -58,30 +58,35 @@ AI coding agents (**Cursor**, **Claude Code**, **Codex**, **Devin**, **Windsurf*
 
 ---
 
-## 3. 1-Command Universal Setup (Zero Dependencies)
+## 3. 1-Command Universal Setup (Zero Dependencies — `v1.8.4`)
 
-You do **not** need Go, PostgreSQL, GCC/Xcode/MinGW, or Docker pre-installed. Garuda provisions a portable user-space toolchain (`~/.garuda/toolchain/go`) and database (`~/.garuda/data/pg` on port `5433`) automatically:
+You do **not** need Go, PostgreSQL, GCC/Xcode/MinGW, Homebrew, or Docker pre-installed, and you do **not** need Administrator or `sudo` privileges. Garuda `v1.8.4` provisions a portable user-space Go `1.26.0` toolchain (`~/.garuda/toolchain/go`), pre-built Portable PostgreSQL `16.4` (`~/.garuda/runtime/postgres`), and a local database cluster (`~/.garuda/data/pg` bound to explicit IPv4 `127.0.0.1:5433`) automatically:
 
-### Windows 10 / 11 (PowerShell)
+### Windows 10 / 11 (PowerShell 5.1, PowerShell 7, or Git Bash)
 
 ```powershell
-# Option A: 1-Command Remote Install & Launch
+# Option A: 1-Command Remote Install & Launch (pure 7-bit ASCII for Windows PowerShell 5.1 & 7)
 Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 | iex
 
 # Option B: From inside a cloned/extracted repository
 cd $HOME\garuda
-powershell -ExecutionPolicy Bypass -File .\setup.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-### macOS, Linux, Chromebook (Crostini) & Android (Termux)
+### macOS (Apple Silicon & Intel), Linux, Chromebook (Crostini) & Android (Termux)
 
 ```bash
-# Option A: 1-Command Remote Install & Launch
+# Option A: 1-Command Remote Install & Launch (uses fast shallow clone + 3-second Portable Postgres 16)
 curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash
 
 # Option B: From inside a cloned/extracted repository
-git clone https://github.com/myshra777-ai/garuda.git && cd garuda && ./setup.sh
+git clone --depth 1 https://github.com/myshra777-ai/garuda.git && cd garuda && ./setup.sh
 ```
+
+### Key `v1.8.4` Cross-OS Provisioning Guarantees
+- **No 45-Minute Homebrew Source Compiles on macOS**: Automatically downloads pre-built Portable PostgreSQL `16.4.0` (`~18 MB`) into `~/.garuda/runtime/postgres/bin` when PostgreSQL is missing.
+- **No Double Go Toolchain Download**: Inspects `go.mod` and downloads Portable Go `1.26.0` directly into `~/.garuda/toolchain/go`, compiling all 4 binaries in a single `CGO_ENABLED=0` pass with commit build-stamp caching (`bin/.build_stamp`).
+- **Explicit IPv4 `127.0.0.1:5433` & Socket Isolation**: Normalizes `@localhost:` to `@127.0.0.1:` in `DATABASE_URL` (avoiding macOS IPv6 `[::1]:5433` connection refusals) and isolates Unix sockets in `~/.garuda/data/run` (`chmod 700`).
 
 ### Direct CLI Repository Initialization (`garuda init`)
 
@@ -152,7 +157,7 @@ Incrementally re-indexes dirty working-tree files in milliseconds, maps git diff
 
 ### 5.4 Autonomous Supervisor Loop (`garuda talon run`)
 
-Wrap a CLI coding agent (`claude`, `aider`, `codex`) in a bounded self-repair loop. Garuda feeds policy/ADR feedback back to the agent for up to `--max-retries` attempts (default: `3`). If violations remain after the retry limit, the final outcome may still be `BLOCK`:
+Wrap any CLI coding agent (`claude`, `aider`, `codex`) in a closed self-repair loop that automatically feeds policy/ADR violation fixes back to the agent (up to `--max-retries 3`) until `ALLOW` is achieved:
 
 ```bash
 ./bin/garuda talon run --max-retries 3 -- claude "Refactor CheckoutHandler to use OrderService"
@@ -306,11 +311,26 @@ Add Garuda to GitHub Actions (`.github/workflows/garuda-gate.yml`) or GitLab CI:
 
 ## 15. Troubleshooting & Common Error Reference
 
-For platform-specific installation errors (Windows PowerShell ExecutionPolicy, missing GCC/Xcode, stopped PostgreSQL, port conflicts, Chromebook port forwarding, Android Termux storage, or `git push origin main` non-fast-forward rejections), run `./bin/garuda doctor --fix` or consult the complete 13-item table in **[`INSTALL.md`](INSTALL.md)**.
+For any installation, database, build, MCP, or Git hook issue across Windows PowerShell 5.1/7, macOS (Intel & Apple Silicon), Linux, Chromebook, or Android:
+
+1. **Run Automatic Self-Repair First**:
+   ```bash
+   # macOS / Linux / Chromebook / Android
+   ./bin/garuda doctor --fix
+
+   # Windows PowerShell
+   .\bin\garuda.exe doctor --fix
+   ```
+2. **Quick Remedies for Common Situations**:
+   - **Windows PowerShell 5.1 `UnexpectedToken` or `PSSecurityException`**: Pull latest `v1.8.4` (`git pull --rebase origin main`) and run `powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1`.
+   - **macOS/Linux `dial tcp [::1]:5433: connect: connection refused`**: Run `./setup.sh` or `./bin/garuda doctor --fix` (which normalizes `DATABASE_URL` to `127.0.0.1:5433` and starts the portable cluster in `~/.garuda/data/pg`).
+   - **Environment Drift Warning (`⚠️ Environment drift detected`)**: Run `./bin/garuda analyze . --workspace default --save` to refresh the workspace `BuildContext` receipt for your current machine.
+   - **Git Push Rejected (`! [rejected] main -> main (non-fast-forward)`)**: Run `git checkout -- go.mod go.sum 2>/dev/null; git pull --rebase origin main && git push origin main`.
+3. **Full 20-Scenario Diagnostic Table**: See **[`INSTALL.md`](INSTALL.md)** for the complete cross-OS troubleshooting matrix.
 
 ---
 
-## 16. v1.8.1 Operational Workflows: Docs-to-Code Lineage Graph, Talon Risk Hub & Deterministic BuildContext Matrix
+## 16. v1.8.4 Operational Workflows: Docs-to-Code Lineage Graph, Talon Risk Hub & Deterministic BuildContext Matrix
 
 ### 16.1 Exploring & Ingesting into the 4-Tier Docs, Specs & Guardrails Graph
 Every Markdown ADR (`docs/adr/*.md`), design spec (`docs/specs/*.md`), system invariant (`docs/invariants.md`), and YAML policy (`policies/*.yaml`) is automatically parsed into a 4-tier lineage graph (`Document -> Normative Rule -> Active Guardrail -> Code Symbol`):

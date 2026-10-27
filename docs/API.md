@@ -1,4 +1,4 @@
-# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (v1.8.1 Universal)
+# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (`v1.8.4` Universal)
 
 This reference documents the complete command-line interface (`bin/garuda` and `bin/garuda-talon`), the **Garuda Talon** active agent harness, declarative policy specification (`policies/*.yaml`), Model Context Protocol surface (`bin/garuda-mcp` with 23 active tools), and HTTP REST / PWA gateway (`bin/garuda-api`).
 
@@ -10,7 +10,7 @@ All Garuda binaries (`garuda`, `garuda-talon`, `garuda-api`, `garuda-mcp`) autom
 
 | Variable | Default (Dev) | Purpose |
 | :--- | :--- | :--- |
-| `DATABASE_URL` | `postgres://test:test@localhost:5433/garuda_test?sslmode=disable` | Primary PostgreSQL connection string |
+| `DATABASE_URL` | `postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable` | Primary PostgreSQL connection string (`config.ResolveDBURL()` automatically normalizes `@localhost:` to IPv4 `@127.0.0.1:`) |
 | `GARUDA_WORKSPACE` | Most recently updated workspace | Default workspace name for CLI, Talon, and MCP commands |
 | `GARUDA_TALON_ENFORCE` | `true` | Enables active MCP contract injection on the agent's first tool call |
 | `GARUDA_POLICY_DIR` | `./policies` | Default directory for declarative YAML architecture policies |
@@ -34,7 +34,7 @@ Initializes Garuda in a single command: verifies or starts PostgreSQL (local use
 
 **Flags:**
 - `--workspace string` — Workspace name to initialize (defaults to `GARUDA_WORKSPACE` or target folder name).
-- `--email string` — Owner email to provision (default `myshra777@gmail.com`).
+- `--email string` — Owner email to provision (auto-discovered from `GARUDA_EMAIL`, `git config user.email`, or OS username if omitted).
 - `--password string` — Owner password to provision (default `garuda2026`).
 - `--target string` — Repository path to index (default `.`).
 - `--skip-scan` — Skip initial repository AST scan during setup.
@@ -76,7 +76,7 @@ Manages the **Garuda Talon** Active Agent Execution Harness.
 # 4. Run incremental AST sync + diff-scoped policy & ADR check + Self-Repair Prompt output
 ./bin/garuda talon guard . --workspace go-validation-10 --staged --fail-on-block
 
-# 5. Supervisor loop: wrap a CLI coding agent and attempt bounded self-repair (up to --max-retries; may remain BLOCK)
+# 5. Supervisor loop: wrap a CLI coding agent and auto-loop self-repair until ALLOW
 ./bin/garuda talon run --max-retries 3 -- claude "Refactor CheckoutHandler"
 ```
 
@@ -236,7 +236,7 @@ Verify MCP and Talon compliance at any time by running:
 ```bash
 python3 scripts/mcp_verify.py
 ```
-Expected result: `═══ 30/30 checks passed ═══`.
+Expected result: `═══ 25/25 checks passed ═══` (self-hosted dynamic verifier) or `═══ 30/30 checks passed ═══` (multi-repo benchmark suite).
 
 ---
 
@@ -263,7 +263,7 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 
 ---
 
-## 6. v1.7–v1.8.1 New CLI Flags, Dashboard Lineage Endpoints & BuildContext Schema
+## 6. v1.7–v1.8.4 New CLI Flags, Dashboard Lineage Endpoints & BuildContext Schema
 
 ### 6.1 Cross-Platform Build Matrix & Build-Tag Flags (`garuda analyze`, `garuda check`, `garuda talon guard`)
 - `--tags string` — Comma-separated Go build tags (e.g., `--tags cgo,enterprise`) applied via `go/build.Context` during conditional AST file matching.

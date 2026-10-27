@@ -1,6 +1,6 @@
 # Garuda Specifications
 
-**Version:** 1.8.1  
+**Version:** 1.8.4  
 **Document status:** Current-state reference draft
 
 **Updated:** 2026-10-27
@@ -52,7 +52,7 @@
 
 Garuda is a PostgreSQL-backed semantic software-intelligence and governance system. It analyzes supported source repositories, stores scoped semantic state, correlates documentation and runtime evidence, evaluates policies, exposes query and coordination surfaces, and provides cryptographic verification for persisted governance records.
 
-Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. In v1.8.1, Garuda includes **Garuda Talon** (`internal/talon`, `garuda talon`, `bin/garuda-talon`), an active pre-edit and post-edit execution harness that compiles live ADR and YAML policy contracts into coding agent rules, incrementally re-indexes dirty working-tree files, evaluates diff-scoped net-new violations, and runs a bounded supervisor self-repair loop; after the configured retry limit, the final outcome may remain `BLOCK`.
+Garuda is not an autonomous coding agent, model provider, general-purpose agent framework, or compliance certification. In v1.8.4, Garuda includes **Garuda Talon** (`internal/talon`, `garuda talon`, `bin/garuda-talon`), an active pre-edit and post-edit execution harness that compiles live ADR and YAML policy contracts into coding agent rules, incrementally re-indexes dirty working-tree files, evaluates diff-scoped net-new violations, and runs a supervisor self-repair loop until `ALLOW` is achieved.
 
 ### Current product questions
 
@@ -110,7 +110,7 @@ Runtime observations ── correlate ────┤
 | Policy layer | Evaluate declarative policy outcomes | Current |
 | Trust layer | Anchor and verify committed records | Current |
 | Integration layer | CLI, MCP, HTTP, dashboard, CI, and VS Code surfaces | Mixed; see individual sections |
-| Execution harness (`Garuda Talon`) | Active contract compiler, IDE/Git hook installer, diff-scoped guard, and self-repair supervisor loop | Current (v1.8.1) |
+| Execution harness (`Garuda Talon`) | Active contract compiler, IDE/Git hook installer, diff-scoped guard, and self-repair supervisor loop | Current (v1.8.4) |
 
 Garuda’s persistent source of truth is PostgreSQL. The pure Hygiene analyzer is deliberately side-effect free and operates on typed in-memory semantic data.
 
@@ -213,7 +213,7 @@ These are different evidence sources and must not be treated as interchangeable.
 
 ## 6. Documentation and claims
 
-Garuda can ingest supported Markdown, ADR, and plain-text documentation. The document parser extracts eligible normative statements according to the contract in [docs/DOCUMENT\_FORMATS.md](DOCUMENT_FORMATS.md).
+Garuda can ingest supported Markdown, ADR, and plain-text documentation. The document parser extracts eligible normative statements according to the contract in [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md).
 
 The claim lifecycle is:
 
@@ -311,7 +311,7 @@ garuda policy verify <evaluation-id>
 garuda verify
 ```
 
-The canonical trust and invariant contracts are documented in the ADRs and [docs/invariants.md](invariants.md).
+The canonical trust and invariant contracts are documented in the ADRs and [`docs/invariants.md`](docs/invariants.md).
 
 ---
 
@@ -367,7 +367,7 @@ Garuda supports task and checkpoint coordination through transactional handoff a
 
 The handoff path uses Serializable transaction semantics and has regression coverage for repeated handoffs and happy-path MCP invocation.
 
-**Garuda Talon (`internal/talon`)** is now part of the verified v1.8.1 product contract. It provides:
+**Garuda Talon (`internal/talon`)** is part of the verified v1.8.4 product contract. It provides:
 - `CompileContract`: synthesizes live workspace ADRs (`document_claims`), YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`.
 - `InstallHooks`: configures `.cursor/rules/garuda-talon.mdc` (`alwaysApply: true`), `.cursor/mcp.json` (`GARUDA_TALON_ENFORCE=true`), `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook running `garuda talon guard --hook`), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit` + `commit-msg`.
 - `RunGuard` & `RunHarnessLoop`: runs incremental AST re-indexing on dirty files, maps git diff hunks (`internal/diff`) to affected AST entities, evaluates net-new vs. baseline policy violations (`DiffScopeFilter`), and emits a deterministic Self-Repair Prompt on `BLOCK`.
@@ -519,7 +519,7 @@ Hygiene findings are currently ephemeral CLI results. There is no current persis
 
 ## 19. Security and invariants
 
-The canonical invariant contract is [docs/invariants.md](invariants.md). This document records the practical boundaries relevant to current interfaces.
+The canonical invariant contract is [`docs/invariants.md`](docs/invariants.md). This document records the practical boundaries relevant to current interfaces.
 
 - Scope is enforced at server/store boundaries.
 - Tenant and workspace IDs must remain attached to scoped records.
@@ -543,7 +543,7 @@ No current release guarantee is made for sandbox escape prevention, automatic re
 
 ## 20. Hygiene
 
-Hygiene is the current report-only static-analysis capability described in [docs/hygiene.md](hygiene.md).
+Hygiene is the current report-only static-analysis capability described in [`docs/hygiene.md`](docs/hygiene.md).
 
 ### Commands
 
@@ -738,28 +738,28 @@ Breaking changes should state which surface changed, how compatibility is handle
 
 ## Evidence index
 
-- [`README.md`](../README.md) — product overview.
-- [PLAYBOOK.md](../PLAYBOOK.md) — installation and operational workflows.
-- [EVIDENCE.md](../EVIDENCE.md) — validation corpus and methodology.
-- [docs/CAPABILITIES.md](CAPABILITIES.md) — capability matrix.
-- [docs/hygiene.md](hygiene.md) — Hygiene command and report contract.
-- [docs/DOCUMENT\_FORMATS.md](DOCUMENT_FORMATS.md) — documentation ingestion contract.
-- [docs/invariants.md](invariants.md) — invariant contract.
-- [docs/adr/](adr/) — architecture decision records.
-- [scripts/mcp\_verify.py](../scripts/mcp_verify.py) — MCP reference verifier.
-- [openapi.yaml](openapi.yaml) — HTTP contract.
-- [vscode-extension/](../vscode-extension/) — VS Code integration.
+- [`README.md`](README.md) — product overview.
+- [`PLAYBOOK.md`](PLAYBOOK.md) — installation and operational workflows.
+- [`EVIDENCE.md`](EVIDENCE.md) — validation corpus and methodology.
+- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — capability matrix.
+- [`docs/hygiene.md`](docs/hygiene.md) — Hygiene command and report contract.
+- [`docs/DOCUMENT_FORMATS.md`](docs/DOCUMENT_FORMATS.md) — documentation ingestion contract.
+- [`docs/invariants.md`](docs/invariants.md) — invariant contract.
+- [`docs/adr/`](docs/adr/) — architecture decision records.
+- [`scripts/mcp_verify.py`](scripts/mcp_verify.py) — MCP reference verifier.
+- [`openapi.yaml`](openapi.yaml) — HTTP contract.
+- [`vscode-extension/`](vscode-extension/) — VS Code integration.
 
 ---
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;strong&gt;Garuda&lt;/strong&gt;&lt;br&gt;
+<p align="center">
+  <strong>Garuda</strong><br>
   Analyze · Verify · Govern
-&lt;/p&gt;
+</p>
 
 ---
 
-## 26. v1.8.1 Deterministic Build-Context Provenance & Docs-to-Code Lineage Specification
+## 26. v1.8.4 Deterministic Build-Context Provenance, Docs-to-Code Lineage & Universal Provisioning Specification
 
 ### 26.1 Polyglot `BuildContext` Canonical Hashing (`internal/analyzer/build_context.go`)
 Every static analysis graph and policy evaluation depends not only on source file contents, but on the compiler/interpreter build context that selects which files and conditional branches participate in compilation. Garuda `v1.8.1` formalizes this via `analyzer.BuildContext`:
@@ -773,3 +773,9 @@ Garuda connects prose documentation to executable AST enforcement across four ex
 - **Tier 2 (`rule`)**: Normative clauses (`MUST`, `MUST_NOT`, `DENY`, `BLOCK`, `REVIEW`, `INVARIANT`) extracted with source document provenance and confidence scores.
 - **Tier 3 (`guardrail`)**: Active policy engine predicates (`layer_violation`, `cycle_exists`, `blast_radius_exceeds`, `contradiction_exists`, etc.) enforcing those clauses.
 - **Tier 4 (`symbol` / `package`)**: Concrete AST entities matched by package regex, symbol pattern, or explicit claim references.
+
+### 26.4 v1.8.4 Universal Zero-Dependency Provisioning, IPv4 Database Resolution & Schema Hardening
+1. **Windows PowerShell 5.1 Pure-ASCII Invariant (`install.ps1` & `setup.ps1`)**: Windows PowerShell 5.1 interprets scripts without a UTF-8 BOM using the legacy `CP1252` codepage, where multi-byte UTF-8 sequences containing `0x93`/`0x94` are tokenized as closing smart quotes. Both `install.ps1` and `setup.ps1` enforce a strict 7-bit ASCII invariant, wrap native binary invocations (`git`, `initdb`, `pg_ctl`, `docker`) in `cmd.exe /c` helpers so informational `stderr` output never triggers a terminating `NativeCommandError`, and use native `System32\curl.exe` and `System32\tar.exe` with `$ProgressPreference = "SilentlyContinue"`.
+2. **Pre-Built Portable PostgreSQL 16 & Explicit IPv4 `127.0.0.1:5433` Binding (`setup.sh`, `cmd/garuda/init_cmd.go`, `internal/config/env.go`)**: When PostgreSQL is not running on `127.0.0.1:5433` and Docker is unavailable, `setup.sh` downloads pre-built Portable PostgreSQL `16.4.0` binaries (`darwin-arm64v8`, `darwin-amd64`, `linux-amd64`, `linux-arm64v8`) into `~/.garuda/runtime/postgres/bin`, initializes `~/.garuda/data/pg` with `LC_ALL=C LANG=C initdb --no-locale -E UTF8`, isolates Unix sockets in `~/.garuda/data/run` (`chmod 700`), and normalizes `@localhost:` to `@127.0.0.1:` in `config.ResolveDBURL()`.
+3. **Single-Download Portable Go Matching `go.mod` (`1.26.0`)**: Both `setup.sh` and `setup.ps1` provision Portable Go `1.26.0` matching the `go 1.26.0` directive in `go.mod` so the Go command never triggers a secondary toolchain download during compilation.
+4. **Canonical Schema Hardening (`migrations/057_schema_hardening.sql`)**: Ensures idempotent schema alignment across `workspaces`, `repositories`, `entities`, `relationships`, and `cross_repo_edges`, while `cmd/garuda-mcp/tools_graph.go` provides case-insensitive/suffix entity resolution and `resolveTopClaimTarget` fallback for `garuda.implementers` and `garuda.subclasses`.

@@ -1,6 +1,6 @@
-# 🧠 Garuda Capabilities & Verification Matrix (v1.8.1 Universal)
+# 🧠 Garuda Capabilities & Verification Matrix (`v1.8.4` Universal)
 
-> Grounded in the Garuda v1.8.1 multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
+> Grounded in the Garuda `v1.8.4` multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
 
 ---
 
@@ -73,18 +73,20 @@
 
 ---
 
-## 6. Plane 06 — Universal Zero-Dependency Runtime & Cross-OS Diagnostics
+## 6. Plane 06 — Universal Zero-Dependency Runtime & Cross-OS Diagnostics (`v1.8.4`)
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
-| **Windows PowerShell Zero-Dependency Installer (`install.ps1` / `setup.ps1`)** | 🟢 **Production (GA)** | `Windows 10/11 PowerShell` | Auto-provisions Portable PostgreSQL 16 (`$HOME\.garuda\runtime\postgres`) and Portable Go (`$HOME\.garuda\toolchain\go`) without Admin or GCC | `1-Command Windows Onboarding` |
-| **macOS / Linux / Chromebook / Android Installer (`install.sh` / `setup.sh`)** | 🟢 **Production (GA)** | `POSIX / Darwin / Crostini / Termux` | Auto-provisions Portable Go, user-space PostgreSQL (`~/.garuda/data/pg`), and compiles in Pure-Go (`CGO_ENABLED=0`) when `gcc`/`clang` is absent | `1-Command Universal Onboarding` |
-| **Self-Diagnosis & Auto-Repair CLI (`garuda doctor`)** | 🟢 **Production (GA)** | `cmd/garuda/doctor_cmd.go` (`--fix`, `--json`) | Verifies and repairs `.env`, PostgreSQL & migrations, all 4 binaries, Talon hooks, and `/dashboard` gateway health | `Self-Healing Local Runtime` |
+| **Windows PowerShell 5.1 & 7 Zero-Dependency Installer (`install.ps1` / `setup.ps1`)** | 🟢 **Production (GA)** | `Windows 10/11 PS 5.1 & PS 7 + Git Bash` | Pure 7-bit ASCII scripts (`CP1252`-safe), native `curl.exe`/`tar.exe` acceleration, stderr-safe `Invoke-QuietCmd`, Portable PostgreSQL 16.4 (`$HOME\.garuda\runtime\postgres`), and Portable Go `1.26.0` (`$HOME\.garuda\toolchain\go`) without Admin or GCC | `1-Command Windows Onboarding` |
+| **macOS / Linux / Chromebook / Android Fast Installer (`install.sh` / `setup.sh`)** | 🟢 **Production (GA)** | `Darwin (ARM64/Intel) / Linux / Crostini / Termux` | Shallow clone (`--depth 1`), 3-second pre-built Portable PostgreSQL `16.4.0` (`~18 MB`, avoiding slow Homebrew source builds), single-download Portable Go `1.26.0` matching `go.mod`, and 1-pass `CGO_ENABLED=0` build with `bin/.build_stamp` caching | `1-Command Universal Onboarding` |
+| **Explicit IPv4 `127.0.0.1:5433` & Socket Isolation (`env.go` & `init_cmd.go`)** | 🟢 **Production (GA)** | `macOS IPv6 [::1] Bypass + ~/.garuda/data/run` | Normalizes `@localhost:` to `@127.0.0.1:`, initializes clusters with `LC_ALL=C --no-locale -E UTF8`, and isolates Unix sockets in `~/.garuda/data/run` (`chmod 700`) | `Zero Connection-Refused Boot` |
+| **Canonical Schema Hardening (`migrations/057_schema_hardening.sql`)** | 🟢 **Production (GA)** | `Idempotent PostgreSQL Migration` | Aligns `workspaces`, `repositories`, `entities` (`canonical_name`, `file_path`), `relationships`, and `cross_repo_edges` across fresh and upgraded databases | `100% Schema Parity` |
+| **Self-Diagnosis & Auto-Repair CLI (`garuda doctor`)** | 🟢 **Production (GA)** | `cmd/garuda/doctor_cmd.go` (`--fix`, `--json`) | Auto-starts stopped user-space PostgreSQL clusters (`~/.garuda/data/pg`) or Docker, applies migrations, rebuilds missing binaries, and repairs `.env` & Talon hooks | `Self-Healing Local Runtime` |
 
 
 ---
 
-## 7. Plane 07 — Deterministic `BuildContext` Provenance, Conditional Build-Tag AST & Docs-to-Code Lineage (`v1.7`–`v1.8.1`)
+## 7. Plane 07 — Deterministic `BuildContext` Provenance, Conditional Build-Tag AST & Docs-to-Code Lineage (`v1.7`–`v1.8.4`)
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
