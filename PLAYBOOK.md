@@ -152,7 +152,7 @@ Incrementally re-indexes dirty working-tree files in milliseconds, maps git diff
 
 ### 5.4 Autonomous Supervisor Loop (`garuda talon run`)
 
-Wrap any CLI coding agent (`claude`, `aider`, `codex`) in a closed self-repair loop that automatically feeds policy/ADR violation fixes back to the agent (up to `--max-retries 3`) until `ALLOW` is achieved:
+Wrap a CLI coding agent (`claude`, `aider`, `codex`) in a bounded self-repair loop. Garuda feeds policy/ADR feedback back to the agent for up to `--max-retries` attempts (default: `3`). If violations remain after the retry limit, the final outcome may still be `BLOCK`:
 
 ```bash
 ./bin/garuda talon run --max-retries 3 -- claude "Refactor CheckoutHandler to use OrderService"
