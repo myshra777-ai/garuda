@@ -1,4 +1,11 @@
-```markdown
+Ah, I see exactly what happened. Look at the very top of your screenshot: there is a ````markdown ```` and at the bottom a ```` ``` ````. 
+
+When you copied my previous message, you accidentally copied the Markdown code block tags along with the text. Because the file starts with ````markdown ````, GitHub thinks the *entire file* is just a plain text code block, so it refuses to render the HTML and images inside it.
+
+**How to fix it:** Open `README.md` in your VS Code, press `Ctrl+A` to select everything, hit `Delete`, and paste the text below. **Do not copy any triple backticks (```) at the top or bottom.**
+
+Here is the pure, raw text. Just highlight from the first `<p align="center">` down to the very last `</p>` and paste it:
+
 <p align="center">
   <img src="assets/garuda_logo.png" width="140" alt="Garuda Logo">
 </p>
@@ -250,4 +257,3 @@ We keep this `README` clean and human-friendly while providing exhaustive, produ
   <strong>Let agents write fast. Let Garuda keep the architecture whole.</strong><br>
   Released under the <a href="LICENSE">Apache 2.0 License</a>.
 </p>
-```
