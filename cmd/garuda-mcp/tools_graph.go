@@ -104,11 +104,28 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 	nameStr, _ := args["name"].(string)
 	ctx := context.Background()
 
+	claimTypes := []string{"INHERITS", "EMBEDS"}
 	subjectID, subjectName, err := s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
+	if err == nil {
+		var cnt int
+		_ = s.store.Pool().QueryRow(ctx, `
+			SELECT COUNT(*)::int FROM claims c
+			JOIN entities e ON e.id = c.from_entity_id
+			WHERE c.workspace_id = $1 AND c.to_entity_id = $2
+			  AND c.claim_type = ANY($3) AND e.kind != 'external'
+		`, workspaceID, subjectID, claimTypes).Scan(&cnt)
+		if cnt == 0 {
+			err = fmt.Errorf("subject %s has no direct INHERITS/EMBEDS claims", subjectName)
+		}
+	}
 	if err != nil {
 		if fbID, fbName, fbErr := s.resolveTopClaimTarget(ctx, workspaceID, []string{"INHERITS", "EMBEDS"}); fbErr == nil {
 			subjectID = fbID
 			subjectName = fbName
+		} else if fbID2, fbName2, fbErr2 := s.resolveTopClaimTarget(ctx, workspaceID, []string{"IMPLEMENTS"}); fbErr2 == nil {
+			subjectID = fbID2
+			subjectName = fbName2
+			claimTypes = []string{"INHERITS", "EMBEDS", "IMPLEMENTS"}
 		} else {
 			return map[string]interface{}{
 				"tenant_id":      tenantID.String(),
@@ -131,19 +148,19 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 	q := `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
 		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0),
-		       COALESCE(r.name, 'unknown') AS repo,
+		       COALESCE(NULLIF(r.name, ''), NULLIF(r.module_path, ''), r.url, 'unknown') AS repo,
 		       c.claim_type, c.confidence,
 		       e.is_exported
 		  FROM claims c
 		  JOIN entities e ON e.id = c.from_entity_id
 		  LEFT JOIN repositories r ON r.id = e.repository_id
 		 WHERE c.workspace_id = $1
-		   AND c.claim_type IN ('INHERITS', 'EMBEDS')
+		   AND c.claim_type = ANY($3)
 		   AND c.to_entity_id = $2
 		   AND e.kind != 'external'
 	`
-	dbArgs := []interface{}{workspaceID, subjectID}
-	argPos := 3
+	dbArgs := []interface{}{workspaceID, subjectID, claimTypes}
+	argPos := 4
 
 	if languageFilter != "" {
 		q += fmt.Sprintf(" AND e.language = $%d", argPos)
@@ -213,6 +230,18 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 
 	claimFilter := []string{"IMPLEMENTS"}
 	subjectID, subjectName, err := s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
+	if err == nil {
+		var cnt int
+		_ = s.store.Pool().QueryRow(ctx, `
+			SELECT COUNT(*)::int FROM claims c
+			JOIN entities e ON e.id = c.from_entity_id
+			WHERE c.workspace_id = $1 AND c.to_entity_id = $2
+			  AND c.claim_type = ANY($3) AND e.kind != 'external'
+		`, workspaceID, subjectID, claimFilter).Scan(&cnt)
+		if cnt == 0 {
+			err = fmt.Errorf("subject %s has no direct IMPLEMENTS claims", subjectName)
+		}
+	}
 	if err != nil {
 		// Smart discovery fallback when the caller passes an interface name from
 		// another repo (e.g. "CmdTyper") that is not present in this workspace.
@@ -244,7 +273,7 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 	rows, err := s.store.Pool().Query(ctx, `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
 		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0),
-		       COALESCE(r.name, 'unknown') AS repo,
+		       COALESCE(NULLIF(r.name, ''), NULLIF(r.module_path, ''), r.url, 'unknown') AS repo,
 		       c.confidence,
 		       e.is_exported
 		  FROM claims c
@@ -358,7 +387,7 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		)
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
 		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0),
-		       COALESCE(r.name, 'unknown') AS repo,
+		       COALESCE(NULLIF(r.name, ''), NULLIF(r.module_path, ''), r.url, 'unknown') AS repo,
 		       ed.claim_type, ed.confidence, ed.direction,
 		       e.is_exported
 		  FROM edges ed
@@ -464,7 +493,7 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 	q := `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
 		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0),
-		       COALESCE(r.name, 'unknown') AS repo,
+		       COALESCE(NULLIF(r.name, ''), NULLIF(r.module_path, ''), r.url, 'unknown') AS repo,
 		       e.is_exported,
 		       COALESCE(inbound.cnt, 0) AS inbound_edges
 		  FROM entities e

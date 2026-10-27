@@ -14,7 +14,7 @@ import (
 )
 
 // DefaultDBURL is the local development Postgres connection string.
-const DefaultDBURL = "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
+const DefaultDBURL = "postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable"
 
 // FindDotEnvPath returns the path to the nearest .env file, or ".env" if none exists yet.
 func FindDotEnvPath() string {
@@ -113,7 +113,7 @@ func UpsertDotEnv(pairs map[string]string) error {
 func ResolveDBURL() string {
 	LoadDotEnv()
 	if u := strings.TrimSpace(os.Getenv("DATABASE_URL")); u != "" {
-		return u
+		return strings.ReplaceAll(u, "@localhost:", "@127.0.0.1:")
 	}
 	return DefaultDBURL
 }

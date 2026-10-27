@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/myshra777-ai/garuda/internal/analyzer"
 )
 
@@ -239,8 +240,44 @@ func (s *PostgresStore) SaveSemanticGraph(
 	}
 	defer tx.Rollback(ctx)
 
-	// 1. Populate entityIDMap with UUIDs and all qualified naming permutations
+	// 1. Populate entityIDMap with UUIDs and all qualified naming permutations, and batch upsert entities
 	entityIDMap := make(map[string]uuid.UUID, len(result.Entities)*4)
+	entityBatch := &pgx.Batch{}
+
+	const upsertEntitySQL = `
+		INSERT INTO entities (
+			id, tenant_id, workspace_id, repository_id, analysis_id,
+			name, kind, package, package_path, module_path, receiver_type,
+			file_path, commit_sha, line, line_start, line_end,
+			signature, fields, methods, is_exported, language,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			$6, $7, $8, $9, $10, $11,
+			$12, $13, $14, $15, $16,
+			$17, $18, $19, $20, COALESCE(NULLIF($21, ''), 'go'),
+			NOW(), NOW()
+		)
+		ON CONFLICT (id) DO UPDATE SET
+			analysis_id   = EXCLUDED.analysis_id,
+			name          = EXCLUDED.name,
+			kind          = EXCLUDED.kind,
+			package       = EXCLUDED.package,
+			package_path  = EXCLUDED.package_path,
+			module_path   = EXCLUDED.module_path,
+			receiver_type = EXCLUDED.receiver_type,
+			file_path     = EXCLUDED.file_path,
+			language      = EXCLUDED.language,
+			commit_sha    = EXCLUDED.commit_sha,
+			line          = EXCLUDED.line,
+			line_start    = EXCLUDED.line_start,
+			line_end      = EXCLUDED.line_end,
+			signature     = EXCLUDED.signature,
+			fields        = EXCLUDED.fields,
+			methods       = EXCLUDED.methods,
+			is_exported   = EXCLUDED.is_exported,
+			updated_at    = NOW()
+	`
 
 	for i := range result.Entities {
 		entity := &result.Entities[i]
@@ -260,135 +297,111 @@ func (s *PostgresStore) SaveSemanticGraph(
 			line = entity.LineStart
 		}
 
-		_, err = tx.Exec(ctx, `
-			INSERT INTO entities (
-				id, tenant_id, workspace_id, repository_id, analysis_id,
-				name, kind, package, package_path, module_path, receiver_type,
-				file_path, commit_sha, line, line_start, line_end,
-								signature, fields, methods, is_exported, language,
-				created_at, updated_at
-			) VALUES (
-				$1, $2, $3, $4, $5,
-				$6, $7, $8, $9, $10, $11,
-				$12, $13, $14, $15, $16,
-				$17, $18, $19, $20, COALESCE(NULLIF($21, ''), 'go'),
-				NOW(), NOW()
-			)
-			ON CONFLICT (id) DO UPDATE SET
-				analysis_id   = EXCLUDED.analysis_id,
-				name          = EXCLUDED.name,
-				kind          = EXCLUDED.kind,
-				package       = EXCLUDED.package,
-				package_path  = EXCLUDED.package_path,
-				module_path   = EXCLUDED.module_path,
-				receiver_type = EXCLUDED.receiver_type,
-				file_path     = EXCLUDED.file_path,
-				language      = EXCLUDED.language,
-				commit_sha    = EXCLUDED.commit_sha,
-				line          = EXCLUDED.line,
-				line_start    = EXCLUDED.line_start,
-				line_end      = EXCLUDED.line_end,
-				signature     = EXCLUDED.signature,
-				fields        = EXCLUDED.fields,
-				methods       = EXCLUDED.methods,
-				is_exported   = EXCLUDED.is_exported,
-				updated_at    = NOW()
-		`,
+		entityBatch.Queue(
+			upsertEntitySQL,
 			entityID, tenantID, workspaceID, repoID, analysisID,
 			entity.Name, string(entity.Kind), entity.Package,
 			entity.PackagePath, entity.ModulePath, entity.ReceiverType,
 			entity.File, commitSHA, line, entity.LineStart, entity.LineEnd,
 			entity.Signature, fieldsJSON, methodsJSON, entity.Exported, entity.Language,
 		)
-		if err != nil {
-			return fmt.Errorf("failed to upsert entity %s (%s): %w", entity.Name, entity.Kind, err)
-		}
 
 		// Register lookups
 		entityIDMap[entity.ID] = entityID
-
 		if entity.Name != "" {
 			entityIDMap[entity.Name] = entityID
 		}
-
 		if entity.Package != "" && entity.Name != "" {
 			entityIDMap[entity.Package+"."+entity.Name] = entityID
 			entityIDMap[entity.Package+":"+entity.Name] = entityID
 		}
-
 		if entity.PackagePath != "" && entity.Name != "" {
 			entityIDMap[entity.PackagePath+"."+entity.Name] = entityID
 			entityIDMap[entity.PackagePath+":"+entity.Name] = entityID
 		}
-
 		if entity.ReceiverType != "" && entity.Name != "" {
 			entityIDMap[entity.ReceiverType+"."+entity.Name] = entityID
-
 			if entity.Package != "" {
 				entityIDMap[entity.Package+"."+entity.ReceiverType+"."+entity.Name] = entityID
 			}
-
 			if entity.PackagePath != "" {
 				entityIDMap[entity.PackagePath+"."+entity.ReceiverType+"."+entity.Name] = entityID
 			}
 		}
 	}
 
-	// 2. Insert relationships (creating normalized stubs for external targets)
+	if entityBatch.Len() > 0 {
+		br := tx.SendBatch(ctx, entityBatch)
+		for i := 0; i < entityBatch.Len(); i++ {
+			if _, err := br.Exec(); err != nil {
+				_ = br.Close()
+				return fmt.Errorf("failed to upsert entity in batch: %w", err)
+			}
+		}
+		if err := br.Close(); err != nil {
+			return fmt.Errorf("failed to close entity batch: %w", err)
+		}
+	}
+
+	// 2. Batch insert external stubs and relationships
+	relBatch := &pgx.Batch{}
+	const insertStubSQL = `
+		INSERT INTO entities (
+			id, tenant_id, workspace_id, repository_id, analysis_id,
+			name, kind, package, package_path, module_path, receiver_type,
+			file_path, commit_sha, line, line_start, line_end,
+			signature, fields, methods, is_exported, language,
+			created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			$6, 'external', $7, $7, $8, '',
+			'', $9, 0, 0, 0,
+			'', '[]'::jsonb, '[]'::jsonb, true, 'external',
+			NOW(), NOW()
+		) ON CONFLICT (id) DO NOTHING
+	`
+	const upsertClaimSQL = `
+		INSERT INTO claims (
+			id, tenant_id, workspace_id, repository_id, snapshot_id,
+			from_entity_id, to_entity_id, claim_type, epistemic_class, confidence,
+			resolution_status, resolution_method,
+			file_path, commit_sha, line_start, line_end,
+			created_at
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			$6, $7, $8, $9, $10,
+			$11, $12,
+			$13, $14, $15, $16,
+			NOW()
+		)
+		ON CONFLICT (workspace_id, from_entity_id, to_entity_id, claim_type) DO UPDATE SET
+			snapshot_id        = EXCLUDED.snapshot_id,
+			epistemic_class    = EXCLUDED.epistemic_class,
+			confidence         = EXCLUDED.confidence,
+			resolution_status  = EXCLUDED.resolution_status,
+			resolution_method  = EXCLUDED.resolution_method,
+			file_path          = EXCLUDED.file_path,
+			commit_sha         = EXCLUDED.commit_sha,
+			line_start         = EXCLUDED.line_start,
+			line_end           = EXCLUDED.line_end
+	`
+
 	for _, rel := range result.Relationships {
 		fromID, fromOk := entityIDMap[rel.From]
 		toID, toOk := entityIDMap[rel.To]
 
-		// 1. Resolve fromID stub
 		if !fromOk {
 			pkgPath, symName, modPath := parseExternalTarget(rel.From)
 			extFromID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(tenantID.String()+":stub:"+rel.From))
-			_, err := tx.Exec(ctx, `
-				INSERT INTO entities (
-					id, tenant_id, workspace_id, repository_id, analysis_id,
-					name, kind, package, package_path, module_path, receiver_type,
-					file_path, commit_sha, line, line_start, line_end,
-					signature, fields, methods, is_exported, language,
-					created_at, updated_at
-				) VALUES (
-					$1, $2, $3, $4, $5,
-					$6, 'external', $7, $7, $8, '',
-					'', $9, 0, 0, 0,
-					'', '[]'::jsonb, '[]'::jsonb, true, 'external',
-					NOW(), NOW()
-				) ON CONFLICT (id) DO NOTHING
-			`, extFromID, tenantID, workspaceID, repoID, analysisID, symName, pkgPath, modPath, commitSHA)
-			if err != nil {
-				return fmt.Errorf("failed to insert from-stub entity %s: %w", rel.From, err)
-			}
-
+			relBatch.Queue(insertStubSQL, extFromID, tenantID, workspaceID, repoID, analysisID, symName, pkgPath, modPath, commitSHA)
 			fromID = extFromID
 			entityIDMap[rel.From] = extFromID
 		}
 
-		// 2. Resolve toID stub
 		if !toOk {
 			pkgPath, symName, modPath := parseExternalTarget(rel.To)
 			extToID := uuid.NewSHA1(uuid.NameSpaceURL, []byte(tenantID.String()+":stub:"+rel.To))
-			_, err := tx.Exec(ctx, `
-				INSERT INTO entities (
-					id, tenant_id, workspace_id, repository_id, analysis_id,
-					name, kind, package, package_path, module_path, receiver_type,
-					file_path, commit_sha, line, line_start, line_end,
-					signature, fields, methods, is_exported, language,
-					created_at, updated_at
-				) VALUES (
-					$1, $2, $3, $4, $5,
-					$6, 'external', $7, $7, $8, '',
-					'', $9, 0, 0, 0,
-					'', '[]'::jsonb, '[]'::jsonb, true, 'external',
-					NOW(), NOW()
-				) ON CONFLICT (id) DO NOTHING
-			`, extToID, tenantID, workspaceID, repoID, analysisID, symName, pkgPath, modPath, commitSHA)
-			if err != nil {
-				return fmt.Errorf("failed to insert to-stub entity %s: %w", rel.To, err)
-			}
-
+			relBatch.Queue(insertStubSQL, extToID, tenantID, workspaceID, repoID, analysisID, symName, pkgPath, modPath, commitSHA)
 			toID = extToID
 			entityIDMap[rel.To] = extToID
 		}
@@ -399,8 +412,6 @@ func (s *PostgresStore) SaveSemanticGraph(
 		}
 		confidence := rel.Confidence
 		if confidence <= 0 {
-			// No confidence value means the caller did not classify this edge.
-			// Treat as AMBIGUOUS rather than silently upgrading to certain.
 			confidence = 0.50
 		}
 		resolutionStatus := rel.ResolutionStatus
@@ -423,38 +434,25 @@ func (s *PostgresStore) SaveSemanticGraph(
 		}
 
 		claimID := uuid.New()
-		_, err := tx.Exec(ctx, `
-    INSERT INTO claims (
-        id, tenant_id, workspace_id, repository_id, snapshot_id,
-        from_entity_id, to_entity_id, claim_type, epistemic_class, confidence,
-        resolution_status, resolution_method,
-        file_path, commit_sha, line_start, line_end,
-        created_at
-    ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10,
-        $11, $12,
-        $13, $14, $15, $16,
-        NOW()
-    )
-    ON CONFLICT (workspace_id, from_entity_id, to_entity_id, claim_type) DO UPDATE SET
-                snapshot_id        = EXCLUDED.snapshot_id,
-                epistemic_class    = EXCLUDED.epistemic_class,
-				confidence         = EXCLUDED.confidence,
-				resolution_status  = EXCLUDED.resolution_status,
-				resolution_method  = EXCLUDED.resolution_method,
-				file_path          = EXCLUDED.file_path,
-				commit_sha         = EXCLUDED.commit_sha,
-				line_start         = EXCLUDED.line_start,
-				line_end           = EXCLUDED.line_end
-		`,
+		relBatch.Queue(
+			upsertClaimSQL,
 			claimID, tenantID, workspaceID, repoID, analysisID,
 			fromID, toID, rel.Type, epistemicClass, confidence,
 			resolutionStatus, resolutionMethod,
 			filePath, commitSHA, lineStart, lineEnd,
 		)
-		if err != nil {
-			return fmt.Errorf("failed to insert claim from %s to %s: %w", rel.From, rel.To, err)
+	}
+
+	if relBatch.Len() > 0 {
+		br := tx.SendBatch(ctx, relBatch)
+		for i := 0; i < relBatch.Len(); i++ {
+			if _, err := br.Exec(); err != nil {
+				_ = br.Close()
+				return fmt.Errorf("failed to insert claim/stub in batch: %w", err)
+			}
+		}
+		if err := br.Close(); err != nil {
+			return fmt.Errorf("failed to close claim batch: %w", err)
 		}
 	}
 

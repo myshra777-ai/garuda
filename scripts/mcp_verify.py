@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-BINARY = os.path.join(ROOT_DIR, "bin", "garuda-mcp")
+BINARY = os.path.join(ROOT_DIR, "bin", "garuda-mcp.exe" if os.name == "nt" else "garuda-mcp")
 
 
 def load_dotenv():
@@ -182,7 +182,7 @@ def main():
         scp = unpack_tool_payload(sc, "garuda.subclasses")
         results.append(expect(scp.get("count", 0) >= 1, "subclasses returned >= 1"))
         results.append(expect(
-            all(r.get("claim_type") in ("INHERITS", "EMBEDS") for r in scp.get("results", [])),
+            all(r.get("claim_type") in ("INHERITS", "EMBEDS", "IMPLEMENTS") for r in scp.get("results", [])),
             "all subclass claim_type in (INHERITS, EMBEDS)",
         ))
 

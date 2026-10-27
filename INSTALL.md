@@ -1,4 +1,4 @@
-# Garuda Universal Installation & Troubleshooting Guide (`v1.8.1`)
+# Garuda Universal Installation & Troubleshooting Guide (`v1.8.3`)
 
 **Zero pre-installed dependencies required.** Whether you are a Product Manager, Founder, Designer, Architect, or Software Engineer on **Windows 10/11 (PowerShell)**, **macOS (Apple Silicon / Intel)**, **Linux**, **Chromebook (ChromiumOS)**, or **Android**, Garuda automatically manages and provisions Go, PostgreSQL, schema migrations, Active MCP, and the Garuda Talon Harness in **1 or 2 commands**—without requiring GCC/C compilers, Xcode Command Line Tools, Docker Desktop, or Administrator privileges.
 

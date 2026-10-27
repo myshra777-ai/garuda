@@ -158,7 +158,7 @@ var doctorCmd = &cobra.Command{
 			if _, err := os.Stat(p); err != nil {
 				if doctorFixFlag {
 					pkg := "./cmd/" + strings.TrimSuffix(b, ext)
-					_ = exec.Command("go", "build", "-o", p, pkg).Run()
+					_ = exec.Command(resolveGoBinary(), "build", "-o", p, pkg).Run()
 				}
 				if _, err2 := os.Stat(p); err2 != nil {
 					missingBins = append(missingBins, b)

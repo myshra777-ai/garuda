@@ -35,6 +35,20 @@ var (
 	initSkipScanFlag  bool
 )
 
+
+func resolveGoBinary() string {
+	if p, err := exec.LookPath("go" + exeSuffix()); err == nil && p != "" {
+		return p
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		portable := filepath.Join(home, ".garuda", "toolchain", "go", "bin", "go"+exeSuffix())
+		if _, err := os.Stat(portable); err == nil {
+			return portable
+		}
+	}
+	return "go" + exeSuffix()
+}
+
 func exeSuffix() string {
 	if runtime.GOOS == "windows" {
 		return ".exe"
@@ -129,9 +143,22 @@ var initCmd = &cobra.Command{
 
 		pool, err := pgxpool.New(ctx, dbURL)
 		if err != nil {
-			return fmt.Errorf("could not connect to PostgreSQL (%s): %w", dbURL, err)
+			return fmt.Errorf("could not configure PostgreSQL pool (%s): %w", dbURL, err)
 		}
 		defer pool.Close()
+		var pingErr error
+		for attempt := 0; attempt < 15; attempt++ {
+			pCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			pingErr = pool.Ping(pCtx)
+			cancel()
+			if pingErr == nil {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		if pingErr != nil {
+			return fmt.Errorf("could not connect to PostgreSQL on %s: %w (run ./setup.sh or .\\setup.ps1 to provision PostgreSQL)", dbURL, pingErr)
+		}
 		fmt.Println("  ✓ PostgreSQL connection verified")
 
 		// 2. Run Idempotent Database Migrations
@@ -232,17 +259,17 @@ var initCmd = &cobra.Command{
 		mcpPath := filepath.Join(binDir, "garuda-mcp"+ext)
 		if _, statErr := os.Stat(mcpPath); statErr != nil {
 			fmt.Printf("  🔨 Building %s...\n", mcpPath)
-			_ = exec.Command("go", "build", "-o", mcpPath, "./cmd/garuda-mcp").Run()
+			_ = exec.Command(resolveGoBinary(), "build", "-o", mcpPath, "./cmd/garuda-mcp").Run()
 		}
 		apiPath := filepath.Join(binDir, "garuda-api"+ext)
 		if _, statErr := os.Stat(apiPath); statErr != nil {
 			fmt.Printf("  🔨 Building %s...\n", apiPath)
-			_ = exec.Command("go", "build", "-o", apiPath, "./cmd/garuda-api").Run()
+			_ = exec.Command(resolveGoBinary(), "build", "-o", apiPath, "./cmd/garuda-api").Run()
 		}
 		talonBinPath := filepath.Join(binDir, "garuda-talon"+ext)
 		if _, statErr := os.Stat(talonBinPath); statErr != nil {
 			fmt.Printf("  🔨 Building %s...\n", talonBinPath)
-			_ = exec.Command("go", "build", "-o", talonBinPath, "./cmd/garuda-talon").Run()
+			_ = exec.Command(resolveGoBinary(), "build", "-o", talonBinPath, "./cmd/garuda-talon").Run()
 		}
 
 		// 7. Auto-Configure Claude Desktop MCP across Windows, macOS, and Linux
@@ -322,24 +349,104 @@ func isPostgresReachable(ctx context.Context, dbURL string) bool {
 	return pool.Ping(cCtx) == nil
 }
 
-func ensureLocalOrDockerPostgres() {
-	// 1. Try portable user-space cluster in ~/.garuda/data/pg first if initialized
-	homeDir, _ := os.UserHomeDir()
-	pgDataDir := filepath.Join(homeDir, ".garuda", "data", "pg")
-	if _, err := os.Stat(filepath.Join(pgDataDir, "PG_VERSION")); err == nil {
-		pgCtl := "pg_ctl"
-		portableCtl := filepath.Join(homeDir, ".garuda", "runtime", "postgres", "pgsql", "bin", "pg_ctl"+exeSuffix())
-		if _, pErr := os.Stat(portableCtl); pErr == nil {
-			pgCtl = portableCtl
+func findPostgresBinDir(homeDir string) string {
+ext := exeSuffix()
+	candidates := []string{
+		filepath.Join(homeDir, ".garuda", "runtime", "postgres", "bin"),
+		filepath.Join(homeDir, ".garuda", "runtime", "postgres", "pgsql", "bin"),
+		"/opt/homebrew/opt/postgresql@17/bin",
+		"/opt/homebrew/opt/postgresql@16/bin",
+		"/opt/homebrew/opt/postgresql@15/bin",
+		"/opt/homebrew/opt/postgresql/bin",
+		"/usr/local/opt/postgresql@17/bin",
+		"/usr/local/opt/postgresql@16/bin",
+		"/usr/local/opt/postgresql@15/bin",
+		"/usr/local/opt/postgresql/bin",
+		"/Applications/Postgres.app/Contents/Versions/latest/bin",
+		"/usr/lib/postgresql/17/bin",
+		"/usr/lib/postgresql/16/bin",
+		"/usr/lib/postgresql/15/bin",
+		"/usr/lib/postgresql/14/bin",
+	}
+	for _, pattern := range []string{
+		"/opt/homebrew/Cellar/postgresql*/*/bin",
+		"/usr/local/Cellar/postgresql*/*/bin",
+		"/Library/PostgreSQL/*/bin",
+		"/usr/lib/postgresql/*/bin",
+	} {
+		if matches, err := filepath.Glob(pattern); err == nil {
+			candidates = append(candidates, matches...)
 		}
-		_ = exec.Command(pgCtl, "-D", pgDataDir, "-l", filepath.Join(homeDir, ".garuda", "data", "postgres.log"), "-o", "-p 5433", "start").Run()
+	}
+	for _, dir := range candidates {
+		if _, err := os.Stat(filepath.Join(dir, "pg_ctl"+ext)); err == nil {
+			return dir
+		}
+	}
+	if p, err := exec.LookPath("pg_ctl" + ext); err == nil && p != "" {
+		return filepath.Dir(p)
+	}
+	return ""
+}
+
+func ensureLocalOrDockerPostgres() {
+	homeDir, _ := os.UserHomeDir()
+	ext := exeSuffix()
+	pgBinDir := findPostgresBinDir(homeDir)
+	pgDataDir := filepath.Join(homeDir, ".garuda", "data", "pg")
+	pgRunDir := filepath.Join(homeDir, ".garuda", "data", "run")
+	pgLog := filepath.Join(homeDir, ".garuda", "data", "postgres.log")
+	_ = os.MkdirAll(pgRunDir, 0700)
+
+	// 1. Try portable / user-space cluster in ~/.garuda/data/pg first
+	if pgBinDir != "" {
+		initdbBin := filepath.Join(pgBinDir, "initdb"+ext)
+		pgCtlBin := filepath.Join(pgBinDir, "pg_ctl"+ext)
+		psqlBin := filepath.Join(pgBinDir, "psql"+ext)
+		createdbBin := filepath.Join(pgBinDir, "createdb"+ext)
+
+		if _, err := os.Stat(filepath.Join(pgDataDir, "PG_VERSION")); err != nil {
+			_ = os.RemoveAll(pgDataDir)
+			cmd := exec.Command(initdbBin, "-D", pgDataDir, "-U", "test", "-A", "trust", "-E", "UTF8", "--no-locale")
+			cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
+			if cmd.Run() != nil {
+				cmd2 := exec.Command(initdbBin, "-D", pgDataDir, "-A", "trust", "-E", "UTF8", "--no-locale")
+				cmd2.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
+				_ = cmd2.Run()
+			}
+		}
+
+		if _, err := os.Stat(filepath.Join(pgDataDir, "PG_VERSION")); err == nil {
+			if conn, cErr := net.DialTimeout("tcp", "127.0.0.1:5433", 400*time.Millisecond); cErr != nil {
+				_ = os.Remove(filepath.Join(pgDataDir, "postmaster.pid"))
+				opts := "-h 127.0.0.1 -p 5433"
+				if runtime.GOOS != "windows" {
+					opts = fmt.Sprintf("-h 127.0.0.1 -p 5433 -k %s", pgRunDir)
+				}
+				startCmd := exec.Command(pgCtlBin, "-D", pgDataDir, "-l", pgLog, "-o", opts, "start")
+				startCmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
+				_ = startCmd.Run()
+			} else {
+				_ = conn.Close()
+			}
+			for i := 0; i < 20; i++ {
+				if conn, cErr := net.DialTimeout("tcp", "127.0.0.1:5433", 400*time.Millisecond); cErr == nil {
+					_ = conn.Close()
+					break
+				}
+				time.Sleep(300 * time.Millisecond)
+			}
+			_ = exec.Command(psqlBin, "-h", "127.0.0.1", "-p", "5433", "-d", "postgres", "-c", "CREATE ROLE test WITH SUPERUSER LOGIN PASSWORD 'test';").Run()
+			_ = exec.Command(createdbBin, "-h", "127.0.0.1", "-p", "5433", "-U", "test", "garuda_test").Run()
+		}
 	}
 
-	// 2. Try Docker container garuda-postgres if port 5433 is still closed
 	if conn, err := net.DialTimeout("tcp", "127.0.0.1:5433", 500*time.Millisecond); err == nil {
 		_ = conn.Close()
 		return
 	}
+
+	// 2. Try Docker container garuda-postgres if port 5433 is still closed
 	if err := exec.Command("docker", "start", "garuda-postgres").Run(); err != nil {
 		_ = exec.Command(
 			"docker", "run", "-d",
@@ -357,7 +464,7 @@ func ensureLocalOrDockerPostgres() {
 			time.Sleep(1 * time.Second)
 			return
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 

@@ -1,20 +1,25 @@
-# ═══════════════════════════════════════════════════════════════════════════
-# 🦅 GARUDA v1.6 ZERO-DEPENDENCY WINDOWS POWERSHELL SETUP (setup.ps1)
-# ═══════════════════════════════════════════════════════════════════════════
-# Usage (from Windows PowerShell — no Admin, Go, Postgres, GCC, or Docker required):
-#   powershell -ExecutionPolicy Bypass -File .\setup.ps1
+# ===========================================================================
+# GARUDA v1.8.4 ZERO-DEPENDENCY WINDOWS POWERSHELL SETUP (setup.ps1)
+# ===========================================================================
+# Usage (from Windows PowerShell 5.1 or PowerShell 7 -- no Admin, Go,
+# PostgreSQL, GCC, or Docker required):
+#   powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 #
 # What this script manages automatically:
 #   1. Frees port 8080 if a previous Garuda instance is running
-#   2. Ensures PostgreSQL is running on :5433 (uses Docker if running, or
-#      automatically downloads & starts Portable Zero-Admin PostgreSQL 16 in
+#   2. Ensures PostgreSQL is running on 127.0.0.1:5433 (uses Docker if running,
+#      or automatically downloads & starts Portable Zero-Admin PostgreSQL 16 in
 #      $HOME\.garuda\runtime\postgres + cluster in $HOME\.garuda\data\pg)
-#   3. Ensures Garuda binaries exist in .\bin\ (uses prebuilt binaries if present,
-#      or automatically downloads Portable Go 1.24 into $HOME\.garuda\toolchain\go
-#      and compiles with CGO_ENABLED=0 — zero GCC/C compiler required!)
-#   4. Runs migrations, seeds owner account, installs Active MCP & Talon hooks
-#   5. Starts Garuda API Gateway and opens http://localhost:8080/login
-# ═══════════════════════════════════════════════════════════════════════════
+#   3. Ensures Garuda binaries exist in .\bin\ (uses Go if installed, or
+#      automatically downloads Portable Go 1.26 into $HOME\.garuda\toolchain\go
+#      and compiles all 4 binaries in 1 command with CGO_ENABLED=0)
+#   4. Runs migrations, seeds owner account, indexes repo, installs Active MCP & Talon
+#   5. Starts Garuda API Gateway, runs Doctor & Guard, and opens http://localhost:8080/login
+#
+# NOTE: Keep this file strictly 7-bit ASCII so Windows PowerShell 5.1 (CP1252
+# default encoding when no UTF-8 BOM is present) never misinterprets multi-byte
+# UTF-8 sequences (0x93/0x94) as smart-quote string delimiters.
+# ===========================================================================
 
 param(
     [string]$Workspace = "",
@@ -24,9 +29,67 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+function Invoke-QuietCmd([string]$CommandLine) {
+    $oldPref = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        cmd.exe /c "$CommandLine >nul 2>&1"
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $oldPref
+    }
+}
+
+function Invoke-LoggedCmd([string]$CommandLine) {
+    $oldPref = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        cmd.exe /c "$CommandLine"
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $oldPref
+    }
+}
+
+function Download-FileFast([string]$Url, [string]$OutFile) {
+    $curlExe = Join-Path $env:SystemRoot "System32\curl.exe"
+    if (Test-Path $curlExe) {
+        $oldPref = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            & $curlExe -fSL --retry 3 -o $OutFile $Url
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $OutFile)) {
+                return
+            }
+        } finally {
+            $ErrorActionPreference = $oldPref
+        }
+    }
+    Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing
+}
+
+function Extract-ArchiveFast([string]$ZipPath, [string]$DestDir) {
+    New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
+    $tarExe = Join-Path $env:SystemRoot "System32\tar.exe"
+    if (Test-Path $tarExe) {
+        $oldPref = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            & $tarExe -xf $ZipPath -C $DestDir 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                return
+            }
+        } finally {
+            $ErrorActionPreference = $oldPref
+        }
+    }
+    Expand-Archive -Path $ZipPath -DestinationPath $DestDir -Force
+}
+
+$RepoRoot = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Definition) { Split-Path -Parent $MyInvocation.MyCommand.Definition } else { (Get-Location).Path }
 Set-Location $RepoRoot
 
 $GarudaHome = Join-Path $HOME ".garuda"
@@ -47,11 +110,17 @@ if (Test-Path ".env") {
 if (-not $Email) {
     if ($env:GARUDA_EMAIL) {
         $Email = $env:GARUDA_EMAIL
-    } else {
+    } elseif (Get-Command git -ErrorAction SilentlyContinue) {
+        $oldPref = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         try {
-            $gitEmail = (git config user.email 2>$null)
-            if ($gitEmail -and $gitEmail.Contains("@")) { $Email = $gitEmail.Trim() }
-        } catch {}
+            $gitEmail = (& git config user.email 2>$null)
+            if ($LASTEXITCODE -eq 0 -and $gitEmail -and ("$gitEmail").Contains("@")) {
+                $Email = ("$gitEmail").Trim()
+            }
+        } catch {} finally {
+            $ErrorActionPreference = $oldPref
+        }
     }
     if (-not $Email) {
         $user = if ($env:USERNAME) { $env:USERNAME.ToLower() -replace '\s+','.' } else { "admin" }
@@ -67,7 +136,7 @@ if (-not $Workspace) {
     }
 }
 
-$DbUrl = if ($env:DATABASE_URL) { $env:DATABASE_URL } else { "postgres://test:test@localhost:5433/garuda_test?sslmode=disable" }
+$DbUrl = if ($env:DATABASE_URL) { $env:DATABASE_URL } else { "postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable" }
 $env:PORT = "$Port"
 $env:DATABASE_URL = $DbUrl
 $env:CONTROL_DATABASE_URL = $DbUrl
@@ -77,12 +146,12 @@ $env:GARUDA_TALON_ENFORCE = "true"
 $env:CGO_ENABLED = "0"
 
 Write-Host "===================================================================" -ForegroundColor Cyan
-Write-Host "🦅 GARUDA v1.6 ZERO-DEPENDENCY WINDOWS SETUP & TALON HARNESS" -ForegroundColor Cyan
+Write-Host "[GARUDA] v1.8.4 ZERO-DEPENDENCY WINDOWS SETUP & TALON HARNESS" -ForegroundColor Cyan
 Write-Host "===================================================================" -ForegroundColor Cyan
-Write-Host "  • Detected Owner:     $Email"
-Write-Host "  • Target Workspace:   $Workspace"
-Write-Host "  • Gateway Port:       :$Port"
-Write-Host "  • Pure-Go Build Mode: CGO_ENABLED=0 (No GCC/MinGW required)"
+Write-Host "  * Detected Owner:     $Email"
+Write-Host "  * Target Workspace:   $Workspace"
+Write-Host "  * Gateway Port:       :$Port"
+Write-Host "  * Pure-Go Build Mode: CGO_ENABLED=0 (No GCC/MinGW required)"
 
 function Test-TcpPort([string]$HostName, [int]$PortNumber) {
     try {
@@ -99,37 +168,35 @@ function Test-TcpPort([string]$HostName, [int]$PortNumber) {
 }
 
 # 1. Stop any stale garuda-api process on $Port
-Write-Host "`n[1/6] Checking port $Port..." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "[1/7] Checking port $Port..." -ForegroundColor Yellow
 Get-Process -Name "garuda-api" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 # 2. Ensure PostgreSQL is running on port 5433 (Docker or Portable Zero-Admin PostgreSQL)
-Write-Host "[2/6] Verifying PostgreSQL database on :5433..." -ForegroundColor Yellow
+Write-Host "[2/7] Verifying PostgreSQL database on 127.0.0.1:5433..." -ForegroundColor Yellow
 if (-not (Test-TcpPort "127.0.0.1" 5433)) {
     $dockerReady = $false
     if (Get-Command docker -ErrorAction SilentlyContinue) {
-        try {
-            docker info *> $null
-            if ($LASTEXITCODE -eq 0) { $dockerReady = $true }
-        } catch {}
+        $exitCode = Invoke-QuietCmd "docker info"
+        if ($exitCode -eq 0) {
+            $dockerReady = $true
+        }
     }
 
     if ($dockerReady) {
-        Write-Host "  ⏳ Docker detected — starting container 'garuda-postgres' on :5433..."
-        docker start garuda-postgres *> $null
-        if ($LASTEXITCODE -ne 0) {
-            docker run -d --name garuda-postgres `
-                -e POSTGRES_USER=test `
-                -e POSTGRES_PASSWORD=test `
-                -e POSTGRES_DB=garuda_test `
-                -p 5433:5432 `
-                postgres:16-alpine *> $null
+        Write-Host "  [*] Docker detected -- starting container 'garuda-postgres' on :5433..."
+        $startCode = Invoke-QuietCmd "docker start garuda-postgres"
+        if ($startCode -ne 0) {
+            $null = Invoke-QuietCmd "docker run -d --name garuda-postgres -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=garuda_test -p 5433:5432 postgres:16-alpine"
         }
         for ($i = 0; $i -lt 25; $i++) {
             if (Test-TcpPort "127.0.0.1" 5433) { break }
             Start-Sleep -Seconds 1
         }
-    } else {
-        Write-Host "  ⏳ No Docker daemon detected — bootstrapping Portable Zero-Admin PostgreSQL 16..." -ForegroundColor Cyan
+    }
+
+    if (-not (Test-TcpPort "127.0.0.1" 5433)) {
+        Write-Host "  [*] Bootstrapping Portable Zero-Admin PostgreSQL 16..." -ForegroundColor Cyan
         $PgDir = Join-Path $RuntimeDir "postgres"
         $PgBinDir = Join-Path $PgDir "pgsql\bin"
         $PgDataDir = Join-Path $DataDir "pg"
@@ -138,89 +205,113 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
         if (-not (Test-Path (Join-Path $PgBinDir "pg_ctl.exe"))) {
             $PgZip = Join-Path $RuntimeDir "postgresql-16-win64.zip"
             $PgUrl = "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64-binaries.zip"
-            Write-Host "  ⬇️ Downloading Portable PostgreSQL 16 (~55 MB, one-time setup)..."
-            Invoke-WebRequest -Uri $PgUrl -OutFile $PgZip -UseBasicParsing
-            Write-Host "  📦 Extracting Portable PostgreSQL to $PgDir..."
-            Expand-Archive -Path $PgZip -DestinationPath $PgDir -Force
+            Write-Host "  [*] Downloading Portable PostgreSQL 16 (~55 MB, one-time setup)..."
+            Download-FileFast $PgUrl $PgZip
+            Write-Host "  [*] Extracting Portable PostgreSQL to $PgDir..."
+            Extract-ArchiveFast $PgZip $PgDir
             Remove-Item $PgZip -Force -ErrorAction SilentlyContinue
         }
 
         $env:PATH = "$PgBinDir;$env:PATH"
         if (-not (Test-Path (Join-Path $PgDataDir "PG_VERSION"))) {
-            Write-Host "  🛠️ Initializing local PostgreSQL cluster in $PgDataDir..."
-            & (Join-Path $PgBinDir "initdb.exe") -D $PgDataDir -U test -A trust -E UTF8 --no-locale *> $null
+            if (Test-Path $PgDataDir) {
+                Remove-Item -Path $PgDataDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            Write-Host "  [*] Initializing local PostgreSQL cluster in $PgDataDir..."
+            $initDbExe = Join-Path $PgBinDir "initdb.exe"
+            $initCode = Invoke-QuietCmd "`"$initDbExe`" -D `"$PgDataDir`" -U test -A trust -E UTF8 --no-locale"
+            if ($initCode -ne 0) {
+                throw "Failed to initialize local PostgreSQL data directory at $PgDataDir"
+            }
         }
 
-        Write-Host "  🚀 Starting local PostgreSQL server on port 5433..."
-        & (Join-Path $PgBinDir "pg_ctl.exe") -D $PgDataDir -l $PgLog -o "-p 5433" start *> $null
-        for ($i = 0; $i -lt 20; $i++) {
+        $stalePid = Join-Path $PgDataDir "postmaster.pid"
+        if (Test-Path $stalePid) {
+            Remove-Item -Path $stalePid -Force -ErrorAction SilentlyContinue
+        }
+
+        Write-Host "  [*] Starting local PostgreSQL server on port 5433..."
+        $pgCtlExe = Join-Path $PgBinDir "pg_ctl.exe"
+        $null = Invoke-QuietCmd "`"$pgCtlExe`" -D `"$PgDataDir`" -l `"$PgLog`" -o `"-p 5433`" start"
+        for ($i = 0; $i -lt 25; $i++) {
             if (Test-TcpPort "127.0.0.1" 5433) { break }
             Start-Sleep -Seconds 1
         }
-        & (Join-Path $PgBinDir "createdb.exe") -h 127.0.0.1 -p 5433 -U test garuda_test 2>$null
+        $createDbExe = Join-Path $PgBinDir "createdb.exe"
+        $null = Invoke-QuietCmd "`"$createDbExe`" -h 127.0.0.1 -p 5433 -U test garuda_test"
     }
 }
-Write-Host "  ✓ PostgreSQL is online and ready on :5433" -ForegroundColor Green
 
-# 3. Ensure Go Toolchain or Prebuilt Binaries (Zero manual install required)
-Write-Host "[3/6] Preparing Garuda binaries (garuda.exe, garuda-api.exe, garuda-mcp.exe, garuda-talon.exe)..." -ForegroundColor Yellow
+if (-not (Test-TcpPort "127.0.0.1" 5433)) {
+    throw "PostgreSQL could not be started on 127.0.0.1:5433. Check $DataDir\postgres.log for details."
+}
+Write-Host "  [OK] PostgreSQL is online and ready on 127.0.0.1:5433" -ForegroundColor Green
+
+# 3. Ensure Go Toolchain & Build Garuda Binaries in 1 Command (Zero manual install required)
+Write-Host "[3/7] Preparing Garuda binaries (garuda.exe, garuda-api.exe, garuda-mcp.exe, garuda-talon.exe)..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path "bin" | Out-Null
 
-$NeedBuild = (-not (Test-Path "bin\garuda.exe")) -or (-not (Test-Path "bin\garuda-api.exe")) -or (-not (Test-Path "bin\garuda-mcp.exe")) -or (-not (Test-Path "bin\garuda-talon.exe"))
-
-# Check if Go is installed or in $HOME\.garuda\toolchain\go\bin
 $PortableGoBin = Join-Path $ToolchainDir "go\bin"
 if (Test-Path (Join-Path $PortableGoBin "go.exe")) {
     $env:PATH = "$PortableGoBin;$env:PATH"
 }
 
 if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
-    Write-Host "  ⏳ Go not installed — downloading Portable Go 1.24 into $ToolchainDir\go (no Admin required)..." -ForegroundColor Cyan
+    Write-Host "  [*] Go not installed -- downloading Portable Go 1.26 into $ToolchainDir\go (no Admin required)..." -ForegroundColor Cyan
     $Arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM64") { "arm64" } else { "amd64" }
-    $GoZip = Join-Path $ToolchainDir "go1.24.0.windows-$Arch.zip"
-    $GoUrl = "https://go.dev/dl/go1.24.0.windows-$Arch.zip"
-    Invoke-WebRequest -Uri $GoUrl -OutFile $GoZip -UseBasicParsing
-    Write-Host "  📦 Extracting Portable Go toolchain..."
-    Expand-Archive -Path $GoZip -DestinationPath $ToolchainDir -Force
+    $GoZip = Join-Path $ToolchainDir "go1.26.0.windows-$Arch.zip"
+    $GoUrl = "https://go.dev/dl/go1.26.0.windows-$Arch.zip"
+    Download-FileFast $GoUrl $GoZip
+    Write-Host "  [*] Extracting Portable Go toolchain..."
+    Extract-ArchiveFast $GoZip $ToolchainDir
     Remove-Item $GoZip -Force -ErrorAction SilentlyContinue
     $env:PATH = "$PortableGoBin;$env:PATH"
 }
 
-Write-Host "  🔨 Compiling Garuda binaries with CGO_ENABLED=0 (pure Go, no C compiler needed)..."
-go build -o bin\garuda.exe .\cmd\garuda
-go build -o bin\garuda-api.exe .\cmd\garuda-api
-go build -o bin\garuda-mcp.exe .\cmd\garuda-mcp
-go build -o bin\garuda-talon.exe .\cmd\garuda-talon
-Write-Host "  ✓ Built bin\garuda.exe, bin\garuda-api.exe, bin\garuda-mcp.exe, bin\garuda-talon.exe" -ForegroundColor Green
+Write-Host "  [*] Compiling all 4 Garuda binaries in 1 pass with CGO_ENABLED=0..."
+$bCode = Invoke-LoggedCmd "go build -o bin\ .\cmd\garuda .\cmd\garuda-api .\cmd\garuda-mcp .\cmd\garuda-talon"
+if ($bCode -ne 0 -or (-not (Test-Path "bin\garuda.exe"))) {
+    throw "Failed to compile Garuda binaries into .\bin\"
+}
+Write-Host "  [OK] Built bin\garuda.exe, bin\garuda-api.exe, bin\garuda-mcp.exe, bin\garuda-talon.exe" -ForegroundColor Green
 
-# 4. Run 1-Command Initialization (Migrations, .env, Owner Account, Active MCP & Talon Hooks)
-Write-Host "[4/6] Running migrations, provisioning account, and activating Garuda Talon..." -ForegroundColor Yellow
-.\bin\garuda.exe init --workspace $Workspace --email $Email --password $Password
+# 4. Run 1-Command Initialization (Migrations, .env, Owner Account, AST Scan, Active MCP & Talon Hooks)
+Write-Host "[4/7] Running migrations, provisioning account, indexing workspace, and activating Garuda Talon..." -ForegroundColor Yellow
+$initExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" init --workspace `"$Workspace`" --email `"$Email`" --password `"$Password`""
+if ($initExit -ne 0) {
+    throw "garuda.exe init failed with exit code $initExit"
+}
 
 # 5. Start Garuda API Gateway in Background
-Write-Host "[5/6] Starting Garuda API Gateway on http://localhost:$Port ..." -ForegroundColor Yellow
+Write-Host "[5/7] Starting Garuda API Gateway on http://localhost:$Port ..." -ForegroundColor Yellow
 $ApiLog = Join-Path $DataDir "garuda-api.log"
 $ApiErrLog = Join-Path $DataDir "garuda-api.err.log"
-Start-Process -FilePath ".\bin\garuda-api.exe" -WorkingDirectory $RepoRoot -RedirectStandardOutput $ApiLog -RedirectStandardError $ApiErrLog -WindowStyle Hidden
+Start-Process -FilePath (Join-Path $RepoRoot "bin\garuda-api.exe") -WorkingDirectory $RepoRoot -RedirectStandardOutput $ApiLog -RedirectStandardError $ApiErrLog -WindowStyle Hidden
 
-for ($i = 0; $i -lt 20; $i++) {
+for ($i = 0; $i -lt 25; $i++) {
     try {
         $resp = Invoke-WebRequest -Uri "http://localhost:$Port/health" -UseBasicParsing -TimeoutSec 2
         if ($resp.StatusCode -eq 200) { break }
     } catch {}
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 400
 }
 
-# 6. Run Garuda Doctor & Open Browser
-Write-Host "[6/6] Running Garuda System Doctor..." -ForegroundColor Yellow
-.\bin\garuda.exe doctor
+# 6. Run Architectural Summary & Talon Guard (without redundant re-index)
+Write-Host "[6/7] Running Architectural Summary & Talon Guard..." -ForegroundColor Yellow
+$null = Invoke-LoggedCmd "`".\bin\garuda.exe`" summary"
+$null = Invoke-LoggedCmd "`".\bin\garuda.exe`" talon guard --workspace `"$Workspace`" --policies policies --auto-index=false"
 
-Write-Host "`n===================================================================" -ForegroundColor Green
-Write-Host "🚀 GARUDA v1.6 + TALON IS 100% CONFIGURED & ONLINE ON WINDOWS!" -ForegroundColor Green
-Write-Host "   • Web Dashboard:  http://localhost:$Port/login"
-Write-Host "   • Email / Pass:   $Email / $Password"
-Write-Host "   • System Doctor:  .\bin\garuda.exe doctor"
-Write-Host "   • Talon Guard:    .\bin\garuda.exe talon guard --workspace $Workspace"
+# 7. Run Garuda Doctor & Open Browser
+Write-Host "[7/7] Running Garuda System Doctor..." -ForegroundColor Yellow
+$null = Invoke-LoggedCmd "`".\bin\garuda.exe`" doctor"
+
+Write-Host ""
+Write-Host "===================================================================" -ForegroundColor Green
+Write-Host "[OK] GARUDA v1.8.4 + TALON IS 100% CONFIGURED & ONLINE ON WINDOWS!" -ForegroundColor Green
+Write-Host "   * Web Dashboard:  http://localhost:$Port/login"
+Write-Host "   * Email / Pass:   $Email / $Password"
+Write-Host "   * System Doctor:  .\bin\garuda.exe doctor"
+Write-Host "   * Talon Guard:    .\bin\garuda.exe talon guard --workspace $Workspace"
 Write-Host "===================================================================" -ForegroundColor Green
 
 try {

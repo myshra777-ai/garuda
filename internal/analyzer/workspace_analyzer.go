@@ -233,9 +233,11 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		}
 	}
 
-	// Pass 3: Cross-package structural interface satisfaction fallback (deduplicated against existing edges)
+	// Pass 3: Cross-package structural interface & struct embedding satisfaction fallback (deduplicated against existing edges)
 	implRels := deriveWorkspaceInterfaceImplementations(result.Entities, result.Relationships)
 	result.Relationships = append(result.Relationships, implRels...)
+	embedRels := deriveWorkspaceStructEmbeddings(result.Entities, result.Relationships)
+	result.Relationships = append(result.Relationships, embedRels...)
 
 	result.Stats.Packages = len(sortedPkgPaths)
 	for _, e := range result.Entities {
@@ -332,6 +334,88 @@ func deriveWorkspaceInterfaceImplementations(allEntities []Entity, existing []Re
 					},
 				})
 			}
+		}
+	}
+	return rels
+}
+
+
+// deriveWorkspaceStructEmbeddings computes deterministic EMBEDS edges from AST struct
+// anonymous fields (where Field.Name == Field.Type) across workspace entities when
+// go/types could not resolve third-party imports in the containing package.
+func deriveWorkspaceStructEmbeddings(allEntities []Entity, existing []Relationship) []Relationship {
+	byPkgAndName := make(map[string]Entity, len(allEntities))
+	byShortName := make(map[string][]Entity)
+	for _, e := range allEntities {
+		if e.Kind == KindStruct || e.Kind == KindInterface || e.Kind == KindType {
+			byPkgAndName[e.Package+"."+e.Name] = e
+			byShortName[e.Name] = append(byShortName[e.Name], e)
+		}
+	}
+
+	seen := make(map[string]bool)
+	for _, r := range existing {
+		if r.Type == string(RelEmbeds) {
+			seen[r.From+"|"+r.To] = true
+		}
+	}
+
+	var rels []Relationship
+	for _, st := range allEntities {
+		if st.Kind != KindStruct || len(st.Fields) == 0 {
+			continue
+		}
+		fromQ := st.Package + "." + st.Name
+		for _, f := range st.Fields {
+			if f.Name == "" || f.Name != f.Type {
+				continue
+			}
+			clean := strings.TrimPrefix(strings.TrimSpace(f.Type), "*")
+			if clean == "" {
+				continue
+			}
+			var targetQ string
+			if strings.Contains(clean, ".") {
+				parts := strings.Split(clean, ".")
+				shortName := parts[len(parts)-1]
+				pkgAlias := parts[len(parts)-2]
+				for _, cand := range byShortName[shortName] {
+					if cand.Package == pkgAlias || strings.HasSuffix(cand.Package, "/"+pkgAlias) {
+						targetQ = cand.Package + "." + cand.Name
+						break
+					}
+				}
+			} else {
+				if samePkg, ok := byPkgAndName[st.Package+"."+clean]; ok {
+					targetQ = samePkg.Package + "." + samePkg.Name
+				} else if cands := byShortName[clean]; len(cands) == 1 {
+					targetQ = cands[0].Package + "." + cands[0].Name
+				}
+			}
+			if targetQ == "" || targetQ == fromQ {
+				continue
+			}
+			edgeKey := fromQ + "|" + targetQ
+			if seen[edgeKey] {
+				continue
+			}
+			seen[edgeKey] = true
+			rels = append(rels, Relationship{
+				From:             fromQ,
+				To:               targetQ,
+				Type:             string(RelEmbeds),
+				Confidence:       0.95,
+				ResolutionStatus: "RESOLVED",
+				ResolutionMethod: "AST_EXACT",
+				EpistemicClass:   "OBSERVATION",
+				Evidence: Evidence{
+					File:      st.File,
+					Line:      st.Line,
+					LineStart: st.LineStart,
+					LineEnd:   st.LineEnd,
+					Analyzer:  "workspace_analyzer",
+				},
+			})
 		}
 	}
 	return rels

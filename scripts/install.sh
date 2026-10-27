@@ -1,50 +1,45 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+# ===========================================================================
+# GARUDA v1.8.4 ONE-COMMAND UNIVERSAL INSTALLER (install.sh)
+# ===========================================================================
+# Supports:
+#   - macOS (Apple Silicon M1/M2/M3/M4 & Intel x86_64)
+#   - Linux (Ubuntu, Debian, Fedora, Arch, RHEL, WSL2)
+#   - Chromebook / ChromiumOS (Crostini Linux container)
+#   - Android (Termux)
+#   - Windows Git Bash / MSYS2 / Cygwin (delegates to setup.ps1)
+#
+# Run in 1 command (even if Git, Go, PostgreSQL, GCC, or Docker are missing):
+#   curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash
+# ===========================================================================
 
-echo "🛡️ Installing Garuda Runtime Engine..."
+set -euo pipefail
 
-# Detect OS and architecture
-OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
+INSTALL_DIR="${GARUDA_INSTALL_DIR:-$HOME/garuda}"
 
-if [ "$ARCH" = "x86_64" ]; then
-    ARCH="amd64"
-elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-    ARCH="arm64"
-else
-    echo "⚠️ Unknown architecture: $ARCH. Falling back to building from source."
-    ARCH="source"
-fi
+echo "==================================================================="
+echo "GARUDA v1.8.4 UNIVERSAL 1-COMMAND INSTALLER"
+echo "==================================================================="
 
-# Check for Docker
-if ! command -v docker &> /dev/null; then
-    echo "⚠️ Docker not found. Garuda requires Docker to run PostgreSQL and Redis."
-    echo "   Install Docker from: https://docs.docker.com/get-docker/"
-fi
-
-# Check for Go (optional, only needed for building from source)
-if ! command -v go &> /dev/null; then
-    echo "⚠️ Go not found. Will use pre-built binary if available."
-fi
-
-# Download or build
-if [ "$ARCH" != "source" ] && command -v curl &> /dev/null; then
-    BINARY_URL="https://github.com/myshra777-ai/garuda/releases/latest/download/garuda-${OS}-${ARCH}"
-    echo "📥 Downloading binary for ${OS}/${ARCH}..."
-    if curl -fsSL -o /usr/local/bin/garuda "$BINARY_URL"; then
-        chmod +x /usr/local/bin/garuda
-        echo "✅ Binary installed successfully."
+if [[ ! -f "$INSTALL_DIR/setup.sh" ]]; then
+    if command -v git >/dev/null 2>&1; then
+        echo "[*] Cloning Garuda into $INSTALL_DIR (shallow clone --depth 1 for fast setup)..."
+        rm -rf "$INSTALL_DIR"
+        git clone --depth 1 --single-branch --branch main https://github.com/myshra777-ai/garuda.git "$INSTALL_DIR"
     else
-        echo "⚠️ Binary download failed. Building from source..."
-        go build -o /usr/local/bin/garuda ./cmd/garuda
+        echo "[*] Git not found -- downloading Garuda archive via curl..."
+        mkdir -p "$INSTALL_DIR"
+        curl -fsSL "https://github.com/myshra777-ai/garuda/archive/refs/heads/main.tar.gz" | tar -xz -C "$INSTALL_DIR" --strip-components=1
     fi
 else
-    echo "🔨 Building Garuda from source..."
-    go build -o /usr/local/bin/garuda ./cmd/garuda
+    echo "[OK] Found existing Garuda directory at $INSTALL_DIR"
+    if [[ -d "$INSTALL_DIR/.git" ]] && command -v git >/dev/null 2>&1; then
+        echo "[*] Updating $INSTALL_DIR to latest origin/main..."
+        git -C "$INSTALL_DIR" fetch --depth 1 origin main >/dev/null 2>&1 || true
+        git -C "$INSTALL_DIR" reset --hard origin/main >/dev/null 2>&1 || true
+    fi
 fi
 
-echo ""
-echo "✅ Garuda successfully installed!"
-echo "👉 Run 'garuda up' to start your local runtime and Mission Control."
-echo ""
-echo "📖 Documentation: https://github.com/myshra777-ai/garuda"
+cd "$INSTALL_DIR"
+chmod +x setup.sh
+exec ./setup.sh "$@"

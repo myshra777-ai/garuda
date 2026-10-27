@@ -9,6 +9,7 @@ ALTER TABLE workspaces ALTER COLUMN root_path SET DEFAULT '.';
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS is_go_work BOOLEAN DEFAULT false;
 
 ALTER TABLE repositories ADD COLUMN IF NOT EXISTS name TEXT DEFAULT 'primary';
+ALTER TABLE repositories ADD COLUMN IF NOT EXISTS project_name TEXT DEFAULT 'primary';
 ALTER TABLE repositories ALTER COLUMN name DROP NOT NULL;
 ALTER TABLE repositories ALTER COLUMN tenant_id DROP NOT NULL;
 ALTER TABLE repositories ADD COLUMN IF NOT EXISTS provider TEXT DEFAULT 'local';

@@ -1,27 +1,32 @@
 #!/usr/bin/env bash
-# ═══════════════════════════════════════════════════════════════════════════
-# 🦅 GARUDA v1.6 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
-# ═══════════════════════════════════════════════════════════════════════════
-# Supports macOS, Linux, Windows WSL2, Chromebook (ChromiumOS), and Android (Termux)
+# ===========================================================================
+# GARUDA v1.8.4 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
+# ===========================================================================
+# Supports macOS (Intel & Apple Silicon), Linux, Windows WSL2, Chromebook, Android
 # Usage:
 #   ./setup.sh [optional_repo_path_1 optional_repo_path_2 ...]
 #
-# Zero Pre-Installed Dependencies Required:
-#   • No Go installed?       Automatically downloads Portable Go 1.24 into ~/.garuda/toolchain/go
-#   • No GCC/Clang installed? Automatically compiles in Pure-Go mode (CGO_ENABLED=0)
-#   • No Docker installed?   Automatically provisions a user-space PostgreSQL cluster
-#                            in ~/.garuda/data/pg on port 5433 (zero root/sudo required if pg_ctl exists)
-#   • Chromebook / Android?  Auto-detects Crostini / Termux and configures PWA + local runtime
-# ═══════════════════════════════════════════════════════════════════════════
+# Speed & Zero-Dependency Guarantees:
+#   - Instant Portable PostgreSQL 16 binary download (~18 MB from Maven Central CDN)
+#     when PostgreSQL is missing -- avoids 45-minute Homebrew C/C++ source builds
+#     on Intel Macs and works without sudo/root on macOS and Linux.
+#   - Single-download Portable Go matching go.mod (go1.26.0) so Go never downloads
+#     a second toolchain during compilation.
+#   - 1-pass Pure-Go compilation (CGO_ENABLED=0) with commit build-stamp caching.
+# ===========================================================================
 
 set -euo pipefail
 
 cd "$(dirname "$0")"
+REPO_ROOT="$(pwd)"
 
 GARUDA_HOME="${HOME}/.garuda"
 TOOLCHAIN_DIR="${GARUDA_HOME}/toolchain"
+RUNTIME_DIR="${GARUDA_HOME}/runtime"
 DATA_DIR="${GARUDA_HOME}/data"
-mkdir -p "$TOOLCHAIN_DIR" "$DATA_DIR"
+RUN_DIR="${DATA_DIR}/run"
+mkdir -p "$TOOLCHAIN_DIR" "$RUNTIME_DIR" "$DATA_DIR" "$RUN_DIR"
+chmod 700 "$RUN_DIR" 2>/dev/null || true
 
 # Load existing .env if present
 if [[ -f .env ]]; then
@@ -38,8 +43,8 @@ case "$OS_RAW" in
     darwin*) PLATFORM_OS="darwin" ;;
     linux*)  PLATFORM_OS="linux" ;;
     msys*|mingw*|cygwin*)
-        echo "💡 Windows Git Bash detected — delegating to setup.ps1 for native Windows setup..."
-        exec powershell.exe -ExecutionPolicy Bypass -File ./setup.ps1
+        echo "[*] Windows Git Bash detected -- delegating to setup.ps1 for native Windows setup..."
+        exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./setup.ps1
         ;;
     *) PLATFORM_OS="linux" ;;
 esac
@@ -65,11 +70,12 @@ if [[ -n "${GARUDA_WORKSPACE:-}" ]]; then
 elif [[ -d "$HOME/garuda-validation" ]]; then
     WORKSPACE="go-validation-10"
 else
-    WORKSPACE="$(basename "$(pwd)")"
+    WORKSPACE="$(basename "$REPO_ROOT")"
 fi
 
 API_PORT="${GARUDA_PORT:-8080}"
-DB_URL="${DATABASE_URL:-postgres://test:test@localhost:5433/garuda_test?sslmode=disable}"
+RAW_DB_URL="${DATABASE_URL:-postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable}"
+DB_URL="${RAW_DB_URL//@localhost:/@127.0.0.1:}"
 
 export PORT="$API_PORT"
 export DATABASE_URL="$DB_URL"
@@ -77,170 +83,261 @@ export CONTROL_DATABASE_URL="${CONTROL_DATABASE_URL:-$DB_URL}"
 export GARUDA_CONTROL_TOKEN="${GARUDA_CONTROL_TOKEN:-devtoken-changeme-please}"
 export GARUDA_WORKSPACE="$WORKSPACE"
 export GARUDA_TALON_ENFORCE="true"
+export CGO_ENABLED="${CGO_ENABLED:-0}"
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_INSTALL_CLEANUP=1
+export HOMEBREW_NO_ENV_HINTS=1
 
-echo "═══════════════════════════════════════════════════════════════════"
-echo "🦅 GARUDA v1.6 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
-echo "═══════════════════════════════════════════════════════════════════"
-echo "  • Detected Owner:     ${OWNER_EMAIL}"
-echo "  • Target Workspace:   ${WORKSPACE}"
-echo "  • Gateway Port:       :${API_PORT}"
-echo "  • Active Enforcement: GARUDA_TALON_ENFORCE=true"
+echo "==================================================================="
+echo "GARUDA v1.8.4 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
+echo "==================================================================="
+echo "  * Detected Owner:     ${OWNER_EMAIL}"
+echo "  * Target Workspace:   ${WORKSPACE}"
+echo "  * Gateway Port:       :${API_PORT}"
+echo "  * Active Enforcement: GARUDA_TALON_ENFORCE=true"
+
+test_tcp_port() {
+    local host="$1"
+    local port="$2"
+    if command -v nc >/dev/null 2>&1; then
+        nc -z -w 1 "$host" "$port" >/dev/null 2>&1 && return 0
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c "import socket,sys; s=socket.socket(); s.settimeout(0.5); sys.exit(0 if s.connect_ex(('$host',$port))==0 else 1)" >/dev/null 2>&1 && return 0
+    fi
+    (echo >/dev/tcp/"$host"/"$port") >/dev/null 2>&1 && return 0
+    return 1
+}
 
 # 1. Free Port Dynamically
 echo "[1/8] Checking port ${API_PORT} and stopping conflicting services..."
 pkill -9 -f garuda-api 2>/dev/null || true
-if command -v docker >/dev/null 2>&1; then
-    CONFLICT_CONTAINERS="$(docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null | grep ":${API_PORT}->" | awk '{print $1}' || true)"
+if command -v lsof >/dev/null 2>&1; then
+    PORT_PIDS="$(lsof -ti tcp:"${API_PORT}" 2>/dev/null || true)"
+    if [[ -n "$PORT_PIDS" ]]; then
+        kill -9 $PORT_PIDS 2>/dev/null || true
+    fi
+fi
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    CONFLICT_CONTAINERS="$(docker ps --format '{{.Names}}	{{.Ports}}' 2>/dev/null | grep ":${API_PORT}->" | awk '{print $1}' || true)"
     for c in $CONFLICT_CONTAINERS; do
         echo "  Stopping conflicting container on :${API_PORT}: $c"
         docker stop "$c" >/dev/null 2>&1 || true
     done
 fi
-sleep 1
 
-# 2. Ensure PostgreSQL is running (Docker OR Zero-Root User-Space Cluster on :5433)
-echo "[2/8] Verifying PostgreSQL database on :5433..."
+# 2. Ensure PostgreSQL is running (Docker OR Zero-Root User-Space Cluster on 127.0.0.1:5433)
+echo "[2/8] Verifying PostgreSQL database on 127.0.0.1:5433..."
+
+discover_postgres_path() {
+    shopt -s nullglob 2>/dev/null || true
+    for pg_candidate in         "${RUNTIME_DIR}/postgres/bin"         "${RUNTIME_DIR}/postgres/pgsql/bin"         /opt/homebrew/opt/postgresql@17/bin         /opt/homebrew/opt/postgresql@16/bin         /opt/homebrew/opt/postgresql@15/bin         /opt/homebrew/opt/postgresql/bin         /opt/homebrew/Cellar/postgresql*/*/bin         /usr/local/opt/postgresql@17/bin         /usr/local/opt/postgresql@16/bin         /usr/local/opt/postgresql@15/bin         /usr/local/opt/postgresql/bin         /usr/local/Cellar/postgresql*/*/bin         /Applications/Postgres.app/Contents/Versions/latest/bin         /Applications/Postgres.app/Contents/Versions/*/bin         /Library/PostgreSQL/*/bin         /opt/local/lib/postgresql*/bin         /usr/lib/postgresql/17/bin         /usr/lib/postgresql/16/bin         /usr/lib/postgresql/15/bin         /usr/lib/postgresql/14/bin         /usr/lib/postgresql/*/bin; do
+        if [[ -d "$pg_candidate" && -x "$pg_candidate/pg_ctl" ]]; then
+            export PATH="$pg_candidate:$PATH"
+        fi
+    done
+    shopt -u nullglob 2>/dev/null || true
+}
+
+download_portable_postgres() {
+    local pg_dest="${RUNTIME_DIR}/postgres"
+    local zonky_os="$PLATFORM_OS"
+    local zonky_arch="$PLATFORM_ARCH"
+    if [[ "$zonky_arch" == "arm64" ]]; then
+        zonky_arch="arm64v8"
+    fi
+    local pg_ver="16.4.0"
+    local artifact="embedded-postgres-binaries-${zonky_os}-${zonky_arch}"
+    local jar_url="https://repo1.maven.org/maven2/io/zonky/test/postgres/${artifact}/${pg_ver}/${artifact}-${pg_ver}.jar"
+    local jar_file="${RUNTIME_DIR}/${artifact}.jar"
+
+    echo "  [*] Downloading pre-built Portable PostgreSQL 16 (${zonky_os}/${PLATFORM_ARCH}, ~18 MB)..."
+    mkdir -p "$pg_dest"
+    if curl -fsSL --retry 3 -o "$jar_file" "$jar_url"; then
+        if command -v unzip >/dev/null 2>&1; then
+            unzip -q -o "$jar_file" -d "$pg_dest" >/dev/null 2>&1 || true
+        elif command -v python3 >/dev/null 2>&1; then
+            python3 -c "import zipfile; zipfile.ZipFile('$jar_file').extractall('$pg_dest')" 2>/dev/null || true
+        fi
+        rm -f "$jar_file"
+        local txz_file
+        txz_file="$(ls "$pg_dest"/postgres-*.txz 2>/dev/null | head -n 1 || true)"
+        if [[ -n "$txz_file" && -f "$txz_file" ]]; then
+            tar -xJf "$txz_file" -C "$pg_dest" >/dev/null 2>&1 || tar -xf "$txz_file" -C "$pg_dest" >/dev/null 2>&1 || true
+            rm -f "$txz_file"
+        fi
+        if [[ -x "${pg_dest}/bin/pg_ctl" ]]; then
+            export PATH="${pg_dest}/bin:$PATH"
+            echo "  [OK] Portable PostgreSQL 16 unpacked in ${pg_dest}/bin"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+init_and_start_pg_cluster() {
+    local pg_data="$1"
+    local pg_log="${DATA_DIR}/postgres.log"
+
+    if [[ ! -f "${pg_data}/PG_VERSION" ]]; then
+        rm -rf "$pg_data"
+        mkdir -p "$pg_data"
+        chmod 700 "$pg_data"
+        echo "  [*] Initializing user-space PostgreSQL cluster in ${pg_data}..."
+        LC_ALL=C LANG=C initdb -D "$pg_data" -U test -A trust -E UTF8 --no-locale >/dev/null 2>&1 ||         LC_ALL=C LANG=C initdb -D "$pg_data" -A trust -E UTF8 --no-locale >/dev/null 2>&1
+        if [[ -f "${pg_data}/postgresql.conf" ]]; then
+            cat >> "${pg_data}/postgresql.conf" <<PGCONF
+
+# Garuda Zero-Dependency User-Space Cluster Settings
+listen_addresses = '127.0.0.1'
+port = 5433
+unix_socket_directories = '${RUN_DIR}'
+max_connections = 100
+shared_buffers = 64MB
+PGCONF
+        fi
+    fi
+
+    if ! test_tcp_port 127.0.0.1 5433; then
+        rm -f "${pg_data}/postmaster.pid" "${RUN_DIR}/.s.PGSQL.5433.lock" 2>/dev/null || true
+        LC_ALL=C LANG=C pg_ctl -D "$pg_data" -l "$pg_log" -o "-h 127.0.0.1 -p 5433 -k ${RUN_DIR}" start >/dev/null 2>&1 || true
+        for _ in $(seq 1 25); do
+            if test_tcp_port 127.0.0.1 5433; then
+                return 0
+            fi
+            sleep 0.3
+        done
+    fi
+    test_tcp_port 127.0.0.1 5433
+}
+
 ensure_userspace_postgres() {
     local pg_data="${DATA_DIR}/pg"
     local pg_log="${DATA_DIR}/postgres.log"
 
-    # Add common macOS Homebrew / Postgres.app paths if present
-    for pg_candidate in /opt/homebrew/opt/postgresql@16/bin /opt/homebrew/bin /usr/local/opt/postgresql@16/bin /Applications/Postgres.app/Contents/Versions/latest/bin /usr/lib/postgresql/16/bin /usr/lib/postgresql/15/bin; do
-        if [[ -d "$pg_candidate" ]]; then
-            export PATH="$pg_candidate:$PATH"
-        fi
-    done
+    discover_postgres_path
 
-    if ! command -v initdb >/dev/null 2>&1; then
-        echo "  ⏳ PostgreSQL tools not found — installing PostgreSQL automatically..."
+    if ! command -v initdb >/dev/null 2>&1 || ! command -v pg_ctl >/dev/null 2>&1; then
         if [[ "$IS_TERMUX" == "true" ]]; then
             pkg install -y postgresql
-        elif [[ "$PLATFORM_OS" == "darwin" ]] && command -v brew >/dev/null 2>&1; then
-            brew install postgresql@16
-            export PATH="/opt/homebrew/opt/postgresql@16/bin:/usr/local/opt/postgresql@16/bin:$PATH"
-        elif command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql postgresql-client
-            for d in /usr/lib/postgresql/*/bin; do [[ -d "$d" ]] && export PATH="$d:$PATH"; done
-        elif command -v dnf >/dev/null 2>&1; then
-            sudo dnf install -y postgresql-server postgresql
-        elif command -v pacman >/dev/null 2>&1; then
-            sudo pacman -Sy --noconfirm postgresql
+        else
+            # First try fast 3-second pre-built Portable PostgreSQL 16 binary download
+            if ! download_portable_postgres; then
+                echo "  [*] Falling back to system package manager for PostgreSQL..."
+                if [[ "$PLATFORM_OS" == "darwin" ]] && command -v brew >/dev/null 2>&1; then
+                    brew install -q postgresql@16 || brew install -q postgresql
+                elif command -v apt-get >/dev/null 2>&1; then
+                    sudo apt-get update -qq && sudo apt-get install -y -qq postgresql postgresql-client
+                elif command -v dnf >/dev/null 2>&1; then
+                    sudo dnf install -y postgresql-server postgresql
+                elif command -v pacman >/dev/null 2>&1; then
+                    sudo pacman -Sy --noconfirm postgresql
+                fi
+                discover_postgres_path
+            fi
         fi
     fi
 
     if command -v initdb >/dev/null 2>&1 && command -v pg_ctl >/dev/null 2>&1; then
-        if [[ ! -f "${pg_data}/PG_VERSION" ]]; then
-            echo "  🛠️  Initializing user-space PostgreSQL cluster in ${pg_data}..."
-            initdb -D "$pg_data" -U test -A trust -E UTF8 --no-locale >/dev/null 2>&1 || \
-            initdb -D "$pg_data" -A trust -E UTF8 --no-locale >/dev/null 2>&1
+        if ! init_and_start_pg_cluster "$pg_data"; then
+            echo "  [*] Re-initializing clean PostgreSQL cluster in ${pg_data}..."
+            LC_ALL=C LANG=C pg_ctl -D "$pg_data" -m immediate stop >/dev/null 2>&1 || true
+            rm -rf "$pg_data"
+            init_and_start_pg_cluster "$pg_data" || true
         fi
-        pg_ctl -D "$pg_data" -l "$pg_log" -o "-p 5433 -k /tmp" start >/dev/null 2>&1 || true
-        for _ in $(seq 1 15); do
-            if pg_isready -h 127.0.0.1 -p 5433 >/dev/null 2>&1; then
-                break
-            fi
-            sleep 1
-        done
-        psql -h 127.0.0.1 -p 5433 -U test -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='test'" 2>/dev/null | grep -q 1 || \
-            psql -h 127.0.0.1 -p 5433 -d postgres -c "CREATE ROLE test WITH SUPERUSER LOGIN PASSWORD 'test';" 2>/dev/null || true
-        psql -h 127.0.0.1 -p 5433 -U test -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='garuda_test'" 2>/dev/null | grep -q 1 || \
-            createdb -h 127.0.0.1 -p 5433 -U test garuda_test 2>/dev/null || true
     fi
 }
 
-if ! (command -v psql >/dev/null 2>&1 && psql "$DB_URL" -c "SELECT 1" >/dev/null 2>&1); then
+discover_postgres_path
+
+if ! test_tcp_port 127.0.0.1 5433; then
     if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
         if ! docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^garuda-postgres$"; then
-            docker start garuda-postgres >/dev/null 2>&1 || \
-            docker run -d --name garuda-postgres \
-                -e POSTGRES_USER=test \
-                -e POSTGRES_PASSWORD=test \
-                -e POSTGRES_DB=garuda_test \
-                -p 5433:5432 \
-                postgres:16-alpine >/dev/null
+            docker start garuda-postgres >/dev/null 2>&1 ||             docker run -d --name garuda-postgres                 -e POSTGRES_USER=test                 -e POSTGRES_PASSWORD=test                 -e POSTGRES_DB=garuda_test                 -p 5433:5432                 postgres:16-alpine >/dev/null
         fi
-        until docker exec garuda-postgres pg_isready -U test -d garuda_test >/dev/null 2>&1; do
-            echo "  waiting for postgres container..."
-            sleep 1
+        for _ in $(seq 1 25); do
+            if test_tcp_port 127.0.0.1 5433; then
+                break
+            fi
+            sleep 0.4
         done
-    else
+    fi
+    if ! test_tcp_port 127.0.0.1 5433; then
         ensure_userspace_postgres
     fi
-    if command -v psql >/dev/null 2>&1; then
-        BASE_PG_URL="$(echo "$DB_URL" | sed -E 's|/[^/?]+(\?.*)?$|/postgres\1|')"
-        DB_NAME="$(echo "$DB_URL" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')"
-        psql "$BASE_PG_URL" -tc "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" 2>/dev/null | grep -q 1 || \
-            psql "$BASE_PG_URL" -c "CREATE DATABASE \"$DB_NAME\";" 2>/dev/null || true
-    fi
 fi
-echo "  ✓ PostgreSQL is online and ready"
 
-# 3. Bootstrap Portable Go Toolchain (if missing) & Auto-Detect C Compiler for CGO Fallback
+if ! test_tcp_port 127.0.0.1 5433; then
+    echo "  [ERROR] PostgreSQL failed to start on 127.0.0.1:5433."
+    if [[ -f "${DATA_DIR}/postgres.log" ]]; then
+        echo "  --- Last 20 lines of ${DATA_DIR}/postgres.log ---"
+        tail -n 20 "${DATA_DIR}/postgres.log" || true
+    fi
+    exit 1
+fi
+
+if command -v psql >/dev/null 2>&1; then
+    psql -h 127.0.0.1 -p 5433 -U test -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='test'" 2>/dev/null | grep -q 1 ||         psql -h 127.0.0.1 -p 5433 -d postgres -c "CREATE ROLE test WITH SUPERUSER LOGIN PASSWORD 'test';" >/dev/null 2>&1 ||         psql -h "${RUN_DIR}" -p 5433 -d postgres -c "CREATE ROLE test WITH SUPERUSER LOGIN PASSWORD 'test';" >/dev/null 2>&1 || true
+    psql -h 127.0.0.1 -p 5433 -U test -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='garuda_test'" 2>/dev/null | grep -q 1 ||         psql -h 127.0.0.1 -p 5433 -U test -d postgres -c "CREATE DATABASE garuda_test OWNER test;" >/dev/null 2>&1 ||         createdb -h 127.0.0.1 -p 5433 -U test garuda_test >/dev/null 2>&1 ||         createdb -h "${RUN_DIR}" -p 5433 garuda_test >/dev/null 2>&1 || true
+fi
+echo "  [OK] PostgreSQL is online and verified on 127.0.0.1:5433"
+
+# 3. Bootstrap Portable Go Toolchain (matching go.mod so Go never downloads twice!) & Compile in 1 Pass
 echo "[3/8] Preparing Go toolchain and compiling Garuda binaries..."
 if [[ -x "${TOOLCHAIN_DIR}/go/bin/go" ]]; then
     export PATH="${TOOLCHAIN_DIR}/go/bin:$PATH"
 fi
 
+REQUIRED_GO_VER="$(awk '/^go [0-9]+\.[0-9]+/ {print $2; exit}' go.mod 2>/dev/null || echo "1.26.0")"
+[[ -z "$REQUIRED_GO_VER" ]] && REQUIRED_GO_VER="1.26.0"
+
 if ! command -v go >/dev/null 2>&1; then
     if [[ "$IS_TERMUX" == "true" ]]; then
-        echo "  ⏳ Installing Go for Android Termux..."
+        echo "  [*] Installing Go for Android Termux..."
         pkg install -y golang
     else
-        GO_TAR="go1.24.0.${PLATFORM_OS}-${PLATFORM_ARCH}.tar.gz"
-        echo "  ⬇️  Go not found — downloading Portable Go 1.24 (${GO_TAR}) into ${TOOLCHAIN_DIR}/go (no sudo required)..."
-        curl -fsSL "https://go.dev/dl/${GO_TAR}" | tar -xz -C "$TOOLCHAIN_DIR"
+        GO_TAR="go${REQUIRED_GO_VER}.${PLATFORM_OS}-${PLATFORM_ARCH}.tar.gz"
+        echo "  [*] Go not found -- downloading Portable Go ${REQUIRED_GO_VER} (${GO_TAR}) into ${TOOLCHAIN_DIR}/go (no sudo required)..."
+        rm -rf "${TOOLCHAIN_DIR}/go"
+        if ! curl -fsSL "https://go.dev/dl/${GO_TAR}" | tar -xz -C "$TOOLCHAIN_DIR" 2>/dev/null; then
+            GO_TAR="go1.24.0.${PLATFORM_OS}-${PLATFORM_ARCH}.tar.gz"
+            curl -fsSL "https://go.dev/dl/${GO_TAR}" | tar -xz -C "$TOOLCHAIN_DIR"
+        fi
         export PATH="${TOOLCHAIN_DIR}/go/bin:$PATH"
     fi
 fi
 
-# Auto-detect if a working C compiler (gcc/clang) exists; if not, build in 100% Pure-Go mode (CGO_ENABLED=0)
-if [[ -z "${CGO_ENABLED:-}" ]]; then
-    if command -v gcc >/dev/null 2>&1 || command -v clang >/dev/null 2>&1; then
-        # Verify macOS Xcode stub isn't broken
-        if cc --version >/dev/null 2>&1; then
-            export CGO_ENABLED=1
-        else
-            export CGO_ENABLED=0
-        fi
-    else
-        export CGO_ENABLED=0
-    fi
-fi
-echo "  • Compiling with $(go version) [CGO_ENABLED=${CGO_ENABLED}]..."
-
+echo "  * Compiling with $(go version) [CGO_ENABLED=${CGO_ENABLED}]..."
 mkdir -p bin
-go build -o bin/garuda ./cmd/garuda
-go build -o bin/garuda-api ./cmd/garuda-api
-go build -o bin/garuda-mcp ./cmd/garuda-mcp
-go build -o bin/garuda-talon ./cmd/garuda-talon
-echo "  ✓ Built bin/garuda, bin/garuda-api, bin/garuda-mcp, bin/garuda-talon"
+CURRENT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo "local")"
+BUILD_STAMP_FILE="bin/.build_stamp"
+if [[ -x bin/garuda && -x bin/garuda-api && -x bin/garuda-mcp && -x bin/garuda-talon && -f "$BUILD_STAMP_FILE" ]] && [[ "$(cat "$BUILD_STAMP_FILE" 2>/dev/null)" == "$CURRENT_COMMIT" ]] && [[ -z "$(git status --porcelain -- './cmd' './internal' 2>/dev/null || true)" ]]; then
+    echo "  [OK] Binaries already up-to-date for commit ${CURRENT_COMMIT:0:12} (skipping rebuild)"
+else
+    go build -o bin/ ./cmd/garuda ./cmd/garuda-api ./cmd/garuda-mcp ./cmd/garuda-talon
+    echo "$CURRENT_COMMIT" > "$BUILD_STAMP_FILE"
+    echo "  [OK] Built bin/garuda, bin/garuda-api, bin/garuda-mcp, bin/garuda-talon"
+fi
 
 # 4. Run 1-Click Initialization (Migrations + .env + Owner Account + Active MCP & Talon Config)
 echo "[4/8] Running idempotent migrations, persisting .env, and provisioning owner..."
-./bin/garuda init \
-    --workspace "$WORKSPACE" \
-    --email "$OWNER_EMAIL" \
-    --password "$OWNER_PASSWORD" \
-    --skip-scan
+./bin/garuda init     --workspace "$WORKSPACE"     --email "$OWNER_EMAIL"     --password "$OWNER_PASSWORD"     --skip-scan
 
 # 5. Start Garuda API Gateway and verify /health + /signup
 echo "[5/8] Starting Garuda API Gateway on :${API_PORT}..."
-nohup ./bin/garuda-api > /tmp/api.log 2>&1 &
-for _ in $(seq 1 20); do
+nohup ./bin/garuda-api > "${DATA_DIR}/garuda-api.log" 2>&1 &
+for _ in $(seq 1 25); do
     if curl -fsS "http://localhost:${API_PORT}/health" >/dev/null 2>&1; then
         break
     fi
-    sleep 0.5
+    sleep 0.3
 done
 
-echo "  ✓ Garuda API Gateway online at http://localhost:${API_PORT}"
-SIGNUP_RESP=$(curl -s -X POST "http://localhost:${API_PORT}/signup" \
-    -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "email=${OWNER_EMAIL}" \
-    -d "password=${OWNER_PASSWORD}" || true)
-echo "  ✓ Signup endpoint response: ${SIGNUP_RESP}"
+echo "  [OK] Garuda API Gateway online at http://localhost:${API_PORT}"
+SIGNUP_RESP=$(curl -s -X POST "http://localhost:${API_PORT}/signup"     -H "Content-Type: application/x-www-form-urlencoded"     -d "email=${OWNER_EMAIL}"     -d "password=${OWNER_PASSWORD}" || true)
+echo "  [OK] Signup endpoint response: ${SIGNUP_RESP}"
 if command -v psql >/dev/null 2>&1; then
-    echo "  ✓ Active Tenants & Users in PostgreSQL:"
+    echo "  [OK] Active Tenants & Users in PostgreSQL:"
     psql "$DATABASE_URL" -c "SELECT id, name FROM tenants;" || true
     psql "$DATABASE_URL" -c "SELECT id, email, role FROM users;" || true
 fi
@@ -270,20 +367,20 @@ echo "[7/8] Activating Garuda Talon Harness (Contract + Cursor/Claude/Agents/Git
 # 8. Run Summary, Diff-Scoped Change-Control Check, Talon Guard, System Doctor & MCP Verification
 echo "[8/8] Running Architectural Summary, Talon Guard, System Doctor & Active MCP Verification..."
 ./bin/garuda summary
-./bin/garuda check --project "$WORKSPACE" --policy "$POLICY_DIR" --save || true
-./bin/garuda talon guard --workspace "$WORKSPACE" --policies "$POLICY_DIR" || true
+./bin/garuda check --project "$WORKSPACE" --policy "$POLICY_DIR" --auto-index=false --save || true
+./bin/garuda talon guard --workspace "$WORKSPACE" --policies "$POLICY_DIR" --auto-index=false || true
 ./bin/garuda doctor
 if command -v python3 >/dev/null 2>&1; then
     WORKSPACE="$WORKSPACE" python3 scripts/mcp_verify.py || true
 fi
 
 echo ""
-echo "═══════════════════════════════════════════════════════════════════"
-echo "🚀 GARUDA v1.6 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
-echo "   • Web Dashboard:  http://localhost:${API_PORT}/login"
-echo "   • Chromium PWA:   Open in Chrome/Edge/Brave -> Click 'Install Garuda'"
-echo "   • Email / Pass:   ${OWNER_EMAIL} / ${OWNER_PASSWORD}"
-echo "   • System Doctor:  ./bin/garuda doctor"
-echo "   • Talon Contract: .garuda/TALON_CONTRACT.md"
-echo "   • Talon Guard:    ./bin/garuda talon guard --workspace ${WORKSPACE}"
-echo "═══════════════════════════════════════════════════════════════════"
+echo "==================================================================="
+echo "[OK] GARUDA v1.8.4 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
+echo "   * Web Dashboard:  http://localhost:${API_PORT}/login"
+echo "   * Chromium PWA:   Open in Chrome/Edge/Brave -> Click 'Install Garuda'"
+echo "   * Email / Pass:   ${OWNER_EMAIL} / ${OWNER_PASSWORD}"
+echo "   * System Doctor:  ./bin/garuda doctor"
+echo "   * Talon Contract: .garuda/TALON_CONTRACT.md"
+echo "   * Talon Guard:    ./bin/garuda talon guard --workspace ${WORKSPACE}"
+echo "==================================================================="
