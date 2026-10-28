@@ -22,9 +22,20 @@ echo "GARUDA v1.8.4 UNIVERSAL 1-COMMAND INSTALLER"
 echo "==================================================================="
 
 if [[ ! -f "$INSTALL_DIR/setup.sh" ]]; then
+    if [[ -e "$INSTALL_DIR" || -L "$INSTALL_DIR" ]]; then
+        if [[ ! -d "$INSTALL_DIR" ]]; then
+            echo "[ERROR] Install target $INSTALL_DIR exists and is not a directory. Choose a fresh GARUDA_INSTALL_DIR; no files were changed." >&2
+            exit 1
+        fi
+        if [[ -n "$(find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+            echo "[ERROR] Install target $INSTALL_DIR already exists and is not a Garuda installation. Back up its contents and choose a fresh GARUDA_INSTALL_DIR; the installer will not delete it." >&2
+            exit 1
+        fi
+        rmdir "$INSTALL_DIR"
+    fi
+    mkdir -p "$(dirname "$INSTALL_DIR")"
     if command -v git >/dev/null 2>&1; then
         echo "[*] Cloning Garuda into $INSTALL_DIR (shallow clone --depth 1 for fast setup)..."
-        rm -rf "$INSTALL_DIR"
         git clone --depth 1 --single-branch --branch main https://github.com/myshra777-ai/garuda.git "$INSTALL_DIR"
     else
         echo "[*] Git not found -- downloading Garuda archive via curl..."
