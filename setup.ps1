@@ -210,7 +210,7 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
             $null = Invoke-QuietCmd "docker run -d --name garuda-postgres -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=garuda_test -p 5433:5432 postgres:16-alpine"
         }
         for ($i = 0; $i -lt 25; $i++) {
-            if (Test-TcpPort "127.0.0.1" 5433) { break }
+            if (Test-PostgresServerReady) { break }
             Start-Sleep -Seconds 1
         }
     }
@@ -254,7 +254,7 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
         $pgCtlExe = Join-Path $PgBinDir "pg_ctl.exe"
         $null = Invoke-QuietCmd "`"$pgCtlExe`" -D `"$PgDataDir`" -l `"$PgLog`" -o `"-p 5433`" start"
         for ($i = 0; $i -lt 25; $i++) {
-            if (Test-TcpPort "127.0.0.1" 5433) { break }
+            if (Test-PostgresServerReady) { break }
             Start-Sleep -Seconds 1
         }
         $createDbExe = Join-Path $PgBinDir "createdb.exe"
@@ -262,11 +262,16 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
     }
 }
 
-if (-not (Test-PostgresServerReady)) {
+$postgresReady = $false
+for ($i = 0; $i -lt 50; $i++) {
+    if (Test-PostgresServerReady) { $postgresReady = $true; break }
+    Start-Sleep -Milliseconds 500
+}
+if (-not $postgresReady) {
     $pgLog = Join-Path $DataDir "postgres.log"
     if (Test-Path $pgLog) {
-        Write-Host "  --- Last 30 lines of PostgreSQL log ---" -ForegroundColor Red
-        Get-Content $pgLog -Tail 30 | ForEach-Object { Write-Host $_ }
+        Write-Host "  --- Last 100 lines of PostgreSQL log ---" -ForegroundColor Red
+        Get-Content $pgLog -Tail 100 | ForEach-Object { Write-Host $_ }
     }
     throw "PostgreSQL did not become ready on 127.0.0.1:5433. Check $pgLog for details."
 }
@@ -338,7 +343,12 @@ if (-not $apiHealthy) {
 Write-Host "[5b/7] Indexing repository source into workspace '$Workspace'..." -ForegroundColor Yellow
 $analyzeExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" analyze `"$RepoRoot`" --workspace `"$Workspace`" --save"
 if ($analyzeExit -ne 0) {
-    throw "Initial repository analysis failed with exit code $analyzeExit. Check PostgreSQL and $DataDir\postgres.log."
+    $pgLog = Join-Path $DataDir "postgres.log"
+    if (Test-Path $pgLog) {
+        Write-Host "  --- Last 100 lines of PostgreSQL log ---" -ForegroundColor Red
+        Get-Content $pgLog -Tail 100 | ForEach-Object { Write-Host $_ }
+    }
+    throw "Initial repository analysis failed with exit code $analyzeExit. PostgreSQL logs (if present) were printed above; log path: $pgLog."
 }
 
 # 6. Run Architectural Summary & Talon Guard (without redundant re-index)
