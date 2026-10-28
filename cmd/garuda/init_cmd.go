@@ -309,8 +309,16 @@ var initCmd = &cobra.Command{
 		// 8. Optional initial repository analysis
 		if !initSkipScanFlag && targetPath != "" {
 			fmt.Printf("\n🔍 Performing AST & call-graph scan on '%s'...\n", targetPath)
-			rootCmd.SetArgs([]string{"analyze", targetPath, "--workspace", workspaceName, "--save"})
-			if err := rootCmd.Execute(); err != nil {
+
+			// Run analysis in a child CLI process instead of mutating and recursively
+			// executing rootCmd. The analyze command contains legacy os.Exit paths;
+			// executing it recursively can bypass init's deferred cleanup and makes
+			// the parent's command state/output difficult to reason about.
+			scanCmd := exec.CommandContext(ctx, selfPath, "analyze", targetPath,
+				"--workspace", workspaceName, "--save")
+			scanCmd.Stdout = os.Stdout
+			scanCmd.Stderr = os.Stderr
+			if err := scanCmd.Run(); err != nil {
 				return fmt.Errorf("initial analysis failed: %w", err)
 			}
 		}
