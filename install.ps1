@@ -91,15 +91,39 @@ if (-not (Test-Path (Join-Path $InstallDir "setup.ps1"))) {
 } else {
     Write-Host "[OK] Found existing Garuda installation at $InstallDir" -ForegroundColor Green
     if ((Test-Path (Join-Path $InstallDir ".git")) -and (Get-Command git -ErrorAction SilentlyContinue)) {
-        Write-Host "[*] Pulling latest updates in $InstallDir..." -ForegroundColor Yellow
-        $null = Invoke-QuietCmd "git -C `"$InstallDir`" fetch --depth 1 origin main >nul 2>&1"
-        $null = Invoke-QuietCmd "git -C `"$InstallDir`" reset --hard origin/main >nul 2>&1"
+        Write-Host "[*] Checking existing checkout before update..." -ForegroundColor Yellow
+        $localChanges = @(& git -C "$InstallDir" status --porcelain --untracked-files=no 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not inspect the existing Git checkout at $InstallDir. No update was applied."
+        }
+        if ($localChanges.Count -gt 0) {
+            throw "Refusing to overwrite tracked local changes in $InstallDir. Commit or back up your work, then rerun the installer."
+        }
+
+        $fetchOutput = & git -C "$InstallDir" fetch --depth 1 origin main 2>&1
+        $fetchCode = $LASTEXITCODE
+        if ($fetchCode -ne 0) {
+            $fetchOutput | ForEach-Object { Write-Host $_ }
+            throw "Could not fetch the latest Garuda source. Existing installation was left unchanged."
+        }
+        $aheadCount = & git -C "$InstallDir" rev-list --count origin/main..HEAD 2>$null
+        if ($LASTEXITCODE -ne 0 -or [int]$aheadCount -gt 0) {
+            throw "Local commits exist in $InstallDir that are not in origin/main. The installer will not discard them."
+        }
+        $resetOutput = & git -C "$InstallDir" reset --hard origin/main 2>&1
+        $resetCode = $LASTEXITCODE
+        if ($resetCode -ne 0) {
+            $resetOutput | ForEach-Object { Write-Host $_ }
+            throw "Could not update the checkout to origin/main. Inspect $InstallDir and retry."
+        }
     } else {
-        try {
-            Download-FileFast "https://raw.githubusercontent.com/myshra777-ai/garuda/main/setup.ps1" (Join-Path $InstallDir "setup.ps1")
-        } catch {}
+        throw "Existing installation at $InstallDir has no .git directory. The updater will not replace only setup.ps1 because that can mix source versions. Back up local configuration and set GARUDA_INSTALL_DIR to a fresh path for a clean install."
     }
 }
 
 Set-Location $InstallDir
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallDir "setup.ps1")
+$setupExit = $LASTEXITCODE
+if ($setupExit -ne 0) {
+    throw "Garuda setup failed with exit code $setupExit. Review the diagnostics above."
+}
