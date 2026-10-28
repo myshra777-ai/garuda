@@ -275,7 +275,7 @@ if (-not $postgresReady) {
     }
     throw "PostgreSQL did not become ready on 127.0.0.1:5433. Check $pgLog for details."
 }
-Write-Host "  [OK] PostgreSQL server readiness check passed on 127.0.0.1:5433" -ForegroundColor Green
+Write-Host "  [OK] PostgreSQL listener probe passed on 127.0.0.1:5433; garuda init verifies database connectivity" -ForegroundColor Green
 
 # 3. Ensure Go Toolchain & Build Garuda Binaries in 1 Command (Zero manual install required)
 Write-Host "[3/7] Preparing Garuda binaries (garuda.exe, garuda-api.exe, garuda-mcp.exe, garuda-talon.exe)..." -ForegroundColor Yellow
@@ -365,7 +365,7 @@ if ($doctorExit -ne 0) { Write-Host "  [WARN] System Doctor returned exit code $
 
 Write-Host ""
 Write-Host "===================================================================" -ForegroundColor Green
-Write-Host "[OK] GARUDA v1.8.4 + TALON IS 100% CONFIGURED & ONLINE ON WINDOWS!" -ForegroundColor Green
+Write-Host "[OK] GARUDA v1.8.4 + TALON SETUP COMPLETED ON WINDOWS (review warnings above)" -ForegroundColor Green
 Write-Host "   * Web Dashboard:  http://localhost:$Port/login"
 Write-Host "   * Email / Pass:   $Email / $Password"
 Write-Host "   * System Doctor:  .\bin\garuda.exe doctor"
