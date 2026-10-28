@@ -72,11 +72,20 @@ Write-Host "[GARUDA] v1.8.4 1-COMMAND WINDOWS INSTALLER" -ForegroundColor Cyan
 Write-Host "===================================================================" -ForegroundColor Cyan
 
 if (-not (Test-Path (Join-Path $InstallDir "setup.ps1"))) {
+    if (Test-Path -LiteralPath $InstallDir) {
+        $targetItem = Get-Item -LiteralPath $InstallDir -Force
+        if (-not $targetItem.PSIsContainer) {
+            throw "Install target $InstallDir exists as a file. Choose a fresh GARUDA_INSTALL_DIR; no files were changed."
+        }
+        $existingEntry = Get-ChildItem -LiteralPath $InstallDir -Force | Select-Object -First 1
+        if ($null -ne $existingEntry) {
+            throw "Install target $InstallDir already exists and is not a Garuda installation. Back up its contents and choose a fresh GARUDA_INSTALL_DIR; the installer will not delete it."
+        }
+        Remove-Item -LiteralPath $InstallDir -Force
+    }
+
     if (Get-Command git -ErrorAction SilentlyContinue) {
         Write-Host "[*] Cloning Garuda into $InstallDir (shallow clone for fast setup)..." -ForegroundColor Yellow
-        if (Test-Path $InstallDir) {
-            Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
         $code = Invoke-QuietCmd "git clone --depth 1 https://github.com/myshra777-ai/garuda.git `"$InstallDir`""
         if ($code -ne 0 -or (-not (Test-Path (Join-Path $InstallDir "setup.ps1")))) {
             throw "Failed to clone Garuda repository into $InstallDir"
@@ -88,8 +97,7 @@ if (-not (Test-Path (Join-Path $InstallDir "setup.ps1"))) {
         Download-FileFast "https://github.com/myshra777-ai/garuda/archive/refs/heads/main.zip" $TmpZip
         if (Test-Path $TmpExtract) { Remove-Item $TmpExtract -Recurse -Force -ErrorAction SilentlyContinue }
         Extract-ArchiveFast $TmpZip $TmpExtract
-        if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force -ErrorAction SilentlyContinue }
-        Move-Item -Path (Join-Path $TmpExtract "garuda-main") -Destination $InstallDir -Force
+        Move-Item -Path (Join-Path $TmpExtract "garuda-main") -Destination $InstallDir
         Remove-Item $TmpZip -Force -ErrorAction SilentlyContinue
     }
 } else {
