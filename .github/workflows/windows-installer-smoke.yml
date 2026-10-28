@@ -60,7 +60,8 @@ jobs:
           foreach ($required in @(
             "status --porcelain --untracked-files=no",
             "Local commits exist",
-            "Garuda setup failed with exit code"
+            "Garuda setup failed with exit code",
+            "already exists and is not a Garuda installation"
           )) {
             if (-not $installer.Contains($required)) {
               throw "install.ps1 is missing required update-safety contract: $required"
@@ -78,4 +79,6 @@ jobs:
           bash -n setup.sh
           grep -q 'Tracked local changes found' install.sh
           grep -q 'Local commits exist' install.sh
+          grep -q 'already exists and is not a Garuda installation' install.sh
+          if grep -Fq 'rm -rf "$INSTALL_DIR"' install.sh; then exit 1; fi
           echo "PASS: shell installers parse and protect local commits"
