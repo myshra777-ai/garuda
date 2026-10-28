@@ -246,7 +246,16 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
         }
 
         $stalePid = Join-Path $PgDataDir "postmaster.pid"
-        if (Test-Path $stalePid) {
+        $pgCtlExe = Join-Path $PgBinDir "pg_ctl.exe"
+        $existingPgStatus = Invoke-QuietCmd "`"$pgCtlExe`" -D `"$PgDataDir`" status"
+        if (($existingPgStatus -eq 0) -and (-not (Test-TcpPort "127.0.0.1" 5433))) {
+            if (Test-Path $PgLog) {
+                Write-Host "  --- Last 100 lines of PostgreSQL log ---" -ForegroundColor Red
+                Get-Content $PgLog -Tail 100 | ForEach-Object { Write-Host $_ }
+            }
+            throw "PostgreSQL reports that the cluster is running but port 5433 is not accepting connections. The installer will not delete a live postmaster.pid; inspect $PgLog."
+        }
+        if (($existingPgStatus -ne 0) -and (Test-Path $stalePid)) {
             Remove-Item -Path $stalePid -Force -ErrorAction SilentlyContinue
         }
 
