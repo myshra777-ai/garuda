@@ -22,9 +22,20 @@ echo "GARUDA v1.8.4 UNIVERSAL 1-COMMAND INSTALLER"
 echo "==================================================================="
 
 if [[ ! -f "$INSTALL_DIR/setup.sh" ]]; then
+    if [[ -e "$INSTALL_DIR" || -L "$INSTALL_DIR" ]]; then
+        if [[ ! -d "$INSTALL_DIR" ]]; then
+            echo "[ERROR] Install target $INSTALL_DIR exists and is not a directory. Choose a fresh GARUDA_INSTALL_DIR; no files were changed." >&2
+            exit 1
+        fi
+        if [[ -n "$(find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+            echo "[ERROR] Install target $INSTALL_DIR already exists and is not a Garuda installation. Back up its contents and choose a fresh GARUDA_INSTALL_DIR; the installer will not delete it." >&2
+            exit 1
+        fi
+        rmdir "$INSTALL_DIR"
+    fi
+    mkdir -p "$(dirname "$INSTALL_DIR")"
     if command -v git >/dev/null 2>&1; then
         echo "[*] Cloning Garuda into $INSTALL_DIR (shallow clone --depth 1 for fast setup)..."
-        rm -rf "$INSTALL_DIR"
         git clone --depth 1 --single-branch --branch main https://github.com/myshra777-ai/garuda.git "$INSTALL_DIR"
     else
         echo "[*] Git not found -- downloading Garuda archive via curl..."
@@ -34,9 +45,31 @@ if [[ ! -f "$INSTALL_DIR/setup.sh" ]]; then
 else
     echo "[OK] Found existing Garuda directory at $INSTALL_DIR"
     if [[ -d "$INSTALL_DIR/.git" ]] && command -v git >/dev/null 2>&1; then
-        echo "[*] Updating $INSTALL_DIR to latest origin/main..."
-        git -C "$INSTALL_DIR" fetch --depth 1 origin main >/dev/null 2>&1 || true
-        git -C "$INSTALL_DIR" reset --hard origin/main >/dev/null 2>&1 || true
+        echo "[*] Checking existing checkout before update..."
+        if ! git -C "$INSTALL_DIR" rev-parse --verify HEAD >/dev/null 2>&1; then
+            echo "[ERROR] Existing Git checkout at $INSTALL_DIR has no valid HEAD. No update was applied." >&2
+            exit 1
+        fi
+        if [[ -n "$(git -C "$INSTALL_DIR" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then
+            echo "[ERROR] Tracked local changes found in $INSTALL_DIR. Commit or back up your work before updating; no files were changed." >&2
+            exit 1
+        fi
+        if ! git -C "$INSTALL_DIR" fetch --depth 1 origin main; then
+            echo "[ERROR] Could not fetch origin/main. Existing installation was left unchanged." >&2
+            exit 1
+        fi
+        local_ahead="$(git -C "$INSTALL_DIR" rev-list --count origin/main..HEAD 2>/dev/null)" || {
+            echo "[ERROR] Could not compare local commits with origin/main. Existing installation was left unchanged." >&2
+            exit 1
+        }
+        if [[ "$local_ahead" =~ ^[0-9]+$ ]] && (( local_ahead > 0 )); then
+            echo "[ERROR] Local commits exist that are not in origin/main. The installer will not discard them." >&2
+            exit 1
+        fi
+        if ! git -C "$INSTALL_DIR" reset --hard origin/main; then
+            echo "[ERROR] Update failed. Inspect $INSTALL_DIR before retrying." >&2
+            exit 1
+        fi
     fi
 fi
 

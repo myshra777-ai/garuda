@@ -47,8 +47,11 @@ function Invoke-LoggedCmd([string]$CommandLine) {
     $oldPref = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        cmd.exe /c "$CommandLine"
-        return $LASTEXITCODE
+        # Stream child output to the host instead of the caller's pipeline. This
+        # prevents assignments from capturing the full installer log as an exit code.
+        cmd.exe /c "$CommandLine" 2>&1 | ForEach-Object { Write-Host $_ }
+        $commandExit = $LASTEXITCODE
+        return $commandExit
     } finally {
         $ErrorActionPreference = $oldPref
     }
@@ -167,6 +170,23 @@ function Test-TcpPort([string]$HostName, [int]$PortNumber) {
     return $false
 }
 
+function Test-PostgresServerReady {
+    # A TCP handshake can succeed while PostgreSQL is still starting or recovering.
+    $pgIsReady = Join-Path (Join-Path (Join-Path $RuntimeDir "postgres") "pgsql\bin") "pg_isready.exe"
+    if (-not (Test-Path $pgIsReady)) {
+        $command = Get-Command "pg_isready.exe" -ErrorAction SilentlyContinue
+        if ($command) { $pgIsReady = $command.Source }
+    }
+    if ($pgIsReady -and (Test-Path $pgIsReady)) {
+        $readyCode = Invoke-QuietCmd "`"$pgIsReady`" -h 127.0.0.1 -p 5433 -t 1"
+        return ($readyCode -eq 0)
+    }
+
+    # Fallback only proves that a listener accepts TCP. garuda init still performs
+    # the authoritative PostgreSQL protocol/credential check before proceeding.
+    return (Test-TcpPort "127.0.0.1" 5433)
+}
+
 # 1. Stop any stale garuda-api process on $Port
 Write-Host ""
 Write-Host "[1/7] Checking port $Port..." -ForegroundColor Yellow
@@ -190,7 +210,7 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
             $null = Invoke-QuietCmd "docker run -d --name garuda-postgres -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=garuda_test -p 5433:5432 postgres:16-alpine"
         }
         for ($i = 0; $i -lt 25; $i++) {
-            if (Test-TcpPort "127.0.0.1" 5433) { break }
+            if (Test-PostgresServerReady) { break }
             Start-Sleep -Seconds 1
         }
     }
@@ -226,7 +246,16 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
         }
 
         $stalePid = Join-Path $PgDataDir "postmaster.pid"
-        if (Test-Path $stalePid) {
+        $pgCtlExe = Join-Path $PgBinDir "pg_ctl.exe"
+        $existingPgStatus = Invoke-QuietCmd "`"$pgCtlExe`" -D `"$PgDataDir`" status"
+        if (($existingPgStatus -eq 0) -and (-not (Test-TcpPort "127.0.0.1" 5433))) {
+            if (Test-Path $PgLog) {
+                Write-Host "  --- Last 100 lines of PostgreSQL log ---" -ForegroundColor Red
+                Get-Content $PgLog -Tail 100 | ForEach-Object { Write-Host $_ }
+            }
+            throw "PostgreSQL reports that the cluster is running but port 5433 is not accepting connections. The installer will not delete a live postmaster.pid; inspect $PgLog."
+        }
+        if (($existingPgStatus -ne 0) -and (Test-Path $stalePid)) {
             Remove-Item -Path $stalePid -Force -ErrorAction SilentlyContinue
         }
 
@@ -234,7 +263,7 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
         $pgCtlExe = Join-Path $PgBinDir "pg_ctl.exe"
         $null = Invoke-QuietCmd "`"$pgCtlExe`" -D `"$PgDataDir`" -l `"$PgLog`" -o `"-p 5433`" start"
         for ($i = 0; $i -lt 25; $i++) {
-            if (Test-TcpPort "127.0.0.1" 5433) { break }
+            if (Test-PostgresServerReady) { break }
             Start-Sleep -Seconds 1
         }
         $createDbExe = Join-Path $PgBinDir "createdb.exe"
@@ -242,10 +271,20 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
     }
 }
 
-if (-not (Test-TcpPort "127.0.0.1" 5433)) {
-    throw "PostgreSQL could not be started on 127.0.0.1:5433. Check $DataDir\postgres.log for details."
+$postgresReady = $false
+for ($i = 0; $i -lt 50; $i++) {
+    if (Test-PostgresServerReady) { $postgresReady = $true; break }
+    Start-Sleep -Milliseconds 500
 }
-Write-Host "  [OK] PostgreSQL is online and ready on 127.0.0.1:5433" -ForegroundColor Green
+if (-not $postgresReady) {
+    $pgLog = Join-Path $DataDir "postgres.log"
+    if (Test-Path $pgLog) {
+        Write-Host "  --- Last 100 lines of PostgreSQL log ---" -ForegroundColor Red
+        Get-Content $pgLog -Tail 100 | ForEach-Object { Write-Host $_ }
+    }
+    throw "PostgreSQL did not become ready on 127.0.0.1:5433. Check $pgLog for details."
+}
+Write-Host "  [OK] PostgreSQL listener probe passed on 127.0.0.1:5433; garuda init verifies database connectivity" -ForegroundColor Green
 
 # 3. Ensure Go Toolchain & Build Garuda Binaries in 1 Command (Zero manual install required)
 Write-Host "[3/7] Preparing Garuda binaries (garuda.exe, garuda-api.exe, garuda-mcp.exe, garuda-talon.exe)..." -ForegroundColor Yellow
@@ -277,9 +316,14 @@ Write-Host "  [OK] Built bin\garuda.exe, bin\garuda-api.exe, bin\garuda-mcp.exe,
 
 # 4. Run 1-Command Initialization (Migrations, .env, Owner Account, AST Scan, Active MCP & Talon Hooks)
 Write-Host "[4/7] Running migrations, provisioning account, indexing workspace, and activating Garuda Talon..." -ForegroundColor Yellow
-$initExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" init --workspace `"$Workspace`" --email `"$Email`" --password `"$Password`""
+$initExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" init --workspace `"$Workspace`" --email `"$Email`" --password `"$Password`" --skip-scan"
 if ($initExit -ne 0) {
-    throw "garuda.exe init failed with exit code $initExit"
+    $pgLog = Join-Path $DataDir "postgres.log"
+    if (Test-Path $pgLog) {
+        Write-Host "  --- Last 100 lines of PostgreSQL log ---" -ForegroundColor Red
+        Get-Content $pgLog -Tail 100 | ForEach-Object { Write-Host $_ }
+    }
+    throw "garuda.exe init failed with exit code $initExit. PostgreSQL logs (if present) were printed above; log path: $pgLog."
 }
 
 # 5. Start Garuda API Gateway in Background
@@ -288,26 +332,54 @@ $ApiLog = Join-Path $DataDir "garuda-api.log"
 $ApiErrLog = Join-Path $DataDir "garuda-api.err.log"
 Start-Process -FilePath (Join-Path $RepoRoot "bin\garuda-api.exe") -WorkingDirectory $RepoRoot -RedirectStandardOutput $ApiLog -RedirectStandardError $ApiErrLog -WindowStyle Hidden
 
+$apiHealthy = $false
 for ($i = 0; $i -lt 25; $i++) {
     try {
         $resp = Invoke-WebRequest -Uri "http://localhost:$Port/health" -UseBasicParsing -TimeoutSec 2
-        if ($resp.StatusCode -eq 200) { break }
+        if ($resp.StatusCode -eq 200) { $apiHealthy = $true; break }
     } catch {}
     Start-Sleep -Milliseconds 400
+}
+if (-not $apiHealthy) {
+    if (Test-Path $ApiErrLog) {
+        Write-Host "  --- API stderr ---" -ForegroundColor Red
+        Get-Content $ApiErrLog -Tail 40 | ForEach-Object { Write-Host $_ }
+    }
+    if (Test-Path $ApiLog) {
+        Write-Host "  --- API stdout ---" -ForegroundColor Red
+        Get-Content $ApiLog -Tail 40 | ForEach-Object { Write-Host $_ }
+    }
+    throw "Garuda API did not become healthy at http://localhost:$Port/health. Review logs under $DataDir."
+}
+
+# 5b. Index the installed repository in a separate CLI process rather than
+# recursively invoking the root command from within init.
+Write-Host "[5b/7] Indexing repository source into workspace '$Workspace'..." -ForegroundColor Yellow
+$analyzeExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" analyze `"$RepoRoot`" --workspace `"$Workspace`" --save"
+if ($analyzeExit -ne 0) {
+    $pgLog = Join-Path $DataDir "postgres.log"
+    if (Test-Path $pgLog) {
+        Write-Host "  --- Last 100 lines of PostgreSQL log ---" -ForegroundColor Red
+        Get-Content $pgLog -Tail 100 | ForEach-Object { Write-Host $_ }
+    }
+    throw "Initial repository analysis failed with exit code $analyzeExit. PostgreSQL logs (if present) were printed above; log path: $pgLog."
 }
 
 # 6. Run Architectural Summary & Talon Guard (without redundant re-index)
 Write-Host "[6/7] Running Architectural Summary & Talon Guard..." -ForegroundColor Yellow
-$null = Invoke-LoggedCmd "`".\bin\garuda.exe`" summary"
-$null = Invoke-LoggedCmd "`".\bin\garuda.exe`" talon guard --workspace `"$Workspace`" --policies policies --auto-index=false"
+$summaryExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" summary"
+if ($summaryExit -ne 0) { throw "Garuda summary failed with exit code $summaryExit." }
+$guardExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" talon guard --workspace `"$Workspace`" --policies policies --auto-index=false"
+if ($guardExit -ne 0) { Write-Host "  [WARN] Talon guard returned exit code $guardExit. Review findings above; policy blocks are not hidden." -ForegroundColor Yellow }
 
 # 7. Run Garuda Doctor & Open Browser
 Write-Host "[7/7] Running Garuda System Doctor..." -ForegroundColor Yellow
-$null = Invoke-LoggedCmd "`".\bin\garuda.exe`" doctor"
+$doctorExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" doctor"
+if ($doctorExit -ne 0) { Write-Host "  [WARN] System Doctor returned exit code $doctorExit. Review diagnostics above." -ForegroundColor Yellow }
 
 Write-Host ""
 Write-Host "===================================================================" -ForegroundColor Green
-Write-Host "[OK] GARUDA v1.8.4 + TALON IS 100% CONFIGURED & ONLINE ON WINDOWS!" -ForegroundColor Green
+Write-Host "[OK] GARUDA v1.8.4 + TALON SETUP COMPLETED ON WINDOWS (review warnings above)" -ForegroundColor Green
 Write-Host "   * Web Dashboard:  http://localhost:$Port/login"
 Write-Host "   * Email / Pass:   $Email / $Password"
 Write-Host "   * System Doctor:  .\bin\garuda.exe doctor"
