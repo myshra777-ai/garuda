@@ -2077,3 +2077,129 @@ code, pre, .mono { font-family: var(--font-mono); }
     .docs-graph-canvas { height: 420px; }
     .docs-graph-inspector { width: 100%; min-width: 0; border-left: 0; border-top: 1px solid var(--border); }
 }
+
+
+/* ============================================================================
+   v1.9.0 UPGRADES: HUMAN-IN-THE-LOOP WEIGHTED LOGIC, CRITICALITY TIERS,
+   FINANCIAL & DATA AUDIT, AND AUTO-SYNTHESIZED BASE RULEBOOK
+   ============================================================================ */
+
+.human-call-banner {
+    background: var(--brand-accent-soft);
+    border: 1px solid var(--brand-accent-border);
+    border-left: 4px solid var(--ink);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.weight-meter-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.weight-bar-outer {
+    width: 110px;
+    height: 8px;
+    background: var(--surface-3);
+    border-radius: 99px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.weight-bar-inner {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.22s ease;
+}
+
+.weight-badge {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--ink);
+    color: var(--brand-accent);
+}
+
+.criticality-tier-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.criticality-tier-card.HIGH_SEVERE {
+    border-top: 3px solid var(--red);
+}
+
+.criticality-tier-card.MEDIUM {
+    border-top: 3px solid var(--amber);
+}
+
+.criticality-tier-card.LOW {
+    border-top: 3px solid var(--green);
+}
+
+.fin-audit-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--red);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-xs);
+}
+
+.fin-audit-card.RECONCILED {
+    border-left-color: var(--green);
+}
+
+.fin-vs-grid {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 14px;
+    align-items: center;
+    margin: 12px 0;
+    padding: 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.fin-team-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.fin-amount-big {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.rulebook-editor-box {
+    width: 100%;
+    min-height: 280px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+    padding: 14px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    resize: vertical;
+}

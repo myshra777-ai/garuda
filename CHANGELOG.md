@@ -2,6 +2,27 @@
 
 All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented in this file.
 
+## [v1.9.0] - 2026-10-28 — Human-in-the-Loop Weighted Logic Disambiguation (0.0–1.0), Surface Criticality Tiers, Financial/Data Audit Reconciliation, Auto-Rulebook Synthesis & Bulletproof Postgres Handshake
+
+### Added & Fixed
+- **Human-in-the-Loop Multi-Team Formula Disambiguation & 0.0–1.0 Weight Allocation (`internal/api/dashboard_audit_rulebook.go`, `cmd/garuda/audit_cmd.go`, `garuda.disambiguate_logic`)**:
+  - When a repository lacks formal documentation and contains competing formulas for the same business concept across teams (e.g., `Loss Ratio` across **Ops**, **Marketing**, and **Management**), Garuda never allows AI to silently pick or overwrite a formula.
+  - Dynamically calculates **0.00 to 1.00 team weights** based on the active developer's team context (e.g., `0.70` weight for the active Ops team formula vs `0.10` / `0.10` for Marketing and Management), ranks each variant by **Least Harm to the Architecture**, and displays a plain-English blast radius breakdown so the human developer makes the final logical decision.
+- **3-Tier Surface Criticality Classification (`surface_criticality_tiers` & `05 — Talon, Criticality & Risk Hub`)**:
+  - Classifies architectural surfaces into human-understandable business criticality tiers:
+    - **`HIGH_SEVERE` (Core Surfaces — Freeze / Do Not Touch)**: Mission-critical flows like the **Homepage**, **Search Bar**, **Search Results Redirect Router** (142 callers), and **Claims Settlement Ledger**. Prevents catastrophic changes that could take down search redirection or payment settlement.
+    - **`MEDIUM` (Non-Blocking Features — Human Trade-Off Review)**: Secondary features like the **Wishlist Loader** and **Promotional Attribution Badges** (19 callers), where occasional degradation does not block core search or checkout and human trade-offs can be weighed.
+    - **`LOW` (Minor UI & Formatting — Allow with Info)**: Leaf UI helpers like **Search Box Visual Alignment** and badge formatters (4 callers) carrying minimal blast radius.
+- **Continuous Financial & Business Data Discrepancy Audit (`financial_audit_reconciliations`, `garuda audit financial`, `09 — Financial & Logic Audit`)**:
+  - Extends Garuda beyond software development audits to **Financial & Business Data Audits**.
+  - Traces AST and SQL data-lineage across teams to catch business number discrepancies before external audits occur—such as **Claims Ops** reporting **48.00 Crore INR** (`SUM(settled_claims_inr) / 1e7` in `ops.AggregateClaimsPaidCrore`) while **Finance/Management** reports **4.80 Crore INR** (`SUM(settled_claims_lakhs) / 1000.0` in `finance.ExportExecutiveClaimsSummary` — a 10x Lakhs-to-Crore unit divisor bug).
+- **Auto-Synthesized Base Rulebook Studio (`synthesized_rulebooks`, `garuda rulebook generate/approve`, `04 — Docs & Base Rulebook`)**:
+  - Automatically structures unorganized repository architecture, inferred layer boundaries, surface criticality tiers, and multi-team formula weights into a clean, human-readable **Draft Base Rulebook** (`.garuda/DRAFT_BASE_RULEBOOK.md`).
+  - Stakeholders can review, edit inline in the dashboard, and click **Approve & Seal Base Rulebook** (persisted to `.garuda/APPROVED_BASE_RULEBOOK.md` with an RFC 6962 SHA-256 digest).
+- **Bulletproof PostgreSQL Connection & Role/DB Auto-Healing (`setup.sh`, `setup.ps1`, `cmd/garuda/init_cmd.go`, `internal/config/env.go`)**:
+  - Fixed a Go syntax typo (`\ext := exeSuffix()` -> `ext := exeSuffix()`) in `cmd/garuda/init_cmd.go`.
+  - Added `pg_isready` WAL recovery readiness polling and multi-user (`test`, `$USER`, `postgres`) idempotent role/database provisioning with `pg_hba.conf` trust auto-repair so installation never stalls while establishing the PostgreSQL connection on port `5433`.
+
 ## [v1.8.4] - 2026-10-27 — All-OS Zero-Dependency Fast Provisioning, IPv4 PostgreSQL Hardening, Canonical Schema Alignment & Smart MCP Discovery
 
 ### Added & Fixed

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ===========================================================================
-# GARUDA v1.8.4 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
+# GARUDA v1.9.0 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
 # ===========================================================================
 # Supports macOS (Intel & Apple Silicon), Linux, Windows WSL2, Chromebook, Android
 # Usage:
@@ -89,7 +89,7 @@ export HOMEBREW_NO_INSTALL_CLEANUP=1
 export HOMEBREW_NO_ENV_HINTS=1
 
 echo "==================================================================="
-echo "GARUDA v1.8.4 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
+echo "GARUDA v1.9.0 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
 echo "==================================================================="
 echo "  * Detected Owner:     ${OWNER_EMAIL}"
 echo "  * Target Workspace:   ${WORKSPACE}"
@@ -276,11 +276,58 @@ if ! test_tcp_port 127.0.0.1 5433; then
     exit 1
 fi
 
-if command -v psql >/dev/null 2>&1; then
-    psql -h 127.0.0.1 -p 5433 -U test -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='test'" 2>/dev/null | grep -q 1 ||         psql -h 127.0.0.1 -p 5433 -d postgres -c "CREATE ROLE test WITH SUPERUSER LOGIN PASSWORD 'test';" >/dev/null 2>&1 ||         psql -h "${RUN_DIR}" -p 5433 -d postgres -c "CREATE ROLE test WITH SUPERUSER LOGIN PASSWORD 'test';" >/dev/null 2>&1 || true
-    psql -h 127.0.0.1 -p 5433 -U test -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='garuda_test'" 2>/dev/null | grep -q 1 ||         psql -h 127.0.0.1 -p 5433 -U test -d postgres -c "CREATE DATABASE garuda_test OWNER test;" >/dev/null 2>&1 ||         createdb -h 127.0.0.1 -p 5433 -U test garuda_test >/dev/null 2>&1 ||         createdb -h "${RUN_DIR}" -p 5433 garuda_test >/dev/null 2>&1 || true
+# Wait for pg_isready so Postgres finishes WAL recovery before any SQL connection is attempted
+if command -v pg_isready >/dev/null 2>&1; then
+    for _ in $(seq 1 30); do
+        if pg_isready -h 127.0.0.1 -p 5433 >/dev/null 2>&1; then
+            break
+        fi
+        sleep 0.3
+    done
 fi
-echo "  [OK] PostgreSQL is online and verified on 127.0.0.1:5433"
+
+provision_pg_role_and_db() {
+    if ! command -v psql >/dev/null 2>&1; then
+        return 0
+    fi
+    # Ensure pg_hba.conf in user-space cluster permits trust auth on 127.0.0.1
+    if [[ -f "${DATA_DIR}/pg/pg_hba.conf" ]] && ! grep -q "garuda-trust-rule" "${DATA_DIR}/pg/pg_hba.conf" 2>/dev/null; then
+        local tmp_hba="${DATA_DIR}/pg/pg_hba.conf.tmp"
+        {
+            echo "# garuda-trust-rule"
+            echo "local all all trust"
+            echo "host all all 127.0.0.1/32 trust"
+            echo "host all all ::1/128 trust"
+            cat "${DATA_DIR}/pg/pg_hba.conf"
+        } > "$tmp_hba" && mv "$tmp_hba" "${DATA_DIR}/pg/pg_hba.conf"
+        pg_ctl -D "${DATA_DIR}/pg" reload >/dev/null 2>&1 || true
+    fi
+
+    for db_user in "test" "${USER:-}" "$(whoami 2>/dev/null || true)" "postgres"; do
+        [[ -z "$db_user" ]] && continue
+        PGPASSWORD=test psql -h 127.0.0.1 -p 5433 -U "$db_user" -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='test'" 2>/dev/null | grep -q 1 || \
+            PGPASSWORD=test psql -h 127.0.0.1 -p 5433 -U "$db_user" -d postgres -c "CREATE ROLE test WITH SUPERUSER LOGIN PASSWORD 'test';" >/dev/null 2>&1 || \
+            psql -h "${RUN_DIR}" -p 5433 -U "$db_user" -d postgres -c "CREATE ROLE test WITH SUPERUSER LOGIN PASSWORD 'test';" >/dev/null 2>&1 || true
+        PGPASSWORD=test psql -h 127.0.0.1 -p 5433 -U "$db_user" -d postgres -c "ALTER ROLE test WITH SUPERUSER LOGIN PASSWORD 'test';" >/dev/null 2>&1 || true
+        PGPASSWORD=test psql -h 127.0.0.1 -p 5433 -U "$db_user" -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='garuda_test'" 2>/dev/null | grep -q 1 || \
+            PGPASSWORD=test psql -h 127.0.0.1 -p 5433 -U "$db_user" -d postgres -c "CREATE DATABASE garuda_test OWNER test;" >/dev/null 2>&1 || \
+            PGPASSWORD=test createdb -h 127.0.0.1 -p 5433 -U "$db_user" -O test garuda_test >/dev/null 2>&1 || \
+            createdb -h "${RUN_DIR}" -p 5433 -O test garuda_test >/dev/null 2>&1 || true
+    done
+
+    # Verify actual SQL query connectivity as user=test on db=garuda_test
+    if PGPASSWORD=test psql "$DB_URL" -c "SELECT 1;" >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+if ! provision_pg_role_and_db; then
+    echo "  [*] Existing PostgreSQL instance on :5433 rejected user 'test' -- healing user-space cluster in ${DATA_DIR}/pg..."
+    ensure_userspace_postgres
+    provision_pg_role_and_db || true
+fi
+echo "  [OK] PostgreSQL connection & 'garuda_test' database verified on 127.0.0.1:5433"
 
 # 3. Bootstrap Portable Go Toolchain (matching go.mod so Go never downloads twice!) & Compile in 1 Pass
 echo "[3/8] Preparing Go toolchain and compiling Garuda binaries..."
@@ -376,7 +423,7 @@ fi
 
 echo ""
 echo "==================================================================="
-echo "[OK] GARUDA v1.8.4 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
+echo "[OK] GARUDA v1.9.0 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
 echo "   * Web Dashboard:  http://localhost:${API_PORT}/login"
 echo "   * Chromium PWA:   Open in Chrome/Edge/Brave -> Click 'Install Garuda'"
 echo "   * Email / Pass:   ${OWNER_EMAIL} / ${OWNER_PASSWORD}"

@@ -137,6 +137,9 @@ def main():
             "garuda.implementers",
             "garuda.talon_pre_edit",
             "garuda.talon_verify_edit",
+            "garuda.disambiguate_logic",
+            "garuda.audit_financial_discrepancy",
+            "garuda.synthesize_rulebook",
         ):
             results.append(expect(expected in names, f"tool {expected} present"))
 

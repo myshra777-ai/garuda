@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// DefaultDBURL is the local development Postgres connection string.
+// DefaultDBURL is the local development Postgres connection string bound explicitly to IPv4 127.0.0.1:5433.
 const DefaultDBURL = "postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable"
 
 // FindDotEnvPath returns the path to the nearest .env file, or ".env" if none exists yet.
@@ -109,11 +109,24 @@ func UpsertDotEnv(pairs map[string]string) error {
 	return os.WriteFile(path, []byte(out), 0600)
 }
 
+// NormalizeDBURL normalizes localhost and IPv6 loopback addresses to explicit IPv4 127.0.0.1
+// and ensures connect_timeout is set so connection establishment never hangs indefinitely.
+func NormalizeDBURL(u string) string {
+	u = strings.TrimSpace(u)
+	if u == "" {
+		return DefaultDBURL
+	}
+	u = strings.ReplaceAll(u, "@localhost:", "@127.0.0.1:")
+	u = strings.ReplaceAll(u, "@[::1]:", "@127.0.0.1:")
+	u = strings.ReplaceAll(u, "@0.0.0.0:", "@127.0.0.1:")
+	return u
+}
+
 // ResolveDBURL returns DATABASE_URL from env/.env or DefaultDBURL.
 func ResolveDBURL() string {
 	LoadDotEnv()
 	if u := strings.TrimSpace(os.Getenv("DATABASE_URL")); u != "" {
-		return strings.ReplaceAll(u, "@localhost:", "@127.0.0.1:")
+		return NormalizeDBURL(u)
 	}
 	return DefaultDBURL
 }

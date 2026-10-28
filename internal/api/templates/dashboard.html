@@ -34,7 +34,7 @@
                 <div class="brand-mark">G</div>
                 <div>
                     <div class="brand-name">GARUDA</div>
-                    <div class="brand-subtitle">Software Intelligence v1.7</div>
+                    <div class="brand-subtitle">Software Intelligence v1.9</div>
                 </div>
             </div>
             <button class="footer-link-btn" onclick="toggleTheme()" id="theme-toggle-btn" title="Switch Light / Graphite Dark Mode">☀</button>
@@ -89,6 +89,10 @@
             <button class="nav-btn" data-surface="agents" onclick="showView('agents')">
                 <span class="nav-btn-left"><span class="nav-num">08</span><span>Agents &amp; Sessions</span></span>
                 <span class="nav-badge" id="nav-badge-agents">MCP</span>
+            </button>
+            <button class="nav-btn" data-surface="audit" onclick="showView('audit')">
+                <span class="nav-btn-left"><span class="nav-num">09</span><span>Financial &amp; Logic Audit</span></span>
+                <span class="nav-badge" id="nav-badge-audit" style="background:var(--red-bg); color:var(--red); border:1px solid var(--red-border);">10x Drift</span>
             </button>
 
             <div class="nav-group-label" style="margin-top:12px;">Governance Records</div>
@@ -152,6 +156,7 @@
             <button class="tab" data-tab="review" role="tab" aria-selected="false" onclick="showView('review')">06 Change Review</button>
             <button class="tab" data-tab="governance" role="tab" aria-selected="false" onclick="showView('governance')">07 Evidence</button>
             <button class="tab" data-tab="agents" role="tab" aria-selected="false" onclick="showView('agents')">08 Agents</button>
+            <button class="tab" data-tab="audit" role="tab" aria-selected="false" onclick="showView('audit')">09 Financial &amp; Logic Audit</button>
             <button class="tab" data-tab="decisions" role="tab" aria-selected="false" onclick="showView('decisions')">ADR Lineage</button>
         </nav>
 
@@ -175,10 +180,10 @@
                         </div>
                     </div>
                     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                        <button class="btn-secondary" onclick="showView('docsgraph')">✦ Docs &amp; Rules Graph</button>
-                        <button class="btn-secondary" onclick="showView('talon')">🛡️ Talon &amp; Risk Hub</button>
-                        <button class="btn-secondary" onclick="showView('graph')">Architecture Map</button>
-                        <button class="btn-primary" onclick="showView('review')">Change Review Workbench →</button>
+                        <button class="btn-secondary" onclick="showView('docsgraph')">✦ Docs &amp; Base Rulebook</button>
+                        <button class="btn-secondary" onclick="showView('talon')">🛡️ Criticality &amp; Risk Hub</button>
+                        <button class="btn-secondary" onclick="showView('audit')" style="border-color:var(--red-border); color:var(--red); font-weight:650;">⚖️ Financial &amp; Formula Audit (48Cr vs 4.8Cr)</button>
+                        <button class="btn-primary" onclick="showView('review')">Human-in-the-Loop Change Review →</button>
                     </div>
                 </div>
 
@@ -714,6 +719,45 @@
                     </aside>
                 </div>
 
+
+                <!-- v1.9.0 Auto-Synthesized Base Rulebook Studio (Human Review, Edit & 1-Click Approval) -->
+                <div class="panel" style="border: 1.5px solid var(--ink); margin-bottom: 18px;">
+                    <div class="panel-header" style="background: var(--brand-accent-soft);">
+                        <div>
+                            <div class="wb-pane-kicker" style="color: var(--brand-accent-ink);">v1.9.0 AUTO-SYNTHESIZED BASE RULEBOOK · HUMAN-IN-THE-LOOP APPROVAL</div>
+                            <div class="panel-title" style="font-size: 15px; margin-top: 2px;">Unorganized Repo Architecture → Structured Base Rulebook (Grunt Work Done by Garuda, Approved by You)</div>
+                            <div class="panel-subtitle">In companies without formal rule documentation, Garuda extracts implicit layer boundaries, surface criticality tiers (High/Severe, Medium, Low), competing team formula weights (0.0–1.0), and financial audit invariants into one editable document. Review, edit if needed, and approve to lock as your Base Rulebook.</div>
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <span class="badge-pill warning" id="rulebook-status-badge">DRAFT · AWAITING HUMAN APPROVAL</span>
+                            <button class="btn-secondary" onclick="regenerateBaseRulebookDraft()">↻ Re-Synthesize from Repo</button>
+                            <button class="btn-primary" onclick="approveBaseRulebookFromUI()">✓ Approve &amp; Seal Base Rulebook</button>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="two-column" style="margin-bottom: 0;">
+                            <div>
+                                <div class="detail-section-title">Discovered Unorganized Rules &amp; Criticality Tiers (6 Synthesized Rules)</div>
+                                <div id="synthesized-rules-list" class="list" style="border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;"></div>
+                            </div>
+                            <div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <span class="detail-section-title" style="margin-bottom:0;">Editable Base Rulebook Markdown (`.garuda/APPROVED_BASE_RULEBOOK.md`)</span>
+                                    <span class="mono" style="font-size:10.5px; color:var(--muted);" id="rulebook-merkle-chip">SHA-256: pending approval</span>
+                                </div>
+                                <textarea id="synthesized-rulebook-textarea" class="rulebook-editor-box" spellcheck="false"></textarea>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; gap:10px;">
+                                    <input id="rulebook-approver-input" class="form-input" style="max-width: 260px; height: 32px;" value="Primary Stakeholder / Staff Architect" placeholder="Approver Name / Role">
+                                    <div style="display:flex; gap:8px;">
+                                        <button class="btn-secondary" onclick="copyRulebookMarkdown()">📋 Copy Rulebook</button>
+                                        <button class="btn-primary" onclick="approveBaseRulebookFromUI()">✓ Approve &amp; Finalize Base Rulebook</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Structured Cards of Ingested Documents -->
                 <div class="panel">
                     <div class="panel-header">
@@ -970,6 +1014,24 @@ All active YAML policies (architecture-no-api-to-store-bypass, payment-no-direct
                     </div>
                 </div>
 
+
+                <!-- v1.9.0 Surface Criticality Tiers (High/Severe vs Medium vs Low — Amazon Search / Wishlist / UI Box Model) -->
+                <div class="panel" style="margin-bottom: 18px;">
+                    <div class="panel-header">
+                        <div>
+                            <div class="wb-pane-kicker">v1.9.0 ARCHITECTURAL SURFACE CRITICALITY TIERS · HUMAN-READABLE BLAST RADIUS</div>
+                            <div class="panel-title">Surface Criticality Classification (High/Severe · Medium · Low)</div>
+                            <div class="panel-subtitle">Classifies architectural components by human-understandable business impact so Garuda freezes mission-critical surfaces (like Homepage &amp; Search Redirects) while allowing informed trade-offs on non-blocking features (like Wishlist) and low-impact UI alignment.</div>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn-secondary" onclick="showView('audit')">⚖️ Open Multi-Team Formula Weights →</button>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div id="criticality-tiers-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(290px, 1fr)); gap:14px;"></div>
+                    </div>
+                </div>
+
                 <!-- Full-Width Risk Hub Leaderboard -->
                 <div class="panel">
                     <div class="panel-header">
@@ -1022,6 +1084,17 @@ All active YAML policies (architecture-no-api-to-store-bypass, payment-no-direct
                         <button class="btn-secondary" onclick="showView('docsgraph')">Open Docs &amp; Rules Graph</button>
                         <button class="btn-primary" onclick="runLiveReviewCheck()">▶ Run Live Check on Target</button>
                     </div>
+                </div>
+
+
+                <div class="human-call-banner">
+                    <div>
+                        <div style="font-weight:700; font-size:13.5px; color:var(--text);">🤝 Human-in-the-Loop Governance: Garuda Informs, You Make the Call</div>
+                        <div style="font-size:12px; color:var(--text-2); margin-top:3px;">
+                            Garuda never lets AI silently pick or overwrite competing business formulas. We compute the <strong>0.0–1.0 team weight</strong>, <strong>Surface Criticality Tier (High/Severe, Medium, Low)</strong>, and <strong>plain-English blast radius</strong> so your team can take a logical decision.
+                        </div>
+                    </div>
+                    <button class="btn-primary" style="flex-shrink:0;" onclick="showView('audit')">⚖️ Compare Competing Team Formulas (0.0–1.0 Weights) →</button>
                 </div>
 
                 <div class="workbench-grid">
@@ -1280,6 +1353,127 @@ All active YAML policies (architecture-no-api-to-store-bypass, payment-no-direct
                 </div>
             </section>
 
+
+            <!-- ============================================================
+                 09 — FINANCIAL & LOGIC AUDIT: WEIGHTED DISAMBIGUATION (0.0-1.0)
+                      & CROSS-TEAM BUSINESS DATA RECONCILIATION (48 Cr vs 4.8 Cr)
+                 ============================================================ -->
+            <section id="view-audit" style="display:none;">
+                <div class="issue-kicker">
+                    <span class="issue-kicker-dot"></span>
+                    <span>09 · HUMAN-IN-THE-LOOP FORMULA WEIGHTS (0.0–1.0) &amp; FINANCIAL / BUSINESS DATA AUDIT</span>
+                </div>
+                <div class="hero">
+                    <div>
+                        <h1 class="hero-title">Weighted Logic Disambiguation &amp; Financial Data Audit</h1>
+                        <div class="hero-subtitle">
+                            Resolve undocumented competing formulas across teams (e.g., <strong>Loss Ratio</strong> across Ops, Marketing &amp; Management) using <strong>0.0–1.0 team weights</strong> and <strong>human-readable blast radius severity</strong>—and catch cross-team financial discrepancies (like <strong>48 Crore vs 4.8 Crore Claims Paid</strong>) before external audits.
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <span style="font-size:11.5px; font-weight:650; color:var(--text-2);">Active Developer Team Context:</span>
+                        <div class="pill-group" id="team-context-selector">
+                            <button class="filter-pill active" data-team="ops" onclick="switchActiveTeamContext('ops', this)">Ops Team (0.70 Weight)</button>
+                            <button class="filter-pill" data-team="marketing" onclick="switchActiveTeamContext('marketing', this)">Marketing Team (0.70 Weight)</button>
+                            <button class="filter-pill" data-team="management" onclick="switchActiveTeamContext('management', this)">Management Team (0.70 Weight)</button>
+                        </div>
+                        <button class="btn-primary" onclick="showView('docsgraph')">📄 View Auto-Rulebook →</button>
+                    </div>
+                </div>
+
+                <!-- 4-Column Human-in-the-Loop & Financial Audit Pulse Strip -->
+                <div class="pulse-strip">
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>01 · Decision Authority</span>
+                            <span class="badge-pill success">HUMAN-IN-THE-LOOP</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value">100% Human</span>
+                            <span class="pulse-delta">AI informs · Human decides</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono">Zero silent AI formula overwrites</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>02 · Active Team Weighting</span>
+                            <span class="badge-pill info" id="audit-active-team-pill">OPS TEAM (0.70)</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="audit-primary-weight-val">0.70</span>
+                            <span class="pulse-delta">vs 0.10 / 0.10 other teams</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono" id="audit-least-harm-foot">Least harm: ops.CalculateLossRatio (LOW)</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>03 · Severe Surface Protection</span>
+                            <span class="badge-pill critical">1 FROZEN (SEVERE)</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value">142 Callers</span>
+                            <span class="pulse-delta">Search &amp; Pricing Gate protected</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono">Prevents Search Redirect blackout</span>
+                        </div>
+                    </div>
+
+                    <div class="pulse-cell">
+                        <div class="pulse-label">
+                            <span>04 · Financial Data Audit</span>
+                            <span class="badge-pill critical" id="fin-audit-status-pill">48 Cr vs 4.8 Cr (10x)</span>
+                        </div>
+                        <div class="pulse-value-row">
+                            <span class="pulse-value" id="fin-audit-count-val">2 Flagged</span>
+                            <span class="pulse-delta">caught pre-audit via AST lineage</span>
+                        </div>
+                        <div class="pulse-foot">
+                            <span class="mono">Claims Paid 10x unit scale mismatch</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Part 1: Multi-Team Weighted Logic Disambiguation (Loss Ratio Across Ops, Marketing, Management) -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <div class="wb-pane-kicker">PILLAR 1 · MULTI-TEAM FORMULA DISAMBIGUATION &amp; 0.0–1.0 WEIGHT ALLOCATION</div>
+                            <div class="panel-title">Competing Undocumented Formulas: “Loss Ratio Calculation” (Ops vs Marketing vs Management)</div>
+                            <div class="panel-subtitle" id="logic-group-advisory">
+                                When the same concept has different formulas across teams, Garuda calculates weights (0.0 to 1.0) based on your team role, ranks which formula harms the architecture the least, and blocks changes to HIGH/SEVERE blast-radius surfaces.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div id="logic-variants-container" style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px;"></div>
+                    </div>
+                </div>
+
+                <!-- Part 2: Financial & Business Data Discrepancy Audit (48 Crore vs 4.8 Crore Claims Paid) -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <div class="wb-pane-kicker">PILLAR 2 · CONTINUOUS FINANCIAL &amp; BUSINESS DATA AUDIT</div>
+                            <div class="panel-title">Cross-Team Business Number Discrepancy Detector (e.g., 48 Crore vs 4.8 Crore Claims Paid)</div>
+                            <div class="panel-subtitle">
+                                Business number discrepancies between teams usually stay hidden until an external financial audit—when it is already too late. Garuda traces AST &amp; SQL unit-scaling lineage across team pipelines to pinpoint why numbers don't match.
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn-secondary" onclick="simulateCustomFinancialAudit()">+ Simulate Custom Crore Audit Check</button>
+                        </div>
+                    </div>
+                    <div class="panel-body" id="financial-audits-container"></div>
+                </div>
+            </section>
+
             <!-- ============================================================
                  ADR — ARCHITECTURAL DECISION LINEAGE
                  ============================================================ -->
@@ -1341,7 +1535,7 @@ All active YAML policies (architecture-no-api-to-store-bypass, payment-no-direct
             <span><span class="kbd-chip">↑</span> <span class="kbd-chip">↓</span> navigate</span>
             <span><span class="kbd-chip">↵</span> open</span>
             <span><span class="kbd-chip">esc</span> close</span>
-            <span style="margin-left:auto;">Garuda Command Instrument v1.7</span>
+            <span style="margin-left:auto;">Garuda Command Instrument v1.9</span>
         </div>
     </div>
 </div>

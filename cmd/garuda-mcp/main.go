@@ -563,6 +563,40 @@ var allTools = []map[string]interface{}{
 			},
 		},
 	},
+	// ── v1.9.0 Human-in-the-Loop Weighted Logic, Criticality Tiers, Financial Audit & Auto-Rulebook tools ──
+	{
+		"name":        "garuda.disambiguate_logic",
+		"description": "Compare competing undocumented formulas across teams (e.g. Loss Ratio across Ops, Marketing, Management) with 0.0-1.0 team weights, surface criticality tiers (HIGH_SEVERE, MEDIUM, LOW), and human-readable blast radius so the human developer takes the final call.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"team":      map[string]interface{}{"type": "string", "description": "Active team context (ops, marketing, management)"},
+				"concept":   map[string]interface{}{"type": "string", "description": "Business concept or formula to disambiguate"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.audit_financial_discrepancy",
+		"description": "Audit cross-team business and financial number discrepancies (e.g. 48 Crore vs 4.8 Crore Total Claims Paid) by tracing AST and SQL unit-scaling lineage before an external audit.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"metric":    map[string]interface{}{"type": "string", "description": "Financial or business metric to reconcile"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.synthesize_rulebook",
+		"description": "Synthesize unorganized repository architecture, surface criticality tiers, and multi-team formula weights into a structured draft Base Rulebook for human stakeholder review and approval.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+			},
+		},
+	},
 }
 
 // toolNames is the derived whitelist of valid tool names. Built once
@@ -646,7 +680,7 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 			"instructions": "Garuda Talon Active Enforcement is enabled. Call garuda.talon_pre_edit before modifying code and garuda.talon_verify_edit immediately after editing to verify 0 net-new policy or ADR violations.",
 			"serverInfo": map[string]interface{}{
 				"name":    "garuda-mcp",
-				"version": "1.5.0",
+				"version": "1.9.0",
 			},
 		},
 	}
@@ -773,6 +807,12 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleTalonPreEdit(args)
 	case "garuda.talon_verify_edit":
 		result, err = s.handleTalonVerifyEdit(args)
+	case "garuda.disambiguate_logic":
+		result, err = s.handleDisambiguateLogic(args)
+	case "garuda.audit_financial_discrepancy":
+		result, err = s.handleAuditFinancialDiscrepancy(args)
+	case "garuda.synthesize_rulebook":
+		result, err = s.handleSynthesizeRulebook(args)
 
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
