@@ -1,6 +1,6 @@
-# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (`v1.8.4` Universal)
+# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (`v1.9.1` Universal)
 
-This reference documents the complete command-line interface (`bin/garuda` and `bin/garuda-talon`), the **Garuda Talon** active agent harness, declarative policy specification (`policies/*.yaml`), Model Context Protocol surface (`bin/garuda-mcp` with 23 active tools), and HTTP REST / PWA gateway (`bin/garuda-api`).
+This reference documents the complete command-line interface (`bin/garuda` and `bin/garuda-talon`), the **Garuda Talon** active agent harness, declarative policy specification (`policies/*.yaml`), Model Context Protocol surface (`bin/garuda-mcp` with 35 active tools), and HTTP REST / PWA gateway (`bin/garuda-api`).
 
 ---
 
@@ -204,7 +204,7 @@ Every policy file specifies `when` predicates evaluated against the workspace gr
 
 ## 4. Active MCP Surface (`bin/garuda-mcp`)
 
-`bin/garuda-mcp` speaks JSON-RPC 2.0 over stdio (`protocolVersion: "2025-06-18"`), advertises `tools`, `prompts`, and `resources` capabilities, and exposes **23 deterministic tools**:
+`bin/garuda-mcp` speaks JSON-RPC 2.0 over stdio (`protocolVersion: "2025-06-18"`), advertises `tools`, `prompts`, and `resources` capabilities, and exposes **35 deterministic tools**:
 
 | Category | Tool Name | Whitelisted Arguments | Purpose |
 | :--- | :--- | :--- | :--- |
@@ -236,7 +236,7 @@ Verify MCP and Talon compliance at any time by running:
 ```bash
 python3 scripts/mcp_verify.py
 ```
-Expected result: `═══ 25/25 checks passed ═══` (self-hosted dynamic verifier) or `═══ 30/30 checks passed ═══` (multi-repo benchmark suite).
+Expected result: `═══ 25/25 checks passed ═══` (self-hosted dynamic verifier) or `═══ 43/43 checks passed ═══` (multi-repo benchmark suite).
 
 ---
 
@@ -263,7 +263,7 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 
 ---
 
-## 6. v1.7–v1.8.4 New CLI Flags, Dashboard Lineage Endpoints & BuildContext Schema
+## 6. v1.7–v1.9.1 New CLI Flags, Dashboard Lineage Endpoints & BuildContext Schema
 
 ### 6.1 Cross-Platform Build Matrix & Build-Tag Flags (`garuda analyze`, `garuda check`, `garuda talon guard`)
 - `--tags string` — Comma-separated Go build tags (e.g., `--tags cgo,enterprise`) applied via `go/build.Context` during conditional AST file matching.
@@ -304,3 +304,42 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
   "reproduce_command": "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 ./bin/garuda talon guard --workspace default --diff HEAD --fail-on-block"
 }
 ```
+
+
+---
+
+## 7. v1.9.1 Extended CLI Commands, 12 New MCP Tools & Financial/Rulebook HTTP Endpoints
+
+### 7.1 `garuda audit` & `garuda rulebook` CLI Commands (`cmd/garuda/audit_cmd.go`)
+- `garuda audit logic [concept] --team <ops|marketing|management> [--decide <variant_id> --action APPROVED_BY_HUMAN] [--json]`
+- `garuda audit financial --metric <name> --team-a-cr <float> --team-b-cr <float> [--reconcile <audit_id>] [--json]`
+- `garuda audit criticality [--tier HIGH_SEVERE|MEDIUM|LOW] [--json]`
+- `garuda rulebook generate [--output .garuda/DRAFT_BASE_RULEBOOK.md]`
+- `garuda rulebook approve [--by "Stakeholder Name"]`
+
+### 7.2 12 New MCP Tools in `bin/garuda-mcp` (Total: 35 Tools)
+
+| Tool Name | Whitelisted Arguments | Purpose |
+| :--- | :--- | :--- |
+| `garuda.disambiguate_logic` | `workspace`, `team`, `concept`, `tenant_id` | Returns competing team formulas with `0.0–1.0` weights, criticality tiers, and blast radius. |
+| `garuda.decide_logic_variant` | `workspace`, `team`, `variant_id`, `decision_action`, `custom_weight`, `tenant_id` | Persists human stakeholder formula approval or freeze in PostgreSQL. |
+| `garuda.audit_financial_discrepancy` | `workspace`, `metric`, `team_a_name`, `team_a_crore`, `team_b_name`, `team_b_crore`, `tenant_id` | Audits cross-team Crore/INR discrepancies and traces AST/SQL unit-scaling root causes. |
+| `garuda.reconcile_financial_audit` | `workspace`, `audit_id`, `metric`, `approved_by`, `tenant_id` | Marks a flagged financial discrepancy as reconciled by a human auditor. |
+| `garuda.synthesize_rulebook` | `workspace`, `tenant_id` | Generates `.garuda/DRAFT_BASE_RULEBOOK.md` and persists draft to PostgreSQL. |
+| `garuda.approve_base_rulebook` | `workspace`, `approved_by`, `tenant_id` | Seals `.garuda/APPROVED_BASE_RULEBOOK.md` with an RFC 6962 SHA-256 digest. |
+| `garuda.criticality_tiers` | `workspace`, `tier_filter`, `surface_name`, `package_pattern`, `criticality_tier`, `tenant_id` | Lists or registers `HIGH_SEVERE`, `MEDIUM`, and `LOW` architectural surfaces. |
+| `garuda.docs_graph` | `workspace`, `doc_type`, `tenant_id` | Returns the 4-tier Document-to-Code & Guardrails Lineage Matrix. |
+| `garuda.docs_ingest` | `workspace`, `path`, `title`, `doc_type`, `tenant_id` | Ingests Markdown ADRs/specs into `document_claims` and correlates with AST entities. |
+| `garuda.doctor_diagnose` | `workspace`, `fix`, `tenant_id` | Executes the System Doctor check over MCP. |
+| `garuda.build_matrix_check` | `workspace`, `repo_dir`, `diff`, `tenant_id` | Evaluates the 4-target Cross-Platform Build Matrix and returns the `BuildContext` receipt. |
+| `garuda.hygiene_report` | `workspace`, `limit`, `tenant_id` | Runs the static code hygiene analyzer over MCP. |
+
+### 7.3 v1.9.1 HTTP Endpoints (`internal/api/dashboard_audit_rulebook.go`)
+- `GET  /api/v1/dashboard/logic-weights?workspace=<ws>&team=<ops|marketing|management>`
+- `POST /api/v1/dashboard/logic-weights/decide`
+- `GET  /api/v1/dashboard/criticality-tiers?workspace=<ws>`
+- `POST /api/v1/dashboard/criticality-tiers`
+- `GET  /api/v1/dashboard/financial-audit?workspace=<ws>`
+- `POST /api/v1/dashboard/financial-audit`
+- `GET  /api/v1/dashboard/rulebook-draft?workspace=<ws>`
+- `POST /api/v1/dashboard/rulebook-approve?workspace=<ws>`

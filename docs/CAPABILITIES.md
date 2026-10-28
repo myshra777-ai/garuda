@@ -1,6 +1,6 @@
-# 🧠 Garuda Capabilities & Verification Matrix (`v1.8.4` Universal)
+# 🧠 Garuda Capabilities & Verification Matrix (`v1.9.1` Universal)
 
-> Grounded in the Garuda `v1.8.4` multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
+> Grounded in the Garuda `v1.9.1` multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
 
 ---
 
@@ -60,12 +60,12 @@
 
 ---
 
-## 5. Plane 05 — Garuda Talon Active Agent Harness & 23-Tool MCP Surface
+## 5. Plane 05 — Garuda Talon Active Agent Harness & 35-Tool MCP Surface
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
 | **Active Contract Compilation (`garuda talon init`)** | 🟢 **Production (GA)** | `internal/talon/talon.go` | Synthesizes live ADRs (`document_claims`), YAML policies, and top hubs into `.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc`, `CLAUDE.md`, `AGENTS.md`, and `.windsurfrules` | `Always-On Agent Context` |
-| **Active MCP Session Enforcement (`GARUDA_TALON_ENFORCE=true`)** | 🟢 **Production (GA)** | `30/30 checks in scripts/mcp_verify.py` | 23 MCP tools + `prompts/list` (`garuda.architectural_contract`) + `resources/list` (`garuda://workspace/contract`) + automatic first-call guardrail injection | `Fail-Closed Agent Orientation` |
+| **Active MCP Session Enforcement (`GARUDA_TALON_ENFORCE=true`)** | 🟢 **Production (GA)** | `43/43 checks in scripts/mcp_verify.py` | 35 MCP tools + `prompts/list` (`garuda.architectural_contract`) + `resources/list` (`garuda://workspace/contract`) + automatic first-call guardrail injection | `Fail-Closed Agent Orientation` |
 | **Pre-Edit & Post-Edit Guard (`garuda.talon_pre_edit` / `verify_edit`)** | 🟢 **Production (GA)** | `internal/talon` + `cmd/garuda-mcp` | Pre-flight blast radius & ADR check before edits; incremental AST sync + diff-scoped policy check + deterministic Self-Repair Prompt after edits | `Zero Blind Agent Edits` |
 | **Claude Code & Git Hook Enforcement** | 🟢 **Production (GA)** | `.claude/settings.json` + `.git/hooks/` | `PostToolUse` hook (`garuda talon guard --hook` exiting `2` on `BLOCK`) and Git `pre-commit` / `commit-msg` Merkle provenance trailers | `Pre-Commit & Edit-Time Gate` |
 | **Autonomous Supervisor Loop (`garuda talon run`)** | 🟢 **Production (GA)** | `talon.RunHarnessLoop` | Wraps any CLI coding agent, intercepts dirty edits, evaluates `talon guard`, and loops the agent with self-repair prompts until `ALLOW` | `Automated Self-Repair Convergence` |
@@ -73,7 +73,7 @@
 
 ---
 
-## 6. Plane 06 — Universal Zero-Dependency Runtime & Cross-OS Diagnostics (`v1.8.4`)
+## 6. Plane 06 — Universal Zero-Dependency Runtime & Cross-OS Diagnostics (`v1.9.1`)
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
@@ -86,7 +86,7 @@
 
 ---
 
-## 7. Plane 07 — Deterministic `BuildContext` Provenance, Conditional Build-Tag AST & Docs-to-Code Lineage (`v1.7`–`v1.8.4`)
+## 7. Plane 07 — Deterministic `BuildContext` Provenance, Conditional Build-Tag AST & Docs-to-Code Lineage (`v1.7`–`v1.9.1`)
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
@@ -97,3 +97,16 @@
 | **Relative-Path Package Cache Determinism (`v1.8.1`)** | 🟢 **Production (GA)** | `TestDoubleRunDeterminism (24/24)` | Hashes repository-relative paths (`filepath.Rel`) + file sizes + SHA-256 digests so cache fingerprints are checkout-path invariant | `100% Deterministic Fingerprints` |
 | **4-Tier Docs, Specs & Guardrails Lineage Graph** | 🟢 **Production (GA)** | `GET /api/v1/dashboard/docs-graph` & `garuda docs graph` | Connects Documents (ADRs/Specs/Policies) → Extracted Rules (`MUST`/`MUST_NOT`) → Active Guardrails → Governed AST Symbols | `Traceable Normative Lineage` |
 | **Architectural Risk Hub & Blast-Radius Leaderboard** | 🟢 **Production (GA)** | `GET /api/v1/dashboard/talon-hub` | Ranks symbols `0–100` (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`) by caller fan-in, transitive blast radius, and ADR sensitivity | `Pre-Edit Risk Visibility` |
+
+
+---
+
+## 8. Plane 08 — Human-in-the-Loop Formula Disambiguation, Surface Criticality Tiers, Financial Data Audit & Auto-Rulebook (`v1.9.1`)
+
+| Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
+| :--- | :--- | :--- | :--- | :--- |
+| **Multi-Team Formula Disambiguation (`0.0–1.0` Weights)** | 🟢 **Production (GA)** | `garuda audit logic` & `garuda.disambiguate_logic` | Computes `0.00–1.00` team weights (`0.70` active team vs `0.10`/`0.10`), ranks variants by Least Architectural Harm, and persists human decisions in `logic_variants_registry` | `Human-in-the-Loop Mandate (Zero Silent AI Overwrites)` |
+| **3-Tier Surface Criticality Classification** | 🟢 **Production (GA)** | `garuda audit criticality` & `garuda.criticality_tiers` | Classifies surfaces into `HIGH_SEVERE` (`HUMAN_FREEZE_DO_NOT_TOUCH`), `MEDIUM` (`HUMAN_TRADE_OFF_REVIEW`), and `LOW` (`ALLOW_WITH_INFO`) | `Core Search & Settlement Freeze` |
+| **Continuous Financial & Business Data Lineage Audit** | 🟢 **Production (GA)** | `garuda audit financial` & `garuda.audit_financial_discrepancy` | Traces AST & SQL aggregation formulas across teams to catch 10x unit-scaling discrepancies (`48.00 Cr` vs `4.80 Cr`) and omitted cessions pre-audit | `Pre-Audit Crore Normalization (SYNTH-AUDIT-005)` |
+| **Auto-Synthesized Base Rulebook Studio** | 🟢 **Production (GA)** | `garuda rulebook generate/approve` & `garuda.approve_base_rulebook` | Synthesizes unorganized repo rules into `.garuda/DRAFT_BASE_RULEBOOK.md` and seals human-approved baseline into `.garuda/APPROVED_BASE_RULEBOOK.md` | `RFC 6962 SHA-256 Rulebook Seal` |
+| **35-Tool Extended MCP Server (`bin/garuda-mcp`)** | 🟢 **Production (GA)** | `43/43 checks in scripts/mcp_verify.py` + `TestToolArgWhitelistCoversAllTools` | Exposes all 35 tools over stdio JSON-RPC 2.0 with strict argument whitelisting and first-call active contract injection | `100% CLI-to-MCP Parity` |

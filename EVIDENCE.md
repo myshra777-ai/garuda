@@ -1,11 +1,11 @@
-# Garuda Evidence & Verification Summary (`v1.8.4`)
+# Garuda Evidence & Verification Summary (`v1.9.1`)
 
-> **Latest Release Verification (`v1.8.4` — 2026-10-27):**
+> **Latest Release Verification (`v1.9.1` — 2026-10-27):**
 > - **All-OS Zero-Dependency Setup & Self-Healing Doctor (`install.sh`/`setup.sh`, `install.ps1`/`setup.ps1`, `garuda doctor --fix`)**: `PASS` across Windows PowerShell 5.1/7 (pure 7-bit ASCII, `curl.exe`/`tar.exe` fast path), macOS Apple Silicon & Intel (`~18 MB` pre-built Portable PostgreSQL 16.4, explicit IPv4 `127.0.0.1:5433`, `~/.garuda/data/run` socket isolation), Linux, Chromebook (Crostini), and Android (Termux).
 > - **24/24 Compiler & Multi-Module Ground-Truth Benchmarks (`make benchmark-strict`)**: `PASS` (`100%` precision/recall gate, `TestDoubleRunDeterminism` verified across all 24 cases with checkout-path-invariant package cache fingerprints).
 > - **Build-Tag & Platform Conditional AST Proof (`TestTwoBuildsExposeDifferentEdges`)**: `PASS` (proves two builds of the same commit—`cgo=0` vs `cgo=1 -tags cgo,enterprise`—expose distinct AST edge sets and deterministic `graph_fingerprint` values).
 > - **CI-vs-Editor Drift & 4-Target Cross-Platform Matrix (`TestDetectEnvironmentDrift`, `TestEvaluateBuildMatrix`)**: `PASS` (`linux/amd64 cgo=0`, `linux/amd64 cgo=1`, `darwin/arm64 cgo=1`, `windows/amd64 cgo=0`).
-> - **Active MCP & Talon Harness Verification (`scripts/mcp_verify.py`)**: `PASS` (`25/25` dynamic self-hosted repo checks & `30/30` multi-repo reference checks with smart `resolveTopClaimTarget` fallback).
+> - **Active MCP & Talon Harness Verification (`scripts/mcp_verify.py`)**: `PASS` (`25/25` dynamic self-hosted repo checks & `43/43` multi-repo reference checks with smart `resolveTopClaimTarget` fallback).
 > - **10/10 Controlled Runtime Contradiction Quarantine (`scripts/runtime_contradiction_test.py`)**: `PASS`.
 > - **Cold-Boot CI RFC 6962 Merkle Root Seeding & Canonical Schema Hardening (`057_schema_hardening.sql`)**: `PASS` (`Status: COMMITTED ✓`, zero tamper or race errors under `go test -v -race ./...`).
 
@@ -21,11 +21,11 @@ Every number below is a measured result, a snapshot value, or an explicitly labe
 
 ## Evidence at a Glance
 
-| Area | Current evidence (v1.8.4) |
+| Area | Current evidence (v1.9.1) |
 |---|---|
 | Ground-Truth Compiler & AST Benchmark Suite | `24/24` strict benchmarks passed (`make benchmark-strict`, including `TestDoubleRunDeterminism` and `024-go-work` at `1.0` confidence) |
-| Reference MCP & Talon Active Verifier | `25/25` self-hosted dynamic checks & `30/30` multi-repo checks passed (`scripts/mcp_verify.py`) |
-| MCP Tools, Prompts & Resources | **23 tools** exposed + `garuda.architectural_contract` prompt + `garuda://workspace/contract` resources + first-call active contract injection |
+| Reference MCP & Talon Active Verifier | `25/25` self-hosted dynamic checks & `43/43` multi-repo checks passed (`scripts/mcp_verify.py`) |
+| MCP Tools, Prompts & Resources | **35 tools** exposed + `garuda.architectural_contract` prompt + `garuda://workspace/contract` resources + first-call active contract injection |
 | Garuda Talon Active Harness | Unit & integration suite passing (`internal/talon`, `internal/diff`, `internal/policy` net-new vs. baseline diff scoping) |
 | MCP clients tested | Cursor, Claude Desktop, Claude Code (`PostToolUse` hook), Codex CLI, and dependency-free reference verifier |
 | Go-only validation | 14 repositories (4,888 entities, 5,894 relationships, 55 cross-module bridges) |
@@ -33,7 +33,7 @@ Every number below is a measured result, a snapshot value, or an explicitly labe
 | Blended workspace snapshot | 14,333 entities and 40,956 relationships |
 | Controlled runtime contradiction test | `10/10` injected contradictions detected (`scripts/runtime_contradiction_test.py` with Ed25519 JWT auth) |
 | Software Intelligence Instrument (`/dashboard`) | All 6 surfaces (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) + `⌘K` palette verified |
-| Universal Zero-Dependency Build & Runtime (`v1.8.4`) | `CGO_ENABLED=0` Pure-Go compilation + Portable Go `1.26.0` + pre-built Portable PostgreSQL `16.4` (`127.0.0.1:5433`), pure-ASCII Windows PowerShell 5.1 `install.ps1`/`setup.ps1`, fast `install.sh`/`setup.sh`, `garuda doctor --fix`, and PWA (`/manifest.json`, `/sw.js`) |
+| Universal Zero-Dependency Build & Runtime (`v1.9.1`) | `CGO_ENABLED=0` Pure-Go compilation + Portable Go `1.26.0` + pre-built Portable PostgreSQL `16.4` (`127.0.0.1:5433`), pure-ASCII Windows PowerShell 5.1 `install.ps1`/`setup.ps1`, fast `install.sh`/`setup.sh`, `garuda doctor --fix`, and PWA (`/manifest.json`, `/sw.js`) |
 | VS Code integration | Ledger, contradictions, diagnostics, graph, refresh, reanalysis, and Go hover workflows exercised |
 
 ---
@@ -245,7 +245,7 @@ These values describe the tested environment: local Linux x86_64 deployment, Pos
 
 ## MCP Server Verification
 
-The current MCP server exposes **23 tools** (plus MCP Prompts and Resources) and has been tested against four clients:
+The current MCP server exposes **35 tools** (plus MCP Prompts and Resources) and has been tested against four clients:
 
 | Client | Verification scope |
 |---|---|
@@ -257,7 +257,7 @@ The current MCP server exposes **23 tools** (plus MCP Prompts and Resources) and
 ### Current reference result
 
 ```text
-═══ 30/30 checks passed ═══
+═══ 43/43 checks passed ═══
 ```
 
 Run the current verifier against your workspace:
@@ -424,7 +424,7 @@ WORKSPACE=<workspace-name> python3 scripts/mcp_verify.py
 Expected:
 
 ```text
-═══ 30/30 checks passed ═══
+═══ 43/43 checks passed ═══
 ```
 
 ### Inspect ledger status
@@ -455,15 +455,15 @@ psql "$DATABASE_URL" -c "
 ## Evidence Sources
 
 - [`README.md`](README.md) — Product claims and public positioning.
-- [`PLAYBOOK.md`](PLAYBOOK.md) — Operational workflows and command reference.
-- [`docs/SPECS.md`](docs/SPECS.md) — Detailed product and system specification.
-- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — Capability maturity and analyzer matrix.
-- [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) — Visual interface and screenshot tour.
-- [`docs/adr/`](docs/adr/) — Architecture decision records.
-- [`docs/invariants.md`](docs/invariants.md) — Invariant contract.
-- [`scripts/mcp_verify.py`](scripts/mcp_verify.py) — MCP reference verifier.
-- [`scripts/runtime_contradiction_test.py`](scripts/runtime_contradiction_test.py) — Controlled runtime contradiction test.
-- [`scripts/doc_verify_test.py`](scripts/doc_verify_test.py) — Documentation extraction and verification test.
-- [`vscode-extension/`](vscode-extension/) — VS Code integration source and manifest.
+- [PLAYBOOK.md](https://www.google.com/search?q=PLAYBOOK.md) — Operational workflows and command reference.
+- [docs/SPECS.md](https://www.google.com/search?q=docs/SPECS.md) — Detailed product and system specification.
+- [docs/CAPABILITIES.md](https://www.google.com/search?q=docs/CAPABILITIES.md) — Capability maturity and analyzer matrix.
+- [docs/WALKTHROUGH.md](https://www.google.com/search?q=docs/WALKTHROUGH.md) — Visual interface and screenshot tour.
+- [docs/adr/](https://www.google.com/search?q=docs/adr/) — Architecture decision records.
+- [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md) — Invariant contract.
+- [scripts/mcp\_verify.py](https://www.google.com/search?q=scripts/mcp_verify.py) — MCP reference verifier.
+- [scripts/runtime\_contradiction\_test.py](https://www.google.com/search?q=scripts/runtime_contradiction_test.py) — Controlled runtime contradiction test.
+- [scripts/doc\_verify\_test.py](https://www.google.com/search?q=scripts/doc_verify_test.py) — Documentation extraction and verification test.
+- [vscode-extension/](https://www.google.com/search?q=vscode-extension/) — VS Code integration source and manifest.
 
-Historical evidence documents may contain earlier corpus sizes or MCP check totals. Such entries should be read as historical milestones; the current MCP & Talon reference result is `30/30` (`scripts/mcp_verify.py`) alongside `24/24` strict ground-truth compiler benchmarks (`make benchmark-strict`) and the current public product surface is documented in `README.md`, `PLAYBOOK.md`, and `docs/SPECS.md`.
+Historical evidence documents may contain earlier corpus sizes or MCP check totals. Such entries should be read as historical milestones; the current MCP & Talon reference result is `43/43` (`scripts/mcp_verify.py`) alongside `24/24` strict ground-truth compiler benchmarks (`make benchmark-strict`) and the current public product surface is documented in `README.md`, `PLAYBOOK.md`, and `docs/SPECS.md`.

@@ -597,6 +597,111 @@ var allTools = []map[string]interface{}{
 			},
 		},
 	},
+	{
+		"name":        "garuda.decide_logic_variant",
+		"description": "Record a human stakeholder decision (APPROVE_VARIANT, FREEZE_SEVERE, or SET_CUSTOM_WEIGHT) on a competing multi-team formula variant in PostgreSQL.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace":       map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"team":            map[string]interface{}{"type": "string", "description": "Active team role (ops, marketing, management)"},
+				"variant_id":      map[string]interface{}{"type": "string", "description": "Variant ID (e.g. loss_ratio_ops_v1)"},
+				"decision_action": map[string]interface{}{"type": "string", "description": "APPROVE_VARIANT or FREEZE_SEVERE"},
+				"custom_weight":   map[string]interface{}{"type": "number", "description": "Optional custom weight (0.0 to 1.0)"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.reconcile_financial_audit",
+		"description": "Approve and reconcile a flagged cross-team financial discrepancy (e.g. 48 Crore vs 4.8 Crore Claims Paid) in the audit ledger.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace":   map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"audit_id":    map[string]interface{}{"type": "string", "description": "Financial audit item ID"},
+				"approved_by": map[string]interface{}{"type": "string", "description": "Approving Finance Controller or Auditor"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.approve_base_rulebook",
+		"description": "Approve and seal the synthesized draft Base Rulebook into .garuda/APPROVED_BASE_RULEBOOK.md with an RFC 6962 SHA-256 digest.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace":   map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"approved_by": map[string]interface{}{"type": "string", "description": "Approver name or role"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.criticality_tiers",
+		"description": "List or register 3-Tier Surface Criticality classifications (HIGH_SEVERE freeze, MEDIUM trade-off, LOW UI box alignment).",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace":        map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"tier_filter":      map[string]interface{}{"type": "string", "description": "Optional filter: HIGH_SEVERE, MEDIUM, LOW, or ALL"},
+				"surface_name":     map[string]interface{}{"type": "string", "description": "Optional custom surface name to register"},
+				"package_pattern":  map[string]interface{}{"type": "string", "description": "Optional package pattern for custom surface"},
+				"criticality_tier": map[string]interface{}{"type": "string", "description": "Optional tier for custom surface (HIGH_SEVERE, MEDIUM, LOW)"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.docs_graph",
+		"description": "Retrieve the 4-Tier Document-to-Code & Guardrails Lineage Matrix (Documents -> Normative Rules -> Active Policies -> AST Symbols).",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"doc_type":  map[string]interface{}{"type": "string", "description": "Optional filter: ADR, SPEC, POLICY, or ALL"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.docs_ingest",
+		"description": "Ingest Markdown ADRs or design specifications into document_claims and correlate them against workspace AST symbols.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"path":      map[string]interface{}{"type": "string", "description": "File or directory path to ingest (default docs/adr)"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.doctor_diagnose",
+		"description": "Run the Garuda System Doctor diagnostic suite across platform, PostgreSQL, Talon contract, and API gateway health.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.build_matrix_check",
+		"description": "Verify the codebase across the 4-target Cross-Platform Build Matrix (linux/amd64, darwin/arm64, windows/amd64, cgo/purego) and return the deterministic BuildContext receipt.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"repo_dir":  map[string]interface{}{"type": "string", "description": "Repository root path"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.hygiene_report",
+		"description": "Run the static code hygiene analyzer on the workspace graph to report advisory unreferenced candidates, duplicate symbol names, and stdlib alternatives.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"limit":     map[string]interface{}{"type": "number", "description": "Max findings per category (default 25)"},
+			},
+		},
+	},
 }
 
 // toolNames is the derived whitelist of valid tool names. Built once
@@ -680,7 +785,7 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 			"instructions": "Garuda Talon Active Enforcement is enabled. Call garuda.talon_pre_edit before modifying code and garuda.talon_verify_edit immediately after editing to verify 0 net-new policy or ADR violations.",
 			"serverInfo": map[string]interface{}{
 				"name":    "garuda-mcp",
-				"version": "1.9.0",
+				"version": "1.9.1",
 			},
 		},
 	}
@@ -813,6 +918,24 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleAuditFinancialDiscrepancy(args)
 	case "garuda.synthesize_rulebook":
 		result, err = s.handleSynthesizeRulebook(args)
+	case "garuda.decide_logic_variant":
+		result, err = s.handleDecideLogicVariant(args)
+	case "garuda.reconcile_financial_audit":
+		result, err = s.handleReconcileFinancialAudit(args)
+	case "garuda.approve_base_rulebook":
+		result, err = s.handleApproveBaseRulebook(args)
+	case "garuda.criticality_tiers":
+		result, err = s.handleCriticalityTiers(args)
+	case "garuda.docs_graph":
+		result, err = s.handleDocsGraph(args)
+	case "garuda.docs_ingest":
+		result, err = s.handleDocsIngest(args)
+	case "garuda.doctor_diagnose":
+		result, err = s.handleDoctorDiagnose(args)
+	case "garuda.build_matrix_check":
+		result, err = s.handleBuildMatrixCheck(args)
+	case "garuda.hygiene_report":
+		result, err = s.handleHygieneReport(args)
 
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)

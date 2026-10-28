@@ -2,6 +2,25 @@
 
 All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented in this file.
 
+## [v1.9.1] - 2026-10-29 — 35-Tool Extended MCP Integration, Zero-Stub CLI Hardening, Finance & Audit Guide, CLI Decision Matrix & Persona Onboarding Suite
+
+### Added & Fixed
+- **Extended 35-Tool Production MCP Server (`cmd/garuda-mcp/main.go`, `tools_audit.go`, `tools_whitelist.go`, `scripts/mcp_verify.py`)**:
+  - Expanded `bin/garuda-mcp` from 26 to **35 production-grade tools** with full PostgreSQL persistence, strict `toolArgWhitelist` coverage (`TestToolArgWhitelistCoversAllTools`), and **`43/43` passing protocol & functional checks** in `scripts/mcp_verify.py`:
+    - `garuda.disambiguate_logic` & `garuda.decide_logic_variant` (PostgreSQL `logic_variants_registry` 0.0–1.0 team weights & human decision recording)
+    - `garuda.audit_financial_discrepancy` & `garuda.reconcile_financial_audit` (PostgreSQL `financial_audit_reconciliations` 48 Cr vs 4.8 Cr lineage trace & auditor sign-off)
+    - `garuda.synthesize_rulebook` & `garuda.approve_base_rulebook` (PostgreSQL `synthesized_rulebooks` + `.garuda/APPROVED_BASE_RULEBOOK.md` RFC 6962 SHA-256 seal)
+    - `garuda.criticality_tiers` (PostgreSQL `surface_criticality_tiers` `HIGH_SEVERE` / `MEDIUM` / `LOW` surface classification)
+    - `garuda.docs_graph` & `garuda.docs_ingest` (4-tier Document-to-Code lineage matrix & live ADR ingestion)
+    - `garuda.doctor_diagnose`, `garuda.build_matrix_check`, and `garuda.hygiene_report`
+- **Zero-Stub CLI Hardening (`cmd/garuda/governance.go` & `cmd/garuda/audit_cmd.go`)**:
+  - Replaced the legacy `handleMCPInstall` placeholder in `cmd/garuda/governance.go` with full execution of `talonInitCmd` (`garuda mcp install` now compiles `.garuda/TALON_CONTRACT.md` and installs all 6 IDE, MCP, and Git hooks).
+  - Upgraded `garuda audit logic`, `garuda audit financial`, `garuda audit criticality`, and `garuda rulebook generate/approve` (`cmd/garuda/audit_cmd.go`) to persist and synchronize directly with PostgreSQL tables (`093_human_in_the_loop_audit_rulebook.sql`).
+- **Complete Role-Based Documentation Suite (`README.md`, `docs/FINANCE_AND_AUDIT_GUIDE.md`, `docs/CLI_DECISION_GUIDE.md`, `docs/PERSONA_ONBOARDING_GUIDE.md`, `PLAYBOOK.md`, `docs/SPECS.md`, `docs/API.md`, `docs/CAPABILITIES.md`, `docs/WALKTHROUGH.md`, `INSTALL.md`, `EVIDENCE.md`)**:
+  - Created [`docs/FINANCE_AND_AUDIT_GUIDE.md`](docs/FINANCE_AND_AUDIT_GUIDE.md) for Finance Controllers, CFOs, Actuaries, and Statutory Auditors.
+  - Created [`docs/CLI_DECISION_GUIDE.md`](docs/CLI_DECISION_GUIDE.md) with a complete "How & When to Use What CLI Command & MCP Tool" decision matrix.
+  - Created [`docs/PERSONA_ONBOARDING_GUIDE.md`](docs/PERSONA_ONBOARDING_GUIDE.md) with 5-minute onboarding paths for all 7 user personas.
+
 ## [v1.9.0] - 2026-10-28 — Human-in-the-Loop Weighted Logic Disambiguation (0.0–1.0), Surface Criticality Tiers, Financial/Data Audit Reconciliation, Auto-Rulebook Synthesis & Bulletproof Postgres Handshake
 
 ### Added & Fixed

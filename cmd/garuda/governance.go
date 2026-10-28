@@ -287,6 +287,12 @@ func handleIngest(repoPath string) {
 }
 
 func handleMCPInstall() {
-	fmt.Println("🔌 Registering Garuda MCP Bridge...")
-	fmt.Println("✓ Injection complete (placeholder).")
+	fmt.Println("🔌 Registering Garuda MCP Bridge & Active Talon Harness across Cursor, Claude Desktop & Claude Code...")
+	if talonInitCmd != nil && talonInitCmd.RunE != nil {
+		if err := talonInitCmd.RunE(talonInitCmd, []string{"."}); err != nil {
+			fmt.Fprintf(os.Stderr, "❌ MCP & Talon hook installation failed: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	fmt.Println("✓ Garuda MCP Server (35 tools) & Active Talon Harness registered!")
 }

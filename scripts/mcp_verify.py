@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-mcp_verify.py — spec-compliance, graph-intelligence, and Garuda Talon active
-enforcement verification for bin/garuda-mcp.
+mcp_verify.py — spec-compliance, graph-intelligence, Garuda Talon active
+enforcement, and v1.9.1 Human-in-the-Loop / Financial Audit / Rulebook /
+Criticality / Docs-Graph / Doctor / Matrix verification for bin/garuda-mcp.
 
 Dynamically discovers entities and interfaces from the active workspace (no hardcoded
 repository names or magic edge counts) and loads .env automatically if present.
@@ -78,7 +79,7 @@ def main():
     env = dict(os.environ)
     env.setdefault(
         "DATABASE_URL",
-        "postgres://test:test@localhost:5433/garuda_test?sslmode=disable",
+        "postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable",
     )
     env["GARUDA_MCP_QUIET"] = "1"
     env["GARUDA_TALON_ENFORCE"] = "true"
@@ -101,7 +102,7 @@ def main():
             "params": {
                 "protocolVersion": "2025-06-18",
                 "capabilities": {},
-                "clientInfo": {"name": "python-verify", "version": "1.5"},
+                "clientInfo": {"name": "python-verify", "version": "1.9.1"},
             },
         })
         init = read_response(proc)
@@ -121,7 +122,7 @@ def main():
         tl = read_response(proc)
         results.append(expect(tl.get("id") == 2, "tools/list id == 2 (no notification response)"))
         tools = tl.get("result", {}).get("tools", [])
-        results.append(expect(len(tools) >= 23, f"tools/list >= 23 tools (got {len(tools)})"))
+        results.append(expect(len(tools) >= 35, f"tools/list >= 35 tools (got {len(tools)})"))
 
         names = {t["name"] for t in tools}
         for expected in (
@@ -138,8 +139,17 @@ def main():
             "garuda.talon_pre_edit",
             "garuda.talon_verify_edit",
             "garuda.disambiguate_logic",
+            "garuda.decide_logic_variant",
             "garuda.audit_financial_discrepancy",
+            "garuda.reconcile_financial_audit",
             "garuda.synthesize_rulebook",
+            "garuda.approve_base_rulebook",
+            "garuda.criticality_tiers",
+            "garuda.docs_graph",
+            "garuda.docs_ingest",
+            "garuda.doctor_diagnose",
+            "garuda.build_matrix_check",
+            "garuda.hygiene_report",
         ):
             results.append(expect(expected in names, f"tool {expected} present"))
 
@@ -332,13 +342,56 @@ def main():
             "resources/list exposes garuda://workspace/contract",
         ))
 
-        # 12. Negative path: unknown tool name
+        # 12. Extended v1.9.1 MCP tools verification (Logic Weights, Financial Audit, Rulebook, Criticality, Docs Graph, Doctor)
         send(proc, {
             "jsonrpc": "2.0", "id": 14, "method": "tools/call",
+            "params": {"name": "garuda.disambiguate_logic", "arguments": {"workspace": WORKSPACE, "team": "ops"}},
+        })
+        dl = unpack_tool_payload(read_response(proc), "garuda.disambiguate_logic")
+        results.append(expect(len(dl.get("variants", [])) == 3, "garuda.disambiguate_logic returns 3 weighted team variants"))
+
+        send(proc, {
+            "jsonrpc": "2.0", "id": 15, "method": "tools/call",
+            "params": {"name": "garuda.audit_financial_discrepancy", "arguments": {"workspace": WORKSPACE}},
+        })
+        af = unpack_tool_payload(read_response(proc), "garuda.audit_financial_discrepancy")
+        results.append(expect(af.get("variance_ratio") == 10.0, "garuda.audit_financial_discrepancy detects 10x Crore discrepancy"))
+
+        send(proc, {
+            "jsonrpc": "2.0", "id": 16, "method": "tools/call",
+            "params": {"name": "garuda.criticality_tiers", "arguments": {"workspace": WORKSPACE}},
+        })
+        ct = unpack_tool_payload(read_response(proc), "garuda.criticality_tiers")
+        results.append(expect(ct.get("count", 0) >= 4, "garuda.criticality_tiers returns HIGH_SEVERE, MEDIUM, and LOW surfaces"))
+
+        send(proc, {
+            "jsonrpc": "2.0", "id": 17, "method": "tools/call",
+            "params": {"name": "garuda.synthesize_rulebook", "arguments": {"workspace": WORKSPACE}},
+        })
+        sr = unpack_tool_payload(read_response(proc), "garuda.synthesize_rulebook")
+        results.append(expect(sr.get("rules_inferred") == 6, "garuda.synthesize_rulebook synthesizes 6 base rules"))
+
+        send(proc, {
+            "jsonrpc": "2.0", "id": 18, "method": "tools/call",
+            "params": {"name": "garuda.docs_graph", "arguments": {"workspace": WORKSPACE}},
+        })
+        dg = unpack_tool_payload(read_response(proc), "garuda.docs_graph")
+        results.append(expect(dg.get("components_count", 0) >= 1, "garuda.docs_graph returns 4-tier lineage components"))
+
+        send(proc, {
+            "jsonrpc": "2.0", "id": 19, "method": "tools/call",
+            "params": {"name": "garuda.doctor_diagnose", "arguments": {"workspace": WORKSPACE}},
+        })
+        dd = unpack_tool_payload(read_response(proc), "garuda.doctor_diagnose")
+        results.append(expect(dd.get("healthy") is True, "garuda.doctor_diagnose confirms healthy database & runtime"))
+
+        # 13. Negative path: unknown tool name
+        send(proc, {
+            "jsonrpc": "2.0", "id": 20, "method": "tools/call",
             "params": {"name": "garuda.nonexistent", "arguments": {}},
         })
         unk = read_response(proc)
-        results.append(expect(unk.get("id") == 14, "unknown tool id == 14"))
+        results.append(expect(unk.get("id") == 20, "unknown tool id == 20"))
         results.append(expect(
             unk.get("error", {}).get("code") == -32601,
             "unknown tool returns -32601"))
