@@ -19,8 +19,12 @@ function Invoke-QuietCmd([string]$CommandLine) {
     $oldPref = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        cmd.exe /c "$CommandLine"
-        return $LASTEXITCODE
+        # Stream output to the console and return only the native exit code.
+        # Without this, assignments capture git's stdout along with the code and
+        # a successful clone can be misread as a failure.
+        cmd.exe /c "$CommandLine" 2>&1 | ForEach-Object { Write-Host $_ }
+        $commandExit = $LASTEXITCODE
+        return $commandExit
     } finally {
         $ErrorActionPreference = $oldPref
     }
