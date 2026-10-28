@@ -346,11 +346,11 @@ Write-Host "[6/7] Running Architectural Summary & Talon Guard..." -ForegroundCol
 $summaryExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" summary"
 if ($summaryExit -ne 0) { throw "Garuda summary failed with exit code $summaryExit." }
 $guardExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" talon guard --workspace `"$Workspace`" --policies policies --auto-index=false"
-if ($guardExit -ne 0) { Write-Host "  [WARN] Talon guard returned exit code $guardExit. Review findings above; policy blocks are not hidden." -ForegroundColor Yellow }$Workspace`" --policies policies --auto-index=false"
+if ($guardExit -ne 0) { Write-Host "  [WARN] Talon guard returned exit code $guardExit. Review findings above; policy blocks are not hidden." -ForegroundColor Yellow }
 
 # 7. Run Garuda Doctor & Open Browser
 Write-Host "[7/7] Running Garuda System Doctor..." -ForegroundColor Yellow
-$doctorExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" doctor
+$doctorExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" doctor"
 if ($doctorExit -ne 0) { Write-Host "  [WARN] System Doctor returned exit code $doctorExit. Review diagnostics above." -ForegroundColor Yellow }
 
 Write-Host ""
