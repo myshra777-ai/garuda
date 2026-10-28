@@ -309,7 +309,12 @@ Write-Host "  [OK] Built bin\garuda.exe, bin\garuda-api.exe, bin\garuda-mcp.exe,
 Write-Host "[4/7] Running migrations, provisioning account, indexing workspace, and activating Garuda Talon..." -ForegroundColor Yellow
 $initExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" init --workspace `"$Workspace`" --email `"$Email`" --password `"$Password`" --skip-scan"
 if ($initExit -ne 0) {
-    throw "garuda.exe init failed with exit code $initExit"
+    $pgLog = Join-Path $DataDir "postgres.log"
+    if (Test-Path $pgLog) {
+        Write-Host "  --- Last 100 lines of PostgreSQL log ---" -ForegroundColor Red
+        Get-Content $pgLog -Tail 100 | ForEach-Object { Write-Host $_ }
+    }
+    throw "garuda.exe init failed with exit code $initExit. PostgreSQL logs (if present) were printed above; log path: $pgLog."
 }
 
 # 5. Start Garuda API Gateway in Background
