@@ -5,6 +5,8 @@ on:
     paths:
       - "setup.ps1"
       - "install.ps1"
+      - "install.sh"
+      - "setup.sh"
       - ".github/workflows/windows-installer-smoke.yml"
   push:
     branches: [main]
@@ -65,3 +67,15 @@ jobs:
             }
           }
           Write-Host "PASS: Windows installer reliability contracts are present"
+
+  shell-installer-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell installer syntax
+        run: |
+          bash -n install.sh
+          bash -n setup.sh
+          grep -q 'Tracked local changes found' install.sh
+          grep -q 'Local commits exist' install.sh
+          echo "PASS: shell installers parse and protect local commits"
