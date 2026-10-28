@@ -106,7 +106,7 @@ Run each stage in order. Record command output, pass/fail, elapsed time, and any
 - Fresh Windows PowerShell 5.1 installation with no Go/PostgreSQL preinstalled.
 - Fresh Windows PowerShell 7 installation if available.
 - First install when port 8080 is occupied; expected behavior is an actionable conflict message, not killing an unrelated process silently.
-- First install when port 5433 is occupied by a non-PostgreSQL listener; installer must not report a healthy database based only on a TCP connection.
+- First install when port 5433 is occupied by a non-PostgreSQL listener; installer must not complete successfully based only on a TCP connection; it must fail clearly when the Garuda CLI cannot authenticate to a PostgreSQL database.
 - PostgreSQL not yet ready; verify the installer waits for database readiness, or fails with a focused error and the PostgreSQL log location.
 - Network interruption/download failure during portable toolchain download; verify retry and cleanup behavior.
 - Re-run setup after successful installation; verify idempotence and no duplicate accounts/workspaces/migrations.
