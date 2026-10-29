@@ -157,8 +157,7 @@ func AnalyzeWorkspaceWithOptions(ctx context.Context, ws *WorkspaceContext, opts
 		}
 	}
 
-	// Include active matched file count in fingerprint
-	repoHasher.Write(fmt.Appendf(nil, "active_files=%d:skipped=%d", result.Stats.Files, skippedCount))
+	// Graph fingerprint is derived deterministically from build context and package tree hashes (identical across cold & warm cached runs)
 	result.Fingerprint = fmt.Sprintf("%x", repoHasher.Sum(nil))
 	buildCtx.ActiveFilesCount = result.Stats.Files
 	buildCtx.SkippedByBuildTagsCount = skippedCount
