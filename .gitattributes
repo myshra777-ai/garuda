@@ -1,0 +1,13 @@
+# Git archive exclusions to keep source tarballs lean (<10 MB) and free of recursive artifacts
+dist/** export-ignore
+/dist export-ignore
+bin/** export-ignore
+/bin export-ignore
+.garuda/** export-ignore
+/.garuda export-ignore
+refund-api/refund-api export-ignore
+refund-api/bin/** export-ignore
+test/benchmark/results/** export-ignore
+install_garuda_*.sh export-ignore
+install_garuda_*.bash export-ignore
+update_garuda_*.sh export-ignore

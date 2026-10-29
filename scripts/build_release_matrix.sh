@@ -1,32 +1,29 @@
 #!/usr/bin/env bash
 # ===========================================================================
-# GARUDA v1.9.1 MULTI-OS RELEASE & PACKAGE MATRIX BUILDER
+# GARUDA v1.9.2 MULTI-OS RELEASE & PACKAGE MATRIX BUILDER
 # ===========================================================================
 # Cross-compiles 100% standalone zero-CGO (CGO_ENABLED=0) release archives
 # and OS-native package manifests for:
-#   1. Windows 10/11 (x64 / amd64)             -> garuda-v1.9.1-windows-amd64.zip
-#   2. Windows 11 ARM64 (Snapdragon)           -> garuda-v1.9.1-windows-arm64.zip
-#   3. macOS Apple Silicon (M1/M2/M3/M4 arm64) -> garuda-v1.9.1-darwin-arm64.tar.gz
-#   4. macOS Intel (x86_64 / amd64)            -> garuda-v1.9.1-darwin-amd64.tar.gz
-#   5. Linux x86_64 (Ubuntu/Debian/RHEL/WSL2)  -> garuda-v1.9.1-linux-amd64.tar.gz + .deb
-#   6. Linux ARM64 & Chromebook (Crostini)     -> garuda-v1.9.1-linux-arm64.tar.gz + .deb
-#   7. Android Termux (ARM64)                  -> garuda-v1.9.1-android-arm64-termux.tar.gz
-#   8. FreeBSD x86_64                          -> garuda-v1.9.1-freebsd-amd64.tar.gz
-#   9. Source & Universal Installer Bundle     -> garuda-v1.9.1-universal-source.tar.gz
-#  10. Package Manager Manifests:
-#        - packaging/homebrew/garuda.rb        (macOS & Linux Homebrew Formula)
-#        - packaging/winget/garuda.yaml        (Windows Winget Manifest)
-#        - packaging/scoop/garuda.json         (Windows Scoop Manifest)
-#        - packaging/choco/garuda.nuspec       (Windows Chocolatey Package Spec)
-#        - packaging/aur/PKGBUILD              (Arch Linux AUR Package)
-#        - packaging/rpm/garuda.spec           (Fedora / RHEL / Rocky RPM Spec)
-#        - dist/SHA256SUMS.txt                 (Cryptographic SHA-256 Checksums)
+#   1. Windows 10/11 (x64 / amd64)             -> garuda-v1.9.2-windows-amd64.zip
+#   2. Windows 11 ARM64 (Snapdragon)           -> garuda-v1.9.2-windows-arm64.zip
+#   3. macOS Apple Silicon (M1/M2/M3/M4 arm64) -> garuda-v1.9.2-darwin-arm64.tar.gz
+#   4. macOS Intel (x86_64 / amd64)            -> garuda-v1.9.2-darwin-amd64.tar.gz
+#   5. Linux x86_64 (Ubuntu/Debian/RHEL/WSL2)  -> garuda-v1.9.2-linux-amd64.tar.gz + .deb
+#   6. Linux ARM64 & Chromebook (Crostini)     -> garuda-v1.9.2-linux-arm64.tar.gz + .deb
+#   7. Android Termux (ARM64)                  -> garuda-v1.9.2-android-arm64-termux.tar.gz
+#   8. FreeBSD x86_64                          -> garuda-v1.9.2-freebsd-amd64.tar.gz
+#   9. Source & Universal Installer Bundle     -> garuda-v1.9.2-universal-source.tar.gz
+#
+# NOTE: dist/ is git-ignored and NEVER committed into Git so the repository
+# and universal source tarball stay lean (~5-8 MB instead of 255 MB).
 # ===========================================================================
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-VERSION="${GARUDA_VERSION:-v1.9.1}"
+DEFAULT_VER="$(tr -d '[:space:]' < version.txt 2>/dev/null || echo 'v1.9.2')"
+[[ -z "$DEFAULT_VER" ]] && DEFAULT_VER="v1.9.2"
+VERSION="${GARUDA_VERSION:-$DEFAULT_VER}"
 VERSION_NO_V="${VERSION#v}"
 OUT_DIR="${1:-dist}"
 rm -rf "$OUT_DIR"
@@ -36,7 +33,6 @@ if [[ -x "$HOME/.garuda/toolchain/go/bin/go" ]]; then
     export PATH="$HOME/.garuda/toolchain/go/bin:$PATH"
 fi
 
-COMMIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo 'v1.9.1')"
 LDFLAGS="-s -w -X main.version=${VERSION}"
 
 TARGETS=(
@@ -111,9 +107,10 @@ for entry in "${TARGETS[@]}"; do
     CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags="$LDFLAGS" -o "${STAGE_DIR}/bin/garuda-api${EXT}" ./cmd/garuda-api
     CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags="$LDFLAGS" -o "${STAGE_DIR}/bin/garuda-mcp${EXT}" ./cmd/garuda-mcp
     CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags="$LDFLAGS" -o "${STAGE_DIR}/bin/garuda-talon${EXT}" ./cmd/garuda-talon
+    echo "prebuilt" > "${STAGE_DIR}/bin/.build_stamp"
 
-    cp -r migrations policies "${STAGE_DIR}/"
-    cp setup.sh setup.ps1 install.sh install.ps1 README.md INSTALL.md PLAYBOOK.md CHANGELOG.md EVIDENCE.md LICENSE "${STAGE_DIR}/" 2>/dev/null || true
+    cp -r migrations policies cmd internal "${STAGE_DIR}/"
+    cp go.mod go.sum version.txt setup.sh setup.ps1 install.sh install.ps1 README.md INSTALL.md PLAYBOOK.md CHANGELOG.md EVIDENCE.md LICENSE "${STAGE_DIR}/" 2>/dev/null || true
     [[ -f RELEASE_NOTES.md ]] && cp RELEASE_NOTES.md "${STAGE_DIR}/"
     cp docs/*.md "${STAGE_DIR}/docs/" 2>/dev/null || true
     cp scripts/mcp_verify.py "${STAGE_DIR}/scripts/" 2>/dev/null || true
@@ -138,10 +135,22 @@ for entry in "${TARGETS[@]}"; do
     rm -rf "$STAGE_DIR"
 done
 
-# Package universal source & 1-command installer archive
-git archive --format=tar.gz --prefix="garuda-${VERSION}-universal/" HEAD -o "${OUT_DIR}/garuda-${VERSION}-universal-source.tar.gz" 2>/dev/null || \
-    tar --exclude='./.git' --exclude="./${OUT_DIR}" --exclude='./bin' -czf "${OUT_DIR}/garuda-${VERSION}-universal-source.tar.gz" .
-echo "  [OK] Packaged ${OUT_DIR}/garuda-${VERSION}-universal-source.tar.gz"
+# Package lean universal source & 1-command installer archive (strictly excluding dist/, bin/, .git/, .garuda/)
+STAGE_SRC="${OUT_DIR}/garuda-${VERSION}-universal"
+mkdir -p "$STAGE_SRC"
+tar --exclude='./.git' \
+    --exclude="./${OUT_DIR}" \
+    --exclude='./dist' \
+    --exclude='./bin' \
+    --exclude='./.garuda' \
+    --exclude='./refund-api/refund-api' \
+    --exclude='./refund-api/bin' \
+    --exclude='./install_garuda_*.sh' \
+    --exclude='./install_garuda_*.bash' \
+    -cf - . | (cd "$STAGE_SRC" && tar -xf -)
+tar -czf "${OUT_DIR}/garuda-${VERSION}-universal-source.tar.gz" -C "$OUT_DIR" "garuda-${VERSION}-universal"
+rm -rf "$STAGE_SRC"
+echo "  [OK] Packaged lean ${OUT_DIR}/garuda-${VERSION}-universal-source.tar.gz"
 
 # Copy 1-click installer scripts & release notes into dist/ for direct GitHub Release attachment
 cp install.sh install.ps1 setup.sh setup.ps1 "${OUT_DIR}/" 2>/dev/null || true
@@ -159,4 +168,5 @@ cp install.sh install.ps1 setup.sh setup.ps1 "${OUT_DIR}/" 2>/dev/null || true
 echo "  [OK] Generated ${OUT_DIR}/SHA256SUMS.txt"
 echo "==================================================================="
 echo "[SUCCESS] All Garuda ${VERSION} multi-OS release packages built in ${OUT_DIR}/"
+echo "NOTE: dist/ is git-ignored; attach dist/* to GitHub Releases via 'gh release upload' or CI."
 echo "==================================================================="

@@ -1,5 +1,5 @@
 # ===========================================================================
-# GARUDA v1.9.1 ZERO-DEPENDENCY WINDOWS POWERSHELL SETUP (setup.ps1)
+# GARUDA v1.9.2 ZERO-DEPENDENCY WINDOWS POWERSHELL SETUP (setup.ps1)
 # ===========================================================================
 # Usage (from Windows PowerShell 5.1 or PowerShell 7 -- no Admin, Go,
 # PostgreSQL, GCC, or Docker required):
@@ -255,33 +255,39 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
 }
 Write-Host "  [OK] PostgreSQL is online and ready on 127.0.0.1:5433" -ForegroundColor Green
 
-# 3. Ensure Go Toolchain & Build Garuda Binaries in 1 Command (Zero manual install required)
+# 3. Ensure Go Toolchain (or use pre-compiled release binaries)
 Write-Host "[3/7] Preparing Garuda binaries (garuda.exe, garuda-api.exe, garuda-mcp.exe, garuda-talon.exe)..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path "bin" | Out-Null
+$StampFile = "bin\.build_stamp"
+$StampVal = if (Test-Path $StampFile) { (Get-Content $StampFile -Raw).Trim() } else { "" }
 
-$PortableGoBin = Join-Path $ToolchainDir "go\bin"
-if (Test-Path (Join-Path $PortableGoBin "go.exe")) {
-    $env:PATH = "$PortableGoBin;$env:PATH"
-}
+if ((Test-Path "bin\garuda.exe") -and (Test-Path "bin\garuda-api.exe") -and (Test-Path "bin\garuda-mcp.exe") -and (Test-Path "bin\garuda-talon.exe") -and (($StampVal -eq "prebuilt") -or (-not (Test-Path ".\cmd\garuda")))) {
+    Write-Host "  [OK] Pre-compiled Garuda binaries verified in bin\ (skipping Go download & rebuild)" -ForegroundColor Green
+} else {
+    $PortableGoBin = Join-Path $ToolchainDir "go\bin"
+    if (Test-Path (Join-Path $PortableGoBin "go.exe")) {
+        $env:PATH = "$PortableGoBin;$env:PATH"
+    }
 
-if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
-    Write-Host "  [*] Go not installed -- downloading Portable Go 1.26 into $ToolchainDir\go (no Admin required)..." -ForegroundColor Cyan
-    $Arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM64") { "arm64" } else { "amd64" }
-    $GoZip = Join-Path $ToolchainDir "go1.26.0.windows-$Arch.zip"
-    $GoUrl = "https://go.dev/dl/go1.26.0.windows-$Arch.zip"
-    Download-FileFast $GoUrl $GoZip
-    Write-Host "  [*] Extracting Portable Go toolchain..."
-    Extract-ArchiveFast $GoZip $ToolchainDir
-    Remove-Item $GoZip -Force -ErrorAction SilentlyContinue
-    $env:PATH = "$PortableGoBin;$env:PATH"
-}
+    if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
+        Write-Host "  [*] Go not installed -- downloading Portable Go 1.26 into $ToolchainDir\go (no Admin required)..." -ForegroundColor Cyan
+        $Arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM64") { "arm64" } else { "amd64" }
+        $GoZip = Join-Path $ToolchainDir "go1.26.0.windows-$Arch.zip"
+        $GoUrl = "https://go.dev/dl/go1.26.0.windows-$Arch.zip"
+        Download-FileFast $GoUrl $GoZip
+        Write-Host "  [*] Extracting Portable Go toolchain..."
+        Extract-ArchiveFast $GoZip $ToolchainDir
+        Remove-Item $GoZip -Force -ErrorAction SilentlyContinue
+        $env:PATH = "$PortableGoBin;$env:PATH"
+    }
 
-Write-Host "  [*] Compiling all 4 Garuda binaries in 1 pass with CGO_ENABLED=0..."
-$bCode = Invoke-LoggedCmd "go build -o bin\ .\cmd\garuda .\cmd\garuda-api .\cmd\garuda-mcp .\cmd\garuda-talon"
-if ($bCode -ne 0 -or (-not (Test-Path "bin\garuda.exe"))) {
-    throw "Failed to compile Garuda binaries into .\bin\"
+    Write-Host "  [*] Compiling all 4 Garuda binaries in 1 pass with CGO_ENABLED=0..."
+    $bCode = Invoke-LoggedCmd "go build -o bin\ .\cmd\garuda .\cmd\garuda-api .\cmd\garuda-mcp .\cmd\garuda-talon"
+    if ($bCode -ne 0 -or (-not (Test-Path "bin\garuda.exe"))) {
+        throw "Failed to compile Garuda binaries into .\bin\"
+    }
+    Write-Host "  [OK] Built bin\garuda.exe, bin\garuda-api.exe, bin\garuda-mcp.exe, bin\garuda-talon.exe" -ForegroundColor Green
 }
-Write-Host "  [OK] Built bin\garuda.exe, bin\garuda-api.exe, bin\garuda-mcp.exe, bin\garuda-talon.exe" -ForegroundColor Green
 
 # 4. Run 1-Command Initialization (Migrations, .env, Owner Account, AST Scan, Active MCP & Talon Hooks)
 Write-Host "[4/7] Running migrations, provisioning account, indexing workspace, and activating Garuda Talon..." -ForegroundColor Yellow
@@ -315,7 +321,7 @@ $null = Invoke-LoggedCmd "`".\bin\garuda.exe`" doctor"
 
 Write-Host ""
 Write-Host "===================================================================" -ForegroundColor Green
-Write-Host "[OK] GARUDA v1.9.1 + TALON IS 100% CONFIGURED & ONLINE ON WINDOWS!" -ForegroundColor Green
+Write-Host "[OK] GARUDA v1.9.2 + TALON IS 100% CONFIGURED & ONLINE ON WINDOWS!" -ForegroundColor Green
 Write-Host "   * Web Dashboard:  http://localhost:$Port/login"
 Write-Host "   * Email / Pass:   $Email / $Password"
 Write-Host "   * System Doctor:  .\bin\garuda.exe doctor"

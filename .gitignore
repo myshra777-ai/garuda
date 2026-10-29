@@ -154,3 +154,16 @@ docs/specs/tenant-tabs.md
 # Demo recording scratch artifacts
 garuda_video_build/
 internal/api/bad_violation.go
+
+# Release packages & build outputs (never commit to git)
+/dist/
+dist/
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+/refund-api/refund-api
+/refund-api/bin/
+install_garuda_*.sh
+install_garuda_*.bash
+update_garuda_*.sh

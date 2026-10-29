@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ===========================================================================
-# GARUDA v1.9.1 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
+# GARUDA v1.9.2 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
 # ===========================================================================
 # Supports macOS (Intel & Apple Silicon), Linux, Windows WSL2, Chromebook, Android
 # Usage:
@@ -89,7 +89,7 @@ export HOMEBREW_NO_INSTALL_CLEANUP=1
 export HOMEBREW_NO_ENV_HINTS=1
 
 echo "==================================================================="
-echo "GARUDA v1.9.1 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
+echo "GARUDA v1.9.2 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
 echo "==================================================================="
 echo "  * Detected Owner:     ${OWNER_EMAIL}"
 echo "  * Target Workspace:   ${WORKSPACE}"
@@ -329,42 +329,51 @@ if ! provision_pg_role_and_db; then
 fi
 echo "  [OK] PostgreSQL connection & 'garuda_test' database verified on 127.0.0.1:5433"
 
-# 3. Bootstrap Portable Go Toolchain (matching go.mod so Go never downloads twice!) & Compile in 1 Pass
-echo "[3/8] Preparing Go toolchain and compiling Garuda binaries..."
-if [[ -x "${TOOLCHAIN_DIR}/go/bin/go" ]]; then
-    export PATH="${TOOLCHAIN_DIR}/go/bin:$PATH"
-fi
-
-REQUIRED_GO_VER="$(awk '/^go [0-9]+\.[0-9]+/ {print $2; exit}' go.mod 2>/dev/null || echo "1.26.0")"
-[[ -z "$REQUIRED_GO_VER" ]] && REQUIRED_GO_VER="1.26.0"
-
-if ! command -v go >/dev/null 2>&1; then
-    if [[ "$IS_TERMUX" == "true" ]]; then
-        echo "  [*] Installing Go for Android Termux..."
-        pkg install -y golang
-    else
-        GO_TAR="go${REQUIRED_GO_VER}.${PLATFORM_OS}-${PLATFORM_ARCH}.tar.gz"
-        echo "  [*] Go not found -- downloading Portable Go ${REQUIRED_GO_VER} (${GO_TAR}) into ${TOOLCHAIN_DIR}/go (no sudo required)..."
-        rm -rf "${TOOLCHAIN_DIR}/go"
-        if ! curl -fsSL "https://go.dev/dl/${GO_TAR}" | tar -xz -C "$TOOLCHAIN_DIR" 2>/dev/null; then
-            GO_TAR="go1.24.0.${PLATFORM_OS}-${PLATFORM_ARCH}.tar.gz"
-            curl -fsSL "https://go.dev/dl/${GO_TAR}" | tar -xz -C "$TOOLCHAIN_DIR"
-        fi
-        export PATH="${TOOLCHAIN_DIR}/go/bin:$PATH"
-    fi
-fi
-
-echo "  * Compiling with $(go version) [CGO_ENABLED=${CGO_ENABLED}]..."
+# 3. Bootstrap Portable Go Toolchain (or use pre-compiled release binaries) & Sync Global PATH
+echo "[3/8] Preparing Garuda binaries (bin/garuda, bin/garuda-api, bin/garuda-mcp, bin/garuda-talon)..."
 mkdir -p bin
 CURRENT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo "local")"
 BUILD_STAMP_FILE="bin/.build_stamp"
-if [[ -x bin/garuda && -x bin/garuda-api && -x bin/garuda-mcp && -x bin/garuda-talon && -f "$BUILD_STAMP_FILE" ]] && [[ "$(cat "$BUILD_STAMP_FILE" 2>/dev/null)" == "$CURRENT_COMMIT" ]] && [[ -z "$(git status --porcelain -- './cmd' './internal' 2>/dev/null || true)" ]]; then
-    echo "  [OK] Binaries already up-to-date for commit ${CURRENT_COMMIT:0:12} (skipping rebuild)"
+STAMP_VAL="$(cat "$BUILD_STAMP_FILE" 2>/dev/null || echo "")"
+
+if [[ -x bin/garuda && -x bin/garuda-api && -x bin/garuda-mcp && -x bin/garuda-talon ]] && { [[ "$STAMP_VAL" == "prebuilt" ]] || [[ ! -d "./cmd/garuda" ]] || { [[ "$STAMP_VAL" == "$CURRENT_COMMIT" ]] && [[ -z "$(git status --porcelain -- './cmd' './internal' 2>/dev/null || true)" ]]; }; }; then
+    echo "  [OK] Pre-built / up-to-date Garuda binaries verified in bin/ (skipping rebuild)"
 else
+    if [[ -x "${TOOLCHAIN_DIR}/go/bin/go" ]]; then
+        export PATH="${TOOLCHAIN_DIR}/go/bin:$PATH"
+    fi
+    REQUIRED_GO_VER="$(awk '/^go [0-9]+\.[0-9]+/ {print $2; exit}' go.mod 2>/dev/null || echo "1.26.0")"
+    [[ -z "$REQUIRED_GO_VER" ]] && REQUIRED_GO_VER="1.26.0"
+
+    if ! command -v go >/dev/null 2>&1; then
+        if [[ "$IS_TERMUX" == "true" ]]; then
+            echo "  [*] Installing Go for Android Termux..."
+            pkg install -y golang
+        else
+            GO_TAR="go${REQUIRED_GO_VER}.${PLATFORM_OS}-${PLATFORM_ARCH}.tar.gz"
+            echo "  [*] Go not found -- downloading Portable Go ${REQUIRED_GO_VER} (${GO_TAR}) into ${TOOLCHAIN_DIR}/go (no sudo required)..."
+            rm -rf "${TOOLCHAIN_DIR}/go"
+            if ! curl -fsSL "https://go.dev/dl/${GO_TAR}" | tar -xz -C "$TOOLCHAIN_DIR" 2>/dev/null; then
+                GO_TAR="go1.24.0.${PLATFORM_OS}-${PLATFORM_ARCH}.tar.gz"
+                curl -fsSL "https://go.dev/dl/${GO_TAR}" | tar -xz -C "$TOOLCHAIN_DIR"
+            fi
+            export PATH="${TOOLCHAIN_DIR}/go/bin:$PATH"
+        fi
+    fi
+
+    echo "  * Compiling with $(go version) [CGO_ENABLED=${CGO_ENABLED}]..."
     go build -o bin/ ./cmd/garuda ./cmd/garuda-api ./cmd/garuda-mcp ./cmd/garuda-talon
     echo "$CURRENT_COMMIT" > "$BUILD_STAMP_FILE"
     echo "  [OK] Built bin/garuda, bin/garuda-api, bin/garuda-mcp, bin/garuda-talon"
 fi
+
+# Sync fresh binaries into user PATH directories (~/.local/bin, ~/go/bin, /usr/local/bin if writable)
+mkdir -p "$HOME/.local/bin" 2>/dev/null || true
+for target_bin_dir in "$HOME/.local/bin" "$HOME/go/bin" "/usr/local/bin"; do
+    if [[ -d "$target_bin_dir" && -w "$target_bin_dir" ]]; then
+        cp -f bin/garuda bin/garuda-api bin/garuda-mcp bin/garuda-talon "$target_bin_dir/" 2>/dev/null || true
+    fi
+done
 
 # 4. Run 1-Click Initialization (Migrations + .env + Owner Account + Active MCP & Talon Config)
 echo "[4/8] Running idempotent migrations, persisting .env, and provisioning owner..."
@@ -423,7 +432,7 @@ fi
 
 echo ""
 echo "==================================================================="
-echo "[OK] GARUDA v1.9.1 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
+echo "[OK] GARUDA v1.9.2 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
 echo "   * Web Dashboard:  http://localhost:${API_PORT}/login"
 echo "   * Chromium PWA:   Open in Chrome/Edge/Brave -> Click 'Install Garuda'"
 echo "   * Email / Pass:   ${OWNER_EMAIL} / ${OWNER_PASSWORD}"

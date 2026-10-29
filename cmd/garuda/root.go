@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "v1.9.1-universal"
+var version = "v1.9.2"
 
 var (
 	summaryFlag    bool
@@ -32,17 +33,49 @@ var (
 	checkpointFlag string
 	agentIDFlag    string
 	versionFlag    bool
+	doctorFlag     bool
+	policiesFlag   bool
 )
+
+func resolveRuntimeVersion() string {
+	candidates := []string{"version.txt"}
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "version.txt"),
+			filepath.Join(exeDir, "..", "version.txt"),
+		)
+	}
+	for _, p := range candidates {
+		if b, err := os.ReadFile(p); err == nil {
+			if v := strings.TrimSpace(string(b)); v != "" {
+				return v
+			}
+		}
+	}
+	return version
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "garuda",
 	Short: "Garuda Organizational Intelligence & Change-Control Runtime",
 	Long: `Garuda is the Change-Control Layer for AI-generated software.
 It analyzes multi-language codebases (Go, Python, TypeScript), verifies runtime drift,
-evaluates architectural policies, and seals governance verdicts in an RFC 6962 Merkle ledger.`,
+evaluates architectural policies, governs multi-team formulas & financial lineage,
+and seals governance verdicts in an RFC 6962 Merkle ledger.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if versionFlag {
-			fmt.Printf("Garuda Runtime Engine %s (%s/%s)\n", version, runtime.GOOS, runtime.GOARCH)
+			fmt.Printf("Garuda Runtime Engine %s (%s/%s)\n", resolveRuntimeVersion(), runtime.GOOS, runtime.GOARCH)
+			return
+		}
+
+		if doctorFlag && doctorCmd != nil && doctorCmd.RunE != nil {
+			_ = doctorCmd.RunE(doctorCmd, args)
+			return
+		}
+
+		if policiesFlag && policyListCmd != nil && policyListCmd.RunE != nil {
+			_ = policyListCmd.RunE(policyListCmd, args)
 			return
 		}
 
@@ -85,6 +118,8 @@ func init() {
 	rootCmd.Flags().StringVar(&checkpointFlag, "checkpoint", "", "Create checkpoint")
 	rootCmd.Flags().StringVar(&agentIDFlag, "agent", "cli-operator", "Agent ID context")
 	rootCmd.Flags().BoolVar(&versionFlag, "version", false, "Display runtime version")
+	rootCmd.Flags().BoolVar(&doctorFlag, "doctor", false, "Run Garuda System Doctor diagnostics (alias for 'garuda doctor')")
+	rootCmd.Flags().BoolVar(&policiesFlag, "policies", false, "List active architectural policies (alias for 'garuda policy list')")
 
 	if statsCmd != nil {
 		rootCmd.AddCommand(statsCmd)

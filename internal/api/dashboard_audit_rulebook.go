@@ -442,6 +442,85 @@ func (s *Server) buildHumanDecisionHubPayload(ctx context.Context, pgStore *stor
 	audits := defaultFinancialAudits()
 	rulebook := defaultSynthesizedRulebook(workspaceName)
 
+	// Dynamically enrich from live PostgreSQL workspace AST graph & persisted human audit records
+	if pgStore != nil && pgStore.Pool() != nil && workspaceID != uuid.Nil {
+		rows, err := pgStore.Pool().Query(ctx, `
+			SELECT COALESCE(e.package_path, 'pkg'), e.name, e.kind,
+			       COUNT(DISTINCT c.from_entity_id)::int AS callers_count
+			  FROM entities e
+			  LEFT JOIN claims c ON c.workspace_id = e.workspace_id AND c.to_entity_id = e.id
+			 WHERE e.workspace_id = $1
+			   AND e.kind NOT IN ('external', 'package', 'file')
+			 GROUP BY e.id, e.package_path, e.name, e.kind
+			 ORDER BY callers_count DESC, e.name ASC
+			 LIMIT 4
+		`, workspaceID)
+		if err == nil {
+			now := time.Now().UTC().Format(time.RFC3339)
+			for rows.Next() {
+				var pkgPath, symName, kind string
+				var callers int
+				if rows.Scan(&pkgPath, &symName, &kind, &callers) == nil {
+					tier := "LOW"
+					action := "ALLOW_WITH_INFO"
+					impact := fmt.Sprintf("Live indexed workspace symbol (%d callers in %s). Low blast radius.", callers, workspaceName)
+					if callers >= 25 {
+						tier = "HIGH_SEVERE"
+						action = "HUMAN_FREEZE_DO_NOT_TOUCH"
+						impact = fmt.Sprintf("SEVERE BLAST RADIUS: Live high-fan-in workspace hub (%d callers in %s). Freeze against unreviewed AI edits.", callers, workspaceName)
+					} else if callers >= 5 {
+						tier = "MEDIUM"
+						action = "HUMAN_TRADE_OFF_REVIEW"
+						impact = fmt.Sprintf("MEDIUM BLAST RADIUS: Live workspace component (%d callers in %s). Requires human trade-off review.", callers, workspaceName)
+					}
+					tiers = append(tiers, SurfaceCriticalityTierDTO{
+						ID:                fmt.Sprintf("tier-live-%s-%s", pkgPath, symName),
+						SurfaceName:       fmt.Sprintf("Live Workspace Hub: %s.%s (%s)", pkgPath, symName, kind),
+						PackagePattern:    pkgPath,
+						SymbolPattern:     symName,
+						CriticalityTier:   tier,
+						BlastRadiusImpact: impact,
+						HumanPolicyAction: action,
+						CallersCount:      callers,
+						DefinedBy:         "Garuda Live AST Classifier",
+						UpdatedAt:         now,
+					})
+				}
+			}
+			rows.Close()
+		}
+
+		// Sync any persisted human decisions from logic_variants_registry
+		lRows, lErr := pgStore.Pool().Query(ctx, `
+			SELECT variant_id, human_decision_status, COALESCE(approved_by, '')
+			  FROM logic_variants_registry
+			 WHERE workspace_id = $1
+		`, workspaceID)
+		if lErr == nil {
+			decMap := make(map[string]string)
+			appMap := make(map[string]string)
+			for lRows.Next() {
+				var vid, st, app string
+				if lRows.Scan(&vid, &st, &app) == nil {
+					decMap[vid] = st
+					appMap[vid] = app
+				}
+			}
+			lRows.Close()
+			for gIdx := range logicGroups {
+				for vIdx := range logicGroups[gIdx].Variants {
+					vid := logicGroups[gIdx].Variants[vIdx].VariantID
+					if st, ok := decMap[vid]; ok && st != "" {
+						logicGroups[gIdx].Variants[vIdx].HumanDecisionStatus = st
+					}
+					if app, ok := appMap[vid]; ok && app != "" {
+						logicGroups[gIdx].Variants[vIdx].ApprovedBy = app
+					}
+				}
+			}
+		}
+	}
+
 	// Check if a saved/approved rulebook exists on disk in .garuda/APPROVED_BASE_RULEBOOK.md
 	repoRoot := resolveRepoRoot()
 	approvedPath := filepath.Join(repoRoot, ".garuda", "APPROVED_BASE_RULEBOOK.md")
