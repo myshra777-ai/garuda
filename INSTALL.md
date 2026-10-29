@@ -149,3 +149,21 @@ At any time, you can verify your installation and automatically repair missing `
 | **18** | **Database migration error (`dirty database version` or missing `canonical_name` / `relationships` column)** | A previous migration was interrupted or an older schema was initialized before `057_schema_hardening.sql`. | Run automatic schema repair:<br>`./bin/garuda doctor --fix` (or `./bin/garuda init --skip-scan`) |
 | **19** | **Chromebook Crostini**: Browser cannot reach `localhost:8080` | ChromeOS Linux container port forwarding was paused after sleep. | Open ChromeOS `Settings -> Developers -> Linux -> Port forwarding` and enable TCP port `8080`, or open `http://penguin.linux.test:8080/login`. |
 | **20** | **Android Termux**: `Permission denied` when accessing `/sdcard` repositories | Termux has not yet been granted shared storage permissions, or `/sdcard` mounts `noexec`. | Run `termux-setup-storage` inside Termux and keep Git repositories inside `$HOME/` (`~/garuda`) for native POSIX permissions. |
+
+
+---
+
+## 1B. Direct Pre-Built Release Packages & OS Package Managers (`v1.9.1`)
+
+Prefer downloading a pre-compiled binary archive or installing via your OS package manager? Grab any `v1.9.1` package from [**GitHub Releases (`releases/tag/v1.9.1`)**](https://github.com/myshra777-ai/garuda/releases/tag/v1.9.1) or build the entire 8-target matrix locally with `make release-matrix` (`./scripts/build_release_matrix.sh dist`):
+
+| Platform | Direct Release Archive (`dist/`) | Package Manager Manifest (`packaging/`) |
+| :--- | :--- | :--- |
+| **Windows 10 / 11 (x64)** | `garuda-v1.9.1-windows-amd64.zip` | `winget install --manifest packaging\winget\garuda.yaml`<br>`scoop install packaging\scoop\garuda.json`<br>`choco pack packaging\choco\garuda.nuspec` |
+| **Windows 11 ARM64** | `garuda-v1.9.1-windows-arm64.zip` | `winget install --manifest packaging\winget\garuda.yaml` |
+| **macOS Apple Silicon (`arm64`)** | `garuda-v1.9.1-darwin-arm64.tar.gz` | `brew install --formula packaging/homebrew/garuda.rb` |
+| **macOS Intel (`amd64`)** | `garuda-v1.9.1-darwin-amd64.tar.gz` | `brew install --formula packaging/homebrew/garuda.rb` |
+| **Linux x86_64 (Debian/Ubuntu/RHEL/Arch)** | `garuda-v1.9.1-linux-amd64.tar.gz`<br>`garuda_1.9.1_amd64.deb` | `sudo dpkg -i dist/garuda_1.9.1_amd64.deb`<br>`rpmbuild -bb packaging/rpm/garuda.spec`<br>`cd packaging/aur && makepkg -si` |
+| **Linux ARM64 & Chromebook (Crostini)** | `garuda-v1.9.1-linux-arm64.tar.gz`<br>`garuda_1.9.1_arm64.deb` | `sudo dpkg -i dist/garuda_1.9.1_arm64.deb` |
+| **Android (Termux ARM64)** | `garuda-v1.9.1-android-arm64-termux.tar.gz` | `tar -xzf garuda-v1.9.1-android-arm64-termux.tar.gz` |
+| **FreeBSD (`x86_64`)** | `garuda-v1.9.1-freebsd-amd64.tar.gz` | `tar -xzf garuda-v1.9.1-freebsd-amd64.tar.gz` |

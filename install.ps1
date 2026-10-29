@@ -1,5 +1,5 @@
 # ===========================================================================
-# GARUDA v1.9.0 ONE-COMMAND WINDOWS POWERSHELL BOOTSTRAPPER (install.ps1)
+# GARUDA v1.9.1 ONE-COMMAND WINDOWS POWERSHELL BOOTSTRAPPER (install.ps1)
 # ===========================================================================
 # Run from any Windows PowerShell 5.1 or PowerShell 7 window (no Admin, Git,
 # Go, PostgreSQL, GCC, or Docker required):
@@ -64,7 +64,7 @@ function Extract-ArchiveFast([string]$ZipPath, [string]$DestDir) {
 $InstallDir = if ($env:GARUDA_INSTALL_DIR) { $env:GARUDA_INSTALL_DIR } else { Join-Path $HOME "garuda" }
 
 Write-Host "===================================================================" -ForegroundColor Cyan
-Write-Host "[GARUDA] v1.9.0 1-COMMAND WINDOWS INSTALLER" -ForegroundColor Cyan
+Write-Host "[GARUDA] v1.9.1 1-COMMAND WINDOWS INSTALLER" -ForegroundColor Cyan
 Write-Host "===================================================================" -ForegroundColor Cyan
 
 if (-not (Test-Path (Join-Path $InstallDir "setup.ps1"))) {

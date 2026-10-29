@@ -1,5 +1,5 @@
 # ===========================================================================
-# GARUDA v1.9.0 ZERO-DEPENDENCY WINDOWS POWERSHELL SETUP (setup.ps1)
+# GARUDA v1.9.1 ZERO-DEPENDENCY WINDOWS POWERSHELL SETUP (setup.ps1)
 # ===========================================================================
 # Usage (from Windows PowerShell 5.1 or PowerShell 7 -- no Admin, Go,
 # PostgreSQL, GCC, or Docker required):
@@ -146,7 +146,7 @@ $env:GARUDA_TALON_ENFORCE = "true"
 $env:CGO_ENABLED = "0"
 
 Write-Host "===================================================================" -ForegroundColor Cyan
-Write-Host "[GARUDA] v1.9.0 ZERO-DEPENDENCY WINDOWS SETUP & TALON HARNESS" -ForegroundColor Cyan
+Write-Host "[GARUDA] v1.9.1 ZERO-DEPENDENCY WINDOWS SETUP & TALON HARNESS" -ForegroundColor Cyan
 Write-Host "===================================================================" -ForegroundColor Cyan
 Write-Host "  * Detected Owner:     $Email"
 Write-Host "  * Target Workspace:   $Workspace"
@@ -315,7 +315,7 @@ $null = Invoke-LoggedCmd "`".\bin\garuda.exe`" doctor"
 
 Write-Host ""
 Write-Host "===================================================================" -ForegroundColor Green
-Write-Host "[OK] GARUDA v1.9.0 + TALON IS 100% CONFIGURED & ONLINE ON WINDOWS!" -ForegroundColor Green
+Write-Host "[OK] GARUDA v1.9.1 + TALON IS 100% CONFIGURED & ONLINE ON WINDOWS!" -ForegroundColor Green
 Write-Host "   * Web Dashboard:  http://localhost:$Port/login"
 Write-Host "   * Email / Pass:   $Email / $Password"
 Write-Host "   * System Doctor:  .\bin\garuda.exe doctor"

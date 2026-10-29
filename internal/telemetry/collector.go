@@ -165,7 +165,7 @@ func (c *Collector) sendBatch(events []TelemetryEvent) error {
 		Events  []TelemetryEvent `json:"events"`
 		Count   int              `json:"count"`
 	}{
-		Version: "1.0.0",
+		Version: "1.9.1",
 		Events:  events,
 		Count:   len(events),
 	}

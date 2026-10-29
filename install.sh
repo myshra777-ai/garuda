@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ===========================================================================
-# GARUDA v1.9.0 ONE-COMMAND UNIVERSAL INSTALLER (install.sh)
+# GARUDA v1.9.1 ONE-COMMAND UNIVERSAL INSTALLER (install.sh)
 # ===========================================================================
 # Supports:
 #   - macOS (Apple Silicon M1/M2/M3/M4 & Intel x86_64)
@@ -18,7 +18,7 @@ set -euo pipefail
 INSTALL_DIR="${GARUDA_INSTALL_DIR:-$HOME/garuda}"
 
 echo "==================================================================="
-echo "GARUDA v1.9.0 UNIVERSAL 1-COMMAND INSTALLER"
+echo "GARUDA v1.9.1 UNIVERSAL 1-COMMAND INSTALLER"
 echo "==================================================================="
 
 if [[ ! -f "$INSTALL_DIR/setup.sh" ]]; then

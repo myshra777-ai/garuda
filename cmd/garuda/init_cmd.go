@@ -325,7 +325,7 @@ var initCmd = &cobra.Command{
 		}
 
 		fmt.Println("\n══════════════════════════════════════════════════════════════════")
-		fmt.Println("🎉 Garuda v1.9.0 + Garuda Talon Active Harness Initialized!")
+		fmt.Println("🎉 Garuda v1.9.1 + Garuda Talon Active Harness Initialized!")
 		fmt.Println("══════════════════════════════════════════════════════════════════")
 		fmt.Printf("  • Platform:           %s/%s\n", runtime.GOOS, runtime.GOARCH)
 		fmt.Printf("  • Active Workspace:   %s\n", workspaceName)

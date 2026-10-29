@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: garuda-api
-        image: ghcr.io/myshra777-ai/garuda-api:v1.3.0
+        image: ghcr.io/myshra777-ai/garuda-api:v1.9.1
         ports:
         - containerPort: 8080
         securityContext:

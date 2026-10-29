@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>garuda</id>
+    <version>1.9.1</version>
+    <title>Garuda Software &amp; Financial Intelligence Engine</title>
+    <authors>Rohit Mishra</authors>
+    <projectUrl>https://github.com/myshra777-ai/garuda</projectUrl>
+    <licenseUrl>https://github.com/myshra777-ai/garuda/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <tags>garuda ai-governance mcp-server static-analysis ast financial-audit merkle</tags>
+    <summary>Local-first change-control gate, Garuda Talon active AI harness, financial audit engine, and 35-tool MCP server.</summary>
+    <description>Garuda v1.9.1 guards architecture, business formulas (0.0-1.0 team weights), surface criticality tiers, and financial numbers (48 Cr vs 4.8 Cr) across Go, Python, and TypeScript repositories.</description>
+  </metadata>
+  <files>
+    <file src="..\..\dist\garuda-v1.9.1-windows-amd64\bin\*.exe" target="tools" />
+  </files>
+</package>

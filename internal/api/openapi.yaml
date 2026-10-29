@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Garuda Engine API Gateway
-  version: 1.0.0
+  version: 1.9.1
   description: |
     Garuda is the deterministic governance, multi-agent state handoff,
     and cryptographic audit layer for enterprise AI swarms.
@@ -90,7 +90,7 @@ paths:
                 properties:
                   version:
                     type: string
-                    example: v1.0.0
+                    example: v1.9.1
                   modules:
                     type: array
                     items:
@@ -105,7 +105,7 @@ paths:
                           items:
                             type: string
               example:
-                version: v1.0.0
+                version: v1.9.1
                 modules:
                   - name: System
                     description: Health, discovery, bootstrap, sandbox, and dashboard.
@@ -135,7 +135,7 @@ paths:
                 $ref: '#/components/schemas/BootstrapManifest'
               example:
                 system: "Garuda Engine"
-                version: "v1.0.0"
+                version: "v1.9.1"
                 tenant_id: "00000000-0000-0000-0000-000000000001"
                 active_merkle_root: "3979217185da1d556e923273e417d4937b830488c45ce23f4eee9ea892fcc016"
                 block_height: 64
@@ -864,7 +864,7 @@ components:
           example: "Garuda Engine"
         version:
           type: string
-          example: "v1.0.0"
+          example: "v1.9.1"
         tenant_id:
           type: string
           format: uuid

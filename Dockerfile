@@ -1,5 +1,5 @@
 # Stage 1: Build static Go binary
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN go mod download
 COPY . .
 
 # Compile fully static, stripped binary with release metadata
-ARG VERSION=v1.0.0
+ARG VERSION=v1.9.1
 ARG COMMIT=release
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -trimpath \

@@ -239,7 +239,7 @@ func (c *Collector) Flush() error {
 		InstanceHash:          c.instanceHash,
 		SessionID:             c.sessionID,
 		Mode:                  c.cfg.Mode,
-		GarudaVersion:         "1.0.0",
+		GarudaVersion:         "1.9.1",
 		TotalDecisions:        totalDecisions,
 		TotalContradictions:   totalContradictions,
 		TokensSaved:           c.cost.TokensSaved,

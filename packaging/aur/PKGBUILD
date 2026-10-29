@@ -1,0 +1,27 @@
+# Maintainer: Rohit Mishra <myshra777@gmail.com>
+pkgname=garuda-bin
+pkgver=1.9.1
+pkgrel=1
+pkgdesc="Local-first AI change-control gate, Garuda Talon harness, financial discrepancy audit & 35-tool MCP server"
+arch=('x86_64' 'aarch64')
+url="https://github.com/myshra777-ai/garuda"
+license=('Apache-2.0')
+provides=('garuda' 'garuda-api' 'garuda-mcp' 'garuda-talon')
+conflicts=('garuda')
+source_x86_64=("https://github.com/myshra777-ai/garuda/releases/download/v${pkgver}/garuda-v${pkgver}-linux-amd64.tar.gz")
+source_aarch64=("https://github.com/myshra777-ai/garuda/releases/download/v${pkgver}/garuda-v${pkgver}-linux-arm64.tar.gz")
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+  local _arch="amd64"
+  [[ "$CARCH" == "aarch64" ]] && _arch="arm64"
+  cd "${srcdir}/garuda-v${pkgver}-linux-${_arch}"
+  install -Dm755 bin/garuda "${pkgdir}/usr/bin/garuda"
+  install -Dm755 bin/garuda-api "${pkgdir}/usr/bin/garuda-api"
+  install -Dm755 bin/garuda-mcp "${pkgdir}/usr/bin/garuda-mcp"
+  install -Dm755 bin/garuda-talon "${pkgdir}/usr/bin/garuda-talon"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+  install -Dm644 RELEASE_NOTES.md "${pkgdir}/usr/share/doc/${pkgname}/RELEASE_NOTES.md"
+}

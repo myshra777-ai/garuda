@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Garuda Engine API Gateway
-  version: 1.0.0
+  version: 1.9.1
   description: |
     Garuda is the deterministic governance, multi-agent state handoff, and cryptographic audit layer for enterprise AI swarms.
     It provides a dual-engine protocol: high-ergonomics REST for humans and MCP Tool Manifests for autonomous agents.

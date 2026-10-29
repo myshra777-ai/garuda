@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
+PackageIdentifier: GarudaAI.Garuda
+PackageVersion: 1.9.1
+PackageLocale: en-US
+Publisher: Rohit Mishra (Garuda AI)
+PublisherUrl: https://github.com/myshra777-ai/garuda
+PackageName: Garuda Software & Financial Intelligence Engine
+PackageUrl: https://github.com/myshra777-ai/garuda
+License: Apache-2.0
+LicenseUrl: https://github.com/myshra777-ai/garuda/blob/main/LICENSE
+ShortDescription: Local-first AI change-control gate, Garuda Talon harness, 0.0-1.0 formula disambiguation, financial audit & 35-tool MCP server.
+Commands:
+  - garuda
+  - garuda-api
+  - garuda-mcp
+  - garuda-talon
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: garuda-v1.9.1-windows-amd64\bin\garuda.exe
+        PortableCommandAlias: garuda
+      - RelativeFilePath: garuda-v1.9.1-windows-amd64\bin\garuda-api.exe
+        PortableCommandAlias: garuda-api
+      - RelativeFilePath: garuda-v1.9.1-windows-amd64\bin\garuda-mcp.exe
+        PortableCommandAlias: garuda-mcp
+      - RelativeFilePath: garuda-v1.9.1-windows-amd64\bin\garuda-talon.exe
+        PortableCommandAlias: garuda-talon
+    InstallerUrl: https://github.com/myshra777-ai/garuda/releases/download/v1.9.1/garuda-v1.9.1-windows-amd64.zip
+  - Architecture: arm64
+    InstallerType: zip
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: garuda-v1.9.1-windows-arm64\bin\garuda.exe
+        PortableCommandAlias: garuda
+      - RelativeFilePath: garuda-v1.9.1-windows-arm64\bin\garuda-api.exe
+        PortableCommandAlias: garuda-api
+      - RelativeFilePath: garuda-v1.9.1-windows-arm64\bin\garuda-mcp.exe
+        PortableCommandAlias: garuda-mcp
+      - RelativeFilePath: garuda-v1.9.1-windows-arm64\bin\garuda-talon.exe
+        PortableCommandAlias: garuda-talon
+    InstallerUrl: https://github.com/myshra777-ai/garuda/releases/download/v1.9.1/garuda-v1.9.1-windows-arm64.zip
+ManifestType: singleton
+ManifestVersion: 1.6.0

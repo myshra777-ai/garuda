@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ===========================================================================
-# GARUDA v1.9.0 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
+# GARUDA v1.9.1 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
 # ===========================================================================
 # Supports macOS (Intel & Apple Silicon), Linux, Windows WSL2, Chromebook, Android
 # Usage:
@@ -89,7 +89,7 @@ export HOMEBREW_NO_INSTALL_CLEANUP=1
 export HOMEBREW_NO_ENV_HINTS=1
 
 echo "==================================================================="
-echo "GARUDA v1.9.0 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
+echo "GARUDA v1.9.1 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
 echo "==================================================================="
 echo "  * Detected Owner:     ${OWNER_EMAIL}"
 echo "  * Target Workspace:   ${WORKSPACE}"
@@ -423,7 +423,7 @@ fi
 
 echo ""
 echo "==================================================================="
-echo "[OK] GARUDA v1.9.0 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
+echo "[OK] GARUDA v1.9.1 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
 echo "   * Web Dashboard:  http://localhost:${API_PORT}/login"
 echo "   * Chromium PWA:   Open in Chrome/Edge/Brave -> Click 'Install Garuda'"
 echo "   * Email / Pass:   ${OWNER_EMAIL} / ${OWNER_PASSWORD}"
