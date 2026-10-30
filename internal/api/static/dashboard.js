@@ -2082,9 +2082,10 @@ function renderTalonVerdict(verdict) {
     verdict = verdict || {};
     var hasOutcome = typeof verdict.outcome === "string" && verdict.outcome.length > 0;
     var outcome = hasOutcome ? verdict.outcome : "No evaluation";
+    var outcomeLabel = verdict.simulated && hasOutcome ? "DEMO " + outcome : outcome;
     var pill = document.getElementById("talon-verdict-pill");
     if (pill) {
-        pill.textContent = outcome;
+        pill.textContent = outcomeLabel;
         pill.className = "badge-pill " + (outcome === "BLOCK" ? "critical" : (outcome === "WARN" || outcome === "REVIEW" ? "warning" : (outcome === "ALLOW" ? "success" : "info")));
     }
     setText("nav-badge-talon", outcome === "BLOCK" ? "BLOCK" : (hasOutcome ? "Guard" : "—"));
@@ -2096,7 +2097,7 @@ function renderTalonVerdict(verdict) {
 
     var termStatus = document.getElementById("talon-term-status");
     if (termStatus) {
-        termStatus.textContent = hasOutcome ? "OUTCOME: " + outcome : "NO COMPLETED CHECK";
+        termStatus.textContent = hasOutcome ? (verdict.simulated ? "DEMO SIMULATION: " : "OUTCOME: ") + outcome : "NO COMPLETED CHECK";
         termStatus.style.color = outcome === "BLOCK" ? "#F87171" : (hasOutcome ? "#4ADE80" : "var(--muted)");
     }
     var termBody = document.getElementById("talon-term-body");
@@ -2132,6 +2133,7 @@ function renderTalonVerdict(verdict) {
     }
     renderBuildContextReceipt(verdict);
 }
+
 function renderBuildContextReceipt(verdict) {
     verdict = verdict || {};
     var bc = verdict.build_context || null;
@@ -2283,106 +2285,45 @@ function renderRiskHubsTable() {
 }
 
 async function runTalonCheckFromUI(action) {
-    showToast(action === "simulate_violation" ? "Simulating violating agent edit & synthesizing self-repair prompt…" : "Running diff-scoped Talon Guard against HEAD…");
+    var isSimulation = action === "simulate_violation" || action === "simulate_drift";
+    showToast(isSimulation ? "Preparing the selected Talon simulation…" : "Running diff-scoped Talon Guard against HEAD…");
     try {
         var res = await fetch("/api/v1/dashboard/talon-check?workspace=" + encodeURIComponent(WORKSPACE), {
             method: "POST",
             headers: { "Content-Type": "application/json", "Accept": "application/json" },
             body: JSON.stringify({ workspace: WORKSPACE, action: action, target: arguments.length > 1 ? arguments[1] : "", diff_rev: "HEAD" })
         });
-        if (res.ok) {
-            var data = await res.json();
-            if (data && data.verdict) {
-                if (!state.talonHubData) state.talonHubData = buildDefaultTalonHub();
-                state.talonHubData.latest_verdict = data.verdict;
-                renderTalonVerdict(data.verdict);
-                showToast("Talon Gate Outcome: " + data.verdict.outcome);
-                return;
-            }
-        }
+        var data = null;
+        try { data = await res.json(); } catch (parseErr) {}
+        if (!res.ok) throw new Error(data && (data.error || data.message) || ("Talon check failed (HTTP " + res.status + ")."));
+        if (!data || !data.verdict || typeof data.verdict.outcome !== "string") throw new Error("The server did not return a completed Talon verdict.");
+        if (!state.talonHubData) state.talonHubData = { hooks: [], risk_hubs: [] };
+        state.talonHubData.latest_verdict = data.verdict;
+        renderTalonVerdict(data.verdict);
+        showToast("Talon Gate Outcome: " + data.verdict.outcome);
+        return;
     } catch (err) {
-        if (action !== "simulate_violation" && action !== "simulate_drift") {
+        if (!isSimulation) {
             showToast(err && err.message ? err.message : "Talon check failed. No verdict was recorded.");
             return;
         }
     }
-
     if (!state.talonHubData) state.talonHubData = { hooks: [], risk_hubs: [] };
     if (action === "simulate_drift") {
         var driftVerdict = {
-            workspace: WORKSPACE,
-            outcome: "BLOCK",
-            agent_should_proceed: false,
+            workspace: WORKSPACE, outcome: "BLOCK", simulated: true, agent_should_proceed: false,
             touched_files: ["internal/refund/charge_bypass.go"],
             touched_symbols: ["refund.ProcessCharge (charge_bypass.go:8)"],
-            touched_packages: ["internal/refund"],
-            blast_radius_affected: 16,
+            touched_packages: ["internal/refund"], blast_radius_affected: 16,
             by_severity: { CRITICAL: 2, HIGH: 5, MEDIUM: 6, LOW: 3 },
-            net_new_violations_count: 1,
-            baseline_violations_count: 0,
-            adr_contradictions_count: 1,
-            violations: [
-                "[CI-vs-Editor Conditional Edge:BLOCK] File `internal/refund/charge_bypass.go` (active only under `-tags=legacy_bypass` on `linux/amd64`) calls `DirectSQLDriver.ExecRawBypass`, violating ADR-0001 and `payment-no-direct-db`."
-            ],
-            self_repair_instructions: [
-                "Reproduce the exact CI graph locally using: `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE + "`",
-                "Remove `DirectSQLDriver.ExecRawBypass()` from conditional build file `internal/refund/charge_bypass.go` and route through `StoreGateway`."
-            ],
-            self_repair_prompt: "GARUDA TALON ENFORCEMENT GATE: CHANGE BLOCKED (CI-VS-EDITOR BUILD DRIFT)\nWorkspace: " + WORKSPACE + " | Outcome: BLOCK | Net-New Violations: 1 | ADR Contradictions: 1\nBuild Receipt: lang=go platform=linux/amd64 cgo=off tags=[legacy_bypass,purego] commit=9f8bc3fa41e2 graph_fp=9f4e2b8d1c6a\nReproduce Verdict: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE + "\n\nDetected Architectural & ADR Violations:\n  ✗ [CI-vs-Editor Conditional Edge:BLOCK] `internal/refund/charge_bypass.go` (compiled only when `-tags=legacy_bypass` is active) calls `DirectSQLDriver.ExecRawBypass`\n\nMandatory Self-Repair Actions:\n  1. Run the Reproduce Verdict command above to inspect the conditional edge locally.\n  2. Refactor `internal/refund/charge_bypass.go` to call `StoreGateway.RecordSafe()` instead of `DirectSQLDriver.ExecRawBypass()`.",
-            merkle_block_height: 54,
-            duration_ms: 21,
-            reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE,
-            build_context: {
-                language: "go",
-                target_os: "linux",
-                target_arch: "amd64",
-                target_platform: "linux/amd64",
-                cgo_enabled: false,
-                build_tags: ["legacy_bypass", "purego"],
-                compiler_version: "go1.24 (CI runner linux/amd64)",
-                commit_sha: "9f8bc3fa41e27b09d4c6a8123e5f70192b4c6d8e",
-                commit_short: "9f8bc3fa41e2",
-                branch: "main",
-                worktree_dirty: false,
-                config_manifest_hash: "e7a1c904b2d81f30",
-                graph_fingerprint: "9f4e2b8d1c6a0f3e7b5d9a1c4e8f2b6d0a3c7e9f1b5d8a2c6e0f4b8d2a6c9e12",
-                receipt_hash: "c184e29a7b0f3d51e6a2c8b4d0f9e1a3c5b7d9e0f2a4c6b8d0e2f4a6b8c0d2e4",
-                active_files_count: 149,
-                skipped_by_build_tags_count: 2,
-                skipped_files_sample: ["internal/refund/charge_safe.go", "cmd/garuda/win_console_windows.go"],
-                reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE
-            },
-            environment_drift: {
-                drift_detected: true,
-                severity: "CRITICAL",
-                summary: "Environment drift detected (3 differences between CI receipt and local editor). Two valid builds exposed different AST edges.",
-                discrepancies: [
-                    "Target OS/Arch mismatch: CI receipt built for GOOS=linux/amd64, local editor is running on GOOS=darwin/arm64.",
-                    "CGO mismatch: CI receipt built with CGO_ENABLED=false, local editor has CGO_ENABLED=true.",
-                    "Build tags mismatch: CI receipt used tags=[legacy_bypass,purego] (activating charge_bypass.go), local editor had tags=[none] (activating charge_safe.go)."
-                ],
-                reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --commit 9f8bc3fa41e2 --workspace " + WORKSPACE
-            },
-            matrix_results: buildDefaultTalonHub().latest_verdict.matrix_results.concat([
-                {
-                    target_platform: "linux/amd64",
-                    cgo_enabled: false,
-                    build_tags: ["legacy_bypass", "purego"],
-                    active_files_count: 149,
-                    skipped_by_build_tags_count: 2,
-                    skipped_files_sample: ["internal/refund/charge_safe.go"],
-                    entities_count: 893,
-                    edges_count: 2419,
-                    graph_fingerprint: "9f4e2b8d1c6a0f3e7b5d9a1c4e8f2b6d0a3c7e9f1b5d8a2c6e0f4b8d2a6c9e12",
-                    receipt_hash: "c184e29a7b0f3d51",
-                    outcome: "BLOCK",
-                    reproduce_command: "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --tags legacy_bypass,purego --workspace " + WORKSPACE
-                }
-            ])
+            net_new_violations_count: 1, baseline_violations_count: 0, adr_contradictions_count: 1,
+            violations: ["Simulated conditional build edge violates the payment architecture rule."],
+            self_repair_instructions: ["Inspect the conditional build file and route persistence through the approved store boundary."],
+            self_repair_prompt: "DEMO SIMULATION — not a repository finding. Conditional build drift was simulated to demonstrate a BLOCK and a self-repair path."
         };
         state.talonHubData.latest_verdict = driftVerdict;
         renderTalonVerdict(driftVerdict);
-        showToast("⚠️ Simulated CI-vs-Editor Build Drift: conditional edge exposed under -tags=legacy_bypass!");
+        showToast("Demo simulation: conditional build drift returned BLOCK.");
         return;
     }
     if (action === "matrix_check") {
@@ -2391,32 +2332,25 @@ async function runTalonCheckFromUI(action) {
     }
     if (action === "simulate_violation") {
         var simVerdict = {
-            workspace: WORKSPACE,
-            outcome: "BLOCK",
-            agent_should_proceed: false,
+            workspace: WORKSPACE, outcome: "BLOCK", simulated: true, agent_should_proceed: false,
             touched_files: ["internal/api/handler.go", "internal/refund/rate_limiter.go"],
             touched_symbols: ["api.HandleRefund (handler.go:194)", "refund.ProcessDirectBankCall (rate_limiter.go:42)"],
-            touched_packages: ["internal/api", "internal/refund"],
-            blast_radius_affected: 19,
+            touched_packages: ["internal/api", "internal/refund"], blast_radius_affected: 19,
             by_severity: { CRITICAL: 3, HIGH: 6, MEDIUM: 7, LOW: 3 },
-            net_new_violations_count: 2,
-            baseline_violations_count: 0,
-            adr_contradictions_count: 1,
+            net_new_violations_count: 2, baseline_violations_count: 0, adr_contradictions_count: 1,
             violations: [
-                "[architecture-no-api-to-store-bypass:BLOCK] Layer violation: internal/api imports database/sql directly, bypassing internal/store.",
-                "[ADR:ADR-0001 Payment Refund Processing] RefundHandler MUST_NOT CALLS DirectBankAPI (Forbidden direct bank call detected in AST)."
+                "Simulated layer violation: API imports database/sql directly.",
+                "Simulated ADR violation: refund handler calls a forbidden direct bank API."
             ],
             self_repair_instructions: [
-                "Remove direct `database/sql` import from `internal/api/handler.go` and route persistence through `internal/store.DecisionStore`.",
-                "Ensure `RefundHandler` calls `IdempotencyStore.CheckAndRecord` and remove the forbidden call to `DirectBankAPI` per ADR-0001."
+                "Route persistence through internal/store.",
+                "Route refunds through the idempotency store boundary."
             ],
-            self_repair_prompt: "GARUDA TALON ENFORCEMENT GATE: CHANGE BLOCKED\nWorkspace: " + WORKSPACE + " | Outcome: BLOCK | Net-New Violations: 2 | ADR Contradictions: 1\n\nTouched Symbols in Your Diff:\n  - api.HandleRefund (handler.go:194)\n  - refund.ProcessDirectBankCall (rate_limiter.go:42)\n\nDetected Architectural & ADR Violations:\n  ✗ [architecture-no-api-to-store-bypass:BLOCK] Layer violation: internal/api imports database/sql directly, bypassing internal/store.\n  ✗ [ADR:ADR-0001 Payment Refund Processing] RefundHandler MUST_NOT CALLS DirectBankAPI\n\nMandatory Self-Repair Actions:\n  1. Remove direct `database/sql` import from `internal/api/handler.go` and route persistence through `internal/store.DecisionStore`.\n  2. Ensure `RefundHandler` calls `IdempotencyStore.CheckAndRecord` and remove the forbidden call to `DirectBankAPI` per ADR-0001.\n\nRefactor the offending code now, then invoke `garuda.talon_verify_edit` (or `garuda talon guard`) to confirm `ALLOW`.",
-            merkle_block_height: 53,
-            duration_ms: 22
+            self_repair_prompt: "DEMO SIMULATION — not a repository finding. A simulated architecture and ADR violation was blocked. Refactor through the approved boundaries, then run a real Talon check."
         };
         state.talonHubData.latest_verdict = simVerdict;
         renderTalonVerdict(simVerdict);
-        showToast("⚠️ Talon Gate BLOCKED 2 net-new violations & generated self-repair prompt!");
+        showToast("Demo simulation: Talon blocked two simulated violations.");
     }
 }
 
@@ -3460,7 +3394,7 @@ function selectReviewTarget(val) {
     var actionsEl = document.getElementById("rev-dr-actions");
     if (actionsEl) {
         var btns = '<button class="btn-primary" onclick="focusSymbolOnArchitectureMap(\'' + escapeJS(targetName) + '\', \'' + escapeJS(pkgName) + '\', null)">Open in Architecture Map →</button>';
-        btns += '<button class="btn-secondary" onclick="verifyPolicyAnchor(\'' + escapeJS(evalId || "eval-52-layer") + '\')">Verify RFC 6962 Proof</button>';
+        if (evalId) btns += '<button class="btn-secondary" onclick="verifyPolicyAnchor(\'' + escapeJS(evalId) + '\')">Verify RFC 6962 Proof</button>';
         btns += '<button class="btn-secondary" onclick="openPreEditBriefDrawer(\'' + escapeJS(targetName) + '\')">Talon Pre-Edit Brief</button>';
         actionsEl.innerHTML = btns;
     }
@@ -3493,7 +3427,7 @@ function selectReviewTarget(val) {
                     '<div class="nb-card-label">Callee Contracts</div>' +
                     '<div class="nb-card-sub">' + escapeHTML(outItems.join(", ")) + '</div>' +
                 '</div>' +
-                '<div class="nb-card" onclick="verifyPolicyAnchor(\'' + escapeJS(evalId || "eval-52-layer") + '\')">' +
+                '<div class="nb-card" onclick="showView(\'governance\')">' +
                     '<div class="nb-card-icon">🛡️ Governance Gate</div>' +
                     '<div class="nb-card-label">' + escapeHTML(decision) + '</div>' +
                     '<div class="nb-card-sub">' + escapeHTML(ledgerText) + '</div>' +
@@ -3504,9 +3438,9 @@ function selectReviewTarget(val) {
         stageHTML += '<div class="panel" style="margin-top:18px; margin-bottom:0;">' +
             '<div class="panel-header"><div class="panel-title">Transitive Impact &amp; Verification Path</div></div>' +
             '<div class="list">' +
-                '<div class="list-row"><div class="row-icon">1</div><div class="row-main"><div class="row-title">Static AST Resolution (GO_TYPES / Tree-sitter)</div><div class="row-meta">Target ' + escapeHTML(targetName) + ' resolved in package ' + escapeHTML(pkgName) + ' with confidence 1.0.</div></div><span class="badge-pill state-supported">RESOLVED</span></div>' +
-                '<div class="list-row"><div class="row-icon">2</div><div class="row-main"><div class="row-title">Document &amp; ADR Guardrail Correlation</div><div class="row-meta">Matched against ADR-0001, ADR-0002, Invariant I-11, and active YAML policies.</div></div><span class="badge-pill state-supported">ENFORCED</span></div>' +
-                '<div class="list-row"><div class="row-icon">3</div><div class="row-main"><div class="row-title">Declarative Policy &amp; RFC 6962 Merkle Seal</div><div class="row-meta">' + escapeHTML(reasonText) + '</div></div><span class="policy-badge ' + escapeHTML(decision) + '">' + escapeHTML(decision) + '</span></div>' +
+                '<div class="list-row"><div class="row-icon">1</div><div class="row-main"><div class="row-title">Indexed symbol context</div><div class="row-meta">Inspect the selected entity and its current source identity in the Architecture Map.</div></div><span class="badge-pill info">INDEXED</span></div>' +
+                '<div class="list-row"><div class="row-icon">2</div><div class="row-main"><div class="row-title">Document &amp; ADR guardrail correlation</div><div class="row-meta">Open Docs &amp; Rules to inspect the actual document links and verification state for this target.</div></div><span class="badge-pill info">INSPECT</span></div>' +
+                '<div class="list-row"><div class="row-icon">3</div><div class="row-main"><div class="row-title">Policy evaluation &amp; provenance</div><div class="row-meta">' + escapeHTML(reasonText) + '</div></div><span class="policy-badge ' + escapeHTML(decision) + '">' + escapeHTML(decision) + '</span></div>' +
             '</div>' +
         '</div>';
 
@@ -3517,6 +3451,7 @@ function selectReviewTarget(val) {
 /* ============================================================================
    07 — EVIDENCE & LEDGER: VERO-STYLE AUDIT TABLE & DECISION RECORD
    ============================================================================ */
+
 function buildAuditEntries() {
     var entries = [];
     var evals = (state.policiesData && state.policiesData.latest_evaluations) || [];
@@ -3607,32 +3542,20 @@ function populateAuditDecisionRecord(entry) {
     setText("audit-dr-what", entry.action);
     setText("audit-dr-looked", entry.lookedAt + " in " + entry.object);
     setText("audit-dr-rule", entry.rule);
-    setText("audit-dr-confidence", entry.result === "BLOCK" ? "Quarantined contradiction / policy violation." : "Deterministic static resolution (1.0); anchored at " + entry.anchor + ".");
+    setText("audit-dr-confidence", entry.isEval
+        ? (entry.anchor && entry.anchor !== "not anchored"
+            ? "Policy evaluation record; anchored at " + entry.anchor + "."
+            : "Policy evaluation record; no ledger anchor is recorded for this entry.")
+        : "Evidence record. Confidence is not inferred from record integrity or display state.");
     var remEl = document.getElementById("audit-dr-remedy");
     if (remEl) {
-        remEl.innerHTML = 'Verify RFC 6962 inclusion proof against the epoch root: <button class="btn-secondary" style="height:24px; font-size:11px; margin-left:6px;" onclick="verifyPolicyAnchor(\'' + escapeJS(entry.id || "eval-52-layer") + '\')">Verify Proof →</button>';
+        if (entry.isEval && entry.id) {
+            remEl.innerHTML = 'Verify the recorded policy evaluation proof: <button class="btn-secondary" style="height:24px;font-size:11px;margin-left:6px;" onclick="verifyPolicyAnchor(\'' + escapeJS(entry.id) + '\')">Verify Proof →</button>';
+        } else {
+            remEl.textContent = "This evidence entry is not a policy-evaluation proof target.";
+        }
     }
 }
-
-/* ============================================================================
-   02 — EXPLORE: SEMANTIC SEARCH & SPLIT PREVIEW
-   ============================================================================ */
-var DEFAULT_SEARCH_SYMBOLS = [
-    { id: "sym:AppendLeafAndSealTx", name: "PostgresStore.AppendLeafAndSealTx", kind: "method", package: "github.com/myshra777-ai/garuda/internal/store", file: "internal/store/merkle_v1.go", exported: true, repo: "garuda-core" },
-    { id: "sym:Engine.Run", name: "Engine.Run", kind: "method", package: "github.com/myshra777-ai/garuda/internal/policy", file: "internal/policy/engine.go", exported: true, repo: "garuda-core" },
-    { id: "sym:RunGuard", name: "talon.RunGuard", kind: "function", package: "github.com/myshra777-ai/garuda/internal/talon", file: "internal/talon/talon.go", exported: true, repo: "talon-harness" },
-    { id: "sym:CompileContract", name: "talon.CompileContract", kind: "function", package: "github.com/myshra777-ai/garuda/internal/talon", file: "internal/talon/talon.go", exported: true, repo: "talon-harness" },
-    { id: "sym:workspaceScopeFromRequest", name: "workspaceScopeFromRequest", kind: "function", package: "github.com/myshra777-ai/garuda/internal/api", file: "internal/api/workspace_scope.go", exported: false, repo: "garuda-core" },
-    { id: "sym:RecomputeWorkspaceVerification", name: "VerificationEngine.RecomputeWorkspaceVerification", kind: "method", package: "github.com/myshra777-ai/garuda/internal/runtime", file: "internal/runtime/verifier.go", exported: true, repo: "garuda-core" },
-    { id: "sym:AuthMiddleware", name: "Server.AuthMiddleware", kind: "method", package: "github.com/myshra777-ai/garuda/internal/api", file: "internal/api/auth_middleware.go", exported: true, repo: "garuda-core" },
-    { id: "sym:ParseDirectory", name: "policy.ParseDirectory", kind: "function", package: "github.com/myshra777-ai/garuda/internal/policy", file: "internal/policy/parser.go", exported: true, repo: "garuda-core" },
-    { id: "sym:AnalyzeWorkspace", name: "AnalyzeWorkspace", kind: "function", package: "github.com/myshra777-ai/garuda/internal/analyzer", file: "internal/analyzer/workspace_analyzer.go", exported: true, repo: "garuda-core" },
-    { id: "sym:Server", name: "Server", kind: "struct", package: "github.com/myshra777-ai/garuda/internal/api", file: "internal/api/handler.go", exported: true, repo: "garuda-core" },
-    { id: "sym:WorkspaceContract", name: "WorkspaceContract", kind: "struct", package: "github.com/myshra777-ai/garuda/internal/talon", file: "internal/talon/talon.go", exported: true, repo: "talon-harness" },
-    { id: "sym:DecisionStore", name: "DecisionStore", kind: "interface", package: "github.com/myshra777-ai/garuda/internal/types", file: "internal/types/types.go", exported: true, repo: "garuda-core" },
-    { id: "pkg:internal/talon", name: "internal/talon", kind: "package", package: "github.com/myshra777-ai/garuda/internal/talon", file: "internal/talon/talon.go", exported: true, repo: "talon-harness" },
-    { id: "pkg:internal/merkle", name: "internal/merkle", kind: "package", package: "github.com/myshra777-ai/garuda/internal/merkle", file: "internal/merkle/tree.go", exported: true, repo: "merkle-ledger" }
-];
 
 function setupSearch() {
     var global = document.getElementById("global-search");

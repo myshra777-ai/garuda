@@ -13,7 +13,7 @@ garuda dev
 
 Choose the workspace you want to inspect from the sidebar selector. Dashboard reads are scoped to that workspace and the current authenticated session.
 
-**Live data vs. sample data:** live data is the default. A zero count means no records were returned for the selected workspace; it is not silently replaced with demo numbers. To preview the UI with sample content, explicitly open `/dashboard?demo=1`. The demo banner is intentional: sample values are not evidence about your repository.
+**Live data vs. sample data:** the main Overview, Symbol Search, Architecture Map, Docs & Rules, Talon, Change Review, Evidence, Agents, and Decision Lineage flows use live workspace responses by default. Empty or failed requests stay empty/unavailable instead of being filled with unrelated example records. To preview the explicit sample datasets, open `/dashboard?demo=1`; the demo banner is intentional and sample values are not evidence about your repository. The Data & Logic Audit API also includes built-in illustrative formula and financial-audit scenarios alongside workspace-enriched criticality context. Treat those scenario rows as examples until linked to imported source evidence.
 
 ## 2. Global navigation and controls
 
