@@ -1,3 +1,13 @@
+var DEMO_MODE = new URLSearchParams(window.location.search).get("demo") === "1";
+if (DEMO_MODE) {
+    document.documentElement.setAttribute("data-demo-mode", "true");
+    window.addEventListener("DOMContentLoaded", function() {
+        var indicator = document.createElement("div");
+        indicator.className = "demo-mode-indicator";
+        indicator.textContent = "DEMO DATA · NOT A LIVE WORKSPACE";
+        document.body.appendChild(indicator);
+    });
+}
 /* ============================================================================
    ZERO-DEPENDENCY OFFLINE SVG FORCE-DIRECTED GRAPH ENGINE (D3 v7 Compatible)
    Ensures 100% offline / air-gapped operation with zero external CDN requests.
@@ -898,12 +908,12 @@ function refreshAllWithToast() {
 }
 
 function initTheme() {
-    var saved = "light";
-    try { saved = localStorage.getItem("garuda_theme") || "light"; } catch (e) {}
+    var saved = "dark";
+    try { saved = localStorage.getItem("garuda_theme") || "dark"; } catch (e) {}
+    if (saved !== "light" && saved !== "dark") saved = "dark";
     document.documentElement.setAttribute("data-theme", saved);
     updateThemeButton(saved);
 }
-
 function toggleTheme() {
     var curr = document.documentElement.getAttribute("data-theme") || "light";
     var next = curr === "light" ? "dark" : "light";
@@ -977,6 +987,20 @@ function switchSurfaceSubTab(sectionId, paneId, btnEl) {
     }
 }
 
+function toggleMobileNav(forceOpen) {
+    var sidebar = document.querySelector(".sidebar");
+    var scrim = document.getElementById("sidebar-scrim");
+    var toggle = document.getElementById("menu-toggle");
+    if (!sidebar || !scrim) return;
+    var open = typeof forceOpen === "boolean" ? forceOpen : !sidebar.classList.contains("mobile-open");
+    sidebar.classList.toggle("mobile-open", open);
+    scrim.classList.toggle("open", open);
+    if (toggle) {
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        toggle.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+    }
+}
+
 function showView(view) {
     var aliases = { overview: "workspace", architecture: "graph", trust: "governance", docs: "docsgraph", risk: "talon" };
     view = aliases[view] || view;
@@ -1002,6 +1026,10 @@ function showView(view) {
         var isActive = el.dataset.surface === view;
         el.classList.toggle("active", isActive);
     });
+    document.querySelectorAll(".nav-cluster").forEach(function(group) {
+        group.open = !!group.querySelector(".nav-btn.active");
+    });
+    if (window.innerWidth <= 900) toggleMobileNav(false);
 
     setText("topbar-surface-name", surfaceLabels[view] || "01 — Overview");
 
@@ -1062,24 +1090,21 @@ async function loadStats() {
         });
         if (!res.ok) throw new Error("Stats request failed: " + res.status);
         var data = await res.json();
-        if (!data || (!data.entities && !data.repositories)) {
-            state.stats = Object.assign({}, FALLBACK_DATA.stats, { workspace: data.workspace || WORKSPACE });
-        } else {
-            if (!data.drift || !data.drift.total_document_claims) {
-                data.drift = FALLBACK_DATA.stats.drift;
-            }
-            if (!data.top_hubs || data.top_hubs.length === 0) {
-                data.top_hubs = FALLBACK_DATA.stats.top_hubs;
-            }
-            state.stats = data;
-        }
+        if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Stats response was not an object.");
+        ["languages_breakdown", "top_hubs", "needs_attention", "recent_evidence", "repo_stats", "repositories_list"].forEach(function(key) {
+            if (!Array.isArray(data[key])) data[key] = [];
+        });
+        if (!data.drift || typeof data.drift !== "object") data.drift = {};
+        state.stats = data;
+        state.statsError = null;
     } catch (err) {
-        state.stats = FALLBACK_DATA.stats;
+        state.statsError = err;
+        state.stats = DEMO_MODE ? FALLBACK_DATA.stats : null;
     }
-    renderStats();
+    if (state.stats) renderStats();
+    else renderStatsUnavailable();
     await loadPolicies();
 }
-
 async function loadPolicies() {
     try {
         var res = await fetch("/api/v1/dashboard/policies?workspace=" + encodeURIComponent(WORKSPACE), {
@@ -1087,21 +1112,40 @@ async function loadPolicies() {
         });
         if (!res.ok) throw new Error("Policies request failed: " + res.status);
         var data = await res.json();
-        if (!data || (!data.active_policies && (!data.latest_evaluations || data.latest_evaluations.length === 0))) {
-            state.policiesData = FALLBACK_DATA.policies;
-        } else {
-            state.policiesData = data;
-        }
+        if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Policies response was not an object.");
+        if (!Array.isArray(data.latest_evaluations)) data.latest_evaluations = [];
+        state.policiesData = data;
+        state.policiesError = null;
     } catch (err) {
-        state.policiesData = FALLBACK_DATA.policies;
+        state.policiesError = err;
+        state.policiesData = DEMO_MODE ? FALLBACK_DATA.policies : { unavailable: true, latest_evaluations: [] };
     }
     renderPolicies(state.policiesData);
     buildAuditEntries();
-    if (state.currentView === "review") {
-        renderChangeReviewWorkbench();
-    }
+    if (state.currentView === "review") renderChangeReviewWorkbench();
 }
-
+function renderStatsUnavailable() {
+    ["stat-repositories", "stat-packages", "stat-entities", "stat-relationships", "stat-cross-links",
+     "stat-idempotency", "stat-supported", "stat-unverified", "stat-contradicted", "pulse-total-claims",
+     "stat-active-policies", "stat-drift-count", "explorer-repos", "explorer-packages", "explorer-entities",
+     "overview-block-height", "overview-merkle-short", "drift-total-docs", "drift-doc-supported",
+     "drift-doc-unverified", "drift-doc-contradicted", "drift-doc-to-code", "drift-code-to-doc",
+     "drift-undocumented-code", "drift-unimplemented-docs"].forEach(function(id) { setText(id, "—"); });
+    setText("overview-updated-at", "Workspace data unavailable");
+    setText("overview-narrative", "Garuda could not load the current workspace snapshot. Check the connection and refresh to try again.");
+    setText("sidebar-meta", "Workspace data unavailable");
+    setText("honest-system-text", "Workspace data unavailable");
+    setText("lang-legend", "Language data unavailable.");
+    var badge = document.getElementById("policy-final-decision-badge");
+    if (badge) { badge.textContent = "Unavailable"; badge.className = "badge-pill info"; }
+    setText("policy-latest-anchor", "No current anchor");
+    ["hub-list", "attention-list", "evidence-list", "scanned-repos-list"].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">Workspace data unavailable</div><div class="row-meta">Refresh after the dashboard connection is restored.</div></div></div>';
+    });
+    var langBar = document.getElementById("lang-bar");
+    if (langBar) langBar.innerHTML = "";
+}
 function renderStats() {
     if (!state.stats) return;
     var s = state.stats;
@@ -1143,11 +1187,11 @@ function renderStats() {
     setText("explorer-packages", formatNumber(s.packages));
     setText("explorer-entities", formatNumber(s.entities));
     setText("nav-badge-packages", formatNumber(s.packages));
-    setText("nav-badge-ledger", "#" + String(s.latest_block_height || 1));
-    setText("overview-block-height", "#" + String(s.latest_block_height || 1));
+    setText("nav-badge-ledger", s.latest_block_height ? "#" + String(s.latest_block_height) : "—");
+    setText("overview-block-height", s.latest_block_height ? "#" + String(s.latest_block_height) : "—");
     setText("overview-updated-at", "Last indexed " + formatDate(s.last_updated));
 
-    var merkleShort = (s.latest_merkle_hash || "Genesis verified");
+    var merkleShort = (s.latest_merkle_hash || "No anchor yet");
     if (merkleShort.length > 22) merkleShort = merkleShort.slice(0, 18) + "…";
     setText("overview-merkle-short", merkleShort);
 
@@ -1162,7 +1206,7 @@ function renderStats() {
     if ((s.contradicted || 0) > 0) {
         narrative += formatNumber(s.contradicted) + " contradicted claim(s) require immediate investigation.";
     } else {
-        narrative += "Zero active contradictions detected across static AST, document claims, and runtime telemetry.";
+        narrative += "No active contradictions are reported in the latest workspace evaluation.";
     }
     setText("overview-narrative", narrative);
 
@@ -1171,7 +1215,7 @@ function renderStats() {
         setText("honest-system-text", s.contradicted + " contradiction(s) active");
         if (sysDot) sysDot.style.background = "var(--red)";
     } else {
-        setText("honest-system-text", "Talon Guard Active · Block #" + (s.latest_block_height || 1));
+        setText("honest-system-text", s.latest_block_height ? "Workspace indexed · Block #" + s.latest_block_height : "Workspace indexed · No ledger anchor yet");
         if (sysDot) sysDot.style.background = "var(--green)";
     }
 
@@ -1187,79 +1231,62 @@ function renderStats() {
 
 function renderPolicies(data) {
     if (!data) return;
-
-    setText("policy-block-count",  formatNumber(data.blocked_count || 0));
+    setText("policy-block-count", formatNumber(data.blocked_count || 0));
     setText("policy-review-count", formatNumber(data.review_count || 0));
-    setText("policy-warn-count",   formatNumber(data.warn_count || 0));
-    setText("policy-allow-count",  formatNumber(data.allow_count || 0));
+    setText("policy-warn-count", formatNumber(data.warn_count || 0));
+    setText("policy-allow-count", formatNumber(data.allow_count || 0));
     setText("stat-active-policies", formatNumber(data.active_policies || 0));
-
     var badge = document.getElementById("policy-final-decision-badge");
+    var decision = data.unavailable ? "Unavailable" : (data.final_decision || "No evaluation");
     if (badge) {
-        badge.textContent = data.final_decision || "ALLOW";
+        badge.textContent = decision;
         badge.className = "badge-pill " + (
-            data.final_decision === "BLOCK"  ? "critical" :
-            data.final_decision === "REVIEW" ? "warning"  :
-            data.final_decision === "WARN"   ? "warning"  : "success"
+            data.unavailable ? "info" :
+            data.final_decision === "BLOCK" ? "critical" :
+            data.final_decision === "REVIEW" || data.final_decision === "WARN" ? "warning" :
+            data.final_decision === "ALLOW" ? "success" : "info"
         );
     }
-    setText("nav-badge-review", data.final_decision || "ALLOW");
-
+    setText("nav-badge-review", data.final_decision || "—");
     var chip = document.getElementById("policy-latest-anchor");
     if (chip) {
-        if (data.latest_merkle_anchor) {
-            chip.textContent = "block #" + data.latest_merkle_anchor;
-            chip.classList.remove("invalid");
-        } else {
-            chip.textContent = "block #1";
-            chip.classList.remove("invalid");
-        }
+        chip.textContent = data.latest_merkle_anchor ? "block #" + data.latest_merkle_anchor : "No anchor yet";
+        chip.classList.remove("invalid");
     }
-
     var list = document.getElementById("policy-eval-list");
     if (!list) return;
-
     var evals = data.latest_evaluations || [];
     if (evals.length === 0) {
-        evals = FALLBACK_DATA.policies.latest_evaluations;
+        list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">' +
+            (data.unavailable ? "Policy evaluations could not be loaded." : "No policy evaluations have been recorded for this workspace yet.") +
+            '</div><div class="row-meta">' +
+            (data.unavailable ? "Refresh the dashboard after the API connection is restored." : "Run a change check to create the first evaluation.") +
+            '</div></div></div>';
+        return;
     }
-
     list.innerHTML = "";
     evals.forEach(function(ev, idx) {
         var row = document.createElement("div");
         row.className = "policy-eval-row";
-
         var anchorChip = ev.merkle_block_height
             ? '<span class="merkle-chip' + (ev.anchor_valid ? '' : ' invalid') + '">block #' + ev.merkle_block_height + '</span>'
-            : '<span class="merkle-chip">anchored</span>';
-
+            : '<span class="merkle-chip">not anchored</span>';
         var preds = (ev.matched_predicates || []).join(", ") || "all predicates passed";
         var when = formatDate(ev.evaluated_at);
-
         row.innerHTML =
             '<span class="policy-badge ' + escapeHTML(ev.decision) + '">' + escapeHTML(ev.decision) + '</span>' +
-            '<div class="policy-eval-main">' +
-                '<div class="policy-eval-title">' + escapeHTML(ev.policy_title) + anchorChip + '</div>' +
-                '<div class="policy-eval-reason">' + escapeHTML(ev.reason) + '</div>' +
-                '<div class="policy-eval-meta">' +
-                    '<span><strong>' + formatNumber(ev.entity_count) + '</strong> entities</span>' +
-                    '<span><strong>' + formatNumber(ev.claim_count) + '</strong> claims</span>' +
-                    '<span><strong>' + formatNumber(ev.contradiction_count) + '</strong> contradictions</span>' +
-                    '<span>rule: <strong>' + escapeHTML(preds) + '</strong></span>' +
-                    '<span>' + escapeHTML(when) + '</span>' +
-                '</div>' +
-            '</div>' +
-            '<button class="btn-secondary" style="height:26px; font-size:11px;" onclick="event.stopPropagation(); openEvalInChangeReview(' + idx + ')">Review →</button>';
-
+            '<div class="policy-eval-main"><div class="policy-eval-title">' + escapeHTML(ev.policy_title) + anchorChip + '</div>' +
+            '<div class="policy-eval-reason">' + escapeHTML(ev.reason) + '</div>' +
+            '<div class="policy-eval-meta"><span><strong>' + formatNumber(ev.entity_count) + '</strong> entities</span>' +
+            '<span><strong>' + formatNumber(ev.claim_count) + '</strong> claims</span>' +
+            '<span><strong>' + formatNumber(ev.contradiction_count) + '</strong> contradictions</span>' +
+            '<span>rule: <strong>' + escapeHTML(preds) + '</strong></span><span>' + escapeHTML(when) + '</span></div></div>' +
+            '<button class="btn-secondary" style="height:30px;font-size:11px;" onclick="event.stopPropagation();openEvalInChangeReview(' + idx + ')">Review</button>';
         row.style.cursor = "pointer";
-        row.onclick = function() {
-            openEvalInChangeReview(idx);
-        };
-
+        row.onclick = function() { openEvalInChangeReview(idx); };
         list.appendChild(row);
     });
 }
-
 function verifyPolicyAnchor(evalID) {
     var url = "/api/v1/dashboard/policies/verify?workspace=" +
         encodeURIComponent(WORKSPACE) + "&id=" + encodeURIComponent(evalID);
@@ -1307,14 +1334,14 @@ function renderLanguages(langs) {
     var bar = document.getElementById("lang-bar");
     var legend = document.getElementById("lang-legend");
     if (!bar || !legend) return;
-
-    if (!langs || langs.length === 0) {
-        langs = FALLBACK_DATA.stats.languages_breakdown;
-    }
-
-    langs.sort(function(a, b) { return b.count - a.count; });
-
+    if ((!langs || langs.length === 0) && DEMO_MODE) langs = FALLBACK_DATA.stats.languages_breakdown;
+    langs = Array.isArray(langs) ? langs.slice().sort(function(a, b) { return b.count - a.count; }) : [];
     bar.innerHTML = "";
+    legend.innerHTML = "";
+    if (langs.length === 0) {
+        legend.textContent = "Language data appears after the first successful index.";
+        return;
+    }
     langs.forEach(function(lang) {
         var seg = document.createElement("div");
         seg.className = "lang-bar-segment";
@@ -1323,8 +1350,6 @@ function renderLanguages(langs) {
         seg.title = lang.name + " " + lang.percentage.toFixed(1) + "%";
         bar.appendChild(seg);
     });
-
-    legend.innerHTML = "";
     langs.slice(0, 3).forEach(function(lang) {
         var item = document.createElement("span");
         item.className = "lang-legend-item";
@@ -1335,45 +1360,37 @@ function renderLanguages(langs) {
         legend.appendChild(item);
     });
 }
-
 function renderDrift(d) {
-    setText("drift-total-docs", formatNumber(d.total_document_claims || 12));
-    setText("drift-doc-supported", formatNumber(d.supported_claims || 11));
-    setText("drift-doc-unverified", formatNumber(d.unverified_claims || 1));
+    d = d || {};
+    setText("drift-total-docs", formatNumber(d.total_document_claims || 0));
+    setText("drift-doc-supported", formatNumber(d.supported_claims || 0));
+    setText("drift-doc-unverified", formatNumber(d.unverified_claims || 0));
     setText("drift-doc-contradicted", formatNumber(d.contradicted_claims || 0));
     setText("drift-doc-to-code", formatNumber(d.doc_to_code_drift_count || 0));
-    setText("drift-code-to-doc", formatNumber(d.code_to_doc_drift_count || 4));
-    setText("drift-undocumented-code", formatNumber(d.undocumented_code || 4));
+    setText("drift-code-to-doc", formatNumber(d.code_to_doc_drift_count || 0));
+    setText("drift-undocumented-code", formatNumber(d.undocumented_code || 0));
     setText("drift-unimplemented-docs", formatNumber(d.unverified_docs || 0));
 }
-
 function renderHubs(hubs) {
     var list = document.getElementById("hub-list");
     if (!list) return;
-    if (!hubs || hubs.length === 0) {
-        hubs = FALLBACK_DATA.stats.top_hubs;
-    }
+    if ((!hubs || hubs.length === 0) && DEMO_MODE) hubs = FALLBACK_DATA.stats.top_hubs;
+    hubs = Array.isArray(hubs) ? hubs : [];
     list.innerHTML = "";
+    if (hubs.length === 0) {
+        list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No indexed hubs yet</div><div class="row-meta">Run an analysis to rank symbols by architectural centrality.</div></div></div>';
+        return;
+    }
     hubs.forEach(function(h) {
         var row = document.createElement("div");
         row.className = "list-row";
         row.style.cursor = "pointer";
-        row.innerHTML = '<div class="row-icon">' + symbolIcon(h.kind) + '</div>' +
-            '<div class="row-main">' +
-                '<div class="row-title mono">' + escapeHTML(h.name) + '</div>' +
-                '<div class="row-meta">' + escapeHTML(h.kind) + ' · ' + escapeHTML(h.package) + '</div>' +
-            '</div>' +
-            '<div style="text-align:right; display:flex; align-items:center; gap:10px;">' +
-                '<div><span class="mono" style="font-weight:700; color:var(--text); font-size:12.5px;">' + h.callers + '</span> <span style="font-size:10px; color:var(--muted);">callers</span></div>' +
-                '<span class="kbd-chip">1-hop →</span>' +
-            '</div>';
-        row.onclick = function() {
-            focusSymbolOnArchitectureMap(h.name, h.package, h);
-        };
+        row.innerHTML = '<div class="row-icon">' + symbolIcon(h.kind) + '</div><div class="row-main"><div class="row-title mono">' + escapeHTML(h.name) + '</div><div class="row-meta">' + escapeHTML(h.kind) + ' · ' + escapeHTML(h.package) + '</div></div>' +
+            '<div style="text-align:right;display:flex;align-items:center;gap:10px;"><div><span class="mono" style="font-weight:700;color:var(--text);font-size:12.5px;">' + h.callers + '</span> <span style="font-size:10px;color:var(--muted);">callers</span></div><span class="kbd-chip">1-hop</span></div>';
+        row.onclick = function() { focusSymbolOnArchitectureMap(h.name, h.package, h); };
         list.appendChild(row);
     });
 }
-
 function focusSymbolOnArchitectureMap(symbolName, pkgName, hubObj) {
     state.currentLevel = "entity";
     state.currentFocus = symbolName || pkgName || "";
@@ -1391,8 +1408,9 @@ function focusSymbolOnArchitectureMap(symbolName, pkgName, hubObj) {
 function renderAttention(items) {
     var list = document.getElementById("attention-list");
     if (!list) return;
-    if (!items || items.length === 0) {
-        list.innerHTML = '<div class="list-row"><div class="row-icon" style="color:var(--green); border-color:var(--green-border); background:var(--green-bg);">✓</div><div class="row-main"><div class="row-title">Zero Active Contradictions</div><div class="row-meta">All indexed static claims, ADR rules, and observed runtime edges are structurally consistent.</div></div><button class="btn-secondary" style="height:26px; font-size:11px;" onclick="showView(\'talon\')">Talon Hub →</button></div>';
+    items = Array.isArray(items) ? items : [];
+    if (items.length === 0) {
+        list.innerHTML = '<div class="list-row"><div class="row-icon" style="color:var(--green);border-color:var(--green-border);background:var(--green-bg);">✓</div><div class="row-main"><div class="row-title">No items need attention</div><div class="row-meta">No active contradictions or policy blocks are reported in this workspace snapshot.</div></div></div>';
         return;
     }
     list.innerHTML = "";
@@ -1401,95 +1419,70 @@ function renderAttention(items) {
         row.className = "list-row";
         row.style.cursor = "pointer";
         row.innerHTML = '<div class="row-icon" style="color:' + (item.severity === 'critical' ? 'var(--red)' : 'var(--amber)') + ';">!</div>' +
-            '<div class="row-main">' +
-                '<div class="row-title">' + escapeHTML(item.title) + '</div>' +
-                '<div class="row-meta">' + escapeHTML(item.subtitle) + ' · ' + escapeHTML(item.evidence_loc) + '</div>' +
-            '</div>' +
+            '<div class="row-main"><div class="row-title">' + escapeHTML(item.title) + '</div><div class="row-meta">' + escapeHTML(item.subtitle) + ' · ' + escapeHTML(item.evidence_loc) + '</div></div>' +
             '<span class="badge-pill ' + escapeHTML(item.severity) + '">' + escapeHTML(item.severity) + '</span>';
-        row.onclick = function() {
-            showView("review");
-        };
+        row.onclick = function() { showView("review"); };
         list.appendChild(row);
     });
 }
-
 function renderEvidence(items) {
     var list = document.getElementById("evidence-list");
     if (!list) return;
-    if (!items || items.length === 0) {
-        items = FALLBACK_DATA.stats.recent_evidence;
-    }
+    if ((!items || items.length === 0) && DEMO_MODE) items = FALLBACK_DATA.stats.recent_evidence;
+    items = Array.isArray(items) ? items : [];
     list.innerHTML = "";
+    if (items.length === 0) {
+        list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No evidence records yet</div><div class="row-meta">Evidence appears after analysis, verification, or policy evaluation.</div></div></div>';
+        return;
+    }
     items.forEach(function(item) {
         var row = document.createElement("div");
         row.className = "list-row";
         var badgeClass = item.kind === "Runtime Trace" ? "warning" : "info";
-        var badgeText = item.kind === "Runtime Trace" ? "Runtime Observed" : "AST / Ledger Recorded";
-        row.innerHTML = '<div class="row-icon">§</div>' +
-            '<div class="row-main">' +
-                '<div class="row-title">' + escapeHTML(item.summary) + '</div>' +
-                '<div class="row-meta">' + escapeHTML(item.kind) + ' · ' + escapeHTML(item.source) + ' · ' + formatDate(item.timestamp) + '</div>' +
-            '</div>' +
+        var badgeText = item.kind === "Runtime Trace" ? "Runtime observed" : "Recorded";
+        row.innerHTML = '<div class="row-icon">§</div><div class="row-main"><div class="row-title">' + escapeHTML(item.summary) + '</div>' +
+            '<div class="row-meta">' + escapeHTML(item.kind) + ' · ' + escapeHTML(item.source) + ' · ' + formatDate(item.timestamp) + '</div></div>' +
             '<span class="badge-pill ' + badgeClass + '">' + badgeText + '</span>';
         list.appendChild(row);
     });
 }
-
 function renderTrust() {
     if (!state.stats) return;
-    setText("trust-status", state.stats.trust_status || "Verified");
-    setText("trust-height", "#" + String(state.stats.latest_block_height || 1));
+    setText("trust-status", state.stats.trust_status || "Status unavailable");
+    setText("trust-height", state.stats.latest_block_height ? "#" + String(state.stats.latest_block_height) : "—");
     setText("trust-updated", formatDate(state.stats.last_updated));
-    setText("trust-merkle", state.stats.latest_merkle_hash || "Genesis verified");
-    setText("trust-parent", state.stats.parent_merkle_hash || "Genesis");
+    setText("trust-merkle", state.stats.latest_merkle_hash || "No anchor recorded");
+    setText("trust-parent", state.stats.parent_merkle_hash || "No parent anchor");
 }
 
 function renderScannedRepos(repoStats, fallbackList) {
     var list = document.getElementById("scanned-repos-list");
     if (!list) return;
-
-    if (!repoStats || repoStats.length === 0) {
-        repoStats = FALLBACK_DATA.stats.repo_stats;
-    }
-
+    if ((!repoStats || repoStats.length === 0) && DEMO_MODE) repoStats = FALLBACK_DATA.stats.repo_stats;
+    repoStats = Array.isArray(repoStats) ? repoStats : [];
     list.innerHTML = "";
+    if (repoStats.length === 0) {
+        list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No repositories indexed in this workspace</div><div class="row-meta">Add a repository with the Garuda CLI, then run workspace sync.</div></div></div>';
+        return;
+    }
     repoStats.forEach(function(repo) {
         var card = document.createElement("div");
         card.className = "repo-card";
-
         var statusBadge = repo.analysis_status === "synced"
             ? '<span class="badge-pill success">synced</span>'
             : '<span class="badge-pill info">' + escapeHTML(repo.analysis_status || "indexed") + '</span>';
-
-        var commitShort = repo.current_commit && repo.current_commit.length > 8
-            ? repo.current_commit.substring(0, 8)
-            : (repo.current_commit || "HEAD");
-
+        var commitShort = repo.current_commit && repo.current_commit.length > 8 ? repo.current_commit.substring(0, 8) : (repo.current_commit || "HEAD");
         card.innerHTML =
-            '<div class="repo-card-header">' +
-                '<div>' +
-                    '<div class="repo-card-name">' + escapeHTML(repo.name) + '</div>' +
-                    '<div class="repo-card-meta">commit ' + escapeHTML(commitShort) + ' · analyzed ' + (repo.last_analyzed || "recently") + '</div>' +
-                '</div>' +
-                statusBadge +
-            '</div>' +
-            '<div class="repo-card-stats">' +
-                '<span><span class="repo-card-stat-val">' + formatNumber(repo.entities) + '</span> entities</span>' +
-                '<span><span class="repo-card-stat-val">' + formatNumber(repo.relationships) + '</span> relationships</span>' +
-                '<span><span class="repo-card-stat-val">' + formatNumber(repo.files) + '</span> files</span>' +
-            '</div>' +
-            '<div class="repo-card-actions">' +
-                '<button class="btn-secondary" style="height:28px; font-size:11.5px;" onclick="event.stopPropagation(); state.currentLevel=\'package\'; state.currentFocus=\'' + escapeJS(repo.name) + '\'; showView(\'graph\');">Architecture Map (Packages) →</button>' +
-                '<button class="btn-secondary" style="height:28px; font-size:11.5px;" onclick="event.stopPropagation(); runSearch(\'' + escapeJS(repo.name) + '\')">Search Symbols</button>' +
-            '</div>';
-
+            '<div class="repo-card-header"><div><div class="repo-card-name">' + escapeHTML(repo.name) + '</div>' +
+            '<div class="repo-card-meta">commit ' + escapeHTML(commitShort) + ' · analyzed ' + escapeHTML(repo.last_analyzed || "time unavailable") + '</div></div>' + statusBadge + '</div>' +
+            '<div class="repo-card-stats"><span><span class="repo-card-stat-val">' + formatNumber(repo.entities) + '</span> entities</span>' +
+            '<span><span class="repo-card-stat-val">' + formatNumber(repo.relationships) + '</span> relationships</span>' +
+            '<span><span class="repo-card-stat-val">' + formatNumber(repo.files) + '</span> files</span></div>' +
+            '<div class="repo-card-actions"><button class="btn-secondary" style="height:28px;font-size:11.5px;" onclick="event.stopPropagation();state.currentLevel=\'package\';state.currentFocus=\'' + escapeJS(repo.name) + '\';showView(\'graph\');">Architecture map</button>' +
+            '<button class="btn-secondary" style="height:28px;font-size:11.5px;" onclick="event.stopPropagation();runSearch(\'' + escapeJS(repo.name) + '\')">Search symbols</button></div>';
         list.appendChild(card);
     });
 }
-
-/* ============================================================================
-   04 — DOCS & RULES GRAPH: DOCUMENT-TO-CODE LINEAGE HUB
-   ============================================================================ */
 async function loadDocsGraph() {
     if (!state.docsGraphData) {
         try {
@@ -1498,18 +1491,16 @@ async function loadDocsGraph() {
             });
             if (!res.ok) throw new Error("docs-graph HTTP " + res.status);
             var data = await res.json();
-            if (!data || !data.documents || data.documents.length === 0) {
-                state.docsGraphData = buildDefaultDocsGraph();
-            } else {
-                state.docsGraphData = data;
-            }
+            state.docsGraphData = data && Array.isArray(data.documents) && (data.documents.length > 0 || !DEMO_MODE)
+                ? data
+                : (DEMO_MODE ? buildDefaultDocsGraph() : { stats: {}, documents: [], components: [], graph: { nodes: [], edges: [] } });
         } catch (err) {
-            state.docsGraphData = buildDefaultDocsGraph();
+            state.docsGraphData = DEMO_MODE ? buildDefaultDocsGraph() :
+                { stats: {}, documents: [], components: [], graph: { nodes: [], edges: [] }, unavailable: true };
         }
     }
     renderDocsGraphAndTables();
 }
-
 function filterDocsGraph(filterVal, btnEl) {
     state.docsFilterType = filterVal;
     state.docsSelectedDocId = "";
@@ -1532,7 +1523,7 @@ function selectSpecificDocCard(docId) {
 
 function renderDocsGraphAndTables() {
     if (!state.docsGraphData) {
-        state.docsGraphData = buildDefaultDocsGraph();
+        state.docsGraphData = DEMO_MODE ? buildDefaultDocsGraph() : { stats: {}, documents: [], components: [], graph: { nodes: [], edges: [] } };
     }
     var dg = state.docsGraphData;
     var st = dg.stats || {};
@@ -2130,31 +2121,28 @@ async function loadTalonHub() {
             });
             if (!res.ok) throw new Error("talon-hub HTTP " + res.status);
             var data = await res.json();
-            if (!data || !data.risk_hubs || data.risk_hubs.length === 0) {
-                state.talonHubData = buildDefaultTalonHub();
-            } else {
-                state.talonHubData = data;
-            }
+            if (!data || typeof data !== "object") throw new Error("Invalid Talon response");
+            state.talonHubData = (DEMO_MODE && (!Array.isArray(data.risk_hubs) || data.risk_hubs.length === 0))
+                ? buildDefaultTalonHub() : data;
         } catch (err) {
-            state.talonHubData = buildDefaultTalonHub();
+            state.talonHubData = DEMO_MODE ? buildDefaultTalonHub() : { hooks: [], risk_hubs: [], enforcement_mode: "Unavailable", unavailable: true };
         }
     }
     renderTalonHub();
 }
-
 function renderTalonHub() {
     if (!state.talonHubData) {
-        state.talonHubData = buildDefaultTalonHub();
+        state.talonHubData = DEMO_MODE ? buildDefaultTalonHub() : { hooks: [], risk_hubs: [], enforcement_mode: "Unavailable" };
     }
     var th = state.talonHubData;
     var hooks = th.hooks || [];
     var hubs = th.risk_hubs || [];
     var verdict = th.latest_verdict || {};
 
-    setText("talon-hooks-count", (th.active_hooks_count || hooks.length) + " / " + (th.total_hooks_count || 6));
-    setText("talon-crit-badge", (th.critical_hubs_count || 4) + " CRITICAL");
+    setText("talon-hooks-count", (th.active_hooks_count || hooks.length) + " / " + (th.total_hooks_count || hooks.length));
+    setText("talon-crit-badge", (th.critical_hubs_count || 0) + " CRITICAL");
     setText("talon-total-hubs", String(hubs.length));
-    setText("talon-high-count", String(th.high_hubs_count || 2));
+    setText("talon-high-count", String(th.high_hubs_count || 0));
 
     renderTalonVerdict(verdict);
 
@@ -3019,8 +3007,9 @@ function updateNeighborhoodAndInspector(centerNode, allNodes, allEdges) {
         setText("nb-dep-sub", "0 outgoing dependencies in view");
     }
 
-    var policyDecision = (state.policiesData && state.policiesData.final_decision) || "ALLOW";
-    var activePolCount = (state.policiesData && state.policiesData.active_policies) || 4;
+    var policyDecision = (state.policiesData && state.policiesData.final_decision) ||
+        (state.policiesData && state.policiesData.unavailable ? "Unavailable" : "No evaluation");
+    var activePolCount = (state.policiesData && state.policiesData.active_policies) || 0;
     setText("nb-policy-title", "Policy Gate: " + policyDecision);
     setText("nb-policy-sub", activePolCount + " active rules · click for Change Review");
 
@@ -3654,44 +3643,34 @@ function selectReviewTarget(val) {
    ============================================================================ */
 function buildAuditEntries() {
     var entries = [];
-    var evals = (state.policiesData && state.policiesData.latest_evaluations) || FALLBACK_DATA.policies.latest_evaluations;
+    var evals = (state.policiesData && state.policiesData.latest_evaluations) || [];
+    if (DEMO_MODE && evals.length === 0) evals = FALLBACK_DATA.policies.latest_evaluations;
     evals.forEach(function(ev) {
         entries.push({
-            id: ev.id,
-            time: ev.evaluated_at,
-            actor: ev.actor || "garuda-talon",
+            id: ev.id, time: ev.evaluated_at, actor: ev.actor || "garuda-talon",
             action: ev.reason || ("Evaluated policy " + ev.policy_title),
             object: ev.policy_title + " (" + (ev.subject_id || WORKSPACE) + ")",
-            anchor: ev.merkle_block_height ? ("block #" + ev.merkle_block_height) : "block #52",
-            result: ev.decision || "ALLOW",
-            rule: (ev.matched_predicates || []).join(", ") || "policy.ValidatePolicy",
+            anchor: ev.merkle_block_height ? ("block #" + ev.merkle_block_height) : "not anchored",
+            result: ev.decision || "UNVERIFIED",
+            rule: (ev.matched_predicates || []).join(", "),
             lookedAt: formatNumber(ev.entity_count) + " entities, " + formatNumber(ev.claim_count) + " static claims, " + formatNumber(ev.contradiction_count) + " contradictions",
             isEval: true
         });
     });
-
-    var evList = (state.stats && state.stats.recent_evidence) || FALLBACK_DATA.stats.recent_evidence;
+    var evList = (state.stats && state.stats.recent_evidence) || [];
+    if (DEMO_MODE && evList.length === 0) evList = FALLBACK_DATA.stats.recent_evidence;
     evList.forEach(function(item, i) {
         entries.push({
-            id: item.id || ("ev-" + i),
-            time: item.timestamp,
-            actor: item.kind || "ast-analyzer",
-            action: item.summary,
-            object: item.source || WORKSPACE,
-            anchor: "block #" + ((state.stats && state.stats.latest_block_height) || 52),
-            result: item.kind === "Runtime Trace" ? "SUPPORTED" : "ALLOW",
-            rule: "canonical.SnapshotHash · GO_TYPES",
-            lookedAt: item.source || "workspace AST snapshot",
-            isEval: false
+            id: item.id || ("ev-" + i), time: item.timestamp, actor: item.kind || "ast-analyzer",
+            action: item.summary, object: item.source || WORKSPACE,
+            anchor: state.stats && state.stats.latest_block_height ? ("block #" + state.stats.latest_block_height) : "not anchored",
+            result: item.kind === "Runtime Trace" ? "SUPPORTED" : "RECORDED",
+            rule: "Evidence record", lookedAt: item.source || "workspace AST snapshot", isEval: false
         });
     });
-
     state.auditEntries = entries;
-    if (state.currentView === "governance") {
-        renderAuditLogTable();
-    }
+    if (state.currentView === "governance") renderAuditLogTable();
 }
-
 function filterAuditEntries(filterVal, btnEl) {
     state.auditFilter = filterVal;
     if (btnEl && btnEl.parentElement) {
@@ -3859,38 +3838,37 @@ async function performSearch(query) {
     var results = document.getElementById("search-results");
     if (!results) return;
     query = (query || "").trim();
-
     try {
         var res = await fetch("/api/v1/dashboard/search?q=" + encodeURIComponent(query) + "&workspace=" + encodeURIComponent(WORKSPACE) + "&limit=80");
         if (!res.ok) throw new Error("Search failed");
         var data = await res.json();
-        var list = (data && data.results) || [];
-        if (list.length === 0) {
-            var qLow = query.toLowerCase();
+        var list = Array.isArray(data.results) ? data.results : [];
+        if (DEMO_MODE && list.length === 0) {
+            var q = query.toLowerCase();
             list = DEFAULT_SEARCH_SYMBOLS.filter(function(item) {
-                if (!qLow) return true;
-                return item.name.toLowerCase().indexOf(qLow) !== -1 ||
-                       item.package.toLowerCase().indexOf(qLow) !== -1 ||
-                       item.file.toLowerCase().indexOf(qLow) !== -1 ||
-                       item.kind.toLowerCase().indexOf(qLow) !== -1;
+                return !q || [item.name, item.package, item.file, item.kind].join(" ").toLowerCase().indexOf(q) !== -1;
             });
         }
         state.searchResultsCache = list;
         renderSearchResults({ query: query, results: list });
     } catch (err) {
-        var qLow2 = query.toLowerCase();
-        var fbList = DEFAULT_SEARCH_SYMBOLS.filter(function(item) {
-            if (!qLow2) return true;
-            return item.name.toLowerCase().indexOf(qLow2) !== -1 ||
-                   item.package.toLowerCase().indexOf(qLow2) !== -1 ||
-                   item.file.toLowerCase().indexOf(qLow2) !== -1 ||
-                   item.kind.toLowerCase().indexOf(qLow2) !== -1;
-        });
-        state.searchResultsCache = fbList;
-        renderSearchResults({ query: query, results: fbList });
+        var fallback = [];
+        if (DEMO_MODE) {
+            var qLow = query.toLowerCase();
+            fallback = DEFAULT_SEARCH_SYMBOLS.filter(function(item) {
+                return !qLow || [item.name, item.package, item.file, item.kind].join(" ").toLowerCase().indexOf(qLow) !== -1;
+            });
+        }
+        state.searchResultsCache = fallback;
+        renderSearchResults({ query: query, results: fallback });
+        if (!DEMO_MODE) {
+            var message = document.createElement("div");
+            message.className = "empty-state";
+            message.textContent = "Search is unavailable. Check the dashboard connection and try again.";
+            results.appendChild(message);
+        }
     }
 }
-
 function renderSearchResults(data) {
     var results = document.getElementById("search-results");
     var title = document.getElementById("search-results-title");
@@ -4114,27 +4092,28 @@ var DEFAULT_SESSIONS = {
 async function loadAgents() {
     if (agentsLoaded) return;
     agentsLoaded = true;
-
     var activeEl = document.getElementById("agents-active-list");
     var recentEl = document.getElementById("agents-recent-list");
     if (!activeEl || !recentEl) return;
-
     try {
         var res = await fetch("/api/v1/dashboard/sessions?workspace=" + encodeURIComponent(WORKSPACE), {
             headers: { "Accept": "application/json" }
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
         var data = await res.json();
-        var act = (data.active && data.active.length > 0) ? data.active : DEFAULT_SESSIONS.active;
-        var rec = (data.recent && data.recent.length > 0) ? data.recent : DEFAULT_SESSIONS.recent;
+        var act = Array.isArray(data.active) ? data.active : [];
+        var rec = Array.isArray(data.recent) ? data.recent : [];
+        if (DEMO_MODE) {
+            if (act.length === 0) act = DEFAULT_SESSIONS.active;
+            if (rec.length === 0) rec = DEFAULT_SESSIONS.recent;
+        }
         renderSessionList(activeEl, act, "No active MCP sessions in the last 5 minutes.", true);
         renderSessionList(recentEl, rec, "No MCP sessions in the last 24 hours.", false);
     } catch (err) {
-        renderSessionList(activeEl, DEFAULT_SESSIONS.active, "No active MCP sessions.", true);
-        renderSessionList(recentEl, DEFAULT_SESSIONS.recent, "No recent MCP sessions.", false);
+        renderSessionList(activeEl, DEMO_MODE ? DEFAULT_SESSIONS.active : [], "Session data is unavailable.", true);
+        renderSessionList(recentEl, DEMO_MODE ? DEFAULT_SESSIONS.recent : [], "Session data is unavailable.", false);
     }
 }
-
 function renderSessionList(container, sessions, emptyMessage, isActivePanel) {
     if (!sessions || sessions.length === 0) {
         container.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">' + escapeHTML(emptyMessage) + '</div></div></div>';
@@ -4212,32 +4191,32 @@ var DEFAULT_DECISIONS = [
 async function loadDecisions() {
     if (decisionsLoaded) return;
     decisionsLoaded = true;
-
     var listEl = document.getElementById("decisions-list");
     var subtitleEl = document.getElementById("decisions-subtitle");
     if (!listEl) return;
-
     try {
         var res = await fetch("/api/v1/dashboard/decisions?workspace=" + encodeURIComponent(WORKSPACE), {
             headers: { "Accept": "application/json" }
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
         var data = await res.json();
-        var decisions = (data.decisions && data.decisions.length > 0) ? data.decisions : DEFAULT_DECISIONS;
+        var decisions = Array.isArray(data.decisions) ? data.decisions : [];
+        if (DEMO_MODE && decisions.length === 0) decisions = DEFAULT_DECISIONS;
         setText("nav-badge-decisions", String(decisions.length));
-        if (subtitleEl) {
-            subtitleEl.textContent = decisions.length + " canonical architectural decisions in this workspace.";
-        }
+        if (subtitleEl) subtitleEl.textContent = decisions.length + " architectural decisions in this workspace.";
         renderDecisionList(listEl, decisions);
     } catch (err) {
-        setText("nav-badge-decisions", String(DEFAULT_DECISIONS.length));
-        if (subtitleEl) subtitleEl.textContent = DEFAULT_DECISIONS.length + " canonical architectural decisions in this workspace.";
-        renderDecisionList(listEl, DEFAULT_DECISIONS);
+        setText("nav-badge-decisions", "—");
+        if (subtitleEl) subtitleEl.textContent = DEMO_MODE ? DEFAULT_DECISIONS.length + " sample decisions (demo mode)." : "Decision records could not be loaded.";
+        renderDecisionList(listEl, DEMO_MODE ? DEFAULT_DECISIONS : []);
     }
 }
-
 function renderDecisionList(container, decisions) {
     container.innerHTML = "";
+    if (!decisions || decisions.length === 0) {
+        container.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No architectural decisions yet</div><div class="row-meta">Ingest an ADR or record a decision to begin the lineage.</div></div></div>';
+        return;
+    }
     decisions.forEach(function(d) {
         var row = document.createElement("div");
         row.className = "list-row";

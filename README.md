@@ -6,14 +6,14 @@
 
 <p align="center">
   <strong>AI writes code at 100 mph. Garuda makes sure your architecture, business formulas, and financial numbers survive the ride.</strong><br>
-  <em>The local-first change-control gate, active AI agent harness (<code>Garuda Talon</code>), human-in-the-loop formula &amp; financial audit engine, and 9-surface software intelligence instrument.</em>
+  <em>The local-first change-control gate, active AI agent harness (<code>Garuda Talon</code>), human-in-the-loop formula &amp; financial audit engine, and 10-surface software intelligence instrument.</em>
 </p>
 
 <p align="center">
   <a href="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml/badge.svg" alt="Garuda CI & Governance"></a>
   <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml/badge.svg" alt="Garuda Integrity Gate"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/version-v1.9.1-2563eb.svg" alt="Version v1.9.1"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/version-v1.9.6-2563eb.svg" alt="Version v1.9.6"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 License"></a>
   <a href="INSTALL.md"><img src="https://img.shields.io/badge/install-1_Command_%7C_Zero_Dependencies-10b981.svg" alt="1-Command Universal Install"></a>
   <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/verified-24%2F24_Benchmarks_%7C_35_MCP_Tools_%7C_10%2F10_Runtime-f59e0b.svg" alt="Verification Evidence"></a>
@@ -22,7 +22,7 @@
 <p align="center">
   <a href="#watch-the-20-second-cinematic-intro">20s Cinematic Demo</a> ·
   <a href="#the-story-why-we-built-garuda">Why Garuda Exists</a> ·
-  <a href="#new-in-v191-human-in-the-loop-weights-criticality-tiers--financial-audits">New in v1.9.1</a> ·
+  <a href="#new-in-v191-human-in-the-loop-weights-criticality-tiers--financial-audits">New in v1.9.6</a> ·
   <a href="#a-visual-tour-of-garuda">Visual Product Tour</a> ·
   <a href="#install-in-one-command-zero-dependencies--foolproof">1-Command Install</a> ·
   <a href="#when-to-use-what-cli-command--mcp-tool">CLI &amp; MCP Quick Guide</a> ·
@@ -30,6 +30,12 @@
 </p>
 
 ---
+
+## Dashboard: a calmer command surface
+
+The current dashboard groups its ten working surfaces into **Explore**, **Enforce**, and **Verify**. It uses a graphite-first theme, restrained mint signal color, keyboard navigation, progressive disclosure, responsive navigation, and reduced-motion support. Live workspace data is not silently replaced by demo numbers; sample content is available only when explicitly requested with `?demo=1`.
+
+See the [Dashboard Walkthrough](docs/DASHBOARD_WALKTHROUGH.md) for every surface, panel, control, and recommended workflow. The dashboard currently ingests ADRs, specifications, invariants, and policy documents. Repository registration and synchronization are available through the CLI (`garuda repo add` and `garuda workspace sync`); direct repository upload/import is not yet a dashboard capability.
 
 ## Watch the 20-Second Cinematic Intro
 
