@@ -3448,7 +3448,8 @@ function selectReviewTarget(val) {
     var polEl = document.getElementById("rev-triad-policy");
     if (polEl) {
         polEl.textContent = decision;
-        polEl.className = "policy-badge " + decision;
+        var decisionClass = ["ALLOW", "BLOCK", "WARN", "REVIEW"].indexOf(decision) >= 0 ? decision : "UNVERIFIED";
+        polEl.className = "policy-badge " + decisionClass;
     }
     var ledEl = document.getElementById("rev-triad-ledger");
     if (ledEl) {
@@ -3459,7 +3460,9 @@ function selectReviewTarget(val) {
     setText("rev-dr-what", reasonText);
     setText("rev-dr-rule", ruleName);
     setText("rev-dr-evidence", evCounts);
-    var cliCmd = "./bin/garuda check --project " + (WORKSPACE || "default") + " --target " + targetName + " --policy policies --save";
+    var cliCmd = evalId
+        ? "No reproduce command was returned for this policy evaluation."
+        : "Select a recorded evaluation to inspect its reproduction details.";
     setText("rev-dr-cli", cliCmd);
 
     var actionsEl = document.getElementById("rev-dr-actions");

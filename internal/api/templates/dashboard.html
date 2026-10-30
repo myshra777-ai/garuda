@@ -47,7 +47,7 @@
                 </div>
             </details>
         </nav> <div class="sidebar-footer">
-            <div class="trust-mini"> <span class="trust-dot"></span>
+            <div class="trust-mini"> <span class="trust-dot" style="background:var(--muted);box-shadow:none;"></span>
                 <span id="sidebar-trust-label">Ledger status follows workspace data</span> </div>
             <div class="sidebar-footer-actions"> <button type="button" class="footer-link-btn" onclick="openAPISpecModal()">API Spec</button>
                 <button type="button" class="footer-link-btn" onclick="openContractModal()">Talon Contract</button> <form method="POST" action="/logout" style="margin:0;">
@@ -422,27 +422,27 @@
                     <div class="card" style="overflow:hidden;">
                         <div class="wb-pane-header"> <div>
                                 <div class="wb-pane-kicker">02 · IMPACT MAP</div> <div class="wb-pane-title" id="rev-center-title">Affected Graph Neighborhood &amp; Dependency Paths</div></div>
-                            <span class="kbd-chip" id="rev-blast-summary">0 callers · 0 callees</span> </div>
+                            <span class="kbd-chip" id="rev-blast-summary">No target selected</span> </div>
                         <div class="wb-pane-body" id="review-impact-stage"></div></div>
                     <div class="card" style="overflow:hidden;">
                         <div class="wb-pane-header"> <div>
                                 <div class="wb-pane-kicker">03 · DECISION &amp; EVIDENCE</div> <div class="wb-pane-title">3-Plane Verification</div></div>
                         </div> <div class="wb-pane-body">
                             <div class="state-triad"> <div class="triad-box">
-                                    <div class="triad-label">1. Epistemic</div> <span class="badge-pill state-supported" id="rev-triad-epistemic">SUPPORTED</span>
+                                    <div class="triad-label">1. Epistemic</div> <span class="badge-pill state-unverified" id="rev-triad-epistemic">UNVERIFIED</span>
                                 </div> <div class="triad-box">
-                                    <div class="triad-label">2. Policy</div> <span class="policy-badge ALLOW" id="rev-triad-policy">ALLOW</span>
+                                    <div class="triad-label">2. Policy</div> <span class="policy-badge UNVERIFIED" id="rev-triad-policy">No evaluation</span>
                                 </div> <div class="triad-box">
-                                    <div class="triad-label">3. Ledger</div> <span class="merkle-chip" id="rev-triad-ledger">ANCHORED</span>
+                                    <div class="triad-label">3. Ledger</div> <span class="merkle-chip" id="rev-triad-ledger">No anchor</span>
                                 </div></div> <div class="record-box" id="review-decision-record">
                                 <div class="dr-header"> <div class="dr-title">📄 Decision Record</div>
                                     <div class="dr-meta" id="rev-dr-id">Select a check</div></div> <div class="dr-grid">
                                     <div class="dr-row"> <div class="dr-key">What it evaluated</div>
-                                        <div class="dr-val" id="rev-dr-what">Workspace architectural invariants and call-graph blast radius.</div></div> <div class="dr-row">
-                                        <div class="dr-key">What rule applied</div> <div class="dr-val mono" id="rev-dr-rule">architecture-layer-guardrails</div></div>
+                                        <div class="dr-val" id="rev-dr-what">Select a policy evaluation or symbol to inspect its available evidence.</div></div> <div class="dr-row">
+                                        <div class="dr-key">What rule applied</div> <div class="dr-val mono" id="rev-dr-rule">No policy evaluation selected</div></div>
                                     <div class="dr-row"> <div class="dr-key">Evidence &amp; counts</div>
                                         <div class="dr-val" id="rev-dr-evidence">—</div></div> <div class="dr-row">
-                                        <div class="dr-key">Uncertainty note</div> <div class="dr-val" id="rev-dr-uncertainty">Static AST relationships resolved via go/types; unexecuted runtime branches remain UNVERIFIED.</div></div>
+                                        <div class="dr-key">Uncertainty note</div> <div class="dr-val" id="rev-dr-uncertainty">Evaluation status and uncertainty are shown after selecting a recorded result.</div></div>
                                     <div class="dr-row"> <div class="dr-key">CLI reproduction</div>
                                         <div class="dr-val"><code id="rev-dr-cli">./bin/garuda check --project {{ .WorkspaceName }} --policy policies</code></div></div> </div>
                                 <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;" id="rev-dr-actions"></div></div> </div></div>
@@ -456,11 +456,11 @@
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:12px;"> <div>
                             <h1 class="hero-title" style="font-size:20px;">Audit Log &amp; Epistemic Evidence</h1> <div class="hero-subtitle">Every claim and policy evaluation traces back to its file, line, resolution method, and RFC 6962 Merkle anchor.</div></div>
                         <div class="trust-badge"> <span class="trust-badge-dot"></span>
-                            <span>Ledger <span id="trust-status">Verified</span> · Block <span id="trust-height">#1</span></span> </div></div>
+                            <span>Ledger <span id="trust-status">Checking…</span> · Block <span id="trust-height">—</span></span> </div></div>
                     <div class="trust-strip" style="margin-bottom:0;"> <div class="trust-tile">
-                            <div class="trust-tile-title">Current Epoch Merkle Root</div> <div class="merkle" id="trust-merkle">Genesis verified</div></div>
+                            <div class="trust-tile-title">Current Epoch Merkle Root</div> <div class="merkle" id="trust-merkle">No anchor recorded</div></div>
                         <div class="trust-tile"> <div class="trust-tile-title">Parent Epoch Root</div>
-                            <div class="merkle" id="trust-parent">Genesis</div></div> <div class="trust-tile">
+                            <div class="merkle" id="trust-parent">No parent anchor</div></div> <div class="trust-tile">
                             <div class="trust-tile-title">Last Anchored Observation</div> <div class="mono" id="trust-updated" style="font-weight:600;">—</div></div>
                     </div></div>
                 <div class="card" style="margin-bottom:16px;">

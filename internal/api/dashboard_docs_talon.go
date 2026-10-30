@@ -6,11 +6,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
