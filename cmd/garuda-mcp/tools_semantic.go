@@ -8,26 +8,47 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/analyzer"
 )
 
+func sanitizeMCPFilePath(p string) string {
+	clean := filepath.ToSlash(strings.TrimSpace(p))
+	if clean == "" {
+		return ""
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		slashHome := filepath.ToSlash(home)
+		for _, sub := range []string{"/garuda-validation/", "/garuda/"} {
+			if strings.HasPrefix(clean, slashHome+sub) {
+				return strings.TrimPrefix(clean, slashHome+sub)
+			}
+		}
+		if strings.HasPrefix(clean, slashHome+"/") {
+			return strings.TrimPrefix(clean, slashHome+"/")
+		}
+	}
+	for _, prefix := range []string{"/home/rohit/garuda-validation/", "/home/rohit/garuda/", "/tmp/garuda/"} {
+		if strings.HasPrefix(clean, prefix) {
+			return strings.TrimPrefix(clean, prefix)
+		}
+	}
+	return clean
+}
+
 // handleEntities lists entities in a workspace, optionally filtered by
 // package or kind.
-//
-// Read-only. Uses the same store API the dashboard's semantic panels
-// use. Does not modify the graph.
 func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, error) {
-	// resolveTenantAndWorkspace already resolves the workspace name (or
-	// the empty-string default) to a UUID via store.ResolveWorkspaceID.
-	// The second lookup that used to be here treated that UUID as a
-	// workspace name and always failed with "not found". Removed.
+	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-	workspaceName, _ := args["workspace"].(string)
+	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
 
 	pkgFilter, _ := args["package"].(string)
 	kindFilter, _ := args["kind"].(string)
@@ -36,29 +57,46 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 		limit = int(v)
 	}
 
-	q := `
-		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''),
-		       COALESCE(line_start, 0), is_exported
-		FROM entities
-		WHERE workspace_id = $1 AND kind != 'external'
-	`
+	whereClause := " WHERE workspace_id = $1 AND kind != 'external'"
 	dbArgs := []interface{}{workspaceID}
 	argPos := 2
 
 	if pkgFilter != "" {
-		q += fmt.Sprintf(" AND package LIKE '%%' || $%d || '%%'", argPos)
+		whereClause += fmt.Sprintf(" AND package LIKE '%%' || $%d || '%%'", argPos)
 		dbArgs = append(dbArgs, pkgFilter)
 		argPos++
 	}
 	if kindFilter != "" {
-		q += fmt.Sprintf(" AND kind = $%d", argPos)
+		whereClause += fmt.Sprintf(" AND kind = $%d", argPos)
 		dbArgs = append(dbArgs, kindFilter)
 		argPos++
 	}
-	q += fmt.Sprintf(" ORDER BY package, name LIMIT $%d", argPos)
-	dbArgs = append(dbArgs, limit)
 
-	rows, err := s.store.Pool().Query(context.Background(), q, dbArgs...)
+	if s.store == nil || s.store.Pool() == nil {
+		return map[string]interface{}{
+			"tenant_id":      tenantID.String(),
+			"workspace_id":   workspaceID.String(),
+			"workspace_name": workspaceName,
+			"filters":        map[string]any{"package": pkgFilter, "kind": kindFilter},
+			"count":          0,
+			"total_count":    0,
+			"truncated":      false,
+			"entities":       []interface{}{},
+			"limit_used":     limit,
+		}, nil
+	}
+
+	var totalCount int
+	_ = s.store.Pool().QueryRow(ctx, "SELECT COUNT(*)::int FROM entities"+whereClause, dbArgs...).Scan(&totalCount)
+
+	q := `
+		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''),
+		       COALESCE(line_start, 0), COALESCE(signature, ''), is_exported
+		FROM entities
+	` + whereClause + fmt.Sprintf(" ORDER BY package, name LIMIT $%d", argPos)
+	queryArgs := append(append([]interface{}{}, dbArgs...), limit)
+
+	rows, err := s.store.Pool().Query(ctx, q, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query entities: %w", err)
 	}
@@ -71,16 +109,22 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 		Package   string `json:"package"`
 		File      string `json:"file"`
 		LineStart int    `json:"line_start"`
+		Signature string `json:"signature,omitempty"`
 		Exported  bool   `json:"exported"`
 	}
 
 	entities := make([]entityRow, 0, limit)
 	for rows.Next() {
 		var e entityRow
-		if err := rows.Scan(&e.ID, &e.Name, &e.Kind, &e.Package, &e.File, &e.LineStart, &e.Exported); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &e.Kind, &e.Package, &e.File, &e.LineStart, &e.Signature, &e.Exported); err != nil {
 			continue
 		}
+		e.File = sanitizeMCPFilePath(e.File)
 		entities = append(entities, e)
+	}
+
+	if totalCount < len(entities) {
+		totalCount = len(entities)
 	}
 
 	return map[string]interface{}{
@@ -89,58 +133,104 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 		"workspace_name": workspaceName,
 		"filters":        map[string]any{"package": pkgFilter, "kind": kindFilter},
 		"count":          len(entities),
+		"total_count":    totalCount,
+		"truncated":      totalCount > len(entities),
 		"entities":       entities,
 		"limit_used":     limit,
 	}, nil
 }
 
 // handleInspect returns one entity and its incoming and outgoing
-// relationships.
-//
-// Read-only. Uses GetEntityRelationships, which reads from claims.
+// relationships, including its canonical signature.
 func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, error) {
-	// Same fix as handleEntities. resolveTenantAndWorkspace already
-	// returns the resolved workspace UUID; the redundant lookup treated
-	// it as a name and always failed.
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-	workspaceName, _ := args["workspace"].(string)
+	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
 
 	entityIDStr, _ := args["entity_id"].(string)
-	if entityIDStr == "" {
+	nameStr, _ := args["name"].(string)
+	if entityIDStr == "" && nameStr == "" {
 		return nil, fmt.Errorf("entity_id is required")
 	}
-	if _, err := uuid.Parse(entityIDStr); err != nil {
-		return nil, fmt.Errorf("invalid entity_id %q: %w", entityIDStr, err)
+
+	ctx := context.Background()
+	lookupTarget := entityIDStr
+	if lookupTarget == "" {
+		lookupTarget = nameStr
+	}
+	if _, parseErr := uuid.Parse(lookupTarget); parseErr != nil {
+		resolvedID, _, rErr := s.resolveSubjectEntity(ctx, workspaceID, "", lookupTarget)
+		if rErr != nil {
+			return nil, fmt.Errorf("invalid entity_id %q: %w", lookupTarget, parseErr)
+		}
+		entityIDStr = resolvedID.String()
+	} else {
+		entityIDStr = lookupTarget
 	}
 
-	// Verify the entity exists and fetch its basic fields.
 	var entity struct {
-		ID        string
-		Name      string
-		Kind      string
-		Package   string
-		File      string
-		LineStart int
-		Exported  bool
+		ID           string `json:"id"`
+		Name         string `json:"name"`
+		Kind         string `json:"kind"`
+		Package      string `json:"package"`
+		ReceiverType string `json:"receiver_type,omitempty"`
+		Language     string `json:"language"`
+		File         string `json:"file"`
+		LineStart    int    `json:"line_start"`
+		LineEnd      int    `json:"line_end,omitempty"`
+		Signature    string `json:"signature"`
+		Exported     bool   `json:"exported"`
 	}
-	err = s.store.Pool().QueryRow(context.Background(), `
-		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''),
-		       COALESCE(line_start, 0), is_exported
+	if s.store == nil || s.store.Pool() == nil {
+		return nil, fmt.Errorf("database not connected")
+	}
+
+	err = s.store.Pool().QueryRow(ctx, `
+		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(receiver_type, ''),
+		       COALESCE(language, 'go'), COALESCE(file_path, ''),
+		       COALESCE(line_start, 0), COALESCE(line_end, 0),
+		       COALESCE(signature, ''), COALESCE(is_exported, false)
 		FROM entities
 		WHERE workspace_id = $1 AND id = $2
 	`, workspaceID, entityIDStr).Scan(
-		&entity.ID, &entity.Name, &entity.Kind, &entity.Package,
-		&entity.File, &entity.LineStart, &entity.Exported,
+		&entity.ID, &entity.Name, &entity.Kind, &entity.Package, &entity.ReceiverType,
+		&entity.Language, &entity.File, &entity.LineStart, &entity.LineEnd,
+		&entity.Signature, &entity.Exported,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("entity %q not found in workspace %q", entityIDStr, workspaceName)
 	}
 
+	entity.File = sanitizeMCPFilePath(entity.File)
+	if strings.TrimSpace(entity.Signature) == "" {
+		switch entity.Kind {
+		case "method":
+			if entity.ReceiverType != "" {
+				entity.Signature = fmt.Sprintf("func (%s) %s()", entity.ReceiverType, entity.Name)
+			} else {
+				entity.Signature = fmt.Sprintf("func %s.%s()", entity.Package, entity.Name)
+			}
+		case "function":
+			if entity.Package != "" {
+				entity.Signature = fmt.Sprintf("func %s.%s()", entity.Package, entity.Name)
+			} else {
+				entity.Signature = fmt.Sprintf("func %s()", entity.Name)
+			}
+		case "struct":
+			entity.Signature = fmt.Sprintf("type %s struct", entity.Name)
+		case "interface":
+			entity.Signature = fmt.Sprintf("type %s interface", entity.Name)
+		case "class":
+			entity.Signature = fmt.Sprintf("class %s", entity.Name)
+		default:
+			entity.Signature = fmt.Sprintf("%s %s.%s", entity.Kind, entity.Package, entity.Name)
+		}
+	}
+
 	incoming, outgoing, err := s.store.GetEntityRelationships(
-		context.Background(), tenantID, workspaceID, entityIDStr,
+		ctx, tenantID, workspaceID, entityIDStr,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch relationships: %w", err)
@@ -161,7 +251,7 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 				From: r.From,
 				To:   r.To,
 				Type: r.Type,
-				File: r.Evidence.File,
+				File: sanitizeMCPFilePath(r.Evidence.File),
 				Line: r.Evidence.LineStart,
 			})
 		}
@@ -173,6 +263,7 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 		"workspace_id":   workspaceID.String(),
 		"workspace_name": workspaceName,
 		"entity":         entity,
+		"signature":      entity.Signature,
 		"incoming_count": len(incoming),
 		"outgoing_count": len(outgoing),
 		"incoming":       convert(incoming),
@@ -180,37 +271,16 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 	}, nil
 }
 
-// handleBriefing returns a session-start briefing: what the workspace
-// contains, what changed since this agent's last session, what is
-// open, and what is proven.
-//
-// The briefing is the entry point for every MCP session. Every other
-// tool answers a specific question; briefing answers the prior
-// question: what should I be asking about?
-//
-// The seven sections are fixed: workspace, trust, scale, hubs,
-// policies, attention, new_since. Agents that need more call the
-// dedicated tools (garuda.policy.list, garuda.check_drift, etc.).
-//
-// Read-only. The only write is the watermark update, which records
-// the moment of this briefing so the next call can compute a diff.
+// handleBriefing returns a session-start briefing (BUG-03 & BUG-08).
+// Uses LoadWorkspaceCounts as the single source of truth for scale and epistemic counts.
 func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-	workspaceName, _ := args["workspace"].(string)
-	if workspaceName == "" {
-		// resolveTenantAndWorkspace resolved the workspace already.
-		// If the caller did not name it, use the resolved name.
-		var resolved string
-		_ = s.store.Pool().QueryRow(context.Background(),
-			`SELECT name FROM workspaces WHERE id = $1`, workspaceID).Scan(&resolved)
-		workspaceName = resolved
-	}
+	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
 
-	// Agent identity: caller-supplied, then handshake clientInfo,
-	// then "default". This is the watermark key.
 	agentID, _ := args["agent_id"].(string)
 	if agentID == "" {
 		agentID = s.clientName
@@ -219,11 +289,38 @@ func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, er
 		agentID = "default"
 	}
 
-	// Session identifier: for correlation only. Not used as a key.
 	sessionID := uuid.New().String()
 
+	if s.store == nil || s.store.Pool() == nil {
+		counts := LoadWorkspaceCounts(ctx, nil, tenantID, workspaceID)
+		return map[string]interface{}{
+			"tenant_id":              tenantID.String(),
+			"workspace":              workspaceName,
+			"workspace_id":           workspaceID.String(),
+			"entity_count":           counts.Entities,
+			"exported_entity_count":  counts.ExportedEntities,
+			"external_stubs_count":   counts.ExternalStubs,
+			"ast_relationship_count": counts.ASTRelationships,
+			"document_claim_count":   counts.DocumentClaims,
+			"policy_verdict":         "NO_DATA",
+			"epistemic": map[string]int{
+				"supported":           0,
+				"unverified":          0,
+				"contradicted":        0,
+				"open_contradictions": 0,
+			},
+			"epistemic_counts": map[string]int{
+				"SUPPORTED":           0,
+				"UNVERIFIED":          0,
+				"CONTRADICTED":        0,
+				"OPEN_CONTRADICTIONS": 0,
+			},
+			"briefing": map[string]interface{}{},
+		}, nil
+	}
+
 	briefing, err := s.store.GetBriefing(
-		context.Background(),
+		ctx,
 		tenantID, workspaceID,
 		workspaceName, agentID, sessionID,
 	)
@@ -231,8 +328,45 @@ func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, er
 		return nil, fmt.Errorf("build briefing: %w", err)
 	}
 
+	counts := LoadWorkspaceCounts(ctx, s.store.Pool(), tenantID, workspaceID)
+	briefing.Scale.Repositories = counts.Repositories
+	briefing.Scale.Entities = counts.Entities
+	briefing.Scale.ExportedEntities = counts.ExportedEntities
+	briefing.Scale.ExternalStubs = counts.ExternalStubs
+	briefing.Scale.Claims = counts.ASTRelationships
+	briefing.Scale.ASTRelationships = counts.ASTRelationships
+	briefing.Scale.DocumentClaims = counts.DocumentClaims
+	briefing.Attention.OpenContradictions = counts.OpenContradictions
+
+	epistemic := map[string]int{
+		"supported":             counts.SupportedClaims,
+		"unverified":            counts.UnverifiedClaims,
+		"contradicted":          counts.ContradictedClaims,
+		"open_contradictions":   counts.OpenContradictions,
+		"total_document_claims": counts.DocumentClaims,
+		"total_ast_claims":      counts.ASTRelationships,
+	}
+	briefing.EpistemicCounts = map[string]int{
+		"SUPPORTED":             counts.SupportedClaims,
+		"UNVERIFIED":            counts.UnverifiedClaims,
+		"CONTRADICTED":          counts.ContradictedClaims,
+		"OPEN_CONTRADICTIONS":   counts.OpenContradictions,
+		"TOTAL_DOCUMENT_CLAIMS": counts.DocumentClaims,
+		"TOTAL_AST_CLAIMS":      counts.ASTRelationships,
+	}
+
 	return map[string]interface{}{
-		"tenant_id": tenantID.String(),
-		"briefing":  briefing,
+		"tenant_id":              tenantID.String(),
+		"workspace":              workspaceName,
+		"workspace_id":           workspaceID.String(),
+		"entity_count":           counts.Entities,
+		"exported_entity_count":  counts.ExportedEntities,
+		"external_stubs_count":   counts.ExternalStubs,
+		"ast_relationship_count": counts.ASTRelationships,
+		"document_claim_count":   counts.DocumentClaims,
+		"policy_verdict":         briefing.PolicyVerdict,
+		"epistemic":              epistemic,
+		"epistemic_counts":       briefing.EpistemicCounts,
+		"briefing":               briefing,
 	}, nil
 }

@@ -67,13 +67,13 @@ type LogicVariantOptionDTO struct {
 
 // LogicDisambiguationGroupDTO groups competing formulas for the same concept across teams.
 type LogicDisambiguationGroupDTO struct {
-	ConceptID            string                  `json:"concept_id"`
-	ConceptName          string                  `json:"concept_name"`
-	ActiveTeamContext    string                  `json:"active_team_context"`
-	ProblemStatement     string                  `json:"problem_statement"`
-	LeastHarmVariantID   string                  `json:"least_harm_variant_id"`
-	HumanAdvisoryNotice  string                  `json:"human_advisory_notice"`
-	Variants             []LogicVariantOptionDTO `json:"variants"`
+	ConceptID           string                  `json:"concept_id"`
+	ConceptName         string                  `json:"concept_name"`
+	ActiveTeamContext   string                  `json:"active_team_context"`
+	ProblemStatement    string                  `json:"problem_statement"`
+	LeastHarmVariantID  string                  `json:"least_harm_variant_id"`
+	HumanAdvisoryNotice string                  `json:"human_advisory_notice"`
+	Variants            []LogicVariantOptionDTO `json:"variants"`
 }
 
 // FinancialAuditDiscrepancyDTO represents a cross-team business/financial number mismatch
@@ -93,11 +93,11 @@ type FinancialAuditDiscrepancyDTO struct {
 	TeamBSourceSymbol   string  `json:"team_b_source_symbol"`
 	TeamBFilePath       string  `json:"team_b_file_path"`
 	TeamBFormula        string  `json:"team_b_formula"`
-	VarianceRatio       float64 `json:"variance_ratio"`         // e.g. 10.0x discrepancy
-	DiscrepancyType     string  `json:"discrepancy_type"`       // e.g. "10x Unit Scale Mismatch (Lakhs-to-Crore / Paise Divisor)"
+	VarianceRatio       float64 `json:"variance_ratio"`   // e.g. 10.0x discrepancy
+	DiscrepancyType     string  `json:"discrepancy_type"` // e.g. "10x Unit Scale Mismatch (Lakhs-to-Crore / Paise Divisor)"
 	RootCauseASTTrace   string  `json:"root_cause_ast_trace"`
-	SeverityTier        string  `json:"severity_tier"`          // HIGH_SEVERE | MEDIUM | LOW
-	AuditStatus         string  `json:"audit_status"`           // FLAGGED_FOR_HUMAN_AUDIT | RECONCILED_BY_HUMAN
+	SeverityTier        string  `json:"severity_tier"` // HIGH_SEVERE | MEDIUM | LOW
+	AuditStatus         string  `json:"audit_status"`  // FLAGGED_FOR_HUMAN_AUDIT | RECONCILED_BY_HUMAN
 	ReconciledBy        string  `json:"reconciled_by,omitempty"`
 	ReconciledAt        string  `json:"reconciled_at,omitempty"`
 }
@@ -158,14 +158,14 @@ func defaultCriticalityTiers() []SurfaceCriticalityTierDTO {
 		},
 		{
 			ID:                "tier-high-claims-ledger",
-			SurfaceName:       "Claims Settlement Ledger & RFC 6962 Merkle Seal",
+			SurfaceName:       "Core Data & Logic Audit Ledger & RFC 6962 Merkle Seal",
 			PackagePattern:    "internal/store|internal/merkle|internal/refund",
 			SymbolPattern:     "AppendLeafAndSealTx|ProcessRefund|AggregateClaimsPaidCrore",
 			CriticalityTier:   "HIGH_SEVERE",
-			BlastRadiusImpact: "SEVERE BLAST RADIUS: Core financial settlement and audit ledger integrity. Any unauthorized formula or schema change corrupts compliance numbers across 60+ callers.",
+			BlastRadiusImpact: "SEVERE BLAST RADIUS: Core data & logic audit ledger and cryptographic Merkle proof integrity. Any unauthorized formula or schema change corrupts compliance numbers across 60+ callers.",
 			HumanPolicyAction: "HUMAN_FREEZE_DO_NOT_TOUCH",
 			CallersCount:      60,
-			DefinedBy:         "Staff Architect / Financial Audit Gate",
+			DefinedBy:         "Staff Architect / Data & Logic Audit Gate",
 			UpdatedAt:         now,
 		},
 		{
@@ -218,11 +218,11 @@ func computeLogicGroupsForTeam(activeTeam string) []LogicDisambiguationGroupDTO 
 
 	return []LogicDisambiguationGroupDTO{
 		{
-			ConceptID:          "concept-loss-ratio",
-			ConceptName:        "Loss Ratio Calculation (Undocumented Multi-Team Formula Drift)",
-			ActiveTeamContext:  strings.ToUpper(team) + " TEAM CONTEXT",
-			ProblemStatement:   "No formal documentation existed for Loss Ratio. Garuda discovered 3 different formulas across Ops, Marketing, and Management packages. Rather than letting AI guess, Garuda calculates team weights (0.0–1.0), severity tiers, and exact blast radius so the human developer can make an informed decision.",
-			LeastHarmVariantID: "loss_ratio_ops_v1",
+			ConceptID:           "concept-loss-ratio",
+			ConceptName:         "Loss Ratio Calculation (Undocumented Multi-Team Formula Drift)",
+			ActiveTeamContext:   strings.ToUpper(team) + " TEAM CONTEXT",
+			ProblemStatement:    "No formal documentation existed for Loss Ratio. Garuda discovered 3 different formulas across Ops, Marketing, and Management packages. Rather than letting AI guess, Garuda calculates team weights (0.0–1.0), severity tiers, and exact blast radius so the human developer can make an informed decision.",
+			LeastHarmVariantID:  "loss_ratio_ops_v1",
 			HumanAdvisoryNotice: "HUMAN-IN-THE-LOOP MANDATE: Garuda never auto-overwrites competing business logic. Based on your active team (" + strings.ToUpper(team) + "), Garuda assigns weight " + fmt.Sprintf("%.1f", wOps) + " to Ops, " + fmt.Sprintf("%.1f", wMkt) + " to Marketing, and " + fmt.Sprintf("%.1f", wMgmt) + " to Management, and highlights that `ops.CalculateLossRatio` causes the least architectural harm (LOW severity).",
 			Variants: []LogicVariantOptionDTO{
 				{
@@ -239,8 +239,7 @@ func computeLogicGroupsForTeam(activeTeam string) []LogicDisambiguationGroupDTO 
 					BlastRadiusSurfaces:  []string{"Internal Ops Claims Queue", "Underwriting Daily Digest Widget (UI Box Alignment)"},
 					HumanImpactSummary:   "LOW SEVERITY (LEAST ARCHITECTURAL HARM): Isolated to internal Ops Claims Queue and UI summary box. Modifying or standardizing on this formula will at worst cause a minor visual box alignment shift in the internal ops widget—zero customer-facing downtime.",
 					ArchitectureHarmRank: 1,
-					HumanDecisionStatus:  "APPROVED_BY_HUMAN",
-					ApprovedBy:           "Ops Lead (Human Decision)",
+					HumanDecisionStatus:  "AWAITING_HUMAN_DECISION",
 				},
 				{
 					VariantID:            "loss_ratio_marketing_v2",
@@ -395,7 +394,7 @@ func defaultSynthesizedRulebook(workspaceName string) SynthesizedRulebookDTO {
 		Workspace:       workspaceName,
 		VersionTag:      "v1.9.0-auto-draft",
 		Status:          "DRAFT_AWAITING_HUMAN_APPROVAL",
-		Title:           "Garuda Auto-Synthesized Base Architecture, Criticality & Financial Audit Rulebook",
+		Title:           "Garuda Auto-Synthesized Base Architecture, Criticality & Data Logic Audit Rulebook",
 		Summary:         "Automatically structured from unorganized repository AST connections, competing multi-team formulas, surface criticality tiers, and financial data lineage. Review, edit if needed, and click Approve to lock as your workspace Base Rulebook.",
 		MarkdownContent: md,
 		Rules:           rules,

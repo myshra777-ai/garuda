@@ -476,7 +476,6 @@ func getDocsWorkspace() string {
 // Registration
 // -----------------------------------------------------------------------------
 
-
 var docsGraphCmd = &cobra.Command{
 	Use:   "graph",
 	Short: "Generate the 4-Tier Document-to-Code & Guardrails Lineage Table and Graph",

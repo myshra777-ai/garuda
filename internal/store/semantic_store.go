@@ -631,21 +631,24 @@ func (s *PostgresStore) detectCrossRepoImports(
 // GetEntity retrieves an entity by package and name within a workspace.
 func (s *PostgresStore) GetEntity(ctx context.Context, tenantID, workspaceID uuid.UUID, pkg, name string) (*analyzer.Entity, error) {
 	var entity analyzer.Entity
-	var entityID, kind, pkgName, pkgPath, modPath, recType, file, signature string
+	var entityID, kind, pkgName, pkgPath, modPath, recType, file, signature, language string
 	var exported bool
 	var fieldsJSON, methodsJSON []byte
 	var line, lineStart, lineEnd int
 
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, kind, package, package_path, module_path, receiver_type,
-		       file_path, signature, fields, methods, is_exported, language,
-		       line, line_start, line_end
+		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(package_path, ''),
+		       COALESCE(module_path, ''), COALESCE(receiver_type, ''),
+		       COALESCE(file_path, ''), COALESCE(signature, ''),
+		       COALESCE(fields, '[]'::jsonb), COALESCE(methods, '[]'::jsonb),
+		       COALESCE(is_exported, false), COALESCE(language, 'go'),
+		       COALESCE(line, 0), COALESCE(line_start, 0), COALESCE(line_end, 0)
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2 AND package = $3 AND name = $4
 		LIMIT 1
 	`, tenantID, workspaceID, pkg, name).Scan(
 		&entityID, &entity.Name, &kind, &pkgName, &pkgPath, &modPath, &recType,
-		&file, &signature, &fieldsJSON, &methodsJSON, &exported,
+		&file, &signature, &fieldsJSON, &methodsJSON, &exported, &language,
 		&line, &lineStart, &lineEnd,
 	)
 	if err != nil {
@@ -661,6 +664,7 @@ func (s *PostgresStore) GetEntity(ctx context.Context, tenantID, workspaceID uui
 	entity.File = file
 	entity.Signature = signature
 	entity.Exported = exported
+	entity.Language = language
 	entity.Line = line
 	entity.LineStart = lineStart
 	entity.LineEnd = lineEnd
@@ -679,40 +683,58 @@ func (s *PostgresStore) GetEntityRelationships(ctx context.Context, tenantID, wo
 	var incoming, outgoing []analyzer.Relationship
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT to_entity_id, claim_type, confidence
-		FROM claims
-		WHERE tenant_id = $1 AND workspace_id = $2 AND from_entity_id = $3
+		SELECT c.to_entity_id::text, COALESCE(e.name, c.to_entity_id::text),
+		       c.claim_type, c.confidence,
+		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0)
+		FROM claims c
+		LEFT JOIN entities e ON e.id = c.to_entity_id AND e.workspace_id = c.workspace_id
+		WHERE c.tenant_id = $1 AND c.workspace_id = $2 AND c.from_entity_id = $3
 	`, tenantID, workspaceID, entityID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
-			var to, typ string
+			var toID, toName, typ, file string
 			var conf float64
-			if err := rows.Scan(&to, &typ, &conf); err == nil {
+			var lineStart int
+			if err := rows.Scan(&toID, &toName, &typ, &conf, &file, &lineStart); err == nil {
 				outgoing = append(outgoing, analyzer.Relationship{
-					To:         to,
+					From:       entityID,
+					To:         toName,
 					Type:       typ,
 					Confidence: conf,
+					Evidence: analyzer.Evidence{
+						File:      file,
+						LineStart: lineStart,
+					},
 				})
 			}
 		}
 	}
 
 	rows2, err := s.pool.Query(ctx, `
-		SELECT from_entity_id, claim_type, confidence
-		FROM claims
-		WHERE tenant_id = $1 AND workspace_id = $2 AND to_entity_id = $3
+		SELECT c.from_entity_id::text, COALESCE(e.name, c.from_entity_id::text),
+		       c.claim_type, c.confidence,
+		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0)
+		FROM claims c
+		LEFT JOIN entities e ON e.id = c.from_entity_id AND e.workspace_id = c.workspace_id
+		WHERE c.tenant_id = $1 AND c.workspace_id = $2 AND c.to_entity_id = $3
 	`, tenantID, workspaceID, entityID)
 	if err == nil {
 		defer rows2.Close()
 		for rows2.Next() {
-			var from, typ string
+			var fromID, fromName, typ, file string
 			var conf float64
-			if err := rows2.Scan(&from, &typ, &conf); err == nil {
+			var lineStart int
+			if err := rows.Scan(&fromID, &fromName, &typ, &conf, &file, &lineStart); err == nil {
 				incoming = append(incoming, analyzer.Relationship{
-					From:       from,
+					From:       fromName,
+					To:         entityID,
 					Type:       typ,
 					Confidence: conf,
+					Evidence: analyzer.Evidence{
+						File:      file,
+						LineStart: lineStart,
+					},
 				})
 			}
 		}
@@ -724,9 +746,12 @@ func (s *PostgresStore) GetEntityRelationships(ctx context.Context, tenantID, wo
 // ListEntities returns all entities in a workspace.
 func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID uuid.UUID) ([]analyzer.Entity, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, kind, package, package_path, module_path, receiver_type,
-		       file_path, signature, fields, methods, is_exported, language,
-		       line, line_start, line_end
+		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(package_path, ''),
+		       COALESCE(module_path, ''), COALESCE(receiver_type, ''),
+		       COALESCE(file_path, ''), COALESCE(signature, ''),
+		       COALESCE(fields, '[]'::jsonb), COALESCE(methods, '[]'::jsonb),
+		       COALESCE(is_exported, false), COALESCE(language, 'go'),
+		       COALESCE(line, 0), COALESCE(line_start, 0), COALESCE(line_end, 0)
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2
 	`, tenantID, workspaceID)
@@ -780,7 +805,7 @@ func (s *PostgresStore) ListEntities(ctx context.Context, tenantID, workspaceID 
 // GetGraphData returns nodes and edges for graph visualisation.
 func (s *PostgresStore) GetGraphData(ctx context.Context, tenantID, workspaceID uuid.UUID) ([]map[string]interface{}, []map[string]interface{}, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, name, kind, package, file_path, is_exported
+		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''), COALESCE(is_exported, false)
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2
 	`, tenantID, workspaceID)
@@ -807,7 +832,7 @@ func (s *PostgresStore) GetGraphData(ctx context.Context, tenantID, workspaceID 
 	}
 
 	rows2, err := s.pool.Query(ctx, `
-		SELECT from_entity_id, to_entity_id, claim_type
+		SELECT from_entity_id::text, to_entity_id::text, claim_type
 		FROM claims
 		WHERE tenant_id = $1 AND workspace_id = $2
 	`, tenantID, workspaceID)
@@ -835,21 +860,24 @@ func (s *PostgresStore) GetGraphData(ctx context.Context, tenantID, workspaceID 
 // GetEntityByID retrieves an entity by its UUID within a tenant and workspace.
 func (s *PostgresStore) GetEntityByID(ctx context.Context, tenantID, workspaceID, entityID uuid.UUID) (*analyzer.Entity, error) {
 	var entity analyzer.Entity
-	var id, kind, pkgName, pkgPath, modPath, recType, file, signature string
+	var id, kind, pkgName, pkgPath, modPath, recType, file, signature, language string
 	var exported bool
 	var fieldsJSON, methodsJSON []byte
 	var line, lineStart, lineEnd int
 
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, name, kind, package, package_path, module_path, receiver_type,
-		       file_path, signature, fields, methods, is_exported, language,
-		       line, line_start, line_end
+		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(package_path, ''),
+		       COALESCE(module_path, ''), COALESCE(receiver_type, ''),
+		       COALESCE(file_path, ''), COALESCE(signature, ''),
+		       COALESCE(fields, '[]'::jsonb), COALESCE(methods, '[]'::jsonb),
+		       COALESCE(is_exported, false), COALESCE(language, 'go'),
+		       COALESCE(line, 0), COALESCE(line_start, 0), COALESCE(line_end, 0)
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2 AND id = $3
 		LIMIT 1
 	`, tenantID, workspaceID, entityID).Scan(
 		&id, &entity.Name, &kind, &pkgName, &pkgPath, &modPath, &recType,
-		&file, &signature, &fieldsJSON, &methodsJSON, &exported,
+		&file, &signature, &fieldsJSON, &methodsJSON, &exported, &language,
 		&line, &lineStart, &lineEnd,
 	)
 	if err != nil {
@@ -865,6 +893,7 @@ func (s *PostgresStore) GetEntityByID(ctx context.Context, tenantID, workspaceID
 	entity.File = file
 	entity.Signature = signature
 	entity.Exported = exported
+	entity.Language = language
 	entity.Line = line
 	entity.LineStart = lineStart
 	entity.LineEnd = lineEnd
@@ -892,3 +921,4 @@ func (s *PostgresStore) FindEntityIDByNameAndPackage(ctx context.Context, worksp
 	}
 	return entityID, nil
 }
+

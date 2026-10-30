@@ -4,23 +4,6 @@
 // Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
 // Package talon implements the Garuda Talon Active Execution Harness.
-//
-// Unlike passive MCP servers that wait for an AI coding agent to ask a question,
-// Garuda Talon actively enforces architectural requirements, ADR claims, and
-// declarative YAML policies across every stage of the agent lifecycle:
-//
-//  1. Active Contract Compilation (.garuda/TALON_CONTRACT.md) from live ADRs
-//     (document_claims), YAML policies, and top high-blast-radius hubs.
-//  2. Active IDE & Git Hook Installation (.cursor/rules/garuda-talon.mdc,
-//     .claude/settings.json PreToolUse/PostToolUse hooks, CLAUDE.md, AGENTS.md,
-//     .windsurfrules, and .git/hooks/pre-commit + commit-msg).
-//  3. Pre-Flight Context Injection (PreEditBrief) before any file or symbol is edited.
-//  4. Post-Edit Guard & Deterministic Self-Repair Loop (RunGuard & RunHarnessLoop)
-//     that blocks violating edits, attaches a BuildContext receipt (build tags,
-//     target platform, CGO state, exact commit, graph fingerprint, and 1-command
-//     reproduce string), detects CI-vs-Editor environment drift, and feeds
-//     structured refactoring instructions back to the coding agent until ALLOW
-//     is reached and Merkle-sealed.
 package talon
 
 import (
@@ -95,6 +78,7 @@ type MatrixTargetVerdict struct {
 
 // WorkspaceContract is the compiled architectural contract injected into coding agents.
 type WorkspaceContract struct {
+	TenantID      string                 `json:"tenant_id,omitempty"`
 	WorkspaceName string                 `json:"workspace_name"`
 	WorkspaceID   string                 `json:"workspace_id"`
 	CompiledAt    string                 `json:"compiled_at"`
@@ -107,19 +91,48 @@ type WorkspaceContract struct {
 	Markdown      string                 `json:"markdown"`
 }
 
-// CompileContract queries PostgreSQL and the policy directory to synthesize the
-// live WorkspaceContract and its Markdown representation.
+func resolveTalonPolicyDir(policyDir string) string {
+	candidates := []string{}
+	if strings.TrimSpace(policyDir) != "" {
+		candidates = append(candidates, strings.TrimSpace(policyDir))
+	}
+	if envDir := strings.TrimSpace(os.Getenv("GARUDA_POLICY_DIR")); envDir != "" {
+		candidates = append(candidates, envDir)
+	}
+	if envRoot := strings.TrimSpace(os.Getenv("GARUDA_REPO_ROOT")); envRoot != "" {
+		candidates = append(candidates, filepath.Join(envRoot, "policies"))
+	}
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "policies"),
+			filepath.Join(filepath.Dir(exeDir), "policies"),
+		)
+	}
+	candidates = append(candidates, "./policies", "../policies", "/home/rohit/garuda/policies", "/tmp/garuda/policies")
+	for _, cand := range candidates {
+		if st, err := os.Stat(cand); err == nil && st.IsDir() {
+			if abs, aErr := filepath.Abs(cand); aErr == nil {
+				return abs
+			}
+			return cand
+		}
+	}
+	return policyDir
+}
+
 func CompileContract(
 	ctx context.Context,
 	pool *pgxpool.Pool,
 	tenantID, workspaceID uuid.UUID,
 	workspaceName, policyDir string,
 ) (*WorkspaceContract, error) {
+	policyDir = resolveTalonPolicyDir(policyDir)
 	repoDir := "."
 	if policyDir != "" {
 		repoDir = filepath.Dir(policyDir)
 	}
-	buildCtx := analyzer.ResolveBuildContext(repoDir, "", workspaceName, nil)
+	buildCtx := analyzer.ResolveBuildContext(repoDir, "go", workspaceName, nil)
 	if pool != nil {
 		if rec := store.GetLatestRecordedBuildContext(ctx, pool, tenantID, workspaceID); rec != nil && rec.GraphFingerprint != "" {
 			buildCtx.GraphFingerprint = rec.GraphFingerprint
@@ -128,9 +141,13 @@ func CompileContract(
 	}
 
 	c := &WorkspaceContract{
+		TenantID:      tenantID.String(),
 		WorkspaceName: workspaceName,
 		WorkspaceID:   workspaceID.String(),
 		CompiledAt:    time.Now().UTC().Format(time.RFC3339),
+		ADRGuardrails: make([]ADRGuardrail, 0),
+		Policies:      make([]PolicyGuardrail, 0),
+		TopHubs:       make([]HubSummary, 0),
 		BuildContext:  buildCtx,
 	}
 
@@ -143,7 +160,6 @@ func CompileContract(
 			SELECT COUNT(*) FROM claims WHERE workspace_id = $1
 		`, workspaceID).Scan(&c.ClaimCount)
 
-		// 1. Load ADR guardrails from document_claims
 		rows, err := pool.Query(ctx, `
 			SELECT COALESCE(document_title, 'ADR'), COALESCE(section_title, ''),
 			       subject, modality, predicate, object,
@@ -163,7 +179,6 @@ func CompileContract(
 			rows.Close()
 		}
 
-		// 2. Load top architectural hubs (highest inbound edge count)
 		hRows, err := pool.Query(ctx, `
 			SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.file_path, ''),
 			       COUNT(c.id)::int AS inbound
@@ -185,7 +200,7 @@ func CompileContract(
 		}
 	}
 
-	// 3. Parse YAML policies from policyDir
+	seenPolicy := make(map[string]bool)
 	if policyDir != "" {
 		if parsed, err := policy.ParseDirectory(policyDir); err == nil {
 			for _, pp := range parsed {
@@ -194,6 +209,8 @@ func CompileContract(
 				for _, w := range p.When {
 					preds = append(preds, w.Type)
 				}
+				seenPolicy[strings.ToLower(p.ID)] = true
+				seenPolicy[strings.ToLower(p.Title)] = true
 				c.Policies = append(c.Policies, PolicyGuardrail{
 					ID:          p.ID,
 					Title:       p.Title,
@@ -205,13 +222,39 @@ func CompileContract(
 			}
 		}
 	}
+	if pool != nil && len(c.Policies) == 0 {
+		pRows, pErr := pool.Query(ctx, `
+			SELECT id::text, COALESCE(metadata->>'title', statement, 'Active Policy'),
+			       COALESCE(statement, ''), COALESCE(scope_domain, '')
+			FROM policies
+			WHERE tenant_id = $1 AND status = 'active'
+			ORDER BY created_at DESC
+			LIMIT 20
+		`, tenantID)
+		if pErr == nil {
+			for pRows.Next() {
+				var pid, ptitle, pstmt, pdom string
+				if pRows.Scan(&pid, &ptitle, &pstmt, &pdom) == nil {
+					if !seenPolicy[strings.ToLower(pid)] && !seenPolicy[strings.ToLower(ptitle)] {
+						c.Policies = append(c.Policies, PolicyGuardrail{
+							ID:          pid,
+							Title:       ptitle,
+							Decision:    "BLOCK",
+							Reason:      pstmt,
+							Predicates:  []string{"active_db_policy"},
+							ScopeDomain: pdom,
+						})
+					}
+				}
+			}
+			pRows.Close()
+		}
+	}
 
 	c.Markdown = RenderContractMarkdown(c)
 	return c, nil
 }
 
-// RenderContractMarkdown formats a WorkspaceContract into a deterministic Markdown
-// contract suitable for `.garuda/TALON_CONTRACT.md`, `CLAUDE.md`, `AGENTS.md`, and `.cursor/rules/`.
 func RenderContractMarkdown(c *WorkspaceContract) string {
 	var b strings.Builder
 	b.WriteString("# GARUDA TALON — ACTIVE ARCHITECTURAL CONTRACT\n\n")
@@ -285,8 +328,6 @@ func talonExeSuffix() string {
 	return ""
 }
 
-// InstallHooks writes the compiled Talon contract and installs active enforcement
-// hooks across Cursor, Claude Code, Codex/Aider, Windsurf, and Git hooks.
 func InstallHooks(
 	repoRoot, garudaBin, mcpBin, dbURL, workspaceName string,
 	contract *WorkspaceContract,
@@ -311,13 +352,12 @@ func InstallHooks(
 			WorkspaceName: workspaceName,
 			WorkspaceID:   "auto",
 			CompiledAt:    time.Now().UTC().Format(time.RFC3339),
-			BuildContext:  analyzer.ResolveBuildContext(absRoot, "", workspaceName, nil),
+			BuildContext:  analyzer.ResolveBuildContext(absRoot, "go", workspaceName, nil),
 		})
 	}
 
 	summary := &InstallSummary{}
 
-	// 1. .garuda/TALON_CONTRACT.md
 	garudaDir := filepath.Join(absRoot, ".garuda")
 	_ = os.MkdirAll(garudaDir, 0755)
 	contractPath := filepath.Join(garudaDir, "TALON_CONTRACT.md")
@@ -326,7 +366,6 @@ func InstallHooks(
 	}
 	summary.ContractPath = contractPath
 
-	// 2. Cursor Active Rule: .cursor/rules/garuda-talon.mdc (alwaysApply: true)
 	cursorRulesDir := filepath.Join(absRoot, ".cursor", "rules")
 	_ = os.MkdirAll(cursorRulesDir, 0755)
 	cursorRulePath := filepath.Join(cursorRulesDir, "garuda-talon.mdc")
@@ -339,7 +378,6 @@ func InstallHooks(
 	_ = os.WriteFile(cursorRulePath, []byte(cursorMDC), 0644)
 	summary.CursorRulePath = cursorRulePath
 
-	// 3. Cursor MCP Config (.cursor/mcp.json) with GARUDA_TALON_ENFORCE=true
 	cursorMCPPath := filepath.Join(absRoot, ".cursor", "mcp.json")
 	mcpEnv := map[string]string{
 		"DATABASE_URL":         dbURL,
@@ -360,7 +398,6 @@ func InstallHooks(
 		summary.CursorMCPPath = cursorMCPPath
 	}
 
-	// 4. Claude Code Active Hooks (.claude/settings.json) + CLAUDE.md
 	claudeDir := filepath.Join(absRoot, ".claude")
 	_ = os.MkdirAll(claudeDir, 0755)
 	claudeSettingsPath := filepath.Join(claudeDir, "settings.json")
@@ -389,7 +426,6 @@ func InstallHooks(
 	upsertMarkedSection(claudeMDPath, contractMD)
 	summary.ClaudeMDPath = claudeMDPath
 
-	// 5. Codex / OpenAI Agents / Aider: AGENTS.md & .windsurfrules
 	agentsMDPath := filepath.Join(absRoot, "AGENTS.md")
 	upsertMarkedSection(agentsMDPath, contractMD)
 	summary.AgentsMDPath = agentsMDPath
@@ -398,37 +434,29 @@ func InstallHooks(
 	upsertMarkedSection(windsurfPath, contractMD)
 	summary.WindsurfRulesPath = windsurfPath
 
-	// 6. Git Hooks (.git/hooks/pre-commit & .git/hooks/commit-msg) — Cross-platform (POSIX sh / Git for Windows Bash)
 	gitHooksDir := filepath.Join(absRoot, ".git", "hooks")
 	if st, err := os.Stat(gitHooksDir); err == nil && st.IsDir() {
 		slashBin := filepath.ToSlash(garudaBin)
 		preCommitPath := filepath.Join(gitHooksDir, "pre-commit")
-		preCommitScript := fmt.Sprintf(`#!/usr/bin/env bash
-# Garuda Talon Active Pre-Commit Gate (Windows Git Bash / macOS / Linux)
-set -e
-if [ -x "%s" ] || [ -f "%s" ]; then
-  "%s" talon guard --staged --fail-on-block --workspace "%s"
-fi
-`, slashBin, slashBin, slashBin, workspaceName)
+		preCommitScript := fmt.Sprintf("#!/usr/bin/env bash\n# Garuda Talon Active Pre-Commit Gate\nset -e\nif [ -x %q ] || [ -f %q ]; then\n  %q talon guard --staged --fail-on-block --workspace %q\nfi\n", slashBin, slashBin, slashBin, workspaceName)
 		if os.WriteFile(preCommitPath, []byte(preCommitScript), 0755) == nil {
 			summary.GitPreCommitPath = preCommitPath
 		}
 
 		commitMsgPath := filepath.Join(gitHooksDir, "commit-msg")
-		commitMsgScript := `#!/usr/bin/env bash
-# Garuda Talon Cryptographic & Build-Context Provenance Trailer
-COMMIT_MSG_FILE="$1"
-if [ -f ".garuda/LAST_DECISION.env" ]; then
-  source ".garuda/LAST_DECISION.env"
-  if [ -n "${GARUDA_LAST_OUTCOME:-}" ] && ! grep -q "Garuda-Governance-Outcome:" "$COMMIT_MSG_FILE" 2>/dev/null; then
-    echo "" >> "$COMMIT_MSG_FILE"
-    echo "Garuda-Governance-Outcome: ${GARUDA_LAST_OUTCOME}" >> "$COMMIT_MSG_FILE"
-    [ -n "${GARUDA_LAST_MERKLE_BLOCK:-}" ] && echo "Garuda-Merkle-Block: #${GARUDA_LAST_MERKLE_BLOCK}" >> "$COMMIT_MSG_FILE"
-    [ -n "${GARUDA_BUILD_RECEIPT:-}" ] && echo "Garuda-Build-Receipt: ${GARUDA_BUILD_RECEIPT}" >> "$COMMIT_MSG_FILE"
-    [ -n "${GARUDA_REPRODUCE_CMD:-}" ] && echo "Garuda-Reproduce: ${GARUDA_REPRODUCE_CMD}" >> "$COMMIT_MSG_FILE"
-  fi
-fi
-`
+		commitMsgScript := "#!/usr/bin/env bash\n" +
+			"# Garuda Talon Cryptographic & Build-Context Provenance Trailer\n" +
+			"COMMIT_MSG_FILE=\"$1\"\n" +
+			"if [ -f \".garuda/LAST_DECISION.env\" ]; then\n" +
+			"  source \".garuda/LAST_DECISION.env\"\n" +
+			"  if [ -n \"${GARUDA_LAST_OUTCOME:-}\" ] && ! grep -q \"Garuda-Governance-Outcome:\" \"$COMMIT_MSG_FILE\" 2>/dev/null; then\n" +
+			"    echo \"\" >> \"$COMMIT_MSG_FILE\"\n" +
+			"    echo \"Garuda-Governance-Outcome: ${GARUDA_LAST_OUTCOME}\" >> \"$COMMIT_MSG_FILE\"\n" +
+			"    [ -n \"${GARUDA_LAST_MERKLE_BLOCK:-}\" ] && echo \"Garuda-Merkle-Block: #${GARUDA_LAST_MERKLE_BLOCK}\" >> \"$COMMIT_MSG_FILE\"\n" +
+			"    [ -n \"${GARUDA_BUILD_RECEIPT:-}\" ] && echo \"Garuda-Build-Receipt: ${GARUDA_BUILD_RECEIPT}\" >> \"$COMMIT_MSG_FILE\"\n" +
+			"    [ -n \"${GARUDA_REPRODUCE_CMD:-}\" ] && echo \"Garuda-Reproduce: ${GARUDA_REPRODUCE_CMD}\" >> \"$COMMIT_MSG_FILE\"\n" +
+			"  fi\n" +
+			"fi\n"
 		if os.WriteFile(commitMsgPath, []byte(commitMsgScript), 0755) == nil {
 			summary.GitCommitMsgPath = commitMsgPath
 		}
@@ -463,7 +491,9 @@ func upsertMarkedSection(filePath, sectionContent string) {
 
 // PreEditBriefing is the structured pre-flight guidance returned before an agent edits a file or symbol.
 type PreEditBriefing struct {
+	TenantID          string                 `json:"tenant_id"`
 	Workspace         string                 `json:"workspace"`
+	WorkspaceID       string                 `json:"workspace_id"`
 	Target            string                 `json:"target"`
 	MatchedEntities   []HubSummary           `json:"matched_entities"`
 	BlastRadiusTotal  int                    `json:"blast_radius_total"`
@@ -474,7 +504,7 @@ type PreEditBriefing struct {
 	MandatoryProtocol []string               `json:"mandatory_protocol"`
 }
 
-// BuildPreEditBriefing computes targeted pre-edit context for a file path or symbol name.
+// BuildPreEditBriefing computes targeted pre-edit context for a file path or symbol name (BUG-16 & CLASS-10).
 func BuildPreEditBriefing(
 	ctx context.Context,
 	st *store.PostgresStore,
@@ -487,7 +517,9 @@ func BuildPreEditBriefing(
 	}
 
 	brief := &PreEditBriefing{
+		TenantID:       tenantID.String(),
 		Workspace:      workspaceName,
+		WorkspaceID:    workspaceID.String(),
 		Target:         target,
 		BySeverity:     map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
 		ActivePolicies: contract.Policies,
@@ -502,14 +534,20 @@ func BuildPreEditBriefing(
 	if target == "" {
 		brief.MatchedEntities = contract.TopHubs
 		brief.ApplicableADRs = contract.ADRGuardrails
+		if brief.BuildContext != nil && brief.BuildContext.Language == "" {
+			brief.BuildContext.Language = "go"
+		}
 		return brief, nil
 	}
 
-	// Find entities matching target (by symbol name or file path substring)
+	// Find entities matching target (by symbol name or file path substring) and join repositories for language (BUG-16)
+	var matchedLang string
 	rows, err := st.Pool().Query(ctx, `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.file_path, ''),
+		       COALESCE(NULLIF(e.language, ''), NULLIF(r.language, ''), 'go'),
 		       (SELECT COUNT(*)::int FROM claims c WHERE c.to_entity_id = e.id AND c.workspace_id = e.workspace_id) AS inbound
 		FROM entities e
+		LEFT JOIN repositories r ON r.id = e.repository_id
 		WHERE e.workspace_id = $1
 		  AND e.kind != 'external'
 		  AND (e.name ILIKE $2 OR e.name ILIKE '%.' || $2 OR COALESCE(e.file_path, '') ILIKE '%' || $2 || '%')
@@ -519,14 +557,35 @@ func BuildPreEditBriefing(
 	if err == nil {
 		for rows.Next() {
 			var h HubSummary
-			if rows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.FilePath, &h.InboundEdges) == nil {
+			var lang string
+			if rows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.FilePath, &lang, &h.InboundEdges) == nil {
 				brief.MatchedEntities = append(brief.MatchedEntities, h)
+				if matchedLang == "" && lang != "" {
+					matchedLang = strings.ToLower(strings.TrimSpace(lang))
+				}
 			}
 		}
 		rows.Close()
 	}
+	if matchedLang == "" {
+		if strings.HasSuffix(strings.ToLower(target), ".py") {
+			matchedLang = "python"
+		} else if strings.HasSuffix(strings.ToLower(target), ".ts") || strings.HasSuffix(strings.ToLower(target), ".tsx") {
+			matchedLang = "typescript"
+		} else {
+			matchedLang = "go"
+		}
+	}
+	if brief.BuildContext != nil {
+		brief.BuildContext.Language = matchedLang
+		if matchedLang == "go" {
+			brief.BuildContext.CompilerVersion = runtime.Version()
+			brief.BuildContext.BuildTags = nil
+		}
+		brief.BuildContext.ReproduceCommand = brief.BuildContext.FormatReproduceCommand(workspaceName)
+		brief.BuildContext.ReceiptHash = brief.BuildContext.ComputeReceiptHash()
+	}
 
-	// Compute union blast radius across matched entities
 	if idx, idxErr := st.BuildImpactIndex(ctx, workspaceID); idxErr == nil && len(brief.MatchedEntities) > 0 {
 		seen := make(map[string]impact.SeverityLevel)
 		for _, me := range brief.MatchedEntities {
@@ -549,7 +608,6 @@ func BuildPreEditBriefing(
 		}
 	}
 
-	// Filter ADR guardrails relevant to target (or return all if none specifically match)
 	targetLower := strings.ToLower(target)
 	for _, g := range contract.ADRGuardrails {
 		if strings.Contains(strings.ToLower(g.Subject), targetLower) ||
@@ -579,11 +637,15 @@ type GuardOptions struct {
 	Matrix        bool
 }
 
-// GuardVerdict is the structured outcome of `garuda talon guard` or `garuda.talon_verify_edit`.
+// GuardVerdict is the structured outcome of `garuda talon guard` or `garuda.talon_verify_edit` (BUG-17 & CLASS-10).
 type GuardVerdict struct {
+	TenantID                string                           `json:"tenant_id"`
 	Workspace               string                           `json:"workspace"`
+	WorkspaceID             string                           `json:"workspace_id"`
 	Outcome                 string                           `json:"outcome"` // ALLOW | WARN | REVIEW | BLOCK
 	AgentShouldProceed      bool                             `json:"agent_should_proceed"`
+	SaveToLedger            bool                             `json:"save_to_ledger"`
+	SideEffects             []string                         `json:"side_effects"`
 	TouchedFiles            []string                         `json:"touched_files"`
 	TouchedSymbols          []string                         `json:"touched_symbols"`
 	TouchedPackages         []string                         `json:"touched_packages"`
@@ -603,9 +665,6 @@ type GuardVerdict struct {
 	DurationMs              int64                            `json:"duration_ms"`
 }
 
-// RunGuard executes the full Talon verification pass on the current working tree
-// or diff, returning a deterministic GuardVerdict with full BuildContext receipt
-// and writing `.garuda/LAST_DECISION.env`.
 func RunGuard(
 	ctx context.Context,
 	st *store.PostgresStore,
@@ -622,7 +681,7 @@ func RunGuard(
 		policyDir = filepath.Join(absRepo, "policies")
 	}
 
-	activeBuildCtx := analyzer.ResolveBuildContext(absRepo, "", opts.WorkspaceName, opts.BuildTarget)
+	activeBuildCtx := analyzer.ResolveBuildContext(absRepo, "go", opts.WorkspaceName, opts.BuildTarget)
 	recordedBuildCtx := store.GetLatestRecordedBuildContext(ctx, st.Pool(), tenantID, workspaceID)
 	if recordedBuildCtx != nil && activeBuildCtx.GraphFingerprint == "" {
 		activeBuildCtx.GraphFingerprint = recordedBuildCtx.GraphFingerprint
@@ -681,7 +740,6 @@ func RunGuard(
 		}
 	}
 
-	// Verify ADR document_claims against current AST
 	adrContradictions := 0
 	baselineADRContradictions := 0
 	var violations []string
@@ -764,10 +822,19 @@ func RunGuard(
 		matrixResults, _ = RunMatrixVerification(ctx, absRepo, opts.WorkspaceName, nil)
 	}
 
+	sideEffects := []string{}
+	if opts.SaveLedger {
+		sideEffects = []string{"merkle_ledger_append"}
+	}
+
 	verdict := &GuardVerdict{
+		TenantID:                tenantID.String(),
 		Workspace:               opts.WorkspaceName,
+		WorkspaceID:             workspaceID.String(),
 		Outcome:                 outcome,
 		AgentShouldProceed:      outcome != string(policy.DecisionBlock),
+		SaveToLedger:            opts.SaveLedger,
+		SideEffects:             sideEffects,
 		BlastRadiusAffected:     affectedCount,
 		BySeverity:              sevMap,
 		NetNewViolationsCount:   runRes.NetNewViolationsCount + adrContradictions,
@@ -796,25 +863,23 @@ func RunGuard(
 		verdict.SelfRepairPrompt = BuildSelfRepairPrompt(verdict)
 	}
 
-	// Persist last decision state + build context receipt for git commit-msg trailer hook
-	garudaDir := filepath.Join(absRepo, ".garuda")
-	_ = os.MkdirAll(garudaDir, 0755)
-	envLines := fmt.Sprintf("GARUDA_LAST_OUTCOME=%s\n", verdict.Outcome)
-	if verdict.MerkleBlockHeight != nil {
-		envLines += fmt.Sprintf("GARUDA_LAST_MERKLE_BLOCK=%d\n", *verdict.MerkleBlockHeight)
+	if opts.SaveLedger {
+		garudaDir := filepath.Join(absRepo, ".garuda")
+		_ = os.MkdirAll(garudaDir, 0755)
+		envLines := fmt.Sprintf("GARUDA_LAST_OUTCOME=%s\n", verdict.Outcome)
+		if verdict.MerkleBlockHeight != nil {
+			envLines += fmt.Sprintf("GARUDA_LAST_MERKLE_BLOCK=%d\n", *verdict.MerkleBlockHeight)
+		}
+		if verdict.BuildContext != nil {
+			envLines += fmt.Sprintf("GARUDA_BUILD_RECEIPT=%q\n", verdict.BuildContext.SummaryLine())
+			envLines += fmt.Sprintf("GARUDA_REPRODUCE_CMD=%q\n", verdict.BuildContext.ReproduceCommand)
+		}
+		_ = os.WriteFile(filepath.Join(garudaDir, "LAST_DECISION.env"), []byte(envLines), 0644)
 	}
-	if verdict.BuildContext != nil {
-		envLines += fmt.Sprintf("GARUDA_BUILD_RECEIPT=%q\n", verdict.BuildContext.SummaryLine())
-		envLines += fmt.Sprintf("GARUDA_REPRODUCE_CMD=%q\n", verdict.BuildContext.ReproduceCommand)
-	}
-	_ = os.WriteFile(filepath.Join(garudaDir, "LAST_DECISION.env"), []byte(envLines), 0644)
 
 	return verdict, nil
 }
 
-// RunMatrixVerification evaluates a repository across standard cross-platform & CGO build
-// targets (linux/amd64 cgo=0, linux/amd64 cgo=1, darwin/arm64 cgo=1, windows/amd64 cgo=0)
-// to verify whether conditional compilation or OS-specific files expose hidden edges.
 func RunMatrixVerification(
 	ctx context.Context,
 	repoDir, workspaceName string,
@@ -870,8 +935,6 @@ func RunMatrixVerification(
 	return out, nil
 }
 
-// BuildSelfRepairPrompt synthesizes a direct, deterministic prompt that an AI coding
-// agent or `garuda talon run` supervisor feeds back into the agent to repair violations.
 func BuildSelfRepairPrompt(v *GuardVerdict) string {
 	var b strings.Builder
 	b.WriteString("GARUDA TALON ENFORCEMENT GATE: CHANGE BLOCKED\n")
@@ -911,10 +974,6 @@ func BuildSelfRepairPrompt(v *GuardVerdict) string {
 	return b.String()
 }
 
-// RunHarnessLoop executes an external coding agent command (`agentArgs`), runs
-// incremental AST re-indexing + `RunGuard` after each pass, and if `BLOCK`
-// occurs, re-invokes the agent with `GARUDA_TALON_REPAIR_PROMPT` (and `--repair`
-// prompt flag if supported) up to `maxRetries` times until `ALLOW` is reached.
 func RunHarnessLoop(
 	ctx context.Context,
 	st *store.PostgresStore,

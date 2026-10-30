@@ -255,7 +255,9 @@ func (s *PostgresStore) GetSymbolSummaryDetail(ctx context.Context, workspaceID 
 
 	if parsedID, parseErr := uuid.Parse(target); parseErr == nil {
 		err = s.pool.QueryRow(ctx, `
-			SELECT id, name, kind, package, receiver_type, file_path, signature, is_exported, line
+			SELECT id, name, kind, COALESCE(package, ''), COALESCE(receiver_type, ''),
+			       COALESCE(file_path, ''), COALESCE(signature, ''), COALESCE(is_exported, false),
+			       COALESCE(NULLIF(line, 0), line_start, 0)
 			FROM entities WHERE workspace_id = $1 AND id = $2 LIMIT 1
 		`, workspaceID, parsedID).Scan(&det.ID, &det.Name, &det.Kind, &det.Package, &det.ReceiverType, &det.FilePath, &det.Signature, &det.IsExported, &det.Line)
 	} else {
@@ -264,7 +266,9 @@ func (s *PostgresStore) GetSymbolSummaryDetail(ctx context.Context, workspaceID 
 			sym = target[dot+1:]
 		}
 		err = s.pool.QueryRow(ctx, `
-			SELECT id, name, kind, package, receiver_type, file_path, signature, is_exported, line
+			SELECT id, name, kind, COALESCE(package, ''), COALESCE(receiver_type, ''),
+			       COALESCE(file_path, ''), COALESCE(signature, ''), COALESCE(is_exported, false),
+			       COALESCE(NULLIF(line, 0), line_start, 0)
 			FROM entities 
 			WHERE workspace_id = $1 AND (name = $2 OR name ILIKE $2)
 			ORDER BY (kind != 'external') DESC, is_exported DESC
@@ -297,16 +301,18 @@ func (s *PostgresStore) GetSymbolSummaryDetail(ctx context.Context, workspaceID 
 // session_id and agent_id are returned for correlation. They are not
 // keys; the watermark is keyed on agent_id only.
 type BriefingDTO struct {
-	Workspace   string               `json:"workspace"`
-	WorkspaceID uuid.UUID            `json:"workspace_id"`
-	SessionID   string               `json:"session_id"`
-	AgentID     string               `json:"agent_id"`
-	Trust       BriefingTrustDTO     `json:"trust"`
-	Scale       BriefingScaleDTO     `json:"scale"`
-	Hubs        []BriefingHubDTO     `json:"hubs"`
-	Policies    BriefingPolicyDTO    `json:"policies"`
-	Attention   BriefingAttentionDTO `json:"attention"`
-	NewSince    BriefingDiffDTO      `json:"new_since"`
+	Workspace       string               `json:"workspace"`
+	WorkspaceID     uuid.UUID            `json:"workspace_id"`
+	SessionID       string               `json:"session_id"`
+	AgentID         string               `json:"agent_id"`
+	PolicyVerdict   string               `json:"policy_verdict"`
+	EpistemicCounts map[string]int       `json:"epistemic_counts"`
+	Trust           BriefingTrustDTO     `json:"trust"`
+	Scale           BriefingScaleDTO     `json:"scale"`
+	Hubs            []BriefingHubDTO     `json:"hubs"`
+	Policies        BriefingPolicyDTO    `json:"policies"`
+	Attention       BriefingAttentionDTO `json:"attention"`
+	NewSince        BriefingDiffDTO      `json:"new_since"`
 }
 
 type BriefingTrustDTO struct {
@@ -318,7 +324,11 @@ type BriefingTrustDTO struct {
 type BriefingScaleDTO struct {
 	Repositories     int `json:"repositories"`
 	Entities         int `json:"entities"`
+	ExportedEntities int `json:"exported_entities"`
+	ExternalStubs    int `json:"external_stubs"`
 	Claims           int `json:"claims"`
+	ASTRelationships int `json:"ast_relationships"`
+	DocumentClaims   int `json:"document_claims"`
 	CrossRepoBridges int `json:"cross_repo_bridges"`
 }
 
@@ -501,16 +511,48 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 		return nil, err
 	}
 
+	var exportedEntities, externalStubs, docClaimsTotal, docSupported, docContradicted, docUnverified int
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1 AND kind != 'external' AND is_exported = true`, workspaceID).Scan(&exportedEntities)
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1 AND kind = 'external'`, workspaceID).Scan(&externalStubs)
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1`, workspaceID).Scan(&docClaimsTotal)
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1 AND status = 'SUPPORTED'`, workspaceID).Scan(&docSupported)
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1 AND status = 'CONTRADICTED'`, workspaceID).Scan(&docContradicted)
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1 AND status NOT IN ('SUPPORTED', 'CONTRADICTED')`, workspaceID).Scan(&docUnverified)
+
+	totalContradictions := contradictions + docContradicted
+	policyVerdict := "ALLOW"
+	if totalContradictions > 0 {
+		policyVerdict = "BLOCK"
+	} else if docClaimsTotal > 0 && docSupported == 0 {
+		policyVerdict = "UNVERIFIED"
+	} else if docClaimsTotal > 0 && docSupported < docClaimsTotal {
+		policyVerdict = "PARTIAL"
+	}
+
+	epistemicCounts := map[string]int{
+		"SUPPORTED":             docSupported,
+		"CONTRADICTED":          totalContradictions,
+		"UNVERIFIED":            docUnverified,
+		"TOTAL_DOCUMENT_CLAIMS": docClaimsTotal,
+		"TOTAL_AST_CLAIMS":      counts.Claims,
+	}
+
 	briefing := &BriefingDTO{
-		Workspace:   workspaceName,
-		WorkspaceID: workspaceID,
-		SessionID:   sessionID,
-		AgentID:     agentID,
-		Trust:       trust,
+		Workspace:       workspaceName,
+		WorkspaceID:     workspaceID,
+		SessionID:       sessionID,
+		AgentID:         agentID,
+		PolicyVerdict:   policyVerdict,
+		EpistemicCounts: epistemicCounts,
+		Trust:           trust,
 		Scale: BriefingScaleDTO{
 			Repositories:     counts.Repositories,
 			Entities:         counts.Entities,
+			ExportedEntities: exportedEntities,
+			ExternalStubs:    externalStubs,
 			Claims:           counts.Claims,
+			ASTRelationships: counts.Claims,
+			DocumentClaims:   docClaimsTotal,
 			CrossRepoBridges: len(bridges),
 		},
 		Hubs: hubs,
@@ -519,7 +561,9 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 			Titles:      policyTitles,
 		},
 		Attention: BriefingAttentionDTO{
-			OpenContradictions: contradictions,
+			OpenContradictions:   totalContradictions,
+			UndocumentedEntities: exportedEntities - docSupported,
+			DriftFindings:        docUnverified,
 		},
 		NewSince: BriefingDiffDTO{
 			HasPriorBriefing: hasPrior,
@@ -546,3 +590,4 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 
 	return briefing, nil
 }
+

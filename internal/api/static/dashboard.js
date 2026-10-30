@@ -378,7 +378,7 @@ var surfaceLabels = {
     review:     "06 — Human-in-the-Loop Change Review",
     governance: "07 — Evidence & Ledger",
     agents:     "08 — Agents & Sessions",
-    audit:      "09 — Financial & Logic Audit (0.0–1.0 Weights)",
+    audit:      "09 — Data & Logic Audit Ledger (0.0–1.0 Weights)",
     decisions:  "ADR — Decision Lineage"
 };
 
@@ -959,6 +959,24 @@ function switchWorkspace(name) {
     window.location.search = params.toString();
 }
 
+
+function switchSurfaceSubTab(sectionId, paneId, btnEl) {
+    var sec = document.getElementById(sectionId);
+    if (!sec) return;
+    sec.querySelectorAll(".surface-tab-pane").forEach(function(p) {
+        var isMatch = (p.id === paneId);
+        p.classList.toggle("active", isMatch);
+    });
+    if (btnEl && btnEl.parentNode) {
+        btnEl.parentNode.querySelectorAll(".surface-tab-btn").forEach(function(b) {
+            b.classList.toggle("active", b === btnEl);
+        });
+    }
+    if (paneId === "dg-pane-graph" && state.docsGraphData) {
+        setTimeout(function() { renderDocsD3Graph(); }, 40);
+    }
+}
+
 function showView(view) {
     var aliases = { overview: "workspace", architecture: "graph", trust: "governance", docs: "docsgraph", risk: "talon" };
     view = aliases[view] || view;
@@ -969,7 +987,9 @@ function showView(view) {
     Object.keys(viewToSection).forEach(function(key) {
         var el = document.getElementById(viewToSection[key]);
         if (!el) return;
-        el.style.display = (key === view) ? "block" : "none";
+        var isTarget = (key === view);
+        el.style.display = isTarget ? "block" : "none";
+        el.classList.toggle("active", isTarget);
     });
 
     document.querySelectorAll(".tab").forEach(function(el) {
@@ -4445,7 +4465,7 @@ window.addEventListener("resize", function() {
    GARUDA v1.9.0 CLIENT CONTROLLERS:
    1. Multi-Team Weighted Logic Disambiguation (0.0 - 1.0 Team Weights)
    2. Surface Criticality Tiers (HIGH_SEVERE vs MEDIUM vs LOW)
-   3. Financial & Business Data Audit (48 Crore vs 4.8 Crore Claims Paid)
+   3. Data & Logic Audit Ledger (Cross-Team Metric Parity)
    4. Auto-Synthesized Base Rulebook Studio & 1-Click Stakeholder Approval
    ============================================================================ */
 
@@ -4554,14 +4574,14 @@ function buildDefaultHumanDecisionHub(teamRole) {
             },
             {
                 id: "tier-high-claims-ledger",
-                surface_name: "Claims Settlement Ledger & RFC 6962 Merkle Seal",
+                surface_name: "Core Data & Logic Audit Ledger & RFC 6962 Merkle Seal",
                 package_pattern: "internal/store | internal/merkle | internal/refund",
                 symbol_pattern: "AppendLeafAndSealTx | ProcessRefund | AggregateClaimsPaidCrore",
                 criticality_tier: "HIGH_SEVERE",
-                blast_radius_impact: "SEVERE BLAST RADIUS: Core financial settlement and audit ledger integrity. Any unauthorized formula or schema change corrupts compliance numbers across 60+ callers.",
+                blast_radius_impact: "SEVERE BLAST RADIUS: Core data & logic audit ledger and cryptographic Merkle proof integrity. Any unauthorized formula or schema change corrupts compliance numbers across 60+ callers.",
                 human_policy_action: "HUMAN_FREEZE_DO_NOT_TOUCH",
                 callers_count: 60,
-                defined_by: "Staff Architect / Financial Audit Gate"
+                defined_by: "Staff Architect / Data & Logic Audit Gate"
             },
             {
                 id: "tier-medium-wishlist",
@@ -4608,7 +4628,7 @@ function buildDefaultHumanDecisionHub(teamRole) {
                         blast_radius_surfaces: ["Internal Ops Claims Queue", "Underwriting Digest UI Box Alignment"],
                         human_impact_summary: "LOW SEVERITY (LEAST ARCHITECTURAL HARM): Isolated to internal Ops Claims Queue and UI summary box. Modifying or standardizing on this formula will at worst cause a minor visual box alignment shift in the ops widget—zero customer-facing downtime.",
                         architecture_harm_rank: 1,
-                        human_decision_status: "APPROVED_BY_HUMAN"
+                        human_decision_status: "AWAITING_HUMAN_DECISION"
                     },
                     {
                         variant_id: "loss_ratio_marketing_v2",
@@ -4694,7 +4714,7 @@ function buildDefaultHumanDecisionHub(teamRole) {
             workspace: WORKSPACE || "default",
             version_tag: "v1.9.0-auto-draft",
             status: "DRAFT_AWAITING_HUMAN_APPROVAL",
-            title: "Garuda Auto-Synthesized Base Architecture, Criticality & Financial Audit Rulebook",
+            title: "Garuda Auto-Synthesized Base Architecture, Criticality & Data Logic Audit Rulebook",
             markdown_content: md,
             rules: rules,
             merkle_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

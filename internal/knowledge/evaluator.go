@@ -22,18 +22,20 @@ func NewEvaluator(pool *pgxpool.Pool) *Evaluator {
 }
 
 type HealthStats struct {
-	TotalClaims      int
-	Supported        int
-	Unverified       int
-	Contradicted     int
-	TotalEntities    int
-	UndocumentedCode int
+	TotalClaims      int `json:"total_claims"`
+	Supported        int `json:"supported"`
+	Unverified       int `json:"unverified"`
+	Contradicted     int `json:"contradicted"`
+	TotalEntities    int `json:"total_entities"`
+	ExportedEntities int `json:"exported_entities"`
+	ASTRelationships int `json:"ast_relationships"`
+	UndocumentedCode int `json:"undocumented_code"`
 }
 
 type CodeDriftFinding struct {
-	SymbolName string
-	Kind       string
-	Path       string
+	SymbolName string `json:"symbol_name"`
+	Kind       string `json:"kind"`
+	Path       string `json:"path"`
 }
 
 func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID, workspaceID uuid.UUID) (*HealthStats, []CodeDriftFinding, error) {
@@ -186,7 +188,9 @@ func (e *Evaluator) EvaluateWorkspace(ctx context.Context, tenantID, workspaceID
 		}
 	}
 
-	_ = e.pool.QueryRow(ctx, `SELECT COUNT(*) FROM entities WHERE tenant_id = $1 AND workspace_id = $2 AND is_exported = true`, tenantID, workspaceID).Scan(&stats.TotalEntities)
+	_ = e.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE tenant_id = $1 AND workspace_id = $2 AND kind != 'external'`, tenantID, workspaceID).Scan(&stats.TotalEntities)
+	_ = e.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE tenant_id = $1 AND workspace_id = $2 AND is_exported = true AND kind != 'external'`, tenantID, workspaceID).Scan(&stats.ExportedEntities)
+	_ = e.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM claims WHERE tenant_id = $1 AND workspace_id = $2`, tenantID, workspaceID).Scan(&stats.ASTRelationships)
 	stats.UndocumentedCode = len(undocumented)
 
 	return stats, undocumented, nil
@@ -199,3 +203,4 @@ func (e *Evaluator) updateClaim(ctx context.Context, id uuid.UUID, entityID *uui
 		WHERE id = $4
 	`, string(status), reason, entityID, id)
 }
+

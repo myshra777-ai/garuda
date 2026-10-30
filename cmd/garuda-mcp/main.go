@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,15 +30,6 @@ import (
 )
 
 // MCPServer holds the process-scoped state of one MCP session.
-//
-// A session begins when the host (Claude Desktop, Cursor, or any
-// other MCP client) spawns this process and ends when the process
-// exits. The session ID is generated once at startup and is included
-// in every log line and, in future commits, in every telemetry event.
-//
-// Store, engines, and auth service are all constructed once. The
-// stdio loop can handle hundreds of tool calls without reconnecting
-// to the database.
 type MCPServer struct {
 	store               *store.PostgresStore
 	lineageEngine       *engine.LineageEngine
@@ -45,50 +37,35 @@ type MCPServer struct {
 	authService         *auth.AuthService
 	jwtConfig           *auth.JWTConfig
 
-	// sessionID is generated at startup and does not change for the
-	// lifetime of the process.
-	sessionID string
-	startedAt time.Time
-
-	// instanceHash is a stable identifier for this deployment
-	// (hostname + cwd + salt). Used to correlate telemetry rows.
+	sessionID    string
+	startedAt    time.Time
 	instanceHash string
-	// clientName is the clientInfo.name reported by the MCP client
-	// during the initialize handshake. Used by garuda.briefing to key
-	// the agent watermark so the same client resumes its own session
-	// across restarts. Empty until initialize completes.
-	clientName  string
-	sessionDBID uuid.UUID
-	sessionMu   sync.RWMutex
-	oriented    bool
+	clientName   string
+	sessionDBID  uuid.UUID
+	sessionMu    sync.RWMutex
+	oriented     bool
 }
 
 func main() {
-	// Suppress the JWT banner and any other informational output.
-	// stderr is transport in the MCP protocol; some clients treat
-	// every line from the child process as an MCP frame regardless
-	// of which stream it arrived on. Set the flag before any
-	// package that might write to stderr.
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "--help", "-h", "help":
+			fmt.Println("Garuda MCP Server v1.9.4 (JSON-RPC 2.0 over stdio — 40 governance & AST tools)")
+			fmt.Println("Usage: garuda-mcp [--version | --help]")
+			return
+		case "--version", "-v", "version":
+			fmt.Println("Garuda MCP Server v1.9.4")
+			return
+		}
+	}
+
 	_ = os.Setenv("GARUDA_MCP_QUIET", "1")
-	// stdout is the JSON-RPC channel and must contain nothing but
-	// line-delimited MCP messages.
-	//
-	// stderr is also constrained in the MCP transport: some clients
-	// (notably Cursor 3.17.x via its "Shared MCP process") treat every
-	// line from the child process as an MCP frame, regardless of which
-	// stream it arrived on. A startup banner or an INFO log on stderr
-	// is therefore parsed as protocol and rejected. The MCP process
-	// runs silent by default; set GARUDA_MCP_DEBUG=1 to keep stderr
-	// for interactive debugging.
 	if os.Getenv("GARUDA_MCP_DEBUG") == "" {
 		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}
 
 	enc := json.NewEncoder(os.Stdout)
 
-	// DATABASE_URL is required. There is no fallback: a missing value
-	// in production should fail loudly, not connect to a local test
-	// database.
 	config.LoadDotEnv()
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" && os.Getenv("GARUDA_ENV") != "production" {
@@ -141,7 +118,6 @@ func main() {
 		"pid", os.Getpid(),
 	)
 
-	// Graceful shutdown on SIGINT/SIGTERM.
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -151,13 +127,6 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// Line-delimited JSON-RPC over stdio. The loop handles one request
-	// at a time and exits when stdin closes (EOF), which the MCP host
-	// signals by closing the pipe.
-	//
-	// A parse error does not terminate the process. The host may send
-	// another well-formed request; we respond with a JSON-RPC parse
-	// error and continue reading.
 	dec := json.NewDecoder(os.Stdin)
 	requestCount := 0
 
@@ -172,8 +141,6 @@ func main() {
 				server.closeSession(context.Background(), "graceful")
 				return
 			}
-			// Malformed input. Respond with a parse error and keep the
-			// loop alive; the host may recover.
 			slog.Warn("Failed to parse MCP request",
 				"session_id", server.sessionID,
 				"error", err,
@@ -191,16 +158,6 @@ func main() {
 
 		requestCount++
 
-		// JSON-RPC 2.0: a message with no "id" is a notification and
-		// MUST NOT receive a response. The MCP spec uses notifications
-		// for lifecycle events such as notifications/initialized, which
-		// every client sends after initialize completes. Responding to
-		// one produces a frame with "id": null, which Cursor's MCP SDK
-		// rejects against its strict zod union and tears the transport
-		// down.
-		//
-		// Notifications are silently dropped. This is the same class of
-		// fix every MCP server that has hit this bug applies.
 		if req.ID == nil {
 			continue
 		}
@@ -241,17 +198,13 @@ type MCPError struct {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tool registry
+// Tool registry (Formatted cleanly for BUG-20 / CLASS-01)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// allTools is the canonical list of every tool this server exposes.
-// handleToolsList returns it verbatim; toolNames is derived from it.
-// The write path and any future policy surface iterate this slice
-// rather than maintaining a parallel list that can drift.
 var allTools = []map[string]interface{}{
 	{
 		"name":        "garuda.briefing",
-		"description": "Session-start briefing: workspace state, trust anchor, scale, top hubs, active policies, open contradictions, and what changed since this agent's last briefing. Read-only. Call this first.",
+		"description": "Session-start briefing: workspace state, policy verdict, epistemic counts, trust anchor, scale, top hubs, active policies, open contradictions, and what changed since this agent's last briefing. Read-only. Call this first.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
@@ -268,49 +221,119 @@ var allTools = []map[string]interface{}{
 	},
 	{
 		"name":        "garuda.query",
-		"description": "Query the Garuda knowledge graph with natural language",
+		"description": "Query the Garuda knowledge graph (entities, document claims, and decisions) with natural language keywords. Rejects raw SQL statements.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"query":     map[string]interface{}{"type": "string", "description": "The natural language query"},
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant ID"},
+				"query": map[string]interface{}{
+					"type":        "string",
+					"description": "The natural language query",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional workspace name",
+				},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional tenant ID",
+				},
 			},
 			"required": []string{"query"},
 		},
 	},
 	{
 		"name":        "garuda.get_lineage",
-		"description": "Get the full lineage of a decision",
+		"description": "Get the full governance and AST lineage of a decision UUID, actor name (e.g. 'cli-operator'), or symbol name.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"decision_id": map[string]interface{}{"type": "string", "description": "The decision UUID"},
-				"tenant_id":   map[string]interface{}{"type": "string", "description": "Tenant ID"},
+				"decision_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Decision UUID, actor identifier, or symbol name",
+				},
+				"symbol": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional symbol name (alias for decision_id)",
+				},
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional entity/symbol name",
+				},
+				"entity_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional entity UUID",
+				},
+				"actor": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional actor filter",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional workspace name",
+				},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant ID",
+				},
 			},
-			"required": []string{"decision_id"},
 		},
 	},
 	{
 		"name":        "garuda.detect_contradictions",
-		"description": "Detect unresolved contradictions in the tenant knowledge graph",
+		"description": "Detect unresolved contradictions across decisions and ADR document claims in the tenant knowledge graph.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant ID"},
-				"scope":     map[string]interface{}{"type": "string", "description": "Optional scope filter"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant ID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional workspace name",
+				},
+				"scope": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional scope filter",
+				},
+				"status": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional status filter: open, resolved, or all (default open)",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.get_impact",
-		"description": "Find what breaks if a decision is changed",
+		"description": "Find what breaks if a decision UUID or code symbol (e.g. 'AppendLeafAndSealTx') is changed. Computes transitive blast radius and child decision impact.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"decision_id": map[string]interface{}{"type": "string", "description": "The decision UUID"},
-				"tenant_id":   map[string]interface{}{"type": "string", "description": "Tenant ID"},
+				"decision_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Decision UUID, entity UUID, or symbol name",
+				},
+				"symbol": map[string]interface{}{
+					"type":        "string",
+					"description": "Target symbol name (e.g. 'AppendLeafAndSealTx')",
+				},
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Alias for symbol name",
+				},
+				"entity_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional entity UUID or symbol name",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional workspace name",
+				},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant ID",
+				},
 			},
-			"required": []string{"decision_id"},
 		},
 	},
 	{
@@ -319,87 +342,177 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id":      map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace":      map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"entity_id":      map[string]interface{}{"type": "string", "description": "Target entity UUID"},
-				"depth":          map[string]interface{}{"type": "integer", "description": "Max traversal depth. Default 3."},
-				"min_confidence": map[string]interface{}{"type": "number", "description": "Minimum edge confidence. Default 0.50."},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"entity_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Target entity UUID or symbol name",
+				},
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Target symbol name (alternative to entity_id)",
+				},
+				"symbol": map[string]interface{}{
+					"type":        "string",
+					"description": "Target symbol name (alternative to entity_id)",
+				},
+				"depth": map[string]interface{}{
+					"type":        "integer",
+					"description": "Max traversal depth. Default 3.",
+				},
+				"min_confidence": map[string]interface{}{
+					"type":        "number",
+					"description": "Minimum edge confidence. Default 0.50.",
+				},
 			},
-			"required": []string{"entity_id"},
 		},
 	},
 	{
 		"name":        "garuda.propose_decision",
-		"description": "Propose a new decision (creates a draft)",
+		"description": "Propose a new architectural decision (creates a draft).",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"title":        map[string]interface{}{"type": "string", "description": "Decision title"},
-				"scope_domain": map[string]interface{}{"type": "string", "description": "Scope domain"},
-				"scope_system": map[string]interface{}{"type": "string", "description": "Scope system"},
-				"tenant_id":    map[string]interface{}{"type": "string", "description": "Tenant ID"},
+				"title": map[string]interface{}{
+					"type":        "string",
+					"description": "Decision title",
+				},
+				"statement": map[string]interface{}{
+					"type":        "string",
+					"description": "Normative decision statement or rationale",
+				},
+				"rationale": map[string]interface{}{
+					"type":        "string",
+					"description": "Alias for statement",
+				},
+				"scope_domain": map[string]interface{}{
+					"type":        "string",
+					"description": "Scope domain",
+				},
+				"scope_system": map[string]interface{}{
+					"type":        "string",
+					"description": "Scope system",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional workspace name",
+				},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant ID",
+				},
 			},
 			"required": []string{"title"},
 		},
 	},
-	// ── Governance tools (Phase 2.2a) ──
 	{
 		"name":        "garuda.policy.list",
 		"description": "List policies registered for a tenant. Read-only.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID; falls back to GARUDA_TENANT_ID env or default tenant"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID; falls back to GARUDA_TENANT_ID env or default tenant",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.governance.status",
-		"description": "Aggregate governance state: active policies, documentation health, contradiction count. Read-only.",
+		"description": "Aggregate governance state: top-level decision, active policies, documentation health, blocked_by list, and unified entity/claim counts. Read-only.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name; falls back to GARUDA_WORKSPACE env or 'default'"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name; falls back to GARUDA_WORKSPACE env or 'default'",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.check_drift",
-		"description": "Documentation-to-code drift report. Read-only.",
+		"description": "Bidirectional documentation-to-code (doc_to_code) and code-to-documentation (code_to_doc) drift report. Read-only.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.query_claims",
-		"description": "Query document claims matching a subject. Read-only.",
+		"description": "Query document claims matching a subject and/or epistemic status (SUPPORTED, UNVERIFIED, CONTRADICTED). Read-only.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"subject":   map[string]interface{}{"type": "string", "description": "Filter by subject or object (substring)"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"subject": map[string]interface{}{
+					"type":        "string",
+					"description": "Filter by subject or object (substring)",
+				},
+				"status": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional status filter: SUPPORTED, UNVERIFIED, CONTRADICTED, or ALL",
+				},
 			},
 		},
 	},
-	// ── Policy + semantic tools (Phase 2.2b/2.2c) ──
 	{
 		"name":        "garuda.policy.evaluate",
-		"description": "Dry-run the policy engine against a workspace and return the decisions it would make. Does NOT persist or Merkle-anchor. Use 'garuda policy evaluate' from the CLI to anchor a real governance decision.",
+		"description": "Dry-run the policy engine against a workspace and return deterministic policy decisions. Does NOT persist or Merkle-anchor. Use 'garuda policy evaluate' from the CLI to anchor a real governance decision.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id":    map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace":    map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"policy_dir":   map[string]interface{}{"type": "string", "description": "Directory containing policy YAML. Defaults to GARUDA_POLICY_DIR or ./policies"},
-				"subject_kind": map[string]interface{}{"type": "string", "description": "Optional subject kind"},
-				"subject_id":   map[string]interface{}{"type": "string", "description": "Optional subject ID"},
-				"actor":        map[string]interface{}{"type": "string", "description": "Optional actor identifier"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"policy_dir": map[string]interface{}{
+					"type":        "string",
+					"description": "Directory containing policy YAML. Defaults to GARUDA_POLICY_DIR or ./policies",
+				},
+				"subject_kind": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional subject kind",
+				},
+				"subject_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional subject ID",
+				},
+				"actor": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional actor identifier",
+				},
 			},
 		},
 	},
@@ -409,10 +522,45 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id":     map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"evaluation_id": map[string]interface{}{"type": "string", "description": "Policy evaluation UUID returned by garuda policy evaluate --save"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"evaluation_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Policy evaluation UUID returned by garuda policy evaluate --save",
+				},
 			},
 			"required": []string{"evaluation_id"},
+		},
+	},
+	{
+		"name":        "garuda.verify_evidence",
+		"description": "Verify the RFC 6962 Merkle inclusion proof or SHA-256 evidence digest for a policy evaluation, evidence block, or decision UUID. Read-only; no side effects.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"evidence_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Evidence block or policy evaluation UUID",
+				},
+				"evaluation_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Alias for evidence_id (policy evaluation UUID)",
+				},
+				"decision_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional decision UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional workspace name",
+				},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+			},
 		},
 	},
 	{
@@ -421,40 +569,85 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"package":   map[string]interface{}{"type": "string", "description": "Optional package name substring"},
-				"kind":      map[string]interface{}{"type": "string", "description": "Optional entity kind (struct, interface, function, method)"},
-				"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 100, cap 1000"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"package": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional package name substring",
+				},
+				"kind": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional entity kind (struct, interface, function, method)",
+				},
+				"limit": map[string]interface{}{
+					"type":        "number",
+					"description": "Max rows, default 100, cap 1000",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.inspect",
-		"description": "Inspect one entity with its incoming and outgoing relationships. Read-only.",
+		"description": "Inspect one entity with its signature and incoming and outgoing relationships. Read-only.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"entity_id": map[string]interface{}{"type": "string", "description": "Entity UUID"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"entity_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Entity UUID or symbol name",
+				},
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional symbol name",
+				},
 			},
 			"required": []string{"entity_id"},
 		},
 	},
-	// ── Graph structure tools (Phase 1) ──
 	{
 		"name":        "garuda.subclasses",
 		"description": "List entities that inherit from or embed the subject. Uses INHERITS and EMBEDS claims. Read-only.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"entity_id": map[string]interface{}{"type": "string", "description": "Subject entity UUID"},
-				"name":      map[string]interface{}{"type": "string", "description": "Subject entity name (alternative to entity_id)"},
-				"language":  map[string]interface{}{"type": "string", "description": "Optional language filter (go, python, typescript)"},
-				"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"entity_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Subject entity UUID",
+				},
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Subject entity name (alternative to entity_id)",
+				},
+				"language": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional language filter (go, python, typescript)",
+				},
+				"limit": map[string]interface{}{
+					"type":        "number",
+					"description": "Max rows, default 50, cap 500",
+				},
 			},
 		},
 	},
@@ -464,126 +657,394 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"entity_id": map[string]interface{}{"type": "string", "description": "Subject interface UUID"},
-				"name":      map[string]interface{}{"type": "string", "description": "Subject interface name (alternative to entity_id)"},
-				"limit":     map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"entity_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Subject interface UUID",
+				},
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Subject interface name (alternative to entity_id)",
+				},
+				"limit": map[string]interface{}{
+					"type":        "number",
+					"description": "Max rows, default 50, cap 500",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.neighbors",
-		"description": "List every entity connected to the subject in one hop, both directions. Resolves names, packages, kinds in one query. External stubs excluded by default. Read-only.",
+		"description": "List every entity connected to the subject in one hop, both incoming and outgoing directions. External stubs excluded by default. Read-only.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id":        map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace":        map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"entity_id":        map[string]interface{}{"type": "string", "description": "Subject entity UUID"},
-				"edge_kinds":       map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "Optional filter, e.g. [\"CALLS\",\"IMPORTS\"]"},
-				"include_external": map[string]interface{}{"type": "boolean", "description": "Include external stubs (default false)"},
-				"limit":            map[string]interface{}{"type": "number", "description": "Max rows, default 100, cap 500"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"entity_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Subject entity UUID or symbol name",
+				},
+				"edge_kinds": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Optional filter, e.g. ['CALLS','IMPORTS']",
+				},
+				"include_external": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Include external stubs (default false)",
+				},
+				"limit": map[string]interface{}{
+					"type":        "number",
+					"description": "Max rows per direction, default 100, cap 500",
+				},
 			},
 			"required": []string{"entity_id"},
 		},
 	},
-	// ── State management tools (Phase 2.4) ──
 	{
-		"name":        "garuda.handoff",
-		"description": "Initiate an atomic task handoff between two agents. Creates a checkpoint of the source agent's state, transfers task ownership, and transitions both agents' statuses. Wraps the same Serializable transaction the HTTP API uses. Caller must ensure source_agent_id currently owns task_id. Returns {status: \"completed\", handoff_id, checkpoint_id} on success, or {status: \"failed\", reason} on precondition failure.",
+		"name":        "garuda.create_task",
+		"description": "Create a new task and provision source/target agent UUIDs in the workspace so garuda.handoff and garuda.resume can operate on persisted UUIDs.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id":       map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"task_id":         map[string]interface{}{"type": "string", "description": "Task UUID being handed off"},
-				"source_agent_id": map[string]interface{}{"type": "string", "description": "Agent UUID currently owning the task"},
-				"target_agent_id": map[string]interface{}{"type": "string", "description": "Agent UUID taking ownership"},
-				"reason":          map[string]interface{}{"type": "string", "description": "Optional human-readable reason"},
-				"checkpoint_data": map[string]interface{}{"type": "object", "description": "Optional serializable state to carry across the handoff"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"title": map[string]interface{}{
+					"type":        "string",
+					"description": "Task title",
+				},
+				"description": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional task description",
+				},
+				"priority": map[string]interface{}{
+					"type":        "number",
+					"description": "Task priority (default 1)",
+				},
+				"owner_agent_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional owner/source agent UUID or alias",
+				},
+				"target_agent_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional target agent UUID or alias",
+				},
+				"scope_domain": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional scope domain",
+				},
+				"scope_system": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional scope system",
+				},
+			},
+			"required": []string{"title"},
+		},
+	},
+	{
+		"name":        "garuda.handoff",
+		"description": "Initiate an atomic task handoff between two agents. Creates a checkpoint of the source agent's state, transfers task ownership, and transitions both agents' statuses. Call garuda.create_task first to provision UUIDs.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"task_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Task UUID returned by garuda.create_task (or symbolic task identifier)",
+				},
+				"source_agent_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Source agent UUID or symbolic identifier",
+				},
+				"target_agent_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Target agent UUID or symbolic identifier",
+				},
+				"reason": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional human-readable reason",
+				},
+				"checkpoint_data": map[string]interface{}{
+					"type":        "object",
+					"description": "Optional serializable state to carry across the handoff",
+				},
 			},
 			"required": []string{"task_id", "source_agent_id", "target_agent_id"},
 		},
 	},
 	{
 		"name":        "garuda.resume",
-		"description": "Restore the state from an active checkpoint created by garuda.handoff, and mark the checkpoint as consumed. A second resume of the same checkpoint returns {status: \"not_found\"}. Wraps the same Serializable transaction the HTTP API uses.",
+		"description": "Restore the state from an active checkpoint created by garuda.handoff, and mark the checkpoint as consumed. A second resume of the same checkpoint returns {status: 'not_found'}.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id":     map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"agent_id":      map[string]interface{}{"type": "string", "description": "Agent UUID performing the resume"},
-				"checkpoint_id": map[string]interface{}{"type": "string", "description": "Checkpoint UUID returned by garuda.handoff"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"agent_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Agent UUID or symbolic identifier performing the resume",
+				},
+				"checkpoint_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Checkpoint UUID or task identifier returned by garuda.handoff",
+				},
 			},
 			"required": []string{"agent_id", "checkpoint_id"},
 		},
 	},
 	{
 		"name":        "garuda.find_entity",
-		"description": "Find entities by name pattern, kind, package, or file path. Results ranked by inbound edge count so the most-connected matches appear first. Read-only.",
+		"description": "Find entities by exact name, regex name_pattern, kind, package, or file path. Returns status='not_found' with empty results when a filter matches 0 entities. Read-only.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id":          map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace":          map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"name_pattern":       map[string]interface{}{"type": "string", "description": "Regex against entity name"},
-				"kind":               map[string]interface{}{"type": "string", "description": "Entity kind (struct, interface, function, method, class, package)"},
-				"package":            map[string]interface{}{"type": "string", "description": "Package name substring"},
-				"file_path_contains": map[string]interface{}{"type": "string", "description": "File path substring"},
-				"exported_only":      map[string]interface{}{"type": "boolean", "description": "Only exported entities (default false)"},
-				"limit":              map[string]interface{}{"type": "number", "description": "Max rows, default 50, cap 500"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "Exact or case-insensitive symbol name to match",
+				},
+				"name_pattern": map[string]interface{}{
+					"type":        "string",
+					"description": "Regex against entity name",
+				},
+				"kind": map[string]interface{}{
+					"type":        "string",
+					"description": "Entity kind (struct, interface, function, method, class, package)",
+				},
+				"package": map[string]interface{}{
+					"type":        "string",
+					"description": "Package name substring",
+				},
+				"file_path_contains": map[string]interface{}{
+					"type":        "string",
+					"description": "File path substring",
+				},
+				"exported_only": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Only exported entities (default false)",
+				},
+				"limit": map[string]interface{}{
+					"type":        "number",
+					"description": "Max rows, default 50, cap 500",
+				},
 			},
 		},
 	},
-	// ── Active Garuda Talon Harness tools (v1.5) ──
 	{
 		"name":        "garuda.talon_pre_edit",
 		"description": "MANDATORY pre-edit check: call before modifying any file or symbol. Returns transitive blast radius, callers, applicable ADR MUST/MUST_NOT claims, and active policy guardrails.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"target":    map[string]interface{}{"type": "string", "description": "Target symbol name or file path about to be edited"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"target": map[string]interface{}{
+					"type":        "string",
+					"description": "Target symbol name or file path about to be edited",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.talon_verify_edit",
-		"description": "MANDATORY post-edit verification gate: call immediately after modifying code. Runs incremental AST sync, diff-scoped policy evaluation, and ADR verification, anchors the decision to the RFC 6962 Merkle ledger, and returns self-repair instructions if BLOCKED.",
+		"description": "MANDATORY post-edit verification gate: call immediately after modifying code. Runs in dry-run mode (side_effects=[]) by default; set save_to_ledger=true to append a Merkle ledger block (side_effects=['merkle_ledger_append']).",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"tenant_id": map[string]interface{}{"type": "string", "description": "Tenant UUID"},
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"repo_dir":  map[string]interface{}{"type": "string", "description": "Repository root directory (default .)"},
-				"staged":    map[string]interface{}{"type": "boolean", "description": "Check staged git index changes"},
-				"diff":      map[string]interface{}{"type": "string", "description": "Git revision range to check"},
-				"files":     map[string]interface{}{"type": "string", "description": "Comma-separated list of modified files"},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Tenant UUID",
+				},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"repo_dir": map[string]interface{}{
+					"type":        "string",
+					"description": "Repository root directory (default .)",
+				},
+				"staged": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Check staged git index changes",
+				},
+				"diff": map[string]interface{}{
+					"type":        "string",
+					"description": "Git revision range to check",
+				},
+				"files": map[string]interface{}{
+					"type":        "string",
+					"description": "Comma-separated list of modified files",
+				},
+				"save_to_ledger": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Explicitly anchor evaluation to RFC 6962 Merkle ledger (default false)",
+				},
+				"save_ledger": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Alias for save_to_ledger (default false)",
+				},
 			},
 		},
 	},
-	// ── v1.9.0 Human-in-the-Loop Weighted Logic, Criticality Tiers, Financial Audit & Auto-Rulebook tools ──
 	{
 		"name":        "garuda.disambiguate_logic",
-		"description": "Compare competing undocumented formulas across teams (e.g. Loss Ratio across Ops, Marketing, Management) with 0.0-1.0 team weights, surface criticality tiers (HIGH_SEVERE, MEDIUM, LOW), and human-readable blast radius so the human developer takes the final call.",
+		"description": "Compare competing undocumented formulas across teams with 0.0-1.0 team weights summing to 1.00, surface criticality tiers (HIGH_SEVERE, MEDIUM, LOW), and explicit mode ('live_ast' vs 'fixture').",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"team":      map[string]interface{}{"type": "string", "description": "Active team context (ops, marketing, management)"},
-				"concept":   map[string]interface{}{"type": "string", "description": "Business concept or formula to disambiguate"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"team": map[string]interface{}{
+					"type":        "string",
+					"description": "Active team context (ops, marketing, management)",
+				},
+				"concept": map[string]interface{}{
+					"type":        "string",
+					"description": "Business concept or formula to disambiguate",
+				},
+			},
+		},
+	},
+	{
+		"name":        "garuda.audit_data_discrepancy",
+		"description": "Audit cross-team business logic and metric number discrepancies in the Data & Logic Audit Ledger by tracing AST and SQL lineage before production deployment.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"metric": map[string]interface{}{
+					"type":        "string",
+					"description": "Metric to reconcile",
+				},
+				"team_a_name": map[string]interface{}{
+					"type":        "string",
+					"description": "Team A display name",
+				},
+				"team_a_cr": map[string]interface{}{
+					"type":        "number",
+					"description": "Team A reported metric value",
+				},
+				"team_a_crore": map[string]interface{}{
+					"type":        "number",
+					"description": "Alias for team_a_cr",
+				},
+				"team_b_name": map[string]interface{}{
+					"type":        "string",
+					"description": "Team B display name",
+				},
+				"team_b_cr": map[string]interface{}{
+					"type":        "number",
+					"description": "Team B reported metric value",
+				},
+				"team_b_crore": map[string]interface{}{
+					"type":        "number",
+					"description": "Alias for team_b_cr",
+				},
+			},
+		},
+	},
+	{
+		"name":        "garuda.reconcile_data_audit",
+		"description": "Record a reconciliation proposal for a flagged cross-team data discrepancy in the Data & Logic Audit Ledger. Requires GARUDA_MCP_APPROVER or CLI co-signing for human approval.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"audit_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Data audit item ID",
+				},
+				"approved_by": map[string]interface{}{
+					"type":        "string",
+					"description": "Approving Lead Auditor or Architect (must match GARUDA_MCP_APPROVER)",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.audit_financial_discrepancy",
-		"description": "Audit cross-team business and financial number discrepancies (e.g. 48 Crore vs 4.8 Crore Total Claims Paid) by tracing AST and SQL unit-scaling lineage before an external audit.",
+		"description": "Legacy alias for garuda.audit_data_discrepancy: audit cross-team business metric number discrepancies in the Data & Logic Audit Ledger.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"metric":    map[string]interface{}{"type": "string", "description": "Financial or business metric to reconcile"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"metric": map[string]interface{}{
+					"type":        "string",
+					"description": "Business metric to reconcile",
+				},
+				"team_a_name": map[string]interface{}{
+					"type":        "string",
+					"description": "Team A display name",
+				},
+				"team_a_cr": map[string]interface{}{
+					"type":        "number",
+					"description": "Team A reported metric value",
+				},
+				"team_a_crore": map[string]interface{}{
+					"type":        "number",
+					"description": "Alias for team_a_cr",
+				},
+				"team_b_name": map[string]interface{}{
+					"type":        "string",
+					"description": "Team B display name",
+				},
+				"team_b_cr": map[string]interface{}{
+					"type":        "number",
+					"description": "Team B reported metric value",
+				},
+				"team_b_crore": map[string]interface{}{
+					"type":        "number",
+					"description": "Alias for team_b_cr",
+				},
 			},
 		},
 	},
@@ -593,44 +1054,105 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"output": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional output file path (e.g. /tmp/smoke_rulebook.md)",
+				},
+				"output_path": map[string]interface{}{
+					"type":        "string",
+					"description": "Alias for output file path",
+				},
+				"path": map[string]interface{}{
+					"type":        "string",
+					"description": "Alias for output file path",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.decide_logic_variant",
-		"description": "Record a human stakeholder decision (APPROVE_VARIANT, FREEZE_SEVERE, or SET_CUSTOM_WEIGHT) on a competing multi-team formula variant in PostgreSQL.",
+		"description": "Propose or record a decision on a competing multi-team formula variant in PostgreSQL. Requires GARUDA_MCP_APPROVER or CLI co-signing for APPROVED_BY_HUMAN.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace":       map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"team":            map[string]interface{}{"type": "string", "description": "Active team role (ops, marketing, management)"},
-				"variant_id":      map[string]interface{}{"type": "string", "description": "Variant ID (e.g. loss_ratio_ops_v1)"},
-				"decision_action": map[string]interface{}{"type": "string", "description": "APPROVE_VARIANT or FREEZE_SEVERE"},
-				"custom_weight":   map[string]interface{}{"type": "number", "description": "Optional custom weight (0.0 to 1.0)"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"team": map[string]interface{}{
+					"type":        "string",
+					"description": "Active team role (ops, marketing, management)",
+				},
+				"variant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Variant ID (e.g. loss_ratio_ops_v1)",
+				},
+				"decision_action": map[string]interface{}{
+					"type":        "string",
+					"description": "APPROVED_BY_HUMAN, APPROVE_VARIANT, PROPOSE_VARIANT, FREEZE_SEVERE, SET_CUSTOM_WEIGHT, or RESET_TO_PENDING",
+				},
+				"custom_weight": map[string]interface{}{
+					"type":        "number",
+					"description": "Optional custom weight (0.0 to 1.0)",
+				},
+				"approved_by": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional stakeholder identifier (must match GARUDA_MCP_APPROVER for direct approval)",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.reconcile_financial_audit",
-		"description": "Approve and reconcile a flagged cross-team financial discrepancy (e.g. 48 Crore vs 4.8 Crore Claims Paid) in the audit ledger.",
+		"description": "Legacy alias for garuda.reconcile_data_audit: record reconciliation for a flagged cross-team metric discrepancy in the Data & Logic Audit Ledger.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace":   map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"audit_id":    map[string]interface{}{"type": "string", "description": "Financial audit item ID"},
-				"approved_by": map[string]interface{}{"type": "string", "description": "Approving Finance Controller or Auditor"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"audit_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Audit item ID",
+				},
+				"approved_by": map[string]interface{}{
+					"type":        "string",
+					"description": "Approving Auditor or Architect",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.approve_base_rulebook",
-		"description": "Approve and seal the synthesized draft Base Rulebook into .garuda/APPROVED_BASE_RULEBOOK.md with an RFC 6962 SHA-256 digest.",
+		"description": "Propose or approve the synthesized Base Rulebook with an RFC 6962 SHA-256 digest. Requires GARUDA_MCP_APPROVER or CLI co-signing for human approval.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace":   map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"approved_by": map[string]interface{}{"type": "string", "description": "Approver name or role"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"approved_by": map[string]interface{}{
+					"type":        "string",
+					"description": "Approver name or role",
+				},
+				"output": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional output file path",
+				},
+				"output_path": map[string]interface{}{
+					"type":        "string",
+					"description": "Alias for output file path",
+				},
+				"path": map[string]interface{}{
+					"type":        "string",
+					"description": "Alias for output file path",
+				},
 			},
 		},
 	},
@@ -640,11 +1162,26 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace":        map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"tier_filter":      map[string]interface{}{"type": "string", "description": "Optional filter: HIGH_SEVERE, MEDIUM, LOW, or ALL"},
-				"surface_name":     map[string]interface{}{"type": "string", "description": "Optional custom surface name to register"},
-				"package_pattern":  map[string]interface{}{"type": "string", "description": "Optional package pattern for custom surface"},
-				"criticality_tier": map[string]interface{}{"type": "string", "description": "Optional tier for custom surface (HIGH_SEVERE, MEDIUM, LOW)"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"tier_filter": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional filter: HIGH_SEVERE, MEDIUM, LOW, or ALL",
+				},
+				"surface_name": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional custom surface name to register",
+				},
+				"package_pattern": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional package pattern for custom surface",
+				},
+				"criticality_tier": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional tier for custom surface (HIGH_SEVERE, MEDIUM, LOW)",
+				},
 			},
 		},
 	},
@@ -654,8 +1191,14 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"doc_type":  map[string]interface{}{"type": "string", "description": "Optional filter: ADR, SPEC, POLICY, or ALL"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"doc_type": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional filter: ADR, SPEC, POLICY, or ALL",
+				},
 			},
 		},
 	},
@@ -665,8 +1208,14 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"path":      map[string]interface{}{"type": "string", "description": "File or directory path to ingest (default docs/adr)"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"path": map[string]interface{}{
+					"type":        "string",
+					"description": "File or directory path to ingest (default docs/adr)",
+				},
 			},
 		},
 	},
@@ -676,7 +1225,10 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
 			},
 		},
 	},
@@ -686,27 +1238,53 @@ var allTools = []map[string]interface{}{
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"repo_dir":  map[string]interface{}{"type": "string", "description": "Repository root path"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"repo_dir": map[string]interface{}{
+					"type":        "string",
+					"description": "Repository root path",
+				},
 			},
 		},
 	},
 	{
 		"name":        "garuda.hygiene_report",
-		"description": "Run the static code hygiene analyzer on the workspace graph to report advisory unreferenced candidates, duplicate symbol names, and stdlib alternatives.",
+		"description": "Run the static code hygiene analyzer on the workspace graph to report advisory unreferenced candidates, duplicate symbol names, and stdlib alternatives with structured file:line locations.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
-				"limit":     map[string]interface{}{"type": "number", "description": "Max findings per category (default 25)"},
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"limit": map[string]interface{}{
+					"type":        "number",
+					"description": "Max findings per category (default 25)",
+				},
+			},
+		},
+	},
+	{
+		"name":        "garuda.reset_audit_state",
+		"description": "Reset smoke-test writes (draft decisions, formula variant overrides, and test audit reconciliations) in the workspace.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{
+					"type":        "string",
+					"description": "Workspace name",
+				},
+				"tenant_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional tenant UUID",
+				},
 			},
 		},
 	},
 }
 
-// toolNames is the derived whitelist of valid tool names. Built once
-// from allTools so it cannot drift from the registry. Used by
-// handleToolsCall to reject unknown tools before dispatch.
 var toolNames = func() map[string]bool {
 	m := make(map[string]bool, len(allTools))
 	for _, t := range allTools {
@@ -743,11 +1321,6 @@ func (s *MCPServer) handleRequest(req MCPRequest) MCPResponse {
 }
 
 func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
-	// Capture clientInfo.name from the handshake. MCP clients send
-	// params.clientInfo.name (e.g. "cursor", "claude-ai"). The briefing
-	// uses it to key the per-agent watermark so a client resumes its
-	// own session across restarts. If the field is absent, the
-	// briefing falls back to "default".
 	if req.Params != nil {
 		if ci, ok := req.Params["clientInfo"].(map[string]interface{}); ok {
 			if name, ok := ci["name"].(string); ok && name != "" {
@@ -756,8 +1329,6 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 		}
 	}
 
-	// Record session start. Best-effort — the handshake completes
-	// regardless.
 	clientVersion := ""
 	if req.Params != nil {
 		if ci, ok := req.Params["clientInfo"].(map[string]interface{}); ok {
@@ -785,15 +1356,11 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 			"instructions": "Garuda Talon Active Enforcement is enabled. Call garuda.talon_pre_edit before modifying code and garuda.talon_verify_edit immediately after editing to verify 0 net-new policy or ADR violations.",
 			"serverInfo": map[string]interface{}{
 				"name":    "garuda-mcp",
-				"version": "1.9.1",
+				"version": "1.9.4",
 			},
 		},
 	}
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tool listing
-// ─────────────────────────────────────────────────────────────────────────────
 
 func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 	return MCPResponse{
@@ -805,13 +1372,6 @@ func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 	}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Budget enforcement
-// ─────────────────────────────────────────────────────────────────────────────
-
-// checkAndConsumeBudget performs a pre-flight budget check and returns
-// a commit closure. The caller invokes commit only after business
-// logic has succeeded, so failed operations consume no tokens.
 func (s *MCPServer) checkAndConsumeBudget(ctx context.Context, tenantID uuid.UUID, agentID, toolName string, payload interface{}) (func(), error) {
 	budgetState, err := s.store.GetTenantBudget(ctx, tenantID)
 	if err != nil {
@@ -836,35 +1396,47 @@ func (s *MCPServer) checkAndConsumeBudget(ctx context.Context, tenantID uuid.UUI
 	return commit, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tool dispatch
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	toolName, ok := req.Params["name"].(string)
 	if !ok {
 		return s.errorResponse(req.ID, -32602, "Invalid tool name")
 	}
 
-	// Whitelist check before dispatch. Reject unknown tools here so
-	// the switch below only handles valid names; the default branch
-	// stays as defense-in-depth if the whitelist and switch ever drift.
 	if !toolNames[toolName] {
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
 	}
 
 	args, _ := req.Params["arguments"].(map[string]interface{})
+	if args == nil {
+		args = map[string]interface{}{}
+	}
 
 	agentID, _ := args["agent_id"].(string)
 	if agentID == "" {
 		agentID = "mcp-agent"
 	}
 
+	// Enforce GARUDA_MCP_READ_ONLY at the dispatch gate (BUG-02)
+	if ReadOnlyMode() && IsMutatingTool(toolName, args) {
+		rej := ReadOnlyRejection(toolName)
+		return MCPResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result: map[string]interface{}{
+				"content": []map[string]interface{}{
+					{
+						"type": "text",
+						"text": mustJSON(rej),
+					},
+				},
+			},
+		}
+	}
+
 	start := time.Now()
 	var result interface{}
 	var err error
 
-	// Handlers control their own pre-flight and post-commit budget lifecycles.
 	switch toolName {
 	case "garuda.query":
 		result, err = s.handleQuery(args)
@@ -892,6 +1464,8 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handlePolicyEvaluate(args)
 	case "garuda.verify_policy_evaluation":
 		result, err = s.handleVerifyPolicyEvaluation(args)
+	case "garuda.verify_evidence":
+		result, err = s.handleVerifyEvidence(args)
 	case "garuda.entities":
 		result, err = s.handleEntities(args)
 	case "garuda.inspect":
@@ -902,6 +1476,8 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleImplementers(args)
 	case "garuda.neighbors":
 		result, err = s.handleNeighbors(args)
+	case "garuda.create_task":
+		result, err = s.handleCreateTask(args)
 	case "garuda.handoff":
 		result, err = s.handleHandoff(args)
 	case "garuda.resume":
@@ -914,14 +1490,14 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleTalonVerifyEdit(args)
 	case "garuda.disambiguate_logic":
 		result, err = s.handleDisambiguateLogic(args)
-	case "garuda.audit_financial_discrepancy":
-		result, err = s.handleAuditFinancialDiscrepancy(args)
+	case "garuda.audit_data_discrepancy", "garuda.audit_financial_discrepancy":
+		result, err = s.handleAuditDataDiscrepancy(args)
 	case "garuda.synthesize_rulebook":
 		result, err = s.handleSynthesizeRulebook(args)
 	case "garuda.decide_logic_variant":
 		result, err = s.handleDecideLogicVariant(args)
-	case "garuda.reconcile_financial_audit":
-		result, err = s.handleReconcileFinancialAudit(args)
+	case "garuda.reconcile_data_audit", "garuda.reconcile_financial_audit":
+		result, err = s.handleReconcileDataAudit(args)
 	case "garuda.approve_base_rulebook":
 		result, err = s.handleApproveBaseRulebook(args)
 	case "garuda.criticality_tiers":
@@ -936,24 +1512,19 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleBuildMatrixCheck(args)
 	case "garuda.hygiene_report":
 		result, err = s.handleHygieneReport(args)
-
+	case "garuda.reset_audit_state":
+		result, err = s.handleResetAuditState(args)
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
 	}
 
 	duration := time.Since(start)
 
-	// Telemetry on both paths. Best-effort: a failure to record does
-	// not affect the response, and is logged at warn level.
-	//
-	// tokensEstimated is 0 for read-only tools, positive for the
-	// propose path. The exact value matters less than the fact that a
-	// row is written with a truthful latency and outcome.
 	s.emitToolInvocation(
 		context.Background(),
 		toolName,
 		agentID,
-		0, // tokensEstimated — the propose path tracks this via budget, not here
+		0,
 		duration,
 		err == nil,
 	)
@@ -984,6 +1555,9 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (s *MCPServer) handleProposeDecision(args map[string]interface{}) (interface{}, error) {
+	if ReadOnlyMode() {
+		return ReadOnlyRejection("garuda.propose_decision"), nil
+	}
 	tenantID, _ := s.resolveTenant(args)
 	agentID, _ := args["agent_id"].(string)
 	if agentID == "" {
@@ -1010,6 +1584,10 @@ func (s *MCPServer) processProposeDecisionLogic(args map[string]interface{}) (in
 	if !ok || title == "" {
 		return nil, fmt.Errorf("title is required")
 	}
+	statement, _ := args["statement"].(string)
+	if statement == "" {
+		statement, _ = args["rationale"].(string)
+	}
 	scopeDomain, _ := args["scope_domain"].(string)
 	scopeSystem, _ := args["scope_system"].(string)
 	tenantID, _ := s.resolveTenant(args)
@@ -1018,17 +1596,21 @@ func (s *MCPServer) processProposeDecisionLogic(args map[string]interface{}) (in
 		tenantID = tenant.CanonicalID
 	}
 
+	owner := s.mcpCallerIdentity()
 	now := time.Now().UTC()
 	decision := &types.Decision{
-		ID:         uuid.New(),
-		TenantID:   tenantID,
-		Title:      title,
-		Status:     types.StatusDraft,
-		Scope:      types.Scope{Domain: scopeDomain, System: scopeSystem},
-		Owner:      "mcp-agent",
-		Confidence: 0.8,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:          uuid.New(),
+		TenantID:    tenantID,
+		Title:       title,
+		Statement:   statement,
+		Status:      types.StatusDraft,
+		Scope:       types.Scope{Domain: scopeDomain, System: scopeSystem},
+		ScopeDomain: scopeDomain,
+		ScopeSystem: scopeSystem,
+		Owner:       owner,
+		Confidence:  0.8,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	if err := s.store.SaveDecision(context.Background(), decision); err != nil {
@@ -1036,141 +1618,391 @@ func (s *MCPServer) processProposeDecisionLogic(args map[string]interface{}) (in
 	}
 
 	return map[string]interface{}{
-		"id":        decision.ID.String(),
-		"tenant_id": decision.TenantID.String(),
-		"title":     decision.Title,
-		"status":    decision.Status.String(),
+		"id":           decision.ID.String(),
+		"tenant_id":    decision.TenantID.String(),
+		"title":        decision.Title,
+		"statement":    decision.Statement,
+		"scope_domain": scopeDomain,
+		"scope_system": scopeSystem,
+		"owner":        owner,
+		"status":       decision.Status.String(),
 	}, nil
 }
 
-func (s *MCPServer) handleQuery(args map[string]interface{}) (interface{}, error) {
-	tenantID, _ := s.resolveTenant(args)
-	commitBudget, err := s.checkAndConsumeBudget(context.Background(), tenantID, "mcp-agent", "query", args)
-	if err != nil {
-		return nil, err
-	}
+var rawSQLGuardRe = regexp.MustCompile(`(?is)^\s*(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE)\s+|\b(SELECT\s+.+\s+FROM|UNION\s+ALL\s+SELECT|UNION\s+SELECT|DROP\s+TABLE|DELETE\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|;\s*(SELECT|DROP|DELETE|INSERT|UPDATE)|--\s*$)`)
 
+// handleQuery implements `garuda.query` (BUG-04 / CLASS-04).
+// Explicitly rejects raw SQL statements with {status: "rejected", reason: "..."}
+// instead of silently returning {count: 0}.
+func (s *MCPServer) handleQuery(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
 	query, ok := args["query"].(string)
-	if !ok || query == "" {
+	if !ok || strings.TrimSpace(query) == "" {
 		return nil, fmt.Errorf("query is required")
 	}
 
-	decisions, err := s.store.GetDecisionsByScope(context.Background(), tenantID, "", "")
+	if rawSQLGuardRe.MatchString(query) {
+		return map[string]interface{}{
+			"status":   "rejected",
+			"rejected": true,
+			"query":    query,
+			"reason":   "garuda.query does not accept raw SQL; use garuda.entities or garuda.find_entity",
+			"count":    0,
+			"results":  []interface{}{},
+		}, nil
+	}
+
+	tenantID, _ := s.resolveTenant(args)
+	commitBudget, err := s.checkAndConsumeBudget(ctx, tenantID, "mcp-agent", "query", args)
 	if err != nil {
 		return nil, err
 	}
 
 	results := make([]map[string]interface{}, 0)
-	for _, d := range decisions {
-		if strings.Contains(strings.ToLower(d.Title), strings.ToLower(query)) {
-			results = append(results, map[string]interface{}{
-				"id":         d.ID.String(),
-				"title":      d.Title,
-				"status":     d.Status.String(),
-				"scope":      d.Scope,
-				"confidence": d.Confidence,
-			})
+	qLower := strings.ToLower(strings.TrimSpace(query))
+
+	// 1. Search decisions
+	if decisions, dErr := s.store.GetDecisionsByScope(ctx, tenantID, "", ""); dErr == nil {
+		for _, d := range decisions {
+			if strings.Contains(strings.ToLower(d.Title), qLower) || strings.Contains(strings.ToLower(d.Statement), qLower) {
+				results = append(results, map[string]interface{}{
+					"kind":       "decision",
+					"id":         d.ID.String(),
+					"title":      d.Title,
+					"statement":  d.Statement,
+					"status":     d.Status.String(),
+					"scope":      d.Scope,
+					"confidence": d.Confidence,
+				})
+			}
+		}
+	}
+
+	// 2. Search workspace entities and document_claims
+	if _, workspaceID, wErr := s.resolveTenantAndWorkspace(args); wErr == nil && workspaceID != uuid.Nil {
+		eRows, eErr := s.store.Pool().Query(ctx, `
+			SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''), COALESCE(line_start, 0)
+			FROM entities
+			WHERE workspace_id = $1 AND kind != 'external'
+			  AND (name ILIKE '%' || $2 || '%' OR COALESCE(package, '') ILIKE '%' || $2 || '%')
+			ORDER BY is_exported DESC, name ASC
+			LIMIT 20
+		`, workspaceID, query)
+		if eErr == nil {
+			for eRows.Next() {
+				var eid, ename, ekind, epkg, efile string
+				var eline int
+				if eRows.Scan(&eid, &ename, &ekind, &epkg, &efile, &eline) == nil {
+					results = append(results, map[string]interface{}{
+						"kind":        "entity",
+						"id":          eid,
+						"name":        ename,
+						"entity_kind": ekind,
+						"package":     epkg,
+						"file":        sanitizeMCPFilePath(efile),
+						"line_start":  eline,
+					})
+				}
+			}
+			eRows.Close()
+		}
+
+		cRows, cErr := s.store.Pool().Query(ctx, `
+			SELECT COALESCE(document_title, 'ADR'), subject, modality, predicate, object, COALESCE(status, 'UNVERIFIED')
+			FROM document_claims
+			WHERE tenant_id = $1 AND workspace_id = $2
+			  AND (subject ILIKE '%' || $3 || '%' OR object ILIKE '%' || $3 || '%' OR COALESCE(document_title, '') ILIKE '%' || $3 || '%')
+			LIMIT 20
+		`, tenantID, workspaceID, query)
+		if cErr == nil {
+			for cRows.Next() {
+				var doc, subj, mod, pred, obj, st string
+				if cRows.Scan(&doc, &subj, &mod, &pred, &obj, &st) == nil {
+					results = append(results, map[string]interface{}{
+						"kind":      "document_claim",
+						"document":  doc,
+						"subject":   subj,
+						"modality":  mod,
+						"predicate": pred,
+						"object":    obj,
+						"status":    st,
+					})
+				}
+			}
+			cRows.Close()
 		}
 	}
 
 	commitBudget()
 
 	return map[string]interface{}{
+		"status":  "ok",
 		"query":   query,
 		"count":   len(results),
 		"results": results,
 	}, nil
 }
 
+// handleGetLineage implements `garuda.get_lineage` (BUG-06).
+// Accepts `decision_id`, `symbol`, `name`, `entity_id`, or `actor`.
 func (s *MCPServer) handleGetLineage(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
 	tenantID, _ := s.resolveTenant(args)
-	commitBudget, err := s.checkAndConsumeBudget(context.Background(), tenantID, "mcp-agent", "get_lineage", args)
+	commitBudget, err := s.checkAndConsumeBudget(ctx, tenantID, "mcp-agent", "get_lineage", args)
 	if err != nil {
 		return nil, err
 	}
 
-	decisionIDStr, ok := args["decision_id"].(string)
-	if !ok || decisionIDStr == "" {
-		return nil, fmt.Errorf("decision_id is required")
+	targetStr := ""
+	for _, k := range []string{"decision_id", "symbol", "name", "entity_id", "actor"} {
+		if v, ok := args[k].(string); ok && strings.TrimSpace(v) != "" {
+			targetStr = strings.TrimSpace(v)
+			break
+		}
 	}
-	decisionID, err := uuid.Parse(decisionIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid decision_id")
-	}
-
-	decision, err := s.store.GetDecision(context.Background(), tenantID, decisionID)
-	if err != nil {
-		return nil, err
+	if targetStr == "" {
+		return nil, fmt.Errorf("one of decision_id, symbol, name, entity_id, or actor is required")
 	}
 
-	children, _ := s.store.ListDecisionsByParent(context.Background(), tenantID, decisionID)
+	if decisionID, pErr := uuid.Parse(targetStr); pErr == nil {
+		if decision, dErr := s.store.GetDecision(ctx, tenantID, decisionID); dErr == nil && decision != nil {
+			children, _ := s.store.ListDecisionsByParent(ctx, tenantID, decisionID)
+			var parent *types.Decision
+			if decision.ParentID != nil && *decision.ParentID != uuid.Nil {
+				p, _ := s.store.GetDecision(ctx, tenantID, *decision.ParentID)
+				parent = p
+			}
+			commitBudget()
+			return map[string]interface{}{
+				"decision_id": decisionID.String(),
+				"decision":    decision,
+				"children":    children,
+				"parent":      parent,
+			}, nil
+		}
+	}
 
-	var parent *types.Decision
-	if decision.ParentID != nil && *decision.ParentID != uuid.Nil {
-		p, _ := s.store.GetDecision(context.Background(), tenantID, *decision.ParentID)
-		parent = p
+	matchedDecisions := make([]map[string]interface{}, 0)
+	dRows, dErr := s.store.Pool().Query(ctx, `
+		SELECT id::text, title, COALESCE(statement, ''), COALESCE(owner, ''), COALESCE(status::text, 'draft'), created_at
+		FROM decisions
+		WHERE tenant_id = $1
+		  AND (COALESCE(owner, '') ILIKE '%' || $2 || '%' OR title ILIKE '%' || $2 || '%')
+		ORDER BY created_at DESC
+		LIMIT 25
+	`, tenantID, targetStr)
+	if dErr == nil {
+		for dRows.Next() {
+			var did, dtitle, dstmt, downer, dst string
+			var createdAt interface{}
+			if dRows.Scan(&did, &dtitle, &dstmt, &downer, &dst, &createdAt) == nil {
+				matchedDecisions = append(matchedDecisions, map[string]interface{}{
+					"id":         did,
+					"title":      dtitle,
+					"statement":  dstmt,
+					"owner":      downer,
+					"status":     dst,
+					"created_at": fmt.Sprint(createdAt),
+				})
+			}
+		}
+		dRows.Close()
+	}
+
+	matchedEvaluations := make([]map[string]interface{}, 0)
+	matchedEntities := make([]map[string]interface{}, 0)
+	if _, workspaceID, wErr := s.resolveTenantAndWorkspace(args); wErr == nil && workspaceID != uuid.Nil {
+		evRows, evErr := s.store.Pool().Query(ctx, `
+			SELECT id::text, policy_id::text, COALESCE(decision, ''), COALESCE(actor, ''),
+			       COALESCE(subject_kind, ''), COALESCE(subject_id, ''), COALESCE(merkle_block_height, 0), evaluated_at
+			FROM policy_evaluations
+			WHERE tenant_id = $1 AND workspace_id = $2
+			  AND (COALESCE(actor, '') ILIKE '%' || $3 || '%' OR COALESCE(subject_id, '') ILIKE '%' || $3 || '%')
+			ORDER BY evaluated_at DESC
+			LIMIT 25
+		`, tenantID, workspaceID, targetStr)
+		if evErr == nil {
+			for evRows.Next() {
+				var evid, polid, dec, act, skind, sid string
+				var bh int64
+				var evAt interface{}
+				if evRows.Scan(&evid, &polid, &dec, &act, &skind, &sid, &bh, &evAt) == nil {
+					matchedEvaluations = append(matchedEvaluations, map[string]interface{}{
+						"evaluation_id":       evid,
+						"policy_id":           polid,
+						"decision":            dec,
+						"actor":               act,
+						"subject_kind":        skind,
+						"subject_id":          sid,
+						"merkle_block_height": bh,
+						"evaluated_at":        fmt.Sprint(evAt),
+					})
+				}
+			}
+			evRows.Close()
+		}
+
+		entRows, entErr := s.store.Pool().Query(ctx, `
+			SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''), COALESCE(line_start, 0)
+			FROM entities
+			WHERE workspace_id = $1 AND kind != 'external'
+			  AND (name ILIKE $2 OR name ILIKE '%.' || $2)
+			ORDER BY is_exported DESC, name ASC
+			LIMIT 10
+		`, workspaceID, targetStr)
+		if entErr == nil {
+			for entRows.Next() {
+				var eid, ename, ekind, epkg, efile string
+				var eline int
+				if entRows.Scan(&eid, &ename, &ekind, &epkg, &efile, &eline) == nil {
+					matchedEntities = append(matchedEntities, map[string]interface{}{
+						"id":         eid,
+						"name":       ename,
+						"kind":       ekind,
+						"package":    epkg,
+						"file":       sanitizeMCPFilePath(efile),
+						"line_start": eline,
+					})
+				}
+			}
+			entRows.Close()
+		}
 	}
 
 	commitBudget()
 
 	return map[string]interface{}{
-		"decision": decision,
-		"children": children,
-		"parent":   parent,
+		"target":             targetStr,
+		"decisions_count":    len(matchedDecisions),
+		"decisions":          matchedDecisions,
+		"evaluations_count":  len(matchedEvaluations),
+		"policy_evaluations": matchedEvaluations,
+		"entities_count":     len(matchedEntities),
+		"entities":           matchedEntities,
+		"lineage_count":      len(matchedDecisions) + len(matchedEvaluations) + len(matchedEntities),
 	}, nil
 }
 
 func (s *MCPServer) handleDetectContradictions(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
 	tenantID, err := s.resolveTenant(args)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve tenant: %w", err)
 	}
 
-	commitBudget, err := s.checkAndConsumeBudget(context.Background(), tenantID, "mcp-agent", "detect_contradictions", args)
+	commitBudget, err := s.checkAndConsumeBudget(ctx, tenantID, "mcp-agent", "detect_contradictions", args)
 	if err != nil {
 		return nil, err
 	}
 
-	contradictions, err := s.store.ListContradictions(context.Background(), tenantID, false)
+	statusFilter, _ := args["status"].(string)
+	statusFilter = strings.ToLower(strings.TrimSpace(statusFilter))
+	resolvedFlag := statusFilter == "resolved"
+
+	contradictions, err := s.store.ListContradictions(ctx, tenantID, resolvedFlag)
 	if err != nil {
 		commitBudget()
 		return nil, fmt.Errorf("failed to query contradictions: %w", err)
 	}
 
+	adrContradictions := make([]map[string]interface{}, 0)
+	if _, workspaceID, wErr := s.resolveTenantAndWorkspace(args); wErr == nil && workspaceID != uuid.Nil && !resolvedFlag {
+		rows, qErr := s.store.Pool().Query(ctx, `
+			SELECT id::text, COALESCE(document_title, 'ADR'), subject, modality, predicate, object, COALESCE(contradiction_reason, '')
+			FROM document_claims
+			WHERE tenant_id = $1 AND workspace_id = $2 AND status = 'CONTRADICTED'
+		`, tenantID, workspaceID)
+		if qErr == nil {
+			for rows.Next() {
+				var cid, doc, subj, mod, pred, obj, rsn string
+				if rows.Scan(&cid, &doc, &subj, &mod, &pred, &obj, &rsn) == nil {
+					adrContradictions = append(adrContradictions, map[string]interface{}{
+						"id":        cid,
+						"kind":      "adr_vs_ast",
+						"document":  doc,
+						"subject":   subj,
+						"modality":  mod,
+						"predicate": pred,
+						"object":    obj,
+						"reason":    rsn,
+					})
+				}
+			}
+			rows.Close()
+		}
+	}
+
 	commitBudget()
 
 	return map[string]interface{}{
-		"tenant_id":      tenantID.String(),
-		"count":          len(contradictions),
-		"contradictions": contradictions,
+		"tenant_id":          tenantID.String(),
+		"status_filter":      map[bool]string{true: statusFilter, false: "open"}[statusFilter != ""],
+		"count":              len(contradictions) + len(adrContradictions),
+		"contradictions":     contradictions,
+		"adr_contradictions": adrContradictions,
 	}, nil
 }
 
+// handleGetImpact implements `garuda.get_impact` (BUG-06 / CLASS-05).
+// Accepts `decision_id`, `symbol`, `name`, or `entity_id` and delegates symbol/entity
+// lookups directly to handleBlastRadius so B4 and B6 return identical blast-radius results.
 func (s *MCPServer) handleGetImpact(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
 	tenantID, _ := s.resolveTenant(args)
-	commitBudget, err := s.checkAndConsumeBudget(context.Background(), tenantID, "mcp-agent", "get_impact", args)
+	commitBudget, err := s.checkAndConsumeBudget(ctx, tenantID, "mcp-agent", "get_impact", args)
 	if err != nil {
 		return nil, err
 	}
 
-	decisionIDStr, ok := args["decision_id"].(string)
-	if !ok || decisionIDStr == "" {
-		return nil, fmt.Errorf("decision_id is required")
+	targetStr := ""
+	for _, k := range []string{"decision_id", "symbol", "name", "entity_id"} {
+		if v, ok := args[k].(string); ok && strings.TrimSpace(v) != "" {
+			targetStr = strings.TrimSpace(v)
+			break
+		}
 	}
-	decisionID, err := uuid.Parse(decisionIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid decision_id")
+	if targetStr == "" {
+		return nil, fmt.Errorf("one of decision_id, symbol, name, or entity_id is required")
 	}
 
-	children, _ := s.store.ListDecisionsByParent(context.Background(), tenantID, decisionID)
+	// 1. If targetStr is a valid UUID and matches a Decision row, return decision children impact
+	if decisionID, pErr := uuid.Parse(targetStr); pErr == nil {
+		if dec, dErr := s.store.GetDecision(ctx, tenantID, decisionID); dErr == nil && dec != nil {
+			children, _ := s.store.ListDecisionsByParent(ctx, tenantID, decisionID)
+			commitBudget()
+			return map[string]interface{}{
+				"decision_id":     decisionID.String(),
+				"impact_count":    len(children),
+				"impact_children": children,
+			}, nil
+		}
+	}
 
+	// 2. Otherwise resolve as an AST entity UUID or symbol name (e.g. "AppendLeafAndSealTx")
+	brArgs := map[string]interface{}{
+		"tenant_id": tenantID.String(),
+	}
+	if ws, ok := args["workspace"].(string); ok && ws != "" {
+		brArgs["workspace"] = ws
+	}
+	if _, pErr := uuid.Parse(targetStr); pErr == nil {
+		brArgs["entity_id"] = targetStr
+	} else {
+		brArgs["name"] = targetStr
+	}
+
+	brResult, brErr := s.handleBlastRadius(brArgs)
 	commitBudget()
-
-	return map[string]interface{}{
-		"decision_id":     decisionID.String(),
-		"impact_count":    len(children),
-		"impact_children": children,
-	}, nil
+	if brErr != nil {
+		return nil, brErr
+	}
+	if m, ok := brResult.(map[string]interface{}); ok {
+		m["decision_id"] = targetStr
+		m["symbol"] = targetStr
+		m["impact_count"] = m["total_affected"]
+		return m, nil
+	}
+	return brResult, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1181,12 +2013,6 @@ func (s *MCPServer) resolveTenant(args map[string]interface{}) (uuid.UUID, error
 	if tenantStr, ok := args["tenant_id"].(string); ok && tenantStr != "" {
 		return uuid.Parse(tenantStr)
 	}
-	// Fall back to the canonical tenant, matching every other CLI and
-	// HTTP path. The previous implementation returned a synthetic
-	// UUID derived from the literal "default-tenant"; that UUID matches
-	// no row in any table, so tenant-scoped queries produced empty
-	// results with no error. Same class of silent miss as the six CLI
-	// sites fixed in 13018d1.
 	return tenant.CanonicalID, nil
 }
 

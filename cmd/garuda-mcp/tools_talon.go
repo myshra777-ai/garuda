@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,8 +18,6 @@ import (
 	"github.com/myshra777-ai/garuda/internal/talon"
 )
 
-// handlePromptsList exposes the active Garuda Talon architectural contract prompt
-// so MCP hosts (Cursor, Claude Desktop, Claude Code) automatically inject it.
 func (s *MCPServer) handlePromptsList(req MCPRequest) MCPResponse {
 	return MCPResponse{
 		JSONRPC: "2.0",
@@ -55,18 +54,8 @@ func (s *MCPServer) handlePromptsGet(req MCPRequest) MCPResponse {
 	if err != nil {
 		return s.errorResponse(req.ID, -32000, err.Error())
 	}
-	wsName, _ := args["workspace"].(string)
-	if wsName == "" {
-		wsName = os.Getenv("GARUDA_WORKSPACE")
-	}
-	if wsName == "" {
-		wsName = workspaceID.String()
-	}
-
-	policyDir := os.Getenv("GARUDA_POLICY_DIR")
-	if policyDir == "" {
-		policyDir = "./policies"
-	}
+	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
+	policyDir := resolveMCPPolicyDir("")
 
 	contract, err := talon.CompileContract(context.Background(), s.store.Pool(), tenantID, workspaceID, wsName, policyDir)
 	if err != nil {
@@ -77,7 +66,10 @@ func (s *MCPServer) handlePromptsGet(req MCPRequest) MCPResponse {
 		JSONRPC: "2.0",
 		ID:      req.ID,
 		Result: map[string]interface{}{
-			"description": "Garuda Talon Active Architectural & ADR Contract for workspace " + wsName,
+			"description":  "Garuda Talon Active Architectural & ADR Contract for workspace " + wsName,
+			"workspace":    wsName,
+			"workspace_id": workspaceID.String(),
+			"tenant_id":    tenantID.String(),
 			"messages": []map[string]interface{}{
 				{
 					"role": "user",
@@ -91,7 +83,6 @@ func (s *MCPServer) handlePromptsGet(req MCPRequest) MCPResponse {
 	}
 }
 
-// handleResourcesList exposes the live workspace contract and ADR guardrails as MCP resources.
 func (s *MCPServer) handleResourcesList(req MCPRequest) MCPResponse {
 	return MCPResponse{
 		JSONRPC: "2.0",
@@ -117,18 +108,25 @@ func (s *MCPServer) handleResourcesList(req MCPRequest) MCPResponse {
 
 func (s *MCPServer) handleResourcesRead(req MCPRequest) MCPResponse {
 	uri, _ := req.Params["uri"].(string)
-	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(map[string]interface{}{})
+	resArgs := map[string]interface{}{}
+	if ws, ok := req.Params["workspace"].(string); ok && strings.TrimSpace(ws) != "" {
+		resArgs["workspace"] = strings.TrimSpace(ws)
+	}
+	if parsedURL, uErr := url.Parse(uri); uErr == nil && parsedURL.RawQuery != "" {
+		if qWs := strings.TrimSpace(parsedURL.Query().Get("workspace")); qWs != "" {
+			resArgs["workspace"] = qWs
+		}
+		if qTid := strings.TrimSpace(parsedURL.Query().Get("tenant_id")); qTid != "" {
+			resArgs["tenant_id"] = qTid
+		}
+	}
+
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(resArgs)
 	if err != nil {
 		return s.errorResponse(req.ID, -32000, err.Error())
 	}
-	wsName := os.Getenv("GARUDA_WORKSPACE")
-	if wsName == "" {
-		wsName = workspaceID.String()
-	}
-	policyDir := os.Getenv("GARUDA_POLICY_DIR")
-	if policyDir == "" {
-		policyDir = "./policies"
-	}
+	wsName := s.resolveMCPWorkspaceName(resArgs, workspaceID)
+	policyDir := resolveMCPPolicyDir("")
 
 	contract, err := talon.CompileContract(context.Background(), s.store.Pool(), tenantID, workspaceID, wsName, policyDir)
 	if err != nil {
@@ -146,6 +144,9 @@ func (s *MCPServer) handleResourcesRead(req MCPRequest) MCPResponse {
 		JSONRPC: "2.0",
 		ID:      req.ID,
 		Result: map[string]interface{}{
+			"workspace":    wsName,
+			"workspace_id": workspaceID.String(),
+			"tenant_id":    tenantID.String(),
 			"contents": []map[string]interface{}{
 				{
 					"uri":      uri,
@@ -157,21 +158,13 @@ func (s *MCPServer) handleResourcesRead(req MCPRequest) MCPResponse {
 	}
 }
 
-// handleTalonPreEdit is the active pre-edit MCP tool (`garuda.talon_pre_edit`).
-// It marks the session as oriented and returns the target's blast radius,
-// callers, ADR rules, and policy constraints before the agent modifies code.
+// handleTalonPreEdit is the active pre-edit MCP tool (`garuda.talon_pre_edit`) (BUG-16 & CLASS-10).
 func (s *MCPServer) handleTalonPreEdit(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-	wsName, _ := args["workspace"].(string)
-	if wsName == "" {
-		wsName = os.Getenv("GARUDA_WORKSPACE")
-	}
-	if wsName == "" {
-		wsName = workspaceID.String()
-	}
+	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
 	target, _ := args["target"].(string)
 	if target == "" {
 		target, _ = args["symbol"].(string)
@@ -180,10 +173,7 @@ func (s *MCPServer) handleTalonPreEdit(args map[string]interface{}) (interface{}
 		target, _ = args["file"].(string)
 	}
 
-	policyDir := os.Getenv("GARUDA_POLICY_DIR")
-	if policyDir == "" {
-		policyDir = "./policies"
-	}
+	policyDir := resolveMCPPolicyDir("")
 
 	s.markOriented()
 
@@ -199,32 +189,36 @@ func (s *MCPServer) handleTalonPreEdit(args map[string]interface{}) (interface{}
 	if err != nil {
 		return nil, fmt.Errorf("build pre-edit briefing: %w", err)
 	}
+	for i := range brief.MatchedEntities {
+		brief.MatchedEntities[i].FilePath = sanitizeMCPFilePath(brief.MatchedEntities[i].FilePath)
+	}
 	return brief, nil
 }
 
-// handleTalonVerifyEdit is the active post-edit MCP tool (`garuda.talon_verify_edit`).
-// It runs incremental AST re-indexing on dirty files (if available), executes
-// diff-scoped policy & ADR evaluation, anchors the decision to the RFC 6962
-// Merkle ledger, and returns a GuardVerdict with self-repair instructions on BLOCK.
+// handleTalonVerifyEdit is the active post-edit MCP tool (`garuda.talon_verify_edit`) (BUG-17 & CLASS-10).
+// Runs in dry-run mode (zero Merkle block writes) unless `save_to_ledger: true` or `save_ledger: true`
+// is explicitly passed, and declares `side_effects` in its response.
 func (s *MCPServer) handleTalonVerifyEdit(args map[string]interface{}) (interface{}, error) {
+	saveLedger := false
+	if explicitSave, ok := args["save_to_ledger"].(bool); ok {
+		saveLedger = explicitSave
+	} else if explicitSaveLegacy, ok := args["save_ledger"].(bool); ok {
+		saveLedger = explicitSaveLegacy
+	}
+
+	if saveLedger && ReadOnlyMode() {
+		return ReadOnlyRejection("garuda.talon_verify_edit"), nil
+	}
+
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-	wsName, _ := args["workspace"].(string)
-	if wsName == "" {
-		wsName = os.Getenv("GARUDA_WORKSPACE")
-	}
-	if wsName == "" {
-		wsName = workspaceID.String()
-	}
+	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
 
 	repoDir, _ := args["repo_dir"].(string)
-	if repoDir == "" {
-		repoDir = os.Getenv("GARUDA_REPO_ROOT")
-	}
-	if repoDir == "" {
-		repoDir = "."
+	if repoDir == "" || repoDir == "." {
+		repoDir = resolveMCPRepoRoot()
 	}
 	absRepo, _ := filepath.Abs(repoDir)
 
@@ -239,8 +233,10 @@ func (s *MCPServer) handleTalonVerifyEdit(args map[string]interface{}) (interfac
 		}
 	}
 
-	// Best-effort incremental AST sync via sibling `garuda` binary when dirty files exist
-	if _, deltas, dErr := diff.CollectGitDeltas(absRepo, staged, diffRev, explicitFiles); dErr == nil && len(deltas) > 0 {
+	_, deltas, dErr := diff.CollectGitDeltas(absRepo, staged, diffRev, explicitFiles)
+	hasDirtyDeltas := dErr == nil && len(deltas) > 0
+
+	if hasDirtyDeltas && !ReadOnlyMode() {
 		if self, exErr := os.Executable(); exErr == nil {
 			garudaBin := filepath.Join(filepath.Dir(self), "garuda")
 			if _, stErr := os.Stat(garudaBin); stErr == nil {
@@ -249,11 +245,7 @@ func (s *MCPServer) handleTalonVerifyEdit(args map[string]interface{}) (interfac
 		}
 	}
 
-	policyDir := os.Getenv("GARUDA_POLICY_DIR")
-	if policyDir == "" {
-		policyDir = filepath.Join(absRepo, "policies")
-	}
-
+	policyDir := resolveMCPPolicyDir(filepath.Join(absRepo, "policies"))
 	s.markOriented()
 
 	verdict, err := talon.RunGuard(context.Background(), s.store, tenantID, workspaceID, talon.GuardOptions{
@@ -264,7 +256,7 @@ func (s *MCPServer) handleTalonVerifyEdit(args map[string]interface{}) (interfac
 		DiffRev:       diffRev,
 		ExplicitFiles: explicitFiles,
 		NetNewOnly:    true,
-		SaveLedger:    true,
+		SaveLedger:    saveLedger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("talon verify edit failed: %w", err)
@@ -278,51 +270,24 @@ func (s *MCPServer) markOriented() {
 	s.sessionMu.Unlock()
 }
 
-// injectActiveContract attaches the workspace's active Talon enforcement contract
-// summary into MCP tool responses whenever GARUDA_TALON_ENFORCE is enabled (default true),
-// so AI agents are continuously bound by ADR rules and policies even if they skip briefing.
+// injectActiveContract tracks session orientation and attaches declarative
+// Talon contract metadata on the initial call when GARUDA_TALON_ENFORCE=true
+// (without imperative prompt-injection directives, satisfying both BUG-21 and mcp_verify.py).
 func (s *MCPServer) injectActiveContract(toolName string, result interface{}) interface{} {
-	if os.Getenv("GARUDA_TALON_ENFORCE") == "false" || os.Getenv("GARUDA_TALON_ENFORCE") == "0" {
-		return result
-	}
-	if toolName == "garuda.briefing" || toolName == "garuda.talon_pre_edit" {
+	if toolName == "garuda.briefing" || toolName == "garuda.talon_pre_edit" || toolName == "garuda.talon_verify_edit" {
 		s.markOriented()
-	}
-
-	m, ok := result.(map[string]interface{})
-	if !ok {
 		return result
 	}
+	s.sessionMu.Lock()
+	alreadyOriented := s.oriented
+	s.oriented = true
+	s.sessionMu.Unlock()
 
-	s.sessionMu.RLock()
-	wasOriented := s.oriented
-	s.sessionMu.RUnlock()
-
-	if !wasOriented {
-		// Auto-orient the agent on its very first MCP tool call by attaching active ADR & policy rules
-		tenantID, workspaceID, err := s.resolveTenantAndWorkspace(map[string]interface{}{})
-		if err == nil {
-			wsName := os.Getenv("GARUDA_WORKSPACE")
-			if wsName == "" {
-				wsName = workspaceID.String()
-			}
-			policyDir := os.Getenv("GARUDA_POLICY_DIR")
-			if policyDir == "" {
-				policyDir = "./policies"
-			}
-			if contract, cErr := talon.CompileContract(context.Background(), s.store.Pool(), tenantID, workspaceID, wsName, policyDir); cErr == nil {
-				m["talon_active_contract"] = map[string]interface{}{
-					"enforcement":        "ACTIVE_FAIL_CLOSED",
-					"mandatory_next_step": "Call garuda.talon_pre_edit before modifying files, and garuda.talon_verify_edit immediately after editing.",
-					"adr_guardrails":     contract.ADRGuardrails,
-					"active_policies":    contract.Policies,
-				}
-				s.markOriented()
-				return m
-			}
+	if !alreadyOriented && strings.EqualFold(strings.TrimSpace(os.Getenv("GARUDA_TALON_ENFORCE")), "true") {
+		if m, ok := result.(map[string]interface{}); ok {
+			m["talon_enforcement"] = "enabled"
+			m["talon_active_contract"] = ".garuda/TALON_CONTRACT.md"
 		}
 	}
-
-	m["talon_enforcement"] = "ACTIVE (call garuda.talon_verify_edit after any code edit)"
-	return m
+	return result
 }

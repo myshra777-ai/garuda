@@ -40,3 +40,4 @@ var WorkspaceScopedTables = map[string]bool{
 	"workspace_members":               true,
 	"workspace_modules":               true,
 }
+

@@ -35,7 +35,6 @@ var (
 	initSkipScanFlag  bool
 )
 
-
 func resolveGoBinary() string {
 	if p, err := exec.LookPath("go" + exeSuffix()); err == nil && p != "" {
 		return p

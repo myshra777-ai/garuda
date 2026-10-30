@@ -57,37 +57,37 @@ type DocSummaryDTO struct {
 
 // DocComponentDTO represents a single extracted component, claim, invariant, or guardrail rule from a document.
 type DocComponentDTO struct {
-	ID          string          `json:"id"`
-	DocID       string          `json:"doc_id"`
-	DocTitle    string          `json:"doc_title"`
-	DocType     string          `json:"doc_type"`
-	DocPath     string          `json:"doc_path"`
-	Section     string          `json:"section"`
-	Line        int             `json:"line"`
-	Modality    string          `json:"modality"`  // MUST | MUST_NOT | BLOCK | REVIEW | DENY | INVARIANT
-	Subject     string          `json:"subject"`   // Governed component / layer / symbol
-	Predicate   string          `json:"predicate"` // CALLS | IMPORTS | LAYER_BOUNDARY | IDEMPOTENT | REQUIRES_EVIDENCE
-	Object      string          `json:"object"`    // Target dependency / contract
-	Statement   string          `json:"statement"` // Human-readable rule statement
-	Status      string          `json:"status"`    // SUPPORTED | ENFORCED | UNVERIFIED | CONTRADICTED
-	Reason      string          `json:"reason"`
-	PolicyID    string          `json:"policy_id,omitempty"`
-	LinkedCode  []LinkedCodeRef `json:"linked_code"`
+	ID         string          `json:"id"`
+	DocID      string          `json:"doc_id"`
+	DocTitle   string          `json:"doc_title"`
+	DocType    string          `json:"doc_type"`
+	DocPath    string          `json:"doc_path"`
+	Section    string          `json:"section"`
+	Line       int             `json:"line"`
+	Modality   string          `json:"modality"`  // MUST | MUST_NOT | BLOCK | REVIEW | DENY | INVARIANT
+	Subject    string          `json:"subject"`   // Governed component / layer / symbol
+	Predicate  string          `json:"predicate"` // CALLS | IMPORTS | LAYER_BOUNDARY | IDEMPOTENT | REQUIRES_EVIDENCE
+	Object     string          `json:"object"`    // Target dependency / contract
+	Statement  string          `json:"statement"` // Human-readable rule statement
+	Status     string          `json:"status"`    // SUPPORTED | ENFORCED | UNVERIFIED | CONTRADICTED
+	Reason     string          `json:"reason"`
+	PolicyID   string          `json:"policy_id,omitempty"`
+	LinkedCode []LinkedCodeRef `json:"linked_code"`
 }
 
 // DocsGraphStats summarizes the Document-to-Code Knowledge Graph metrics.
 type DocsGraphStats struct {
-	TotalDocuments      int `json:"total_documents"`
-	ADRsCount           int `json:"adrs_count"`
-	SpecsCount          int `json:"specs_count"`
-	PoliciesCount       int `json:"policies_count"`
-	TotalComponents     int `json:"total_components"`
-	VerifiedComponents  int `json:"verified_components"`
-	EnforcedByTalon     int `json:"enforced_by_talon"`
-	DriftOrUnverified   int `json:"drift_or_unverified"`
-	ContradictedCount   int `json:"contradicted_count"`
-	ConnectedCodeNodes  int `json:"connected_code_nodes"`
-	TotalGraphEdges     int `json:"total_graph_edges"`
+	TotalDocuments     int `json:"total_documents"`
+	ADRsCount          int `json:"adrs_count"`
+	SpecsCount         int `json:"specs_count"`
+	PoliciesCount      int `json:"policies_count"`
+	TotalComponents    int `json:"total_components"`
+	VerifiedComponents int `json:"verified_components"`
+	EnforcedByTalon    int `json:"enforced_by_talon"`
+	DriftOrUnverified  int `json:"drift_or_unverified"`
+	ContradictedCount  int `json:"contradicted_count"`
+	ConnectedCodeNodes int `json:"connected_code_nodes"`
+	TotalGraphEdges    int `json:"total_graph_edges"`
 }
 
 // DocsGraphResponse is the complete payload for the Docs & Rules Lineage Graph and Table view.

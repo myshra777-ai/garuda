@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ===========================================================================
-# GARUDA v1.9.2 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
+# GARUDA v1.9.4 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
 # ===========================================================================
 # Supports macOS (Intel & Apple Silicon), Linux, Windows WSL2, Chromebook, Android
 # Usage:
@@ -89,7 +89,7 @@ export HOMEBREW_NO_INSTALL_CLEANUP=1
 export HOMEBREW_NO_ENV_HINTS=1
 
 echo "==================================================================="
-echo "GARUDA v1.9.2 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
+echo "GARUDA v1.9.4 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
 echo "==================================================================="
 echo "  * Detected Owner:     ${OWNER_EMAIL}"
 echo "  * Target Workspace:   ${WORKSPACE}"
@@ -334,6 +334,7 @@ echo "[3/8] Preparing Garuda binaries (bin/garuda, bin/garuda-api, bin/garuda-mc
 mkdir -p bin
 CURRENT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo "local")"
 BUILD_STAMP_FILE="bin/.build_stamp"
+if [[ internal/api/templates/dashboard.html -nt bin/garuda-api || internal/api/static/dashboard.css -nt bin/garuda-api || internal/api/static/dashboard.js -nt bin/garuda-api ]]; then rm -f "$BUILD_STAMP_FILE"; fi
 STAMP_VAL="$(cat "$BUILD_STAMP_FILE" 2>/dev/null || echo "")"
 
 if [[ -x bin/garuda && -x bin/garuda-api && -x bin/garuda-mcp && -x bin/garuda-talon ]] && { [[ "$STAMP_VAL" == "prebuilt" ]] || [[ ! -d "./cmd/garuda" ]] || { [[ "$STAMP_VAL" == "$CURRENT_COMMIT" ]] && [[ -z "$(git status --porcelain -- './cmd' './internal' 2>/dev/null || true)" ]]; }; }; then
@@ -381,6 +382,8 @@ echo "[4/8] Running idempotent migrations, persisting .env, and provisioning own
 
 # 5. Start Garuda API Gateway and verify /health + /signup
 echo "[5/8] Starting Garuda API Gateway on :${API_PORT}..."
+pkill -f "garuda-api" 2>/dev/null || killall garuda-api 2>/dev/null || true
+sleep 0.3
 nohup ./bin/garuda-api > "${DATA_DIR}/garuda-api.log" 2>&1 &
 for _ in $(seq 1 25); do
     if curl -fsS "http://localhost:${API_PORT}/health" >/dev/null 2>&1; then
@@ -410,6 +413,7 @@ elif [[ -d "$HOME/garuda-validation" ]]; then
             ./bin/garuda analyze "$candidate" --workspace "$WORKSPACE" --save
         fi
     done
+    ./bin/garuda analyze . --workspace "$WORKSPACE" --save
 else
     ./bin/garuda analyze . --workspace "$WORKSPACE" --save
 fi
@@ -432,7 +436,7 @@ fi
 
 echo ""
 echo "==================================================================="
-echo "[OK] GARUDA v1.9.2 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
+echo "[OK] GARUDA v1.9.4 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
 echo "   * Web Dashboard:  http://localhost:${API_PORT}/login"
 echo "   * Chromium PWA:   Open in Chrome/Edge/Brave -> Click 'Install Garuda'"
 echo "   * Email / Pass:   ${OWNER_EMAIL} / ${OWNER_PASSWORD}"

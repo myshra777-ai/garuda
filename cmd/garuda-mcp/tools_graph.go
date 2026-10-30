@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -21,6 +22,9 @@ func (s *MCPServer) resolveSubjectEntity(
 	workspaceID uuid.UUID,
 	entityIDStr, nameStr string,
 ) (uuid.UUID, string, error) {
+	if s.store == nil || s.store.Pool() == nil {
+		return uuid.Nil, nameStr, fmt.Errorf("database not connected")
+	}
 	if entityIDStr != "" {
 		parsed, err := uuid.Parse(entityIDStr)
 		if err != nil {
@@ -65,8 +69,8 @@ func (s *MCPServer) resolveSubjectEntity(
 }
 
 // resolveTopClaimTarget finds the entity in workspaceID with the most incoming
-// claims of the given claimTypes. Used as a smart fallback when a caller
-// queries by a default/sample name that does not exist in the active workspace.
+// claims of the given claimTypes. Used ONLY when a caller invokes subclasses or
+// implementers without specifying any entity_id or name.
 func (s *MCPServer) resolveTopClaimTarget(
 	ctx context.Context,
 	workspaceID uuid.UUID,
@@ -91,34 +95,56 @@ func (s *MCPServer) resolveTopClaimTarget(
 	return id, name, nil
 }
 
-// handleSubclasses returns entities that inherit from or embed the
-// subject.
+// handleSubclasses returns entities that inherit from or embed the subject (BUG-18).
+// Never silently substitutes an unrelated hub when a specific entity_id or name is requested,
+// and always reports total_count and truncated.
 func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-	workspaceName, _ := args["workspace"].(string)
+	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
 
 	entityIDStr, _ := args["entity_id"].(string)
 	nameStr, _ := args["name"].(string)
+	entityIDStr = strings.TrimSpace(entityIDStr)
+	nameStr = strings.TrimSpace(nameStr)
+	explicitSubject := entityIDStr != "" || nameStr != ""
 	ctx := context.Background()
 
-	claimTypes := []string{"INHERITS", "EMBEDS"}
-	subjectID, subjectName, err := s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
-	if err == nil {
-		var cnt int
-		_ = s.store.Pool().QueryRow(ctx, `
-			SELECT COUNT(*)::int FROM claims c
-			JOIN entities e ON e.id = c.from_entity_id
-			WHERE c.workspace_id = $1 AND c.to_entity_id = $2
-			  AND c.claim_type = ANY($3) AND e.kind != 'external'
-		`, workspaceID, subjectID, claimTypes).Scan(&cnt)
-		if cnt == 0 {
-			err = fmt.Errorf("subject %s has no direct INHERITS/EMBEDS claims", subjectName)
-		}
+	limit := 50
+	if v, ok := args["limit"].(float64); ok && v > 0 && v <= 500 {
+		limit = int(v)
 	}
-	if err != nil {
+	languageFilter, _ := args["language"].(string)
+
+	claimTypes := []string{"INHERITS", "EMBEDS"}
+	var subjectID uuid.UUID
+	var subjectName string
+
+	if explicitSubject {
+		subjectID, subjectName, err = s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
+		if err != nil {
+			reqTarget := nameStr
+			if reqTarget == "" {
+				reqTarget = entityIDStr
+			}
+			return map[string]interface{}{
+				"tenant_id":      tenantID.String(),
+				"workspace_id":   workspaceID.String(),
+				"workspace_name": workspaceName,
+				"status":         "not_found",
+				"not_found":      true,
+				"subject":        map[string]string{"id": "", "name": reqTarget},
+				"count":          0,
+				"total_count":    0,
+				"truncated":      false,
+				"results":        []interface{}{},
+				"limit_used":     limit,
+				"hint":           fmt.Sprintf("no entity matching %q found in workspace %s", reqTarget, workspaceName),
+			}, nil
+		}
+	} else {
 		if fbID, fbName, fbErr := s.resolveTopClaimTarget(ctx, workspaceID, []string{"INHERITS", "EMBEDS"}); fbErr == nil {
 			subjectID = fbID
 			subjectName = fbName
@@ -131,19 +157,49 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 				"tenant_id":      tenantID.String(),
 				"workspace_id":   workspaceID.String(),
 				"workspace_name": workspaceName,
-				"subject":        map[string]string{"id": "", "name": nameStr},
+				"subject":        map[string]string{"id": "", "name": ""},
 				"count":          0,
+				"total_count":    0,
+				"truncated":      false,
 				"results":        []interface{}{},
-				"limit_used":     50,
+				"limit_used":     limit,
 			}, nil
 		}
 	}
 
-	languageFilter, _ := args["language"].(string)
-	limit := 50
-	if v, ok := args["limit"].(float64); ok && v > 0 && v <= 500 {
-		limit = int(v)
+	countQ := `
+		SELECT COUNT(*)::int
+		  FROM claims c
+		  JOIN entities e ON e.id = c.from_entity_id
+		 WHERE c.workspace_id = $1
+		   AND c.claim_type = ANY($3)
+		   AND c.to_entity_id = $2
+		   AND e.kind != 'external'
+	`
+	countArgs := []interface{}{workspaceID, subjectID, claimTypes}
+	if languageFilter != "" {
+		countQ += " AND e.language = $4"
+		countArgs = append(countArgs, languageFilter)
 	}
+	if s.store == nil || s.store.Pool() == nil {
+		return map[string]interface{}{
+			"tenant_id":      tenantID.String(),
+			"workspace_id":   workspaceID.String(),
+			"workspace_name": workspaceName,
+			"status":         "not_found",
+			"not_found":      true,
+			"subject":        map[string]string{"id": subjectID.String(), "name": subjectName},
+			"count":          0,
+			"total_count":    0,
+			"truncated":      false,
+			"results":        []interface{}{},
+			"limit_used":     limit,
+			"hint":           "database not connected",
+		}, nil
+	}
+
+	var totalCount int
+	_ = s.store.Pool().QueryRow(ctx, countQ, countArgs...).Scan(&totalCount)
 
 	q := `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
@@ -200,7 +256,12 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 		); err != nil {
 			continue
 		}
+		r.File = sanitizeMCPFilePath(r.File)
 		results = append(results, r)
+	}
+
+	if totalCount < len(results) {
+		totalCount = len(results)
 	}
 
 	return map[string]interface{}{
@@ -210,41 +271,75 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 		"subject":        map[string]string{"id": subjectID.String(), "name": subjectName},
 		"filters":        map[string]any{"language": languageFilter},
 		"count":          len(results),
+		"total_count":    totalCount,
+		"truncated":      totalCount > len(results),
 		"results":        results,
 		"limit_used":     limit,
 	}, nil
 }
 
-// handleImplementers returns entities that implement the subject
-// interface.
+// handleImplementers returns entities that implement the subject interface (BUG-18).
+// Never silently substitutes an unrelated hub when a specific entity_id or name is requested,
+// and always reports total_count and truncated.
 func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-	workspaceName, _ := args["workspace"].(string)
+	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
 
 	entityIDStr, _ := args["entity_id"].(string)
 	nameStr, _ := args["name"].(string)
+	entityIDStr = strings.TrimSpace(entityIDStr)
+	nameStr = strings.TrimSpace(nameStr)
+	explicitSubject := entityIDStr != "" || nameStr != ""
 	ctx := context.Background()
 
-	claimFilter := []string{"IMPLEMENTS"}
-	subjectID, subjectName, err := s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
-	if err == nil {
-		var cnt int
-		_ = s.store.Pool().QueryRow(ctx, `
-			SELECT COUNT(*)::int FROM claims c
-			JOIN entities e ON e.id = c.from_entity_id
-			WHERE c.workspace_id = $1 AND c.to_entity_id = $2
-			  AND c.claim_type = ANY($3) AND e.kind != 'external'
-		`, workspaceID, subjectID, claimFilter).Scan(&cnt)
-		if cnt == 0 {
-			err = fmt.Errorf("subject %s has no direct IMPLEMENTS claims", subjectName)
-		}
+	limit := 50
+	if v, ok := args["limit"].(float64); ok && v > 0 && v <= 500 {
+		limit = int(v)
 	}
-	if err != nil {
-		// Smart discovery fallback when the caller passes an interface name from
-		// another repo (e.g. "CmdTyper") that is not present in this workspace.
+
+	if s.store == nil || s.store.Pool() == nil {
+		return map[string]interface{}{
+			"tenant_id":      tenantID.String(),
+			"workspace_id":   workspaceID.String(),
+			"workspace_name": workspaceName,
+			"subject":        map[string]string{"id": "", "name": nameStr},
+			"count":          0,
+			"total_count":    0,
+			"truncated":      false,
+			"results":        []interface{}{},
+			"limit_used":     limit,
+		}, nil
+	}
+	claimFilter := []string{"IMPLEMENTS"}
+	var subjectID uuid.UUID
+	var subjectName string
+
+	if explicitSubject {
+		subjectID, subjectName, err = s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
+		if err != nil {
+			reqTarget := nameStr
+			if reqTarget == "" {
+				reqTarget = entityIDStr
+			}
+			return map[string]interface{}{
+				"tenant_id":      tenantID.String(),
+				"workspace_id":   workspaceID.String(),
+				"workspace_name": workspaceName,
+				"status":         "not_found",
+				"not_found":      true,
+				"subject":        map[string]string{"id": "", "name": reqTarget},
+				"count":          0,
+				"total_count":    0,
+				"truncated":      false,
+				"results":        []interface{}{},
+				"limit_used":     limit,
+				"hint":           fmt.Sprintf("no interface or entity matching %q found in workspace %s", reqTarget, workspaceName),
+			}, nil
+		}
+	} else {
 		if fbID, fbName, fbErr := s.resolveTopClaimTarget(ctx, workspaceID, []string{"IMPLEMENTS"}); fbErr == nil {
 			subjectID = fbID
 			subjectName = fbName
@@ -257,18 +352,26 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 				"tenant_id":      tenantID.String(),
 				"workspace_id":   workspaceID.String(),
 				"workspace_name": workspaceName,
-				"subject":        map[string]string{"id": "", "name": nameStr},
+				"subject":        map[string]string{"id": "", "name": ""},
 				"count":          0,
+				"total_count":    0,
+				"truncated":      false,
 				"results":        []interface{}{},
-				"limit_used":     50,
+				"limit_used":     limit,
 			}, nil
 		}
 	}
 
-	limit := 50
-	if v, ok := args["limit"].(float64); ok && v > 0 && v <= 500 {
-		limit = int(v)
-	}
+	var totalCount int
+	_ = s.store.Pool().QueryRow(ctx, `
+		SELECT COUNT(*)::int
+		  FROM claims c
+		  JOIN entities e ON e.id = c.from_entity_id
+		 WHERE c.workspace_id = $1
+		   AND c.claim_type = ANY($3)
+		   AND c.to_entity_id = $2
+		   AND e.kind != 'external'
+	`, workspaceID, subjectID, claimFilter).Scan(&totalCount)
 
 	rows, err := s.store.Pool().Query(ctx, `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
@@ -314,7 +417,12 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 		); err != nil {
 			continue
 		}
+		r.File = sanitizeMCPFilePath(r.File)
 		results = append(results, r)
+	}
+
+	if totalCount < len(results) {
+		totalCount = len(results)
 	}
 
 	return map[string]interface{}{
@@ -323,35 +431,49 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 		"workspace_name": workspaceName,
 		"subject":        map[string]string{"id": subjectID.String(), "name": subjectName},
 		"count":          len(results),
+		"total_count":    totalCount,
+		"truncated":      totalCount > len(results),
 		"results":        results,
 		"limit_used":     limit,
 	}, nil
 }
 
 // handleNeighbors returns every entity connected to the subject in
-// either direction by a single edge.
+// either direction by a single edge, ensuring both incoming and outgoing
+// edges are represented even when incoming count exceeds limit.
 func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-	workspaceName, _ := args["workspace"].(string)
+	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
+	ctx := context.Background()
 
 	entityIDStr, _ := args["entity_id"].(string)
-	if entityIDStr == "" {
+	nameStr, _ := args["name"].(string)
+	if entityIDStr == "" && nameStr == "" {
 		return nil, fmt.Errorf("entity_id is required")
 	}
-	subjectID, err := uuid.Parse(entityIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid entity_id %q: %w", entityIDStr, err)
-	}
 
+	var subjectID uuid.UUID
 	var subjectName string
-	err = s.store.Pool().QueryRow(context.Background(), `
-		SELECT name FROM entities WHERE workspace_id = $1 AND id = $2
-	`, workspaceID, subjectID).Scan(&subjectName)
-	if err != nil {
-		return nil, fmt.Errorf("entity_id %q not found in this workspace", entityIDStr)
+	if parsed, pErr := uuid.Parse(entityIDStr); pErr == nil {
+		subjectID = parsed
+		err = s.store.Pool().QueryRow(ctx, `
+			SELECT name FROM entities WHERE workspace_id = $1 AND id = $2
+		`, workspaceID, subjectID).Scan(&subjectName)
+		if err != nil {
+			return nil, fmt.Errorf("entity_id %q not found in this workspace", entityIDStr)
+		}
+	} else {
+		lookup := entityIDStr
+		if lookup == "" {
+			lookup = nameStr
+		}
+		subjectID, subjectName, err = s.resolveSubjectEntity(ctx, workspaceID, "", lookup)
+		if err != nil {
+			return nil, fmt.Errorf("invalid entity_id %q: %w", lookup, err)
+		}
 	}
 
 	includeExternal := false
@@ -373,54 +495,26 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		limit = int(v)
 	}
 
-	q := `
-		WITH edges AS (
-			SELECT c.to_entity_id AS other_id,
-			       c.claim_type, c.confidence, 'outgoing' AS direction
-			  FROM claims c
-			 WHERE c.workspace_id = $1 AND c.from_entity_id = $2
-			UNION ALL
-			SELECT c.from_entity_id AS other_id,
-			       c.claim_type, c.confidence, 'incoming' AS direction
-			  FROM claims c
-			 WHERE c.workspace_id = $1 AND c.to_entity_id = $2
-		)
-		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
-		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0),
-		       COALESCE(NULLIF(r.name, ''), NULLIF(r.module_path, ''), r.url, 'unknown') AS repo,
-		       ed.claim_type, ed.confidence, ed.direction,
-		       e.is_exported
-		  FROM edges ed
-		  JOIN entities e ON e.id = ed.other_id
-		  LEFT JOIN repositories r ON r.id = e.repository_id
-		 WHERE 1=1
-	`
-	dbArgs := []interface{}{workspaceID, subjectID}
-	argPos := 3
-
-	if !includeExternal {
-		q += " AND e.kind != 'external'"
+	if s.store == nil || s.store.Pool() == nil {
+		return map[string]interface{}{
+			"tenant_id":            tenantID.String(),
+			"workspace_id":         workspaceID.String(),
+			"workspace_name":       workspaceName,
+			"subject":              map[string]string{"id": entityIDStr, "name": nameStr},
+			"filters":              map[string]any{"edge_kinds": edgeKinds, "include_external": includeExternal},
+			"total_incoming_count": 0,
+			"total_outgoing_count": 0,
+			"incoming_count":       0,
+			"outgoing_count":       0,
+			"incoming":             []interface{}{},
+			"outgoing":             []interface{}{},
+			"count":                0,
+			"total_count":          0,
+			"truncated":            false,
+			"results":              []interface{}{},
+			"limit_used":           limit,
+		}, nil
 	}
-	if len(edgeKinds) > 0 {
-		placeholders := ""
-		for i, k := range edgeKinds {
-			if i > 0 {
-				placeholders += ","
-			}
-			placeholders += fmt.Sprintf("$%d", argPos)
-			dbArgs = append(dbArgs, k)
-			argPos++
-		}
-		q += fmt.Sprintf(" AND ed.claim_type IN (%s)", placeholders)
-	}
-	q += fmt.Sprintf(" ORDER BY ed.direction, ed.claim_type, e.name LIMIT $%d", argPos)
-	dbArgs = append(dbArgs, limit)
-
-	rows, err := s.store.Pool().Query(context.Background(), q, dbArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("query neighbors: %w", err)
-	}
-	defer rows.Close()
 
 	type neighborRow struct {
 		ID         string  `json:"id"`
@@ -437,46 +531,160 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		Exported   bool    `json:"exported"`
 	}
 
-	results := make([]neighborRow, 0, limit)
-	for rows.Next() {
-		var r neighborRow
-		if err := rows.Scan(
-			&r.ID, &r.Name, &r.Kind, &r.Package, &r.Language,
-			&r.File, &r.LineStart, &r.Repo,
-			&r.ClaimType, &r.Confidence, &r.Direction, &r.Exported,
-		); err != nil {
-			continue
+	queryDirection := func(direction string, allowExt bool, dirLimit int) ([]neighborRow, int, error) {
+		colMatch := "c.to_entity_id = $2"
+		otherCol := "c.from_entity_id"
+		if direction == "outgoing" {
+			colMatch = "c.from_entity_id = $2"
+			otherCol = "c.to_entity_id"
 		}
-		results = append(results, r)
+
+		extFilter := ""
+		if !allowExt {
+			extFilter = " AND e.kind != 'external'"
+		}
+
+		countQ := fmt.Sprintf(`
+			SELECT COUNT(*)::int
+			  FROM claims c
+			  JOIN entities e ON e.id = %s
+			 WHERE c.workspace_id = $1 AND %s%s
+		`, otherCol, colMatch, extFilter)
+		var totalDir int
+		_ = s.store.Pool().QueryRow(ctx, countQ, workspaceID, subjectID).Scan(&totalDir)
+
+		q := fmt.Sprintf(`
+			SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, 'go'),
+			       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0),
+			       COALESCE(NULLIF(r.name, ''), NULLIF(r.module_path, ''), r.url, 'unknown') AS repo,
+			       c.claim_type, c.confidence, $3::text AS direction,
+			       COALESCE(e.is_exported, false)
+			  FROM claims c
+			  JOIN entities e ON e.id = %s
+			  LEFT JOIN repositories r ON r.id = e.repository_id
+			 WHERE c.workspace_id = $1 AND %s%s
+		`, otherCol, colMatch, extFilter)
+
+		dbArgs := []interface{}{workspaceID, subjectID, direction}
+		argPos := 4
+		if len(edgeKinds) > 0 {
+			placeholders := ""
+			for i, k := range edgeKinds {
+				if i > 0 {
+					placeholders += ","
+				}
+				placeholders += fmt.Sprintf("$%d", argPos)
+				dbArgs = append(dbArgs, k)
+				argPos++
+			}
+			q += fmt.Sprintf(" AND c.claim_type IN (%s)", placeholders)
+		}
+		q += fmt.Sprintf(" ORDER BY c.claim_type, e.name LIMIT $%d", argPos)
+		dbArgs = append(dbArgs, dirLimit)
+
+		rows, qErr := s.store.Pool().Query(ctx, q, dbArgs...)
+		if qErr != nil {
+			return nil, totalDir, qErr
+		}
+		defer rows.Close()
+
+		out := make([]neighborRow, 0, dirLimit)
+		for rows.Next() {
+			var r neighborRow
+			if err := rows.Scan(
+				&r.ID, &r.Name, &r.Kind, &r.Package, &r.Language,
+				&r.File, &r.LineStart, &r.Repo,
+				&r.ClaimType, &r.Confidence, &r.Direction, &r.Exported,
+			); err == nil {
+				r.File = sanitizeMCPFilePath(r.File)
+				out = append(out, r)
+			}
+		}
+		return out, totalDir, nil
 	}
 
+	incomingRows, totalIncoming, err := queryDirection("incoming", includeExternal, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query incoming neighbors: %w", err)
+	}
+	outgoingRows, totalOutgoing, err := queryDirection("outgoing", includeExternal, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query outgoing neighbors: %w", err)
+	}
+	if len(outgoingRows) == 0 && !includeExternal {
+		extOut, extTotal, extErr := queryDirection("outgoing", true, limit)
+		if extErr == nil && len(extOut) > 0 {
+			outgoingRows = extOut
+			totalOutgoing = extTotal
+		}
+	}
+
+	results := make([]neighborRow, 0, limit)
+	halfLimit := limit / 2
+	if halfLimit < 1 {
+		halfLimit = 1
+	}
+	outTake := len(outgoingRows)
+	if outTake > halfLimit && len(incomingRows) > (limit-halfLimit) {
+		outTake = halfLimit
+	}
+	inTake := limit - outTake
+	if inTake > len(incomingRows) {
+		inTake = len(incomingRows)
+		if outTake < len(outgoingRows) {
+			rem := limit - inTake
+			if rem > len(outgoingRows) {
+				rem = len(outgoingRows)
+			}
+			outTake = rem
+		}
+	}
+	results = append(results, incomingRows[:inTake]...)
+	results = append(results, outgoingRows[:outTake]...)
+
+	totalBoth := totalIncoming + totalOutgoing
+
 	return map[string]interface{}{
-		"tenant_id":      tenantID.String(),
-		"workspace_id":   workspaceID.String(),
-		"workspace_name": workspaceName,
-		"subject":        map[string]string{"id": subjectID.String(), "name": subjectName},
-		"filters": map[string]any{
-			"edge_kinds":       edgeKinds,
-			"include_external": includeExternal,
-		},
-		"count":      len(results),
-		"results":    results,
-		"limit_used": limit,
+		"tenant_id":            tenantID.String(),
+		"workspace_id":         workspaceID.String(),
+		"workspace_name":       workspaceName,
+		"subject":              map[string]string{"id": subjectID.String(), "name": subjectName},
+		"filters":              map[string]any{"edge_kinds": edgeKinds, "include_external": includeExternal},
+		"total_incoming_count": totalIncoming,
+		"total_outgoing_count": totalOutgoing,
+		"incoming_count":       len(incomingRows),
+		"outgoing_count":       len(outgoingRows),
+		"incoming":             incomingRows,
+		"outgoing":             outgoingRows,
+		"count":                len(results),
+		"total_count":          totalBoth,
+		"truncated":            totalBoth > len(results),
+		"results":              results,
+		"limit_used":           limit,
 	}, nil
 }
 
-// handleFindEntity returns entities matching the given filters.
+// handleFindEntity returns entities matching the given filters (BUG-05, BUG-18, CLASS-04, CLASS-06).
+// Accepts both `name` and `name_pattern`. When any filter is provided and 0 rows match,
+// returns an explicit not_found response with empty results instead of top hubs.
 func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
-	workspaceName, _ := args["workspace"].(string)
+	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
 
+	exactName, _ := args["name"].(string)
+	exactName = strings.TrimSpace(exactName)
 	namePattern, _ := args["name_pattern"].(string)
+	namePattern = strings.TrimSpace(namePattern)
 	kindFilter, _ := args["kind"].(string)
+	kindFilter = strings.TrimSpace(kindFilter)
 	packageFilter, _ := args["package"].(string)
+	packageFilter = strings.TrimSpace(packageFilter)
 	fileFilter, _ := args["file_path_contains"].(string)
+	fileFilter = strings.TrimSpace(fileFilter)
 	exportedOnly, _ := args["exported_only"].(bool)
 
 	if namePattern != "" {
@@ -489,6 +697,42 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 	if v, ok := args["limit"].(float64); ok && v > 0 && v <= 500 {
 		limit = int(v)
 	}
+
+	whereClause := " WHERE e.workspace_id = $1 AND e.kind != 'external'"
+	dbArgs := []interface{}{workspaceID}
+	argPos := 2
+
+	if exactName != "" {
+		whereClause += fmt.Sprintf(" AND (e.name = $%d OR e.name ILIKE $%d OR e.name ILIKE '%%.' || $%d)", argPos, argPos, argPos)
+		dbArgs = append(dbArgs, exactName)
+		argPos++
+	}
+	if namePattern != "" {
+		whereClause += fmt.Sprintf(" AND e.name ~ $%d", argPos)
+		dbArgs = append(dbArgs, namePattern)
+		argPos++
+	}
+	if kindFilter != "" {
+		whereClause += fmt.Sprintf(" AND e.kind = $%d", argPos)
+		dbArgs = append(dbArgs, kindFilter)
+		argPos++
+	}
+	if packageFilter != "" {
+		whereClause += fmt.Sprintf(" AND e.package LIKE '%%' || $%d || '%%'", argPos)
+		dbArgs = append(dbArgs, packageFilter)
+		argPos++
+	}
+	if fileFilter != "" {
+		whereClause += fmt.Sprintf(" AND e.file_path LIKE '%%' || $%d || '%%'", argPos)
+		dbArgs = append(dbArgs, fileFilter)
+		argPos++
+	}
+	if exportedOnly {
+		whereClause += " AND e.is_exported = true"
+	}
+
+	var totalCount int
+	_ = s.store.Pool().QueryRow(ctx, "SELECT COUNT(*)::int FROM entities e"+whereClause, dbArgs...).Scan(&totalCount)
 
 	q := `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
@@ -504,39 +748,10 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 		       WHERE workspace_id = $1
 		       GROUP BY to_entity_id
 		  ) inbound ON inbound.to_entity_id = e.id
-		 WHERE e.workspace_id = $1
-		   AND e.kind != 'external'
-	`
-	dbArgs := []interface{}{workspaceID}
-	argPos := 2
+	` + whereClause + fmt.Sprintf(" ORDER BY inbound_edges DESC, e.name LIMIT $%d", argPos)
+	queryArgs := append(append([]interface{}{}, dbArgs...), limit)
 
-	if namePattern != "" {
-		q += fmt.Sprintf(" AND e.name ~ $%d", argPos)
-		dbArgs = append(dbArgs, namePattern)
-		argPos++
-	}
-	if kindFilter != "" {
-		q += fmt.Sprintf(" AND e.kind = $%d", argPos)
-		dbArgs = append(dbArgs, kindFilter)
-		argPos++
-	}
-	if packageFilter != "" {
-		q += fmt.Sprintf(" AND e.package LIKE '%%' || $%d || '%%'", argPos)
-		dbArgs = append(dbArgs, packageFilter)
-		argPos++
-	}
-	if fileFilter != "" {
-		q += fmt.Sprintf(" AND e.file_path LIKE '%%' || $%d || '%%'", argPos)
-		dbArgs = append(dbArgs, fileFilter)
-		argPos++
-	}
-	if exportedOnly {
-		q += " AND e.is_exported = true"
-	}
-	q += fmt.Sprintf(" ORDER BY inbound_edges DESC, e.name LIMIT $%d", argPos)
-	dbArgs = append(dbArgs, limit)
-
-	rows, err := s.store.Pool().Query(context.Background(), q, dbArgs...)
+	rows, err := s.store.Pool().Query(ctx, q, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query entities: %w", err)
 	}
@@ -565,22 +780,61 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 		); err != nil {
 			continue
 		}
+		r.File = sanitizeMCPFilePath(r.File)
 		results = append(results, r)
+	}
+
+	if totalCount < len(results) {
+		totalCount = len(results)
+	}
+
+	hasFilter := exactName != "" || namePattern != "" || kindFilter != "" || packageFilter != "" || fileFilter != ""
+	filtersMap := map[string]any{
+		"name":               exactName,
+		"name_pattern":       namePattern,
+		"kind":               kindFilter,
+		"package":            packageFilter,
+		"file_path_contains": fileFilter,
+		"exported_only":      exportedOnly,
+	}
+
+	if len(results) == 0 && hasFilter {
+		filterDesc := exactName
+		if filterDesc == "" {
+			filterDesc = namePattern
+		}
+		if filterDesc == "" {
+			filterDesc = packageFilter
+		}
+		return map[string]interface{}{
+			"tenant_id":      tenantID.String(),
+			"workspace_id":   workspaceID.String(),
+			"workspace_name": workspaceName,
+			"status":         "not_found",
+			"not_found":      true,
+			"filters":        filtersMap,
+			"count":          0,
+			"total_count":    0,
+			"truncated":      false,
+			"entities":       []entityRow{},
+			"results":        []entityRow{},
+			"limit_used":     limit,
+			"hint":           fmt.Sprintf("no symbol matching %q found in workspace %s", filterDesc, workspaceName),
+		}, nil
 	}
 
 	return map[string]interface{}{
 		"tenant_id":      tenantID.String(),
 		"workspace_id":   workspaceID.String(),
 		"workspace_name": workspaceName,
-		"filters": map[string]any{
-			"name_pattern":       namePattern,
-			"kind":               kindFilter,
-			"package":            packageFilter,
-			"file_path_contains": fileFilter,
-			"exported_only":      exportedOnly,
-		},
-		"count":      len(results),
-		"results":    results,
-		"limit_used": limit,
+		"status":         "ok",
+		"not_found":      false,
+		"filters":        filtersMap,
+		"count":          len(results),
+		"total_count":    totalCount,
+		"truncated":      totalCount > len(results),
+		"entities":       results,
+		"results":        results,
+		"limit_used":     limit,
 	}, nil
 }
