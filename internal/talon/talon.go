@@ -194,12 +194,24 @@ func CompileContract(
 			ORDER BY inbound DESC, e.name ASC
 			LIMIT 10
 		`, workspaceID)
+<<<<<<< HEAD
 		if err != nil { return nil, fmt.Errorf("query workspace top hubs: %w", err) }
 		for hRows.Next() {
 			var h HubSummary
 			if err := hRows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.FilePath, &h.InboundEdges); err != nil {
 				hRows.Close()
 				return nil, fmt.Errorf("scan workspace top hub: %w", err)
+=======
+		if err == nil {
+			for hRows.Next() {
+				var h HubSummary
+				if hRows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.FilePath, &h.InboundEdges) == nil {
+					if idx := strings.Index(h.FilePath, "/garuda/"); idx >= 0 {
+						h.FilePath = h.FilePath[idx+len("/garuda/"):]
+					}
+					c.TopHubs = append(c.TopHubs, h)
+				}
+>>>>>>> ef749a1 (feat(v1.9.6): MCP hardening + read-only enforcement + cross-tool consistency)
 			}
 			c.TopHubs = append(c.TopHubs, h)
 		}
@@ -207,12 +219,16 @@ func CompileContract(
 		hRows.Close()
 	}
 
+	supersededPolicies := policy.LoadSupersededPolicyIDs(ctx, pool, tenantID)
 	seenPolicy := make(map[string]bool)
 	if policyDir != "" {
 		parsed, err := policy.ParseDirectory(policyDir)
 		if err != nil { return nil, fmt.Errorf("parse workspace policy directory: %w", err) }
 		for _, pp := range parsed {
 				p := pp.Policy
+				if supersededPolicies[strings.ToLower(strings.TrimSpace(p.ID))] {
+					continue
+				}
 				var preds []string
 				for _, w := range p.When {
 					preds = append(preds, w.Type)
@@ -614,13 +630,32 @@ func BuildPreEditBriefing(
 		}
 	}
 
-	targetLower := strings.ToLower(target)
+	targetLower := strings.ToLower(strings.TrimSpace(target))
+	matchedPkgs := make(map[string]bool)
+	matchedNames := make(map[string]bool)
+	matchedNames[targetLower] = true
+	for _, me := range brief.MatchedEntities {
+		if me.Name != "" {
+			matchedNames[strings.ToLower(me.Name)] = true
+		}
+		if me.Package != "" {
+			matchedPkgs[strings.ToLower(me.Package)] = true
+		}
+	}
+<<<<<<< HEAD
+=======
+	brief.ApplicableADRs = make([]ADRGuardrail, 0)
 	for _, g := range contract.ADRGuardrails {
-		if strings.Contains(strings.ToLower(g.Subject), targetLower) ||
-			strings.Contains(strings.ToLower(g.Object), targetLower) {
+		subjLower := strings.ToLower(g.Subject)
+		objLower := strings.ToLower(g.Object)
+		if matchedNames[subjLower] || matchedNames[objLower] ||
+			strings.Contains(subjLower, targetLower) || strings.Contains(objLower, targetLower) ||
+			matchedPkgs[subjLower] || matchedPkgs[objLower] {
 			brief.ApplicableADRs = append(brief.ApplicableADRs, g)
 		}
 	}
+
+>>>>>>> ef749a1 (feat(v1.9.6): MCP hardening + read-only enforcement + cross-tool consistency)
 	return brief, nil
 }
 

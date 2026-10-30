@@ -4,60 +4,57 @@
 <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#090B10"> <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes"> <link rel="manifest" href="/manifest.json">
-<link rel="icon" type="image/svg+xml" href="/icon.svg"> <title>Garuda — Architecture Guardrails &amp; Change Control</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg"> <title>Garuda — Epistemic Software Intelligence &amp; Active Governance</title>
 <link rel="stylesheet" href="/static/dashboard.css?v=1.9.6"> </head>
 <body>
 <div class="app"> 
     <aside class="sidebar"> <div class="brand">
             <div class="brand-left"> <div class="brand-mark">G</div>
                 <div class="brand-text"> <div class="brand-name">GARUDA</div>
-                    <div class="brand-subtitle">Software Intelligence v1.9.6</div></div> </div>
+                    <div class="brand-subtitle">Software Intelligence v1.9.4</div></div> </div>
             <button class="footer-link-btn" onclick="toggleTheme()" id="theme-toggle-btn" title="Switch Light / Graphite Dark Mode">☀</button> </div>
         <div class="workspace-switcher-box"> <div class="workspace-mini">
                 <div class="workspace-mini-header"> <div class="workspace-mini-name" id="sidebar-workspace">{{ .WorkspaceName }}</div>
-                     </div>
+                    <span class="badge-pill success">synced</span> </div>
                 <div class="workspace-mini-meta" id="sidebar-meta">Loading workspace index...</div> <select id="workspace-picker" class="workspace-picker" onchange="switchWorkspace(this.value)" aria-label="Switch workspace"></select>
             </div></div> <button class="cmd-trigger-btn" onclick="openCommandPalette()">
             <span>⌕ Jump or run command…</span> <span class="kbd-chip">⌘K</span>
-        </button> <nav class="sidebar-nav" aria-label="Primary navigation">
-            <div class="nav-group-label">Workspace</div>
-            <button class="nav-btn active" data-surface="workspace" onclick="showView('workspace')"><span class="nav-btn-left"><span class="nav-num">01</span><span>Overview</span></span></button>
-            <details class="nav-cluster" data-nav-group="explore">
-                <summary><span>Explore</span><span class="nav-cluster-meta">02</span></summary>
-                <div class="nav-cluster-items">
-                    <button class="nav-btn" data-surface="search" onclick="showView('search')"><span class="nav-btn-left"><span class="nav-num">02</span><span>Symbol search</span></span></button>
-                    <button class="nav-btn" data-surface="graph" onclick="showView('graph')"><span class="nav-btn-left"><span class="nav-num">03</span><span>Architecture map</span></span></button>
-                </div>
-            </details>
-            <details class="nav-cluster" data-nav-group="enforce">
-                <summary><span>Enforce</span><span class="nav-cluster-meta">03</span></summary>
-                <div class="nav-cluster-items">
-                    <button class="nav-btn" data-surface="docsgraph" onclick="showView('docsgraph')"><span class="nav-btn-left"><span class="nav-num">04</span><span>Docs &amp; rules</span></span></button>
-                    <button class="nav-btn" data-surface="talon" onclick="showView('talon')"><span class="nav-btn-left"><span class="nav-num">05</span><span>Talon &amp; risk</span></span></button>
-                    <button class="nav-btn" data-surface="review" onclick="showView('review')"><span class="nav-btn-left"><span class="nav-num">06</span><span>Change review</span></span></button>
-                </div>
-            </details>
-            <details class="nav-cluster" data-nav-group="verify">
-                <summary><span>Verify</span><span class="nav-cluster-meta">04</span></summary>
-                <div class="nav-cluster-items">
-                    <button class="nav-btn" data-surface="governance" onclick="showView('governance')"><span class="nav-btn-left"><span class="nav-num">07</span><span>Evidence &amp; ledger</span></span></button>
-                    <button class="nav-btn" data-surface="agents" onclick="showView('agents')"><span class="nav-btn-left"><span class="nav-num">08</span><span>Agents &amp; sessions</span></span></button>
-                    <button class="nav-btn" data-surface="audit" onclick="showView('audit')"><span class="nav-btn-left"><span class="nav-num">09</span><span>Data &amp; logic audit</span></span></button>
-                    <button class="nav-btn" data-surface="decisions" onclick="showView('decisions')"><span class="nav-btn-left"><span class="nav-num">§</span><span>Decision lineage</span></span></button>
-                </div>
-            </details>
+        </button> <nav class="sidebar-nav" aria-label="Primary Working Surfaces">
+            <button class="nav-btn active" data-surface="workspace" onclick="showView('workspace')"> <span class="nav-btn-left"><span class="nav-num">01</span><span>Overview</span></span>
+                <span class="nav-badge" id="nav-badge-overview">Live</span> </button>
+            <button class="nav-btn" data-surface="search" onclick="showView('search')"> <span class="nav-btn-left"><span class="nav-num">02</span><span>Explore Index</span></span>
+                <span class="kbd-chip">/</span> </button>
+            <button class="nav-btn" data-surface="graph" onclick="showView('graph')"> <span class="nav-btn-left"><span class="nav-num">03</span><span>Architecture Map</span></span>
+                <span class="nav-badge" id="nav-badge-packages">—</span> </button>
+            <button class="nav-btn" data-surface="docsgraph" onclick="showView('docsgraph')"> <span class="nav-btn-left"><span class="nav-num">04</span><span>Docs &amp; Rules Graph</span></span>
+                <span class="nav-badge" id="nav-badge-docsgraph">New</span> </button>
+            <button class="nav-btn" data-surface="talon" onclick="showView('talon')"> <span class="nav-btn-left"><span class="nav-num">05</span><span>Talon &amp; Risk Hub</span></span>
+                <span class="nav-badge" id="nav-badge-talon">Guard</span> </button>
+            <button class="nav-btn" data-surface="review" onclick="showView('review')"> <span class="nav-btn-left"><span class="nav-num">06</span><span>Change Review</span></span>
+                <span class="nav-badge" id="nav-badge-review">Gate</span> </button>
+            <button class="nav-btn" data-surface="governance" onclick="showView('governance')"> <span class="nav-btn-left"><span class="nav-num">07</span><span>Evidence &amp; Ledger</span></span>
+                <span class="nav-badge" id="nav-badge-ledger">#1</span> </button>
+            <button class="nav-btn" data-surface="agents" onclick="showView('agents')"> <span class="nav-btn-left"><span class="nav-num">08</span><span>Agents &amp; Sessions</span></span>
+                <span class="nav-badge" id="nav-badge-agents">MCP</span> </button>
+            <button class="nav-btn" data-surface="audit" onclick="showView('audit')"> <span class="nav-btn-left"><span class="nav-num">09</span><span>Data &amp; Logic Audit</span></span>
+                <span class="nav-badge" id="nav-badge-audit">10x Drift</span> </button>
+            <button class="nav-btn" data-surface="decisions" onclick="showView('decisions')"> <span class="nav-btn-left"><span class="nav-num">§</span><span>Decision Lineage</span></span>
+                <span class="nav-badge" id="nav-badge-decisions">3</span> </button>
         </nav> <div class="sidebar-footer">
+<<<<<<< HEAD
             <div class="trust-mini"> <span class="trust-dot" style="background:var(--muted);box-shadow:none;"></span>
                 <span id="sidebar-trust-label">Ledger status follows workspace data</span> </div>
+=======
+            <div class="trust-mini"> <span class="trust-dot"></span>
+                <span id="sidebar-trust-label">RFC 6962 Ledger Verified</span> </div>
+>>>>>>> ef749a1 (feat(v1.9.6): MCP hardening + read-only enforcement + cross-tool consistency)
             <div class="sidebar-footer-actions"> <button type="button" class="footer-link-btn" onclick="openAPISpecModal()">API Spec</button>
                 <button type="button" class="footer-link-btn" onclick="openContractModal()">Talon Contract</button> <form method="POST" action="/logout" style="margin:0;">
                     <button type="submit" class="footer-link-btn">Sign out</button> </form>
             </div></div> </aside>
          
-    <button type="button" class="sidebar-scrim" id="sidebar-scrim" aria-label="Close navigation" onclick="toggleMobileNav(false)"></button>
     <section class="main">
         <header class="topbar">
-            <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Open navigation" aria-expanded="false" onclick="toggleMobileNav()">☰</button>
             <div class="topbar-breadcrumbs"> <span class="crumb-root" style="cursor:pointer;" onclick="showView('workspace')">Workspace</span>
                 <span class="crumb-sep">/</span> <span class="crumb-ws" id="workspace-breadcrumb">{{ .WorkspaceName }}</span>
                 <span class="crumb-sep">/</span> <span class="crumb-surface" id="topbar-surface-name">01 — Overview</span>
@@ -65,8 +62,8 @@
                 <span class="search-icon">⌕</span> <input id="global-search" class="search-input" placeholder="Search symbols, ADRs, policies, risk hubs, or press ⌘K..." autocomplete="off">
                 <span class="search-shortcut" style="cursor:pointer;" onclick="openCommandPalette()">⌘K</span> </div>
             <div class="topbar-right"> <div class="live-pill" id="honest-system-pill" style="cursor:pointer;" onclick="showView('talon')" title="Click to inspect Talon &amp; Risk Hub">
-                    <span class="live-dot" id="honest-system-dot"></span> <span id="honest-system-text">Connecting to workspace…</span>
-                </div> <button class="btn-secondary" onclick="openIngestDocModal()">+ Add document</button>
+                    <span class="live-dot" id="honest-system-dot"></span> <span id="honest-system-text">Static AST synced</span>
+                </div> <button class="btn-primary" style="height:30px; font-size:11.5px;" onclick="openIngestRepoModal()">🔗 + Index Repo URL</button> <button class="btn-secondary" onclick="openIngestDocModal()">+ Ingest Doc / Rule</button>
                 <button class="refresh-button" onclick="refreshAllWithToast()">↻ Refresh</button> </div>
         </header> <nav class="tab-strip" role="tablist">
             <button class="tab active" data-tab="workspace" role="tab" aria-selected="true" onclick="showView('workspace')">01 Overview</button> <button class="tab" data-tab="search" role="tab" aria-selected="false" onclick="showView('search')">02 Explore</button>
@@ -82,10 +79,11 @@
                     <span id="overview-updated-at">Syncing state…</span> </div>
                 <div class="card" style="padding:20px 24px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap;">
                     <div style="flex:1; min-width:280px;"> <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap;">
-                            <h1 class="hero-title" style="font-size:22px;">System Integrity &amp; Architectural Pulse</h1> <span class="badge-pill info" id="policy-final-decision-badge">Checking…</span>
-                            <span class="merkle-chip" id="policy-latest-anchor">No anchor yet</span> </div>
+                            <h1 class="hero-title" style="font-size:22px;">System Integrity &amp; Architectural Pulse</h1> <span class="badge-pill success" id="policy-final-decision-badge">ALLOW</span>
+                            <span class="merkle-chip" id="policy-latest-anchor">block #1</span> </div>
                         <div class="hero-subtitle" id="overview-narrative">Garuda connects your architecture docs (ADRs &amp; specs), declarative policies, compiler ASTs, and active AI coding agent guardrails (Talon) into one verifiable graph.</div></div> <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                        <button class="btn-primary" onclick="showView('review')">Review changes</button>
+                        <button class="btn-secondary" onclick="showView('docsgraph')">✦ Docs &amp; Rulebook</button> <button class="btn-secondary" onclick="showView('talon')">🛡️ Talon &amp; Risk Hub</button>
+                        <button class="btn-secondary" onclick="showView('audit')">⚖️ Data &amp; Logic Audit</button> <button class="btn-primary" onclick="showView('review')">Change Review →</button>
                     </div></div> <div class="overview-metrics-grid">
                     <div class="card" style="padding:16px 20px; cursor:pointer; display:flex; flex-direction:column; justify-content:space-between; gap:12px;" onclick="showView('graph')">
                         <div class="metric-header"> <span>01 · Indexed Topology</span>
@@ -106,8 +104,8 @@
                             <span><strong class="mono" id="stat-contradicted">0</strong> contradicted · <strong class="mono" id="stat-drift-count">0</strong> drift</span> </div></div>
                     <div class="card" style="padding:16px 20px; cursor:pointer; display:flex; flex-direction:column; justify-content:space-between; gap:12px;" onclick="showView('governance')">
                         <div class="metric-header"> <span>03 · RFC 6962 Provenance Ledger</span>
-                            <span class="mono" id="overview-merkle-short">No anchor yet</span> </div>
-                        <div style="display:flex; align-items:baseline; gap:8px;"> <span class="metric-hero-value" id="overview-block-height">—</span>
+                            <span class="mono" id="overview-merkle-short">Genesis verified</span> </div>
+                        <div style="display:flex; align-items:baseline; gap:8px;"> <span class="metric-hero-value" id="overview-block-height">#1</span>
                             <span style="font-size:12px; color:var(--text-muted);"><span id="stat-idempotency">0</span> safeguarded txns</span> </div>
                         <div class="pulse-bar-track"> <div style="background:var(--accent-emerald); width:100%;"></div></div>
                         <div class="metric-meta-row"> <span class="mono"><strong id="policy-block-count">0</strong> block · <strong id="policy-review-count">0</strong> review · <strong id="policy-warn-count">0</strong> warn · <strong id="policy-allow-count">0</strong> allow</span>
@@ -228,7 +226,7 @@
                                         <div class="nb-tile-label" id="nb-policy-title">Policy &amp; Evidence</div> <div class="nb-tile-sub" id="nb-policy-sub">Click to review governance</div></div>
                                 </div></div> <div class="neighborhood-caption" id="graph-description" style="margin-top:8px; font-size:11.5px; color:var(--text-muted); text-align:center;">Focused architectural neighborhood · Select any node below to update inspector</div></div>
                     </div> </details>
-                <div class="card" style="display:grid; grid-template-columns:minmax(0, 1fr) 320px; gap:12px; min-height:74vh; overflow:hidden;" id="graph-canvas-stage">
+                <div class="card" id="graph-canvas-stage" style="display:grid; grid-template-columns:minmax(0, 1fr) 320px; gap:12px; min-height:620px; overflow:hidden;">
                     <div class="graph-wrap" id="graph-wrap"> <svg id="graph"></svg>
                         <div id="graph-empty" class="graph-empty" style="display:none;">No architecture data available for this filter.</div> <div class="graph-controls">
                             <button class="graph-control" onclick="toggleFullscreen()" title="Toggle Fullscreen">⛶</button> <button class="graph-control" onclick="zoomGraph(1.25)" title="Zoom in">+</button>
@@ -500,7 +498,25 @@
                     <span>08 · AGENTS, SESSIONS &amp; COLLABORATION</span> </div>
                 <div class="hero"> <div>
                         <h1 class="hero-title">Agent Activity &amp; Session Timeline</h1> <div class="hero-subtitle">MCP client sessions, tool invocations, checkpoints, and multi-agent handoffs in workspace {{ .WorkspaceName }}.</div></div>
-                    <button class="btn-secondary" onclick="showView('talon')">Open Talon Harness →</button> </div>
+                    <div style="display:flex; gap:8px;"> <button class="btn-secondary" onclick="triggerAgentSwarmBurst()">⚡ Simulate Agent Swarm Burst</button> <button class="btn-primary" onclick="showView('talon')">Open Talon Harness →</button> </div> </div>
+<div class="agent-neural-stage" id="agent-neural-stage">
+    <div class="neural-overlay-bar">
+        <div style="display:flex; align-items:center; gap:8px;">
+            <span class="badge-pill success" style="background:rgba(16,185,129,0.18); color:#34D399; border-color:rgba(52,211,153,0.35);">● LIVE AGENT ↔ DOCS ↔ CODE NEURAL MESH</span>
+            <span style="font-size:11.5px; color:#94A3B8;">Real-time MCP tool telemetry connecting AI coding agents, ADRs/Policies &amp; AST hubs</span>
+        </div>
+        <div style="display:flex; gap:10px; font-size:11px; color:#CBD5E1; background:rgba(15,23,42,0.75); padding:4px 10px; border-radius:999px; border:1px solid rgba(255,255,255,0.1);">
+            <span><span style="color:#818CF8;">●</span> AI Agents</span>
+            <span><span style="color:#34D399;">●</span> ADRs &amp; Contracts</span>
+            <span><span style="color:#FBBF24;">●</span> AST Code Hubs</span>
+        </div>
+    </div>
+    <svg id="agents-neural-svg"></svg>
+    <div class="neural-ticker">
+        <span id="agents-neural-ticker-text">🦅 [MCP STREAM] Claude Code → garuda.talon_pre_edit(AppendLeafAndSealTx) → Verified ADR-0002 &amp; Policy Set (ALLOW · 14ms)</span>
+        <span class="mono" style="color:#34D399;" id="agents-neural-ops-rate">42 ops/min · 0 violations</span>
+    </div>
+</div>
                 <div class="two-column">
                     <div class="card">
                         <div class="sub-header"> <div>
@@ -564,7 +580,7 @@
             <span class="kbd-chip" style="cursor:pointer;" onclick="closeCommandPalette()">ESC</span> </div>
         <div class="cmdk-list" id="cmdk-list"></div> <div class="cmdk-footer">
             <span><span class="kbd-chip">↑</span> <span class="kbd-chip">↓</span> navigate</span> <span><span class="kbd-chip">↵</span> open</span>
-            <span><span class="kbd-chip">esc</span> close</span> <span style="margin-left:auto;">Garuda Command Instrument v1.9.6</span>
+            <span><span class="kbd-chip">esc</span> close</span> <span style="margin-left:auto;">Garuda Command Instrument v1.9.4</span>
         </div></div> </div>
 <div id="ingest-doc-modal" class="modal-backdrop" onclick="if(event.target===this) closeIngestDocModal()"> <div class="modal-card" role="dialog" aria-modal="true" aria-label="Ingest Architectural Document">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;"> <div>
@@ -588,7 +604,54 @@
             <textarea id="ingest-doc-content" class="form-textarea" placeholder="# ADR-0004: Zero-Trust Agent Execution Gate&#10;&#10;## Decision&#10;- `RunGuard` must call `CompileContract` before evaluating agent diffs.&#10;- `HandleDashboard` must not call `DirectBankAPI` directly."></textarea> </div>
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;"> <button type="button" class="btn-secondary" onclick="closeIngestDocModal()">Cancel</button>
             <button type="button" class="btn-primary" onclick="submitIngestDoc()">Ingest &amp; Connect to Code Graph →</button> </div></div>
-</div> <div id="info-modal" class="modal-backdrop" onclick="if(event.target===this) closeInfoModal()">
+</div> 
+<div id="ingest-repo-modal" class="modal-backdrop" onclick="if(event.target===this) closeIngestRepoModal()">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Index Repository from Git URL">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+                <div class="wb-pane-kicker">ZERO-CLI REPOSITORY ONBOARDING</div>
+                <h2 style="margin:2px 0 0; font-size:17px; font-weight:700;">Index Repository via GitHub URL or Local Path</h2>
+            </div>
+            <button class="drawer-close" onclick="closeIngestRepoModal()">×</button>
+        </div>
+        <p style="color:var(--text-2); font-size:12.5px; margin:0 0 12px;">
+            Paste any GitHub / Git repository link (e.g., <code>https://github.com/myshra777-ai/garuda</code>) or local directory path. Garuda clones the repo, extracts its AST call graph, evaluates ADRs &amp; YAML policies, and seals an RFC 6962 receipt automatically.
+        </p>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">
+            <span style="font-size:11px; color:var(--muted); align-self:center;">Quick Presets:</span>
+            <button type="button" class="hint" onclick="fillRepoPreset('https://github.com/myshra777-ai/garuda', '')">myshra777-ai/garuda</button>
+            <button type="button" class="hint" onclick="fillRepoPreset('https://github.com/go-chi/chi', '')">go-chi/chi</button>
+            <button type="button" class="hint" onclick="fillRepoPreset('https://github.com/spf13/cobra', '')">spf13/cobra</button>
+        </div>
+        <div class="form-field">
+            <label class="form-label" for="ingest-repo-url">Repository Git URL or Local Path</label>
+            <input id="ingest-repo-url" class="form-input mono" value="https://github.com/myshra777-ai/garuda" placeholder="https://github.com/owner/repository or ~/path/to/repo">
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div class="form-field">
+                <label class="form-label" for="ingest-repo-workspace">Target Workspace</label>
+                <input id="ingest-repo-workspace" class="form-input mono" value="{{ .WorkspaceName }}" placeholder="default">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="ingest-repo-branch">Branch / Tag (Optional)</label>
+                <input id="ingest-repo-branch" class="form-input mono" placeholder="main (default HEAD)">
+            </div>
+        </div>
+        <div id="ingest-repo-progress" style="display:none; margin:12px 0; padding:12px; border-radius:8px; background:var(--bg-primary); border:1px solid var(--border-subtle);">
+            <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; margin-bottom:6px;">
+                <span id="ingest-repo-step-text">1/3 · Cloning &amp; resolving repository tree…</span>
+                <span class="mono" id="ingest-repo-pct">35%</span>
+            </div>
+            <div class="pulse-bar-track"><div id="ingest-repo-bar" style="background:var(--accent-emerald); width:35%; transition:width 260ms ease;"></div></div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+            <button type="button" class="btn-secondary" onclick="closeIngestRepoModal()">Cancel</button>
+            <button type="button" class="btn-primary" id="ingest-repo-submit-btn" onclick="submitIngestRepo()">🚀 Clone &amp; Index into Garuda →</button>
+        </div>
+    </div>
+</div>
+
+<div id="info-modal" class="modal-backdrop" onclick="if(event.target===this) closeInfoModal()">
     <div class="modal-card" role="dialog" aria-modal="true"> <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <div> <div class="wb-pane-kicker" id="info-modal-kicker">GARUDA CONTRACT</div>
                 <h2 style="margin:2px 0 0; font-size:17px; font-weight:700;" id="info-modal-title">Active Contract</h2> </div>

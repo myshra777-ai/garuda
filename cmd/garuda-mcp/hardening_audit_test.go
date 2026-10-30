@@ -279,3 +279,42 @@ func TestBug19_PolicyEvaluateDeterminism(t *testing.T) {
 		t.Errorf("expected deterministic criticality_tiers output")
 	}
 }
+
+func TestClaudeAudit_DocsGraphCountsAndPathSanitizer(t *testing.T) {
+	srv := &MCPServer{clientName: "claude-blind-audit"}
+	res, err := srv.handleDocsGraph(map[string]interface{}{"workspace": "default"})
+	if err != nil {
+		t.Fatalf("handleDocsGraph failed: %v", err)
+	}
+	m := res.(map[string]interface{})
+	totalDocs, _ := m["total_documents"].(int)
+	byType, _ := m["by_doc_type"].(map[string]int)
+	sumByType := byType["ADR"] + byType["SPEC"] + byType["POLICY"]
+	if sumByType != totalDocs {
+		t.Errorf("expected sum(by_doc_type)=%d to equal total_documents=%d", sumByType, totalDocs)
+	}
+
+	raw := `{"file": "/home/rohit/garuda/internal/api/handler.go", "other": "/home/rohit/garuda-validation/go/chi/mux.go"}`
+	sanitized := SanitizeGlobalJSONString(raw)
+	if strings.Contains(sanitized, "/home/rohit/") {
+		t.Errorf("expected SanitizeGlobalJSONString to strip /home/rohit/, got %s", sanitized)
+	}
+}
+
+func TestClaudeAudit_NewToolsWorkCleanly(t *testing.T) {
+	_ = os.Unsetenv("GARUDA_MCP_READ_ONLY")
+	srv := &MCPServer{clientName: "claude-blind-audit"}
+
+	if _, err := srv.handleVerifyReceipt(map[string]interface{}{"workspace": "default"}); err != nil {
+		t.Errorf("handleVerifyReceipt failed: %v", err)
+	}
+	if _, err := srv.handleDiffSnapshots(map[string]interface{}{"workspace": "default"}); err != nil {
+		t.Errorf("handleDiffSnapshots failed: %v", err)
+	}
+	if _, err := srv.handleAuditExport(map[string]interface{}{"workspace": "default", "format": "csv"}); err != nil {
+		t.Errorf("handleAuditExport failed: %v", err)
+	}
+	if _, err := srv.handleCreateWorkspace(map[string]interface{}{"workspace": "audit-sandbox"}); err != nil {
+		t.Errorf("handleCreateWorkspace failed: %v", err)
+	}
+}

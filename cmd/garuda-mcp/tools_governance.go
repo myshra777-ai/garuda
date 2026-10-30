@@ -149,12 +149,16 @@ func (s *MCPServer) handlePolicyList(args map[string]interface{}) (interface{}, 
 		policies = append(policies, p)
 	}
 
+	polVer, activeIDs, supersededIDs := ComputePolicySetVersion(context.Background(), s.store.Pool(), tenantID, "")
 	return map[string]interface{}{
-		"tenant_id":        tenantID.String(),
-		"count":            len(policies),
-		"active_count":     activeCount,
-		"superseded_count": supersededCount,
-		"policies":         policies,
+		"tenant_id":             tenantID.String(),
+		"policy_set_version":    polVer,
+		"active_policy_ids":     activeIDs,
+		"superseded_policy_ids": supersededIDs,
+		"count":                 len(policies),
+		"active_count":          activeCount,
+		"superseded_count":      supersededCount,
+		"policies":              policies,
 	}, nil
 }
 
@@ -266,6 +270,8 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 	verdict := computeVerdict(stats)
 	verdict.BlockedBy = blockedBy
 
+	stats.UndocumentedCode = counts.CodeToDocDrift
+	snapshot := ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, wsName)
 	return map[string]interface{}{
 		"tenant_id":              tenantID.String(),
 		"workspace":              wsName,
@@ -273,6 +279,8 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 		"decision":               verdict.State,
 		"blocked_by":             blockedBy,
 		"active_policies":        policyCount,
+		"policy_set_version":     snapshot["policy_set_version"],
+		"snapshot_receipt":       snapshot,
 		"entity_count":           counts.Entities,
 		"exported_entity_count":  counts.ExportedEntities,
 		"external_stubs_count":   counts.ExternalStubs,
@@ -284,8 +292,14 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 			"contradicted":        counts.ContradictedClaims,
 			"open_contradictions": counts.OpenContradictions,
 		},
-		"documentation_health":   stats,
-		"drift_finding_count":    len(drift),
+		"documentation_health": stats,
+		"drift_finding_count":  counts.TotalDriftFindings,
+		"drift_summary": map[string]int{
+			"doc_to_code":           counts.DocToCodeDrift,
+			"code_to_doc":           counts.CodeToDocDrift,
+			"total_drift_findings":  counts.TotalDriftFindings,
+			"undocumented_entities": counts.CodeToDocDrift,
+		},
 		"drift_findings_preview": previewDrift(drift, 10),
 		"gate_verdict":           verdict,
 	}, nil
@@ -419,6 +433,9 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 		for dRows.Next() {
 			var r docDriftRow
 			if dRows.Scan(&r.Document, &r.Section, &r.Subject, &r.Modality, &r.Predicate, &r.Object, &r.Status, &r.Reason) == nil {
+				if strings.EqualFold(r.Status, "UNVERIFIED") {
+					r.Reason = "AWAITING_RUNTIME_EVIDENCE: Static AST resolved; awaiting runtime execution trace"
+				}
 				docToCode = append(docToCode, r)
 			}
 		}
@@ -497,6 +514,7 @@ func (s *MCPServer) handleQueryClaims(args map[string]interface{}) (interface{},
 		Predicate     string `json:"predicate"`
 		Object        string `json:"object"`
 		Status        string `json:"status"`
+		StatusReason  string `json:"status_reason,omitempty"`
 		Contradiction string `json:"contradiction_reason,omitempty"`
 	}
 
@@ -505,6 +523,15 @@ func (s *MCPServer) handleQueryClaims(args map[string]interface{}) (interface{},
 		var v ClaimView
 		if err := rows.Scan(&v.Document, &v.Section, &v.Subject, &v.Modality,
 			&v.Predicate, &v.Object, &v.Status, &v.Contradiction); err == nil {
+			if strings.EqualFold(v.Status, "UNVERIFIED") {
+				v.StatusReason = "AWAITING_RUNTIME_EVIDENCE: Static symbol resolved; no runtime execution trace recorded yet"
+				v.Contradiction = ""
+			} else if strings.EqualFold(v.Status, "SUPPORTED") {
+				v.StatusReason = "VERIFIED_BY_STATIC_AND_RUNTIME_EVIDENCE"
+				v.Contradiction = ""
+			} else {
+				v.StatusReason = v.Contradiction
+			}
 			results = append(results, v)
 		}
 	}
@@ -642,15 +669,18 @@ func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface
 		return ri < rj
 	})
 
+	snapshot := ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, workspaceName)
 	return map[string]interface{}{
-		"tenant_id":      tenantID.String(),
-		"workspace":      workspaceName,
-		"workspace_id":   workspaceID.String(),
-		"policy_dir":     "policies",
-		"dry_run":        true,
-		"final_decision": string(result.FinalDecision),
-		"evaluations":    evaluations,
-		"summary":        result.Summary,
+		"tenant_id":          tenantID.String(),
+		"workspace":          workspaceName,
+		"workspace_id":       workspaceID.String(),
+		"policy_dir":         "policies",
+		"policy_set_version": snapshot["policy_set_version"],
+		"snapshot_receipt":   snapshot,
+		"dry_run":            true,
+		"final_decision":     string(result.FinalDecision),
+		"evaluations":        evaluations,
+		"summary":            result.Summary,
 		"note": "Dry-run only. No evaluation was persisted or anchored. " +
 			"Run 'garuda policy evaluate <dir> --workspace " + workspaceName +
 			"' from the CLI to record and anchor these decisions.",
@@ -802,7 +832,7 @@ func (s *MCPServer) handleVerifyEvidence(args map[string]interface{}) (interface
 
 // handleBlastRadius computes the blast radius of a symbol change.
 func (s *MCPServer) handleBlastRadius(args map[string]interface{}) (interface{}, error) {
-	_, workspaceID, err := s.resolveTenantAndWorkspace(args)
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
@@ -864,7 +894,36 @@ func (s *MCPServer) handleBlastRadius(args map[string]interface{}) (interface{},
 	}
 	result := impact.ComputeBlastRadius(idx, entityID, cfg)
 
-	all := make([]impact.ImpactedEntity, 0, result.TotalAffected)
+	includeFixtures := IncludeFixturesRequested(args)
+	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
+	snapshot := ComputeSnapshotReceipt(context.Background(), s.store.Pool(), tenantID, workspaceID, wsName)
+	canonCommit, _ := snapshot["commit_short"].(string)
+
+	// Batch-lookup file_path and line_start from entities for all impacted IDs
+	fileMap := make(map[string]string)
+	lineMap := make(map[string]int)
+	if s.store != nil && s.store.Pool() != nil {
+		mRows, mErr := s.store.Pool().Query(context.Background(), `
+			SELECT id::text, COALESCE(file_path, ''), COALESCE(line_start, 0)
+			FROM entities WHERE workspace_id = $1
+		`, workspaceID)
+		if mErr == nil {
+			for mRows.Next() {
+				var idStr, fp string
+				var ln int
+				if mRows.Scan(&idStr, &fp, &ln) == nil {
+					fileMap[idStr] = sanitizeMCPFilePath(fp)
+					lineMap[idStr] = ln
+				}
+			}
+			mRows.Close()
+		}
+	}
+
+	all := make([]map[string]interface{}, 0, result.TotalAffected)
+	bySev := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+	fixturesExcluded := 0
+
 	for _, sev := range []impact.SeverityLevel{
 		impact.SeverityCritical,
 		impact.SeverityHigh,
@@ -873,20 +932,53 @@ func (s *MCPServer) handleBlastRadius(args map[string]interface{}) (interface{},
 	} {
 		list := result.BySeverity[sev]
 		impact.SortImpactedEntities(list)
-		all = append(all, list...)
+		for _, item := range list {
+			fp := sanitizeMCPFilePath(item.FilePath)
+			if fp == "" {
+				fp = fileMap[item.EntityID]
+			}
+			ln := lineMap[item.EntityID]
+			if !includeFixtures && (IsFixturePath(fp) || IsFixturePath(item.Package)) {
+				fixturesExcluded++
+				continue
+			}
+			bySev[string(sev)]++
+			snippet := ExtractSourceSnippet(fp, ln)
+			evList := make([]map[string]interface{}, 0, len(item.TraversalChain))
+			for _, hop := range item.TraversalChain {
+				evList = append(evList, map[string]interface{}{
+					"hop":             hop,
+					"source_file":     fp,
+					"line_start":      ln,
+					"commit_sha":      canonCommit,
+					"content_snippet": snippet,
+				})
+			}
+			all = append(all, map[string]interface{}{
+				"entity_id":       item.EntityID,
+				"name":            item.Name,
+				"kind":            item.Kind,
+				"package":         item.Package,
+				"file_path":       fp,
+				"line_start":      ln,
+				"content_snippet": snippet,
+				"severity":        string(item.Severity),
+				"hop_distance":    item.Depth,
+				"confidence":      item.CumulativeConf,
+				"path_evidence":   evList,
+			})
+		}
 	}
 
 	return map[string]interface{}{
-		"target_entity_id": entityID,
-		"target_found":     true,
-		"total_affected":   result.TotalAffected,
-		"by_severity": map[string]int{
-			"CRITICAL": len(result.BySeverity[impact.SeverityCritical]),
-			"HIGH":     len(result.BySeverity[impact.SeverityHigh]),
-			"MEDIUM":   len(result.BySeverity[impact.SeverityMedium]),
-			"LOW":      len(result.BySeverity[impact.SeverityLow]),
-		},
-		"impacted": all,
+		"target_entity_id":        entityID,
+		"target_found":            true,
+		"total_affected":          len(all),
+		"fixtures_excluded_count": fixturesExcluded,
+		"include_fixtures":        includeFixtures,
+		"snapshot_receipt":        snapshot,
+		"by_severity":             bySev,
+		"impacted":                all,
 	}, nil
 }
 

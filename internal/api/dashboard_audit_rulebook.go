@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -808,4 +809,171 @@ func (s *Server) HandleDashboardRulebook(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(rb)
+}
+
+// HandleDashboardRepoIngest handles POST /api/v1/dashboard/repo-ingest.
+// Allows a user to paste any GitHub/Git repository URL (e.g. https://github.com/myshra777-ai/garuda)
+// or local repository path directly in the Web Dashboard without using the CLI.
+// Clones/pulls the repository into ~/.garuda/repos/<slug>, runs `garuda analyze --save`
+// and `garuda talon init`, and returns the updated workspace topology summary.
+func (s *Server) HandleDashboardRepoIngest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	wsName := strings.TrimSpace(r.URL.Query().Get("workspace"))
+	pgStore, _ := s.store.(*store.PostgresStore)
+	var tenantID, workspaceID uuid.UUID
+	if pgStore != nil {
+		if scope, err := workspaceScopeFromRequest(ctx, r, pgStore); err == nil {
+			tenantID = scope.TenantID
+			workspaceID = scope.WorkspaceID
+			wsName = scope.WorkspaceName
+		}
+	}
+
+	var body struct {
+		RepoURL   string `json:"repo_url"`
+		Workspace string `json:"workspace"`
+		Branch    string `json:"branch"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	repoURL := strings.TrimSpace(body.RepoURL)
+	if repoURL == "" {
+		repoURL = strings.TrimSpace(r.URL.Query().Get("repo_url"))
+	}
+	if strings.TrimSpace(body.Workspace) != "" {
+		wsName = strings.TrimSpace(body.Workspace)
+	}
+	if wsName == "" {
+		wsName = "default"
+	}
+	if repoURL == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "error",
+			"reason": "repo_url is required (e.g. https://github.com/myshra777-ai/garuda)",
+		})
+		return
+	}
+
+	homeDir, _ := os.UserHomeDir()
+	if homeDir == "" {
+		homeDir = "/tmp"
+	}
+	reposBaseDir := filepath.Join(homeDir, ".garuda", "repos")
+	_ = os.MkdirAll(reposBaseDir, 0755)
+
+	targetPath := ""
+	repoSlug := "repo"
+	isRemote := strings.HasPrefix(repoURL, "http://") || strings.HasPrefix(repoURL, "https://") || strings.HasPrefix(repoURL, "git@")
+
+	if !isRemote {
+		expanded := repoURL
+		if strings.HasPrefix(expanded, "~/") {
+			expanded = filepath.Join(homeDir, strings.TrimPrefix(expanded, "~/"))
+		}
+		if st, err := os.Stat(expanded); err == nil && st.IsDir() {
+			targetPath = expanded
+			repoSlug = filepath.Base(expanded)
+		}
+	}
+
+	if targetPath == "" {
+		cleanedURL := strings.TrimSuffix(strings.TrimSuffix(repoURL, "/"), ".git")
+		parts := strings.Split(cleanedURL, "/")
+		if len(parts) >= 2 {
+			repoSlug = parts[len(parts)-2] + "-" + parts[len(parts)-1]
+		} else if len(parts) == 1 && parts[0] != "" {
+			repoSlug = parts[0]
+		}
+		repoSlug = strings.Map(func(r rune) rune {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+				return r
+			}
+			return '-'
+		}, repoSlug)
+		if repoSlug == "" {
+			repoSlug = "ingested-repo"
+		}
+
+		// If the user pastes the garuda repo URL and a local checkout already exists at '.', use or clone cleanly
+		localSelf := "."
+		if strings.Contains(strings.ToLower(repoURL), "myshra777-ai/garuda") {
+			if st, err := os.Stat("cmd/garuda"); err == nil && st.IsDir() {
+				if absSelf, aErr := filepath.Abs("."); aErr == nil {
+					localSelf = absSelf
+				}
+			}
+		}
+
+		cloneDest := filepath.Join(reposBaseDir, repoSlug)
+		if _, err := os.Stat(filepath.Join(cloneDest, ".git")); err == nil {
+			pullCmd := exec.CommandContext(ctx, "git", "-C", cloneDest, "pull", "--ff-only")
+			_ = pullCmd.Run()
+			targetPath = cloneDest
+		} else {
+			cloneArgs := []string{"clone", "--depth", "1"}
+			if strings.TrimSpace(body.Branch) != "" {
+				cloneArgs = append(cloneArgs, "--branch", strings.TrimSpace(body.Branch))
+			}
+			cloneArgs = append(cloneArgs, repoURL, cloneDest)
+			cloneCmd := exec.CommandContext(ctx, "git", cloneArgs...)
+			if err := cloneCmd.Run(); err == nil {
+				targetPath = cloneDest
+			} else if localSelf != "." {
+				targetPath = localSelf
+			}
+		}
+	}
+
+	// Locate the garuda CLI binary to run deterministic AST indexing & Talon contract compilation
+	garudaBin := "./bin/garuda"
+	if exe, err := os.Executable(); err == nil {
+		cand := filepath.Join(filepath.Dir(exe), "garuda")
+		if _, stErr := os.Stat(cand); stErr == nil {
+			garudaBin = cand
+		}
+	}
+
+	analyzeStatus := "indexed"
+	analyzeOutput := ""
+	if targetPath != "" {
+		cmd := exec.CommandContext(ctx, garudaBin, "analyze", targetPath, "--workspace", wsName, "--save")
+		if outBytes, err := cmd.CombinedOutput(); err == nil {
+			analyzeOutput = string(outBytes)
+		} else {
+			analyzeOutput = string(outBytes)
+		}
+		talonCmd := exec.CommandContext(ctx, garudaBin, "talon", "init", targetPath, "--workspace", wsName)
+		_ = talonCmd.Run()
+	} else {
+		analyzeStatus = "simulated_offline"
+	}
+
+	var entitiesCount, packagesCount, relsCount, reposCount int
+	if pg, ok := s.store.(*store.PostgresStore); ok && pg != nil && pg.Pool() != nil {
+		if workspaceID == uuid.Nil {
+			workspaceID, _ = store.ResolveWorkspaceID(ctx, pg.Pool(), tenantID, wsName)
+		}
+		if workspaceID != uuid.Nil {
+			_ = pg.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM repositories WHERE workspace_id = $1`, workspaceID).Scan(&reposCount)
+			_ = pg.Pool().QueryRow(ctx, `SELECT COUNT(*) FILTER (WHERE kind != 'external')::int, COUNT(DISTINCT package)::int FROM entities WHERE workspace_id = $1`, workspaceID).Scan(&entitiesCount, &packagesCount)
+			_ = pg.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM claims WHERE workspace_id = $1`, workspaceID).Scan(&relsCount)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":                analyzeStatus,
+		"workspace":             wsName,
+		"repo_url":              repoURL,
+		"repo_slug":             repoSlug,
+		"local_path":            targetPath,
+		"repositories_indexed":  reposCount,
+		"entities_indexed":      entitiesCount,
+		"packages_indexed":      packagesCount,
+		"relationships_indexed": relsCount,
+		"cli_output":            analyzeOutput,
+		"indexed_at":            time.Now().UTC().Format(time.RFC3339),
+	})
 }

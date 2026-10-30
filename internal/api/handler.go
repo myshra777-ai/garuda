@@ -192,6 +192,7 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	sess.HandleFunc("/api/v1/dashboard/policies/verify", s.HandleDashboardPolicyVerify).Methods(http.MethodGet)
 	sess.HandleFunc("/api/v1/dashboard/docs-graph", s.HandleDashboardDocsGraph).Methods(http.MethodGet)
 	sess.HandleFunc("/api/v1/dashboard/docs-ingest", s.HandleDashboardDocsIngest).Methods(http.MethodPost)
+	sess.HandleFunc("/api/v1/dashboard/repo-ingest", s.HandleDashboardRepoIngest).Methods(http.MethodPost)
 	sess.HandleFunc("/api/v1/dashboard/talon-hub", s.HandleDashboardTalonHub).Methods(http.MethodGet)
 	sess.HandleFunc("/api/v1/dashboard/talon-check", s.HandleDashboardTalonCheck).Methods(http.MethodPost)
 	sess.HandleFunc("/api/v1/dashboard/logic-weights", s.HandleDashboardLogicWeights).Methods(http.MethodGet)

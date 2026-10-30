@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,43 @@ type Engine struct {
 	pool      *pgxpool.Pool
 	evaluator *Evaluator
 	anchors   *Anchor
+}
+
+// LoadSupersededPolicyIDs returns the set of policy IDs (lowercase) whose latest
+// status in the tenant's policies table is 'superseded', 'deprecated', or 'disabled'.
+// This provides a single authoritative policy registry across policy.list,
+// policy.evaluate, talon_pre_edit, talon_verify_edit, and docs_graph.
+func LoadSupersededPolicyIDs(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID) map[string]bool {
+	superseded := make(map[string]bool)
+	if pool == nil || tenantID == uuid.Nil {
+		return superseded
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT COALESCE(statement, ''), COALESCE(status, 'active')
+		FROM policies
+		WHERE tenant_id = $1
+		ORDER BY created_at ASC
+	`, tenantID)
+	if err != nil {
+		return superseded
+	}
+	defer rows.Close()
+	latestStatus := make(map[string]string)
+	for rows.Next() {
+		var stmt, st string
+		if rows.Scan(&stmt, &st) == nil {
+			key := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(stmt, "POLICY:")))
+			if key != "" {
+				latestStatus[key] = strings.ToLower(strings.TrimSpace(st))
+			}
+		}
+	}
+	for k, st := range latestStatus {
+		if st == "superseded" || st == "deprecated" || st == "disabled" || st == "archived" {
+			superseded[k] = true
+		}
+	}
+	return superseded
 }
 
 func NewEngine(pool *pgxpool.Pool) *Engine {
@@ -124,8 +162,14 @@ func (e *Engine) Run(
 
 	seenStatements := make(map[string]bool, len(parsed))
 
+	supersededMap := LoadSupersededPolicyIDs(ctx, e.pool, tenantID)
+
 	for _, pp := range parsed {
 		p := pp.Policy
+		if supersededMap[strings.ToLower(strings.TrimSpace(p.ID))] {
+			slog.Debug("policy superseded in registry, skipping enforcement", "policy_id", p.ID)
+			continue
+		}
 		seenStatements["POLICY:"+p.ID] = true
 
 		// Skip expired policies

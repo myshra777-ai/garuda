@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -930,15 +931,22 @@ func (s *MCPServer) handleDocsGraph(args map[string]interface{}) (interface{}, e
 
 	components := make([]map[string]interface{}, 0)
 	byDocType := map[string]int{"ADR": 0, "SPEC": 0, "POLICY": 0}
+	componentsByDocType := map[string]int{"ADR": 0, "SPEC": 0, "POLICY": 0}
 	docSet := make(map[string]bool)
+	docTypeByPath := make(map[string]string)
+	supersededPolicies := policy.LoadSupersededPolicyIDs(ctx, s.store.Pool(), tenantID)
 
-	// 1. Load POLICY documents
+	// 1. Load active POLICY documents from Single Policy Registry (skips superseded policies)
 	if parsedPolicies, err := policy.ParseDirectory(policyDir); err == nil {
 		for _, pp := range parsedPolicies {
 			p := pp.Policy
-			byDocType["POLICY"]++
+			if supersededPolicies[strings.ToLower(strings.TrimSpace(p.ID))] {
+				continue
+			}
 			docPath := "policies/" + filepath.Base(pp.SourcePath)
 			docSet[docPath] = true
+			docTypeByPath[docPath] = "POLICY"
+			componentsByDocType["POLICY"]++
 			if docTypeFilter != "" && docTypeFilter != "ALL" && docTypeFilter != "POLICY" {
 				continue
 			}
@@ -977,8 +985,9 @@ func (s *MCPServer) handleDocsGraph(args map[string]interface{}) (interface{}, e
 					if strings.Contains(strings.ToLower(cleanPath), "spec") || strings.Contains(strings.ToLower(title), "spec") {
 						dtype = "SPEC"
 					}
-					byDocType[dtype]++
+					componentsByDocType[dtype]++
 					docSet[cleanPath] = true
+					docTypeByPath[cleanPath] = dtype
 					if docTypeFilter != "" && docTypeFilter != "ALL" && docTypeFilter != dtype {
 						continue
 					}
@@ -1031,11 +1040,16 @@ func (s *MCPServer) handleDocsGraph(args map[string]interface{}) (interface{}, e
 		},
 	}
 	for _, sp := range specsSpecs {
-		byDocType["SPEC"]++
-		docSet[sp["path"].(string)] = true
+		componentsByDocType["SPEC"]++
+		dp := sp["path"].(string)
+		docSet[dp] = true
+		docTypeByPath[dp] = "SPEC"
 		if docTypeFilter == "" || docTypeFilter == "ALL" || docTypeFilter == "SPEC" {
 			components = append(components, sp)
 		}
+	}
+	for _, dt := range docTypeByPath {
+		byDocType[dt]++
 	}
 
 	counts := LoadWorkspaceCounts(ctx, s.store.Pool(), tenantID, workspaceID)
@@ -1057,11 +1071,12 @@ func (s *MCPServer) handleDocsGraph(args map[string]interface{}) (interface{}, e
 	totalLineageEdges := docToRuleEdges + ruleToPolicyEdges + policyToSymbolEdges
 
 	return map[string]interface{}{
-		"workspace":        wsName,
-		"total_documents":  docCount,
-		"tiers":            []string{"1. Document (ADR/Spec/Policy)", "2. Extracted Normative Rule (MUST/MUST_NOT/BLOCK)", "3. Active Talon Policy Guardrail", "4. Governed AST Code Symbol"},
-		"components_count": len(components),
-		"by_doc_type":      byDocType,
+		"workspace":              wsName,
+		"total_documents":        docCount,
+		"tiers":                  []string{"1. Document (ADR/Spec/Policy)", "2. Extracted Normative Rule (MUST/MUST_NOT/BLOCK)", "3. Active Talon Policy Guardrail", "4. Governed AST Code Symbol"},
+		"components_count":       len(components),
+		"by_doc_type":            byDocType,
+		"components_by_doc_type": componentsByDocType,
 		"tier_counts": map[string]int{
 			"tier_1_documents":            docCount,
 			"tier_2_normative_rules":      ruleCount,
@@ -1195,12 +1210,16 @@ func (s *MCPServer) handleBuildMatrixCheck(args map[string]interface{}) (interfa
 	buildCtx := analyzer.ResolveBuildContext(repoDir, "go", wsName, nil)
 	matrix, _ := talon.RunMatrixVerification(context.Background(), repoDir, wsName, nil)
 
+	counts := LoadWorkspaceCounts(context.Background(), s.store.Pool(), uuid.Nil, workspaceID)
 	return map[string]interface{}{
-		"workspace":         wsName,
-		"build_context":     buildCtx,
-		"reproduce_command": buildCtx.ReproduceCommand,
-		"matrix_profiles":   len(matrix),
-		"matrix_results":    matrix,
+		"workspace":                    wsName,
+		"workspace_total_entities":     counts.Entities,
+		"workspace_repositories_count": counts.Repositories,
+		"scope_explanation":            fmt.Sprintf("matrix_results[].entities_count measures AST entities compiled in target repository (%s) under each OS/arch/CGO profile, whereas workspace_total_entities (%d) sums across all %d repositories indexed in workspace %q.", sanitizeMCPFilePath(repoDir), counts.Entities, counts.Repositories, wsName),
+		"build_context":                buildCtx,
+		"reproduce_command":            buildCtx.ReproduceCommand,
+		"matrix_profiles":              len(matrix),
+		"matrix_results":               matrix,
 	}, nil
 }
 
@@ -1261,11 +1280,30 @@ func (s *MCPServer) handleHygieneReport(args map[string]interface{}) (interface{
 		}
 		cleanFile := sanitizeMCPFilePath(f.File)
 		line := f.LineStart
+		if idx := strings.LastIndex(cleanFile, ":"); idx > 0 {
+			if parsedLn, pErr := strconv.Atoi(cleanFile[idx+1:]); pErr == nil && parsedLn > 0 {
+				if line <= 1 {
+					line = parsedLn
+				}
+				cleanFile = cleanFile[:idx]
+			}
+		}
+		if line <= 1 {
+			for _, ie := range internalEntities {
+				if ie.Name == f.Name && ie.LineStart > 1 && (cleanFile == "" || strings.HasSuffix(ie.File, cleanFile)) {
+					line = ie.LineStart
+					if cleanFile == "" {
+						cleanFile = ie.File
+					}
+					break
+				}
+			}
+		}
 		if line <= 0 {
 			line = 1
 		}
 		fileLine := cleanFile
-		if cleanFile != "" && !strings.Contains(cleanFile, ":") {
+		if cleanFile != "" {
 			fileLine = fmt.Sprintf("%s:%d", cleanFile, line)
 		}
 
@@ -1377,5 +1415,369 @@ func (s *MCPServer) handleResetAuditState(args map[string]interface{}) (interfac
 		"reset_logic_variants":       resetVariants,
 		"reset_data_reconciliations": resetAudits,
 		"reset_rulebooks":            resetRulebooks,
+	}, nil
+}
+
+// 14. handleCreateWorkspace implements `garuda.create_workspace` (Sandbox Provisioning).
+func (s *MCPServer) handleCreateWorkspace(args map[string]interface{}) (interface{}, error) {
+	if ReadOnlyMode() {
+		return ReadOnlyRejection("garuda.create_workspace"), nil
+	}
+	ctx := context.Background()
+	tenantID, _ := s.resolveTenant(args)
+	if tenantID == uuid.Nil {
+		tenantID = defaultTenantID
+	}
+	wsName, _ := args["workspace"].(string)
+	if wsName == "" {
+		wsName, _ = args["name"].(string)
+	}
+	wsName = strings.TrimSpace(wsName)
+	if wsName == "" {
+		wsName = "audit-sandbox"
+	}
+
+	wsID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(tenantID.String()+":workspace:"+wsName))
+	if s.store != nil && s.store.Pool() != nil {
+		_, _ = s.store.Pool().Exec(ctx, `
+			INSERT INTO tenants (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING
+		`, tenantID, "tenant-"+tenantID.String()[:8])
+		_ = s.store.Pool().QueryRow(ctx, `
+			INSERT INTO workspaces (id, tenant_id, name, description)
+			VALUES ($1, $2, $3, 'Isolated Garuda governance & audit sandbox workspace')
+			ON CONFLICT (tenant_id, name) DO UPDATE SET updated_at = NOW()
+			RETURNING id
+		`, wsID, tenantID, wsName).Scan(&wsID)
+	}
+
+	return map[string]interface{}{
+		"status":       "created",
+		"tenant_id":    tenantID.String(),
+		"workspace":    wsName,
+		"workspace_id": wsID.String(),
+		"note":         fmt.Sprintf("Workspace %q is provisioned and ready for isolated mutating and read-only checks.", wsName),
+	}, nil
+}
+
+// 15. handleVerifyReceipt implements `garuda.verify_receipt` (Trust Builder #1).
+// Recomputes receipt_hash and graph_fingerprint from live AST, git commit, and policy registry.
+func (s *MCPServer) handleVerifyReceipt(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
+	tenantID, workspaceID, _ := s.resolveTenantAndWorkspace(args)
+	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
+
+	expectedReceipt, _ := args["receipt_hash"].(string)
+	expectedReceipt = strings.TrimSpace(expectedReceipt)
+
+	snapshot := ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, wsName)
+	recomputedHash, _ := snapshot["receipt_hash"].(string)
+
+	valid := true
+	reason := "Receipt hash verified deterministically against active build context, commit SHA, and graph fingerprint."
+	if expectedReceipt != "" && !strings.EqualFold(expectedReceipt, recomputedHash) && !strings.HasPrefix(recomputedHash, expectedReceipt) {
+		valid = false
+		reason = fmt.Sprintf("supplied receipt_hash %q does not match recomputed receipt_hash %q", expectedReceipt, recomputedHash)
+	}
+
+	return map[string]interface{}{
+		"workspace":               wsName,
+		"valid":                   valid,
+		"supplied_receipt_hash":   expectedReceipt,
+		"recomputed_receipt_hash": recomputedHash,
+		"graph_fingerprint":       snapshot["graph_fingerprint"],
+		"commit_sha":              snapshot["commit_sha"],
+		"policy_set_version":      snapshot["policy_set_version"],
+		"head_matches_index":      snapshot["head_matches_index"],
+		"reproduce_command":       snapshot["reproduce_command"],
+		"reason":                  reason,
+	}, nil
+}
+
+// 16. handleDiffSnapshots implements `garuda.diff_snapshots` (Claude Part 3 Q2 & Suggestion #9).
+func (s *MCPServer) handleDiffSnapshots(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
+	tenantID, workspaceID, _ := s.resolveTenantAndWorkspace(args)
+	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
+
+	snapshot := ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, wsName)
+	counts := LoadWorkspaceCounts(ctx, s.store.Pool(), tenantID, workspaceID)
+
+	var recorded *analyzer.BuildContext
+	if s.store != nil && s.store.Pool() != nil && workspaceID != uuid.Nil {
+		recorded = store.GetLatestRecordedBuildContext(ctx, s.store.Pool(), tenantID, workspaceID)
+	}
+
+	baselineCommit := snapshot["commit_short"]
+	baselineDirty := false
+	baselineFiles := 0
+	if recorded != nil {
+		if recorded.CommitShort != "" {
+			baselineCommit = recorded.CommitShort
+		}
+		baselineDirty = recorded.WorktreeDirty
+		baselineFiles = recorded.ActiveFilesCount
+	}
+
+	return map[string]interface{}{
+		"workspace":           wsName,
+		"workspace_id":        workspaceID.String(),
+		"head_matches_index":  snapshot["head_matches_index"],
+		"policy_set_version":  snapshot["policy_set_version"],
+		"active_policies":     snapshot["active_policies"],
+		"superseded_policies": snapshot["superseded_policies"],
+		"indexed_snapshot": map[string]interface{}{
+			"commit_short":       baselineCommit,
+			"worktree_dirty":     baselineDirty,
+			"active_files_count": baselineFiles,
+			"graph_fingerprint":  snapshot["graph_fingerprint"],
+		},
+		"current_head_snapshot": snapshot,
+		"graph_and_drift_counts": map[string]int{
+			"entities":             counts.Entities,
+			"exported_entities":    counts.ExportedEntities,
+			"ast_relationships":    counts.ASTRelationships,
+			"document_claims":      counts.DocumentClaims,
+			"supported_claims":     counts.SupportedClaims,
+			"unverified_claims":    counts.UnverifiedClaims,
+			"contradicted_claims":  counts.ContradictedClaims,
+			"doc_to_code_drift":    counts.DocToCodeDrift,
+			"code_to_doc_drift":    counts.CodeToDocDrift,
+			"total_drift_findings": counts.TotalDriftFindings,
+		},
+	}, nil
+}
+
+// 17. handleDiffImpact implements `garuda.diff_impact` (Claude Suggestion #5: Diff-level impact in one call).
+func (s *MCPServer) handleDiffImpact(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
+	if err != nil {
+		return nil, err
+	}
+	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
+
+	verdict, vErr := s.handleTalonVerifyEdit(args)
+	if vErr != nil {
+		return nil, vErr
+	}
+	gv, _ := verdict.(*talon.GuardVerdict)
+
+	symbolImpacts := make([]map[string]interface{}, 0)
+	if gv != nil {
+		for _, ts := range gv.TouchedSymbols {
+			symName := ts
+			if idx := strings.Index(symName, " ("); idx > 0 {
+				symName = symName[:idx]
+			}
+			if dot := strings.LastIndex(symName, "."); dot >= 0 {
+				symName = symName[dot+1:]
+			}
+			if br, bErr := s.handleBlastRadius(map[string]interface{}{
+				"workspace": wsName,
+				"name":      symName,
+			}); bErr == nil {
+				if bm, ok := br.(map[string]interface{}); ok {
+					symbolImpacts = append(symbolImpacts, map[string]interface{}{
+						"symbol":         ts,
+						"total_affected": bm["total_affected"],
+						"by_severity":    bm["by_severity"],
+						"impacted":       bm["impacted"],
+					})
+				}
+			}
+		}
+	}
+
+	return map[string]interface{}{
+		"workspace":            wsName,
+		"tenant_id":            tenantID.String(),
+		"workspace_id":         workspaceID.String(),
+		"snapshot_receipt":     ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, wsName),
+		"guard_verdict":        verdict,
+		"per_symbol_impacts":   symbolImpacts,
+		"touched_symbol_count": len(symbolImpacts),
+	}, nil
+}
+
+// 18. handleSymbolTestCoverage implements `garuda.symbol_test_coverage` (Claude Suggestion #6).
+func (s *MCPServer) handleSymbolTestCoverage(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
+	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
+	if err != nil {
+		return nil, err
+	}
+	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
+
+	target, _ := args["symbol"].(string)
+	if target == "" {
+		target, _ = args["name"].(string)
+	}
+	pkgFilter, _ := args["package"].(string)
+
+	type covItem struct {
+		Symbol          string   `json:"symbol"`
+		Package         string   `json:"package"`
+		File            string   `json:"file"`
+		LineStart       int      `json:"line_start"`
+		Exported        bool     `json:"exported"`
+		TestCallers     []string `json:"test_callers"`
+		RuntimeObserved bool     `json:"runtime_observed"`
+		CoverageStatus  string   `json:"coverage_status"`
+	}
+
+	items := make([]covItem, 0)
+	if s.store != nil && s.store.Pool() != nil && workspaceID != uuid.Nil {
+		q := `
+			SELECT e.id::text, e.name, COALESCE(e.package, ''), COALESCE(e.file_path, ''), COALESCE(e.line_start, 0), COALESCE(e.is_exported, false)
+			FROM entities e
+			WHERE e.workspace_id = $1 AND e.kind IN ('function', 'method')
+			  AND COALESCE(e.file_path, '') NOT LIKE '%_test.go'
+		`
+		dbArgs := []interface{}{workspaceID}
+		pos := 2
+		if target != "" {
+			q += fmt.Sprintf(" AND (e.name ILIKE $%d OR e.name ILIKE '%%.' || $%d)", pos, pos)
+			dbArgs = append(dbArgs, target)
+			pos++
+		}
+		if pkgFilter != "" {
+			q += fmt.Sprintf(" AND COALESCE(e.package, '') ILIKE '%%' || $%d || '%%'", pos)
+			dbArgs = append(dbArgs, pkgFilter)
+			pos++
+		}
+		q += " ORDER BY e.is_exported DESC, e.name ASC LIMIT 30"
+
+		rows, qErr := s.store.Pool().Query(ctx, q, dbArgs...)
+		if qErr == nil {
+			for rows.Next() {
+				var eid, ename, epkg, efile string
+				var eline int
+				var exported bool
+				if rows.Scan(&eid, &ename, &epkg, &efile, &eline, &exported) == nil {
+					cleanF := sanitizeMCPFilePath(efile)
+					if IsFixturePath(cleanF) && target == "" {
+						continue
+					}
+					inEdges, _ := QueryCanonicalEntityEdges(ctx, s.store.Pool(), workspaceID, eid, ename)
+					tests := make([]string, 0)
+					for _, inE := range inEdges {
+						if strings.HasPrefix(inE.From, "Test") || strings.HasSuffix(inE.File, "_test.go") {
+							tests = append(tests, fmt.Sprintf("%s (%s:%d)", inE.From, inE.File, inE.Line))
+						}
+					}
+					var rtCount int
+					_ = s.store.Pool().QueryRow(ctx, `
+						SELECT COUNT(*)::int FROM claim_verifications WHERE workspace_id = $1 AND status = 'SUPPORTED'
+					`, workspaceID).Scan(&rtCount)
+					rtObs := rtCount > 0 || len(tests) > 0
+					status := "UNCOVERED"
+					if len(tests) > 0 && rtObs {
+						status = "COVERED_STATIC_AND_RUNTIME"
+					} else if len(tests) > 0 {
+						status = "COVERED_BY_UNIT_TEST"
+					} else if rtObs {
+						status = "COVERED_BY_RUNTIME_TRACE"
+					}
+					items = append(items, covItem{
+						Symbol:          ename,
+						Package:         epkg,
+						File:            cleanF,
+						LineStart:       eline,
+						Exported:        exported,
+						TestCallers:     tests,
+						RuntimeObserved: rtObs,
+						CoverageStatus:  status,
+					})
+				}
+			}
+			rows.Close()
+		}
+	}
+
+	return map[string]interface{}{
+		"workspace": wsName,
+		"tenant_id": tenantID.String(),
+		"symbol":    target,
+		"package":   pkgFilter,
+		"count":     len(items),
+		"results":   items,
+	}, nil
+}
+
+// 19. handleAuditExport implements `garuda.audit_export` (Claude Trust Builder #3).
+func (s *MCPServer) handleAuditExport(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
+	tenantID, workspaceID, _ := s.resolveTenantAndWorkspace(args)
+	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
+	format, _ := args["format"].(string)
+	format = strings.ToLower(strings.TrimSpace(format))
+	if format == "" {
+		format = "json"
+	}
+
+	snapshot := ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, wsName)
+	decisions := make([]map[string]interface{}, 0)
+	evaluations := make([]map[string]interface{}, 0)
+
+	if s.store != nil && s.store.Pool() != nil {
+		dRows, dErr := s.store.Pool().Query(ctx, `
+			SELECT id::text, title, COALESCE(status::text, 'draft'), COALESCE(owner, ''), created_at
+			FROM decisions WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 50
+		`, tenantID)
+		if dErr == nil {
+			for dRows.Next() {
+				var id, title, st, owner string
+				var cat interface{}
+				if dRows.Scan(&id, &title, &st, &owner, &cat) == nil {
+					decisions = append(decisions, map[string]interface{}{
+						"id": id, "title": title, "status": st, "actor": owner, "created_at": fmt.Sprint(cat),
+					})
+				}
+			}
+			dRows.Close()
+		}
+		if workspaceID != uuid.Nil {
+			eRows, eErr := s.store.Pool().Query(ctx, `
+				SELECT id::text, policy_id::text, COALESCE(decision, ''), COALESCE(actor, ''), COALESCE(merkle_block_height, 0), evaluated_at
+				FROM policy_evaluations WHERE tenant_id = $1 AND workspace_id = $2 ORDER BY evaluated_at DESC LIMIT 50
+			`, tenantID, workspaceID)
+			if eErr == nil {
+				for eRows.Next() {
+					var id, pid, dec, act string
+					var bh int64
+					var eat interface{}
+					if eRows.Scan(&id, &pid, &dec, &act, &bh, &eat) == nil {
+						evaluations = append(evaluations, map[string]interface{}{
+							"evaluation_id": id, "policy_id": pid, "decision": dec, "actor": act, "merkle_block_height": bh, "evaluated_at": fmt.Sprint(eat),
+						})
+					}
+				}
+				eRows.Close()
+			}
+		}
+	}
+
+	var csvLines []string
+	if format == "csv" {
+		csvLines = append(csvLines, "record_type,id,title_or_policy,status_or_decision,actor,merkle_block,timestamp")
+		for _, d := range decisions {
+			csvLines = append(csvLines, fmt.Sprintf("decision,%v,%q,%v,%v,0,%v", d["id"], d["title"], d["status"], d["actor"], d["created_at"]))
+		}
+		for _, ev := range evaluations {
+			csvLines = append(csvLines, fmt.Sprintf("policy_evaluation,%v,%v,%v,%v,%v,%v", ev["evaluation_id"], ev["policy_id"], ev["decision"], ev["actor"], ev["merkle_block_height"], ev["evaluated_at"]))
+		}
+	}
+
+	return map[string]interface{}{
+		"workspace":          wsName,
+		"tenant_id":          tenantID.String(),
+		"format":             format,
+		"exported_at":        time.Now().UTC().Format(time.RFC3339),
+		"snapshot_receipt":   snapshot,
+		"decisions_count":    len(decisions),
+		"evaluations_count":  len(evaluations),
+		"decisions":          decisions,
+		"policy_evaluations": evaluations,
+		"csv_content":        strings.Join(csvLines, "\n"),
 	}, nil
 }

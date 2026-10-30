@@ -1268,18 +1268,88 @@ var allTools = []map[string]interface{}{
 	},
 	{
 		"name":        "garuda.reset_audit_state",
-		"description": "Reset smoke-test writes (draft decisions, formula variant overrides, and test audit reconciliations) in the workspace.",
+		"description": "Reset smoke-test or agent-proposed audit state in the workspace back to clean baseline.",
 		"inputSchema": map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"workspace": map[string]interface{}{
-					"type":        "string",
-					"description": "Workspace name",
-				},
-				"tenant_id": map[string]interface{}{
-					"type":        "string",
-					"description": "Optional tenant UUID",
-				},
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant UUID"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.create_workspace",
+		"description": "Provision an isolated sandbox workspace (e.g. 'audit-sandbox') so mutating governance or audit checks can run safely without affecting the default workspace.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "New sandbox workspace name (e.g. 'audit-sandbox')"},
+				"name":      map[string]interface{}{"type": "string", "description": "Alias for workspace name"},
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant UUID"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.verify_receipt",
+		"description": "Recompute receipt_hash, graph_fingerprint, and policy_set_version from the current AST and git commit to cryptographically verify a pre-edit or guard receipt.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace":    map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"receipt_hash": map[string]interface{}{"type": "string", "description": "Optional receipt_hash to verify against recomputed digest"},
+				"tenant_id":    map[string]interface{}{"type": "string", "description": "Optional tenant UUID"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.diff_snapshots",
+		"description": "Compare the indexed graph snapshot receipt against current HEAD and list active vs superseded policies, commit sync state, and drift deltas.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant UUID"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.diff_impact",
+		"description": "Compute diff-level blast radius in one call: returns per-symbol impact with file, line_start, and source snippets for every symbol touched in the git diff.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"repo_dir":  map[string]interface{}{"type": "string", "description": "Optional repository directory"},
+				"staged":    map[string]interface{}{"type": "boolean", "description": "Inspect staged changes"},
+				"diff":      map[string]interface{}{"type": "string", "description": "Git revision range (e.g. 'HEAD')"},
+				"files":     map[string]interface{}{"type": "string", "description": "Optional comma-separated file list"},
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant UUID"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.symbol_test_coverage",
+		"description": "Show which unit tests (*_test.go) and runtime traces exercise a symbol or package, explaining exported handler verification status.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"symbol":    map[string]interface{}{"type": "string", "description": "Target symbol name"},
+				"name":      map[string]interface{}{"type": "string", "description": "Alias for symbol name"},
+				"package":   map[string]interface{}{"type": "string", "description": "Optional package filter"},
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant UUID"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.audit_export",
+		"description": "Export workspace decisions, policy evaluations, and Merkle block anchors as structured JSON or CSV for compliance filing.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"format":    map[string]interface{}{"type": "string", "description": "Export format: 'json' or 'csv' (default 'json')"},
+				"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant UUID"},
 			},
 		},
 	},
@@ -1514,6 +1584,18 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleHygieneReport(args)
 	case "garuda.reset_audit_state":
 		result, err = s.handleResetAuditState(args)
+	case "garuda.create_workspace":
+		result, err = s.handleCreateWorkspace(args)
+	case "garuda.verify_receipt":
+		result, err = s.handleVerifyReceipt(args)
+	case "garuda.diff_snapshots":
+		result, err = s.handleDiffSnapshots(args)
+	case "garuda.diff_impact":
+		result, err = s.handleDiffImpact(args)
+	case "garuda.symbol_test_coverage":
+		result, err = s.handleSymbolTestCoverage(args)
+	case "garuda.audit_export":
+		result, err = s.handleAuditExport(args)
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
 	}
@@ -1531,6 +1613,27 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	s.recordToolCall(context.Background(), toolName, duration, err, args)
 
 	if err != nil {
+		if strings.Contains(err.Error(), "resolve workspace") {
+			reqWs, _ := args["workspace"].(string)
+			notFoundPayload := map[string]interface{}{
+				"status":    "workspace_not_found",
+				"error":     "workspace_not_found",
+				"workspace": reqWs,
+				"reason":    fmt.Sprintf("workspace %q was not found in this tenant; call garuda.create_workspace with workspace=%q to provision it", reqWs, reqWs),
+			}
+			return MCPResponse{
+				JSONRPC: "2.0",
+				ID:      req.ID,
+				Result: map[string]interface{}{
+					"content": []map[string]interface{}{
+						{
+							"type": "text",
+							"text": mustJSON(notFoundPayload),
+						},
+					},
+				},
+			}
+		}
 		return s.errorResponse(req.ID, -32000, err.Error())
 	}
 
@@ -2029,5 +2132,5 @@ func (s *MCPServer) errorResponse(id interface{}, code int, message string) MCPR
 
 func mustJSON(v interface{}) string {
 	b, _ := json.MarshalIndent(v, "", "  ")
-	return string(b)
+	return SanitizeGlobalJSONString(string(b))
 }

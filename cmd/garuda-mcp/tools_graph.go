@@ -579,8 +579,9 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 			}
 			q += fmt.Sprintf(" AND c.claim_type IN (%s)", placeholders)
 		}
-		q += fmt.Sprintf(" ORDER BY c.claim_type, e.name LIMIT $%d", argPos)
-		dbArgs = append(dbArgs, dirLimit)
+		nbOffset := ParseCursorOffset(args)
+		q += fmt.Sprintf(" ORDER BY c.claim_type, e.name LIMIT $%d OFFSET $%d", argPos, argPos+1)
+		dbArgs = append(dbArgs, dirLimit, nbOffset)
 
 		rows, qErr := s.store.Pool().Query(ctx, q, dbArgs...)
 		if qErr != nil {
@@ -644,6 +645,12 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 
 	totalBoth := totalIncoming + totalOutgoing
 
+	nbOffset := ParseCursorOffset(args)
+	isTruncated := (nbOffset + len(results)) < totalBoth
+	nextCursor := ""
+	if isTruncated {
+		nextCursor = fmt.Sprintf("%d", nbOffset+len(results))
+	}
 	return map[string]interface{}{
 		"tenant_id":            tenantID.String(),
 		"workspace_id":         workspaceID.String(),
@@ -657,8 +664,12 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		"incoming":             incomingRows,
 		"outgoing":             outgoingRows,
 		"count":                len(results),
+		"returned_count":       len(results),
 		"total_count":          totalBoth,
-		"truncated":            totalBoth > len(results),
+		"offset":               nbOffset,
+		"next_cursor":          nextCursor,
+		"has_more":             isTruncated,
+		"truncated":            isTruncated,
 		"results":              results,
 		"limit_used":           limit,
 	}, nil

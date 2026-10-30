@@ -7,13 +7,13 @@ package main
 
 var toolArgWhitelist = map[string][]string{
 	"garuda.briefing":                    {"workspace", "tenant_id", "agent_id"},
-	"garuda.entities":                    {"workspace", "package", "kind", "limit", "tenant_id"},
+	"garuda.entities":                    {"workspace", "package", "kind", "limit", "cursor", "offset", "tenant_id"},
 	"garuda.find_entity":                 {"workspace", "name", "name_pattern", "kind", "package", "file_path_contains", "exported_only", "limit", "tenant_id"},
 	"garuda.inspect":                     {"workspace", "entity_id", "name", "tenant_id"},
-	"garuda.neighbors":                   {"workspace", "entity_id", "name", "edge_kinds", "include_external", "limit", "tenant_id"},
+	"garuda.neighbors":                   {"workspace", "entity_id", "name", "edge_kinds", "include_external", "limit", "cursor", "offset", "tenant_id"},
 	"garuda.subclasses":                  {"workspace", "entity_id", "name", "language", "limit", "tenant_id"},
 	"garuda.implementers":                {"workspace", "entity_id", "name", "limit", "tenant_id"},
-	"garuda.blast_radius":                {"workspace", "entity_id", "name", "symbol", "depth", "min_confidence", "tenant_id"},
+	"garuda.blast_radius":                {"workspace", "entity_id", "name", "symbol", "depth", "min_confidence", "include_fixtures", "tenant_id"},
 	"garuda.query":                       {},
 	"garuda.query_claims":                {"workspace", "subject", "status", "tenant_id"},
 	"garuda.policy.list":                 {"tenant_id"},
@@ -23,7 +23,7 @@ var toolArgWhitelist = map[string][]string{
 	"garuda.governance.status":           {"workspace", "tenant_id"},
 	"garuda.check_drift":                 {"workspace", "tenant_id"},
 	"garuda.get_lineage":                 {"decision_id", "actor", "symbol", "name", "entity_id", "workspace", "tenant_id"},
-	"garuda.get_impact":                  {"decision_id", "entity_id", "symbol", "name", "workspace", "tenant_id"},
+	"garuda.get_impact":                  {"decision_id", "entity_id", "symbol", "name", "include_fixtures", "workspace", "tenant_id"},
 	"garuda.detect_contradictions":       {"workspace", "scope", "status", "tenant_id"},
 	"garuda.propose_decision":            {"scope_domain", "scope_system", "workspace", "tenant_id"},
 	"garuda.create_task":                 {"workspace", "title", "description", "priority", "owner_agent_id", "target_agent_id", "agent_id", "task_id", "scope_domain", "scope_system", "tenant_id"},
@@ -46,6 +46,12 @@ var toolArgWhitelist = map[string][]string{
 	"garuda.build_matrix_check":          {"workspace", "repo_dir", "diff", "tenant_id"},
 	"garuda.hygiene_report":              {"workspace", "limit", "tenant_id"},
 	"garuda.reset_audit_state":           {"workspace", "tenant_id"},
+	"garuda.create_workspace":            {"workspace", "name", "tenant_id"},
+	"garuda.verify_receipt":              {"workspace", "receipt_hash", "tenant_id"},
+	"garuda.diff_snapshots":              {"workspace", "tenant_id"},
+	"garuda.diff_impact":                 {"workspace", "repo_dir", "staged", "diff", "files", "tenant_id"},
+	"garuda.symbol_test_coverage":        {"workspace", "symbol", "name", "package", "tenant_id"},
+	"garuda.audit_export":                {"workspace", "format", "tenant_id"},
 }
 
 // filterArgs returns a map containing only whitelisted keys for the

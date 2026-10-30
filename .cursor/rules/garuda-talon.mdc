@@ -6,10 +6,10 @@ alwaysApply: true
 
 # GARUDA TALON — ACTIVE ARCHITECTURAL CONTRACT
 
-- **Workspace**: `default` (`48416063-0cb2-40ea-b89e-0c92ae6d4c13`)
-- **Graph Scale**: 3802 AST entities | 11800 verified edges
-- **Build Receipt**: `lang=go platform=linux/amd64 cgo=off tags=[none] commit=uncommitted graph_fp=10431e45c334`
-- **Reproduce Command**: `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --workspace default`
+- **Workspace**: `evidence-corpus-14` (`4ccd1077-ca6f-4182-9b8f-79e1b301bf26`)
+- **Graph Scale**: 1856 AST entities | 7554 verified edges
+- **Build Receipt**: `lang=go platform=linux/amd64 cgo=off tags=[none] commit=9ea664714cce-dirty graph_fp=bd2f859b83b2`
+- **Reproduce Command**: `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --commit 9ea664714cce --workspace evidence-corpus-14`
 - **Enforcement Mode**: `ACTIVE (FAIL-CLOSED)`
 
 ## 1. Mandatory Agent Execution Protocol (Non-Negotiable)
@@ -23,8 +23,10 @@ You are operating inside a **Garuda Talon Enforced Workspace**. Every code chang
 
 ## 2. Active Declarative Policy Guardrails
 
-- **`[BLOCK]` Payment code must not import database/sql directly** (`block-payment-direct-db`, predicates: `claim_exists`): Direct database/sql import from payment code violates hexagonal boundary.
-- **`[WARN]` Exported functions should have runtime evidence** (`warn-missing-runtime`, predicates: `verification_missing`): Exported function has no runtime evidence. Consider adding a smoke test or re-running OTel ingestion.
+- **`[BLOCK]` API handlers must not bypass store layer to access database/sql directly or transitively** (`architecture-no-api-to-store-bypass`, predicates: `layer_violation`): API layer must route persistence operations through internal/store interfaces
+rather than calling raw database/sql packages directly.
+- **`[REVIEW]` Exported payment handlers must have runtime evidence** (`require-runtime-evidence-for-exported`, predicates: `verification_missing`): Exported handler has no runtime evidence. Requires SRE review
+before merge. Add a smoke test or confirm the handler is exercised.
 
 ## 3. Ingested ADR & Documentation Claims (`document_claims`)
 
@@ -37,13 +39,13 @@ You are operating inside a **Garuda Talon Enforced Workspace**. Every code chang
 
 ## 4. High-Blast-Radius Architectural Hubs (Modify With Caution)
 
-- **`sqlmodel.main.SQLModel`** (class, 171 inbound edges) — `/home/rohit/garuda-validation/py/sqlmodel/sqlmodel/main.py`
-- **`github.com/myshra777-ai/garuda/internal/store.Pool`** (method, 79 inbound edges) — `/home/rohit/garuda/internal/store/postgres.go`
-- **`github.com/spf13/cobra.Command`** (struct, 49 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
-- **`github.com/myshra777-ai/garuda/cmd/garuda-mcp.resolveTenantAndWorkspace`** (method, 42 inbound edges) — `/home/rohit/garuda/cmd/garuda-mcp/tools_governance.go`
-- **`github.com/myshra777-ai/garuda/internal/api.Valid`** (method, 40 inbound edges) — `/home/rohit/garuda/internal/api/generated.go`
-- **`github.com/spf13/cobra.Name`** (method, 36 inbound edges) — `/home/rohit/garuda-validation/go/cobra/command.go`
-- **`github.com/myshra777-ai/garuda/internal/api.RespondWithError`** (method, 33 inbound edges) — `/home/rohit/garuda/internal/api/error.go`
-- **`github.com/myshra777-ai/garuda/internal/types.Evidence`** (struct, 32 inbound edges) — `/home/rohit/garuda/internal/types/types.go`
-- **`github.com/myshra777-ai/garuda/cmd/garuda-mcp.resolveMCPWorkspaceName`** (method, 32 inbound edges) — `/home/rohit/garuda/cmd/garuda-mcp/tools_audit.go`
-- **`docs_src.tutorial.fastapi.update.tutorial002_py310.HeroBase`** (class, 30 inbound edges) — `/home/rohit/garuda-validation/py/sqlmodel/docs_src/tutorial/fastapi/update/tutorial002_py310.py`
+- **`github.com/myshra777-ai/garuda/internal/store.Pool`** (method, 55 inbound edges) — `internal/store/postgres.go`
+- **`github.com/myshra777-ai/garuda/internal/api.Valid`** (method, 40 inbound edges) — `internal/api/generated.go`
+- **`github.com/myshra777-ai/garuda/internal/api.RespondWithError`** (method, 33 inbound edges) — `internal/api/error.go`
+- **`github.com/myshra777-ai/garuda/test/benchmark/truth_fixtures/020-large-ish/store.PostgresStore`** (struct, 25 inbound edges) — `test/benchmark/truth_fixtures/020-large-ish/store/postgres.go`
+- **`github.com/myshra777-ai/garuda/internal/types.Evidence`** (struct, 24 inbound edges) — `internal/types/types.go`
+- **`github.com/myshra777-ai/garuda/internal/api.applyEditors`** (method, 22 inbound edges) — `internal/api/generated.go`
+- **`github.com/myshra777-ai/garuda/cmd/garuda-mcp.resolveTenantAndWorkspace`** (method, 22 inbound edges) — `cmd/garuda-mcp/tools_governance.go`
+- **`github.com/myshra777-ai/garuda/internal/store.Close`** (method, 21 inbound edges) — `internal/store/postgres.go`
+- **`github.com/myshra777-ai/garuda/test/benchmark/truth_fixtures/020-large-ish/store.NewPostgresStore`** (function, 21 inbound edges) — `test/benchmark/truth_fixtures/020-large-ish/store/postgres.go`
+- **`github.com/myshra777-ai/garuda/internal/api.resolveTenantID`** (function, 20 inbound edges) — `internal/api/decision_handlers.go`

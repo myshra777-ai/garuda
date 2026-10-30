@@ -89,12 +89,13 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 	var totalCount int
 	_ = s.store.Pool().QueryRow(ctx, "SELECT COUNT(*)::int FROM entities"+whereClause, dbArgs...).Scan(&totalCount)
 
+	offset := ParseCursorOffset(args)
 	q := `
 		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''),
 		       COALESCE(line_start, 0), COALESCE(signature, ''), is_exported
 		FROM entities
-	` + whereClause + fmt.Sprintf(" ORDER BY package, name LIMIT $%d", argPos)
-	queryArgs := append(append([]interface{}{}, dbArgs...), limit)
+	` + whereClause + fmt.Sprintf(" ORDER BY package, name LIMIT $%d OFFSET $%d", argPos, argPos+1)
+	queryArgs := append(append([]interface{}{}, dbArgs...), limit, offset)
 
 	rows, err := s.store.Pool().Query(ctx, q, queryArgs...)
 	if err != nil {
@@ -127,14 +128,22 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 		totalCount = len(entities)
 	}
 
+	truncated := (offset + len(entities)) < totalCount
+	nextCursor := ""
+	if truncated {
+		nextCursor = fmt.Sprintf("%d", offset+len(entities))
+	}
 	return map[string]interface{}{
 		"tenant_id":      tenantID.String(),
 		"workspace_id":   workspaceID.String(),
 		"workspace_name": workspaceName,
 		"filters":        map[string]any{"package": pkgFilter, "kind": kindFilter},
 		"count":          len(entities),
+		"returned_count": len(entities),
 		"total_count":    totalCount,
-		"truncated":      totalCount > len(entities),
+		"offset":         offset,
+		"next_cursor":    nextCursor,
+		"truncated":      truncated,
 		"entities":       entities,
 		"limit_used":     limit,
 	}, nil
@@ -229,45 +238,23 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 		}
 	}
 
-	incoming, outgoing, err := s.store.GetEntityRelationships(
-		ctx, tenantID, workspaceID, entityIDStr,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch relationships: %w", err)
-	}
-
-	type relRow struct {
-		From string `json:"from"`
-		To   string `json:"to"`
-		Type string `json:"type"`
-		File string `json:"file,omitempty"`
-		Line int    `json:"line,omitempty"`
-	}
-
-	convert := func(rs []analyzer.Relationship) []relRow {
-		out := make([]relRow, 0, len(rs))
-		for _, r := range rs {
-			out = append(out, relRow{
-				From: r.From,
-				To:   r.To,
-				Type: r.Type,
-				File: sanitizeMCPFilePath(r.Evidence.File),
-				Line: r.Evidence.LineStart,
-			})
-		}
-		return out
-	}
+	incoming, outgoing := QueryCanonicalEntityEdges(ctx, s.store.Pool(), workspaceID, entityIDStr, entity.Name)
+	_ = analyzer.Relationship{}
+	snippet := ExtractSourceSnippet(entity.File, entity.LineStart)
 
 	return map[string]interface{}{
-		"tenant_id":      tenantID.String(),
-		"workspace_id":   workspaceID.String(),
-		"workspace_name": workspaceName,
-		"entity":         entity,
-		"signature":      entity.Signature,
-		"incoming_count": len(incoming),
-		"outgoing_count": len(outgoing),
-		"incoming":       convert(incoming),
-		"outgoing":       convert(outgoing),
+		"tenant_id":       tenantID.String(),
+		"workspace_id":    workspaceID.String(),
+		"workspace_name":  workspaceName,
+		"entity":          entity,
+		"signature":       entity.Signature,
+		"content_snippet": snippet,
+		"incoming_count":  len(incoming),
+		"inbound_edges":   len(incoming),
+		"outgoing_count":  len(outgoing),
+		"outbound_edges":  len(outgoing),
+		"incoming":        incoming,
+		"outgoing":        outgoing,
 	}, nil
 }
 
@@ -355,6 +342,8 @@ func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, er
 		"TOTAL_AST_CLAIMS":      counts.ASTRelationships,
 	}
 
+	snapshot := ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, workspaceName)
+
 	return map[string]interface{}{
 		"tenant_id":              tenantID.String(),
 		"workspace":              workspaceName,
@@ -365,8 +354,16 @@ func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, er
 		"ast_relationship_count": counts.ASTRelationships,
 		"document_claim_count":   counts.DocumentClaims,
 		"policy_verdict":         briefing.PolicyVerdict,
-		"epistemic":              epistemic,
-		"epistemic_counts":       briefing.EpistemicCounts,
-		"briefing":               briefing,
+		"policy_set_version":     snapshot["policy_set_version"],
+		"snapshot_receipt":       snapshot,
+		"drift_summary": map[string]int{
+			"doc_to_code":           counts.DocToCodeDrift,
+			"code_to_doc":           counts.CodeToDocDrift,
+			"total_drift_findings":  counts.TotalDriftFindings,
+			"undocumented_entities": counts.CodeToDocDrift,
+		},
+		"epistemic":        epistemic,
+		"epistemic_counts": briefing.EpistemicCounts,
+		"briefing":         briefing,
 	}, nil
 }
