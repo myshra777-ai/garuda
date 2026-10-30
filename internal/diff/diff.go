@@ -202,8 +202,9 @@ func CollectGitDeltas(repoDir string, staged bool, rev string, explicitFiles []s
 	// Default: working tree relative to HEAD (plus untracked source files)
 	out, err := exec.Command("git", "-C", repoDir, "diff", "HEAD", "--unified=0", "--no-color").Output()
 	if err != nil {
-		// Fallback when repo has no commits yet
-		out, _ = exec.Command("git", "-C", repoDir, "diff", "--unified=0", "--no-color").Output()
+		// A new repository without an initial commit can still be diffed without HEAD.
+		out, err = exec.Command("git", "-C", repoDir, "diff", "--unified=0", "--no-color").Output()
+		if err != nil { return "working_tree", nil, fmt.Errorf("git diff working tree: %w", err) }
 	}
 	deltas := ParseUnifiedDiff(string(out))
 	seen := make(map[string]bool, len(deltas))
@@ -212,19 +213,13 @@ func CollectGitDeltas(repoDir string, staged bool, rev string, explicitFiles []s
 	}
 
 	// Also include untracked source files from `git ls-files --others --exclude-standard`
-	if untrackedOut, uErr := exec.Command("git", "-C", repoDir, "ls-files", "--others", "--exclude-standard").Output(); uErr == nil {
-		for _, line := range strings.Split(string(untrackedOut), "\n") {
-			p := filepath.ToSlash(strings.TrimSpace(line))
-			if p == "" || seen[p] || !isSupportedSourceFile(p) {
-				continue
-			}
-			seen[p] = true
-			deltas = append(deltas, FileDelta{
-				FilePath: p,
-				Status:   "A",
-				Hunks:    []LineRange{{Start: 1, End: 1_000_000}},
-			})
-		}
+	untrackedOut, uErr := exec.Command("git", "-C", repoDir, "ls-files", "--others", "--exclude-standard").Output()
+	if uErr != nil { return "working_tree", nil, fmt.Errorf("git ls-files untracked files: %w", uErr) }
+	for _, line := range strings.Split(string(untrackedOut), "\n") {
+		p := filepath.ToSlash(strings.TrimSpace(line))
+		if p == "" || seen[p] || !isSupportedSourceFile(p) { continue }
+		seen[p] = true
+		deltas = append(deltas, FileDelta{FilePath: p, Status: "A", Hunks: []LineRange{{Start: 1, End: 1_000_000}}})
 	}
 
 	return "working_tree", deltas, nil
@@ -232,6 +227,7 @@ func CollectGitDeltas(repoDir string, staged bool, rev string, explicitFiles []s
 
 // HasSourceFileDeltas returns true if at least one FileDelta touches a supported
 // source code file (.go, .py, .ts, .tsx, .js, .jsx).
+
 func HasSourceFileDeltas(deltas []FileDelta) bool {
 	for _, d := range deltas {
 		if isSupportedSourceFile(d.FilePath) {

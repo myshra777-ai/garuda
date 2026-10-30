@@ -152,13 +152,16 @@ func CompileContract(
 	}
 
 	if pool != nil {
-		_ = pool.QueryRow(ctx, `
+		if err := pool.QueryRow(ctx, `
 			SELECT COUNT(*) FROM entities WHERE workspace_id = $1 AND kind != 'external'
-		`, workspaceID).Scan(&c.EntityCount)
-
-		_ = pool.QueryRow(ctx, `
+		`, workspaceID).Scan(&c.EntityCount); err != nil {
+			return nil, fmt.Errorf("count workspace entities: %w", err)
+		}
+		if err := pool.QueryRow(ctx, `
 			SELECT COUNT(*) FROM claims WHERE workspace_id = $1
-		`, workspaceID).Scan(&c.ClaimCount)
+		`, workspaceID).Scan(&c.ClaimCount); err != nil {
+			return nil, fmt.Errorf("count workspace claims: %w", err)
+		}
 
 		rows, err := pool.Query(ctx, `
 			SELECT COALESCE(document_title, 'ADR'), COALESCE(section_title, ''),
@@ -169,15 +172,17 @@ func CompileContract(
 			ORDER BY modality DESC, subject ASC
 			LIMIT 50
 		`, tenantID, workspaceID)
-		if err == nil {
-			for rows.Next() {
-				var g ADRGuardrail
-				if rows.Scan(&g.Document, &g.Section, &g.Subject, &g.Modality, &g.Predicate, &g.Object, &g.Status, &g.Reason) == nil {
-					c.ADRGuardrails = append(c.ADRGuardrails, g)
-				}
+		if err != nil { return nil, fmt.Errorf("query workspace ADR claims: %w", err) }
+		for rows.Next() {
+			var g ADRGuardrail
+			if err := rows.Scan(&g.Document, &g.Section, &g.Subject, &g.Modality, &g.Predicate, &g.Object, &g.Status, &g.Reason); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan workspace ADR claim: %w", err)
 			}
-			rows.Close()
+			c.ADRGuardrails = append(c.ADRGuardrails, g)
 		}
+		if err := rows.Err(); err != nil { rows.Close(); return nil, fmt.Errorf("iterate workspace ADR claims: %w", err) }
+		rows.Close()
 
 		hRows, err := pool.Query(ctx, `
 			SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.file_path, ''),
@@ -189,21 +194,24 @@ func CompileContract(
 			ORDER BY inbound DESC, e.name ASC
 			LIMIT 10
 		`, workspaceID)
-		if err == nil {
-			for hRows.Next() {
-				var h HubSummary
-				if hRows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.FilePath, &h.InboundEdges) == nil {
-					c.TopHubs = append(c.TopHubs, h)
-				}
+		if err != nil { return nil, fmt.Errorf("query workspace top hubs: %w", err) }
+		for hRows.Next() {
+			var h HubSummary
+			if err := hRows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.FilePath, &h.InboundEdges); err != nil {
+				hRows.Close()
+				return nil, fmt.Errorf("scan workspace top hub: %w", err)
 			}
-			hRows.Close()
+			c.TopHubs = append(c.TopHubs, h)
 		}
+		if err := hRows.Err(); err != nil { hRows.Close(); return nil, fmt.Errorf("iterate workspace top hubs: %w", err) }
+		hRows.Close()
 	}
 
 	seenPolicy := make(map[string]bool)
 	if policyDir != "" {
-		if parsed, err := policy.ParseDirectory(policyDir); err == nil {
-			for _, pp := range parsed {
+		parsed, err := policy.ParseDirectory(policyDir)
+		if err != nil { return nil, fmt.Errorf("parse workspace policy directory: %w", err) }
+		for _, pp := range parsed {
 				p := pp.Policy
 				var preds []string
 				for _, w := range p.When {
@@ -220,7 +228,6 @@ func CompileContract(
 					ScopeDomain: p.Scope.Domain,
 				})
 			}
-		}
 	}
 	if pool != nil && len(c.Policies) == 0 {
 		pRows, pErr := pool.Query(ctx, `
@@ -231,29 +238,25 @@ func CompileContract(
 			ORDER BY created_at DESC
 			LIMIT 20
 		`, tenantID)
-		if pErr == nil {
-			for pRows.Next() {
-				var pid, ptitle, pstmt, pdom string
-				if pRows.Scan(&pid, &ptitle, &pstmt, &pdom) == nil {
-					if !seenPolicy[strings.ToLower(pid)] && !seenPolicy[strings.ToLower(ptitle)] {
-						c.Policies = append(c.Policies, PolicyGuardrail{
-							ID:          pid,
-							Title:       ptitle,
-							Decision:    "BLOCK",
-							Reason:      pstmt,
-							Predicates:  []string{"active_db_policy"},
-							ScopeDomain: pdom,
-						})
-					}
-				}
+		if pErr != nil { return nil, fmt.Errorf("query active workspace policies: %w", pErr) }
+		for pRows.Next() {
+			var pid, ptitle, pstmt, pdom string
+			if err := pRows.Scan(&pid, &ptitle, &pstmt, &pdom); err != nil {
+				pRows.Close()
+				return nil, fmt.Errorf("scan active workspace policy: %w", err)
 			}
-			pRows.Close()
+			if !seenPolicy[strings.ToLower(pid)] && !seenPolicy[strings.ToLower(ptitle)] {
+				c.Policies = append(c.Policies, PolicyGuardrail{ID: pid, Title: ptitle, Decision: "BLOCK", Reason: pstmt, Predicates: []string{"active_db_policy"}, ScopeDomain: pdom})
+			}
 		}
+		if err := pRows.Err(); err != nil { pRows.Close(); return nil, fmt.Errorf("iterate active workspace policies: %w", err) }
+		pRows.Close()
 	}
 
 	c.Markdown = RenderContractMarkdown(c)
 	return c, nil
 }
+
 
 func RenderContractMarkdown(c *WorkspaceContract) string {
 	var b strings.Builder
@@ -511,6 +514,7 @@ func BuildPreEditBriefing(
 	tenantID, workspaceID uuid.UUID,
 	workspaceName, target, policyDir string,
 ) (*PreEditBriefing, error) {
+	if st == nil || st.Pool() == nil { return nil, fmt.Errorf("workspace database is unavailable") }
 	contract, err := CompileContract(ctx, st.Pool(), tenantID, workspaceID, workspaceName, policyDir)
 	if err != nil {
 		return nil, err
@@ -554,19 +558,19 @@ func BuildPreEditBriefing(
 		ORDER BY inbound DESC, e.is_exported DESC
 		LIMIT 10
 	`, workspaceID, target)
-	if err == nil {
-		for rows.Next() {
-			var h HubSummary
-			var lang string
-			if rows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.FilePath, &lang, &h.InboundEdges) == nil {
-				brief.MatchedEntities = append(brief.MatchedEntities, h)
-				if matchedLang == "" && lang != "" {
-					matchedLang = strings.ToLower(strings.TrimSpace(lang))
-				}
-			}
+	if err != nil { return nil, fmt.Errorf("query pre-edit target entities: %w", err) }
+	for rows.Next() {
+		var h HubSummary
+		var lang string
+		if err := rows.Scan(&h.ID, &h.Name, &h.Kind, &h.Package, &h.FilePath, &lang, &h.InboundEdges); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan pre-edit target entity: %w", err)
 		}
-		rows.Close()
+		brief.MatchedEntities = append(brief.MatchedEntities, h)
+		if matchedLang == "" && lang != "" { matchedLang = strings.ToLower(strings.TrimSpace(lang)) }
 	}
+	if err := rows.Err(); err != nil { rows.Close(); return nil, fmt.Errorf("iterate pre-edit target entities: %w", err) }
+	rows.Close()
 	if matchedLang == "" {
 		if strings.HasSuffix(strings.ToLower(target), ".py") {
 			matchedLang = "python"
@@ -586,7 +590,9 @@ func BuildPreEditBriefing(
 		brief.BuildContext.ReceiptHash = brief.BuildContext.ComputeReceiptHash()
 	}
 
-	if idx, idxErr := st.BuildImpactIndex(ctx, workspaceID); idxErr == nil && len(brief.MatchedEntities) > 0 {
+	if len(brief.MatchedEntities) > 0 {
+		idx, idxErr := st.BuildImpactIndex(ctx, workspaceID)
+		if idxErr != nil { return nil, fmt.Errorf("build pre-edit impact index: %w", idxErr) }
 		seen := make(map[string]impact.SeverityLevel)
 		for _, me := range brief.MatchedEntities {
 			br := impact.ComputeBlastRadius(idx, me.ID, impact.BlastRadiusConfig{
@@ -615,10 +621,6 @@ func BuildPreEditBriefing(
 			brief.ApplicableADRs = append(brief.ApplicableADRs, g)
 		}
 	}
-	if len(brief.ApplicableADRs) == 0 {
-		brief.ApplicableADRs = contract.ADRGuardrails
-	}
-
 	return brief, nil
 }
 
@@ -665,6 +667,7 @@ type GuardVerdict struct {
 	DurationMs              int64                            `json:"duration_ms"`
 }
 
+
 func RunGuard(
 	ctx context.Context,
 	st *store.PostgresStore,
@@ -672,6 +675,8 @@ func RunGuard(
 	opts GuardOptions,
 ) (*GuardVerdict, error) {
 	start := time.Now()
+	if st == nil || st.Pool() == nil { return nil, fmt.Errorf("workspace database is unavailable") }
+	if strings.TrimSpace(opts.RepoDir) == "" { return nil, fmt.Errorf("repository root is required for a Talon guard") }
 	absRepo, err := filepath.Abs(opts.RepoDir)
 	if err != nil {
 		absRepo = opts.RepoDir
@@ -688,13 +693,17 @@ func RunGuard(
 		activeBuildCtx.ReceiptHash = activeBuildCtx.ComputeReceiptHash()
 	}
 
-	mode, deltas, _ := diff.CollectGitDeltas(absRepo, opts.Staged, opts.DiffRev, opts.ExplicitFiles)
-	diffRes, _ := diff.ResolveTouchedEntities(ctx, st.Pool(), workspaceID, absRepo, mode, opts.DiffRev, deltas)
+	mode, deltas, err := diff.CollectGitDeltas(absRepo, opts.Staged, opts.DiffRev, opts.ExplicitFiles)
+	if err != nil { return nil, fmt.Errorf("collect changed files for Talon guard: %w", err) }
+	diffRes, err := diff.ResolveTouchedEntities(ctx, st.Pool(), workspaceID, absRepo, mode, opts.DiffRev, deltas)
+	if err != nil { return nil, fmt.Errorf("resolve changed workspace entities: %w", err) }
 
 	sevMap := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
 	affectedCount := 0
 
-	if idx, idxErr := st.BuildImpactIndex(ctx, workspaceID); idxErr == nil && diffRes != nil && len(diffRes.TouchedEntities) > 0 {
+	if diffRes != nil && len(diffRes.TouchedEntities) > 0 {
+		idx, idxErr := st.BuildImpactIndex(ctx, workspaceID)
+		if idxErr != nil { return nil, fmt.Errorf("build Talon impact index: %w", idxErr) }
 		seen := make(map[string]impact.SeverityLevel)
 		for _, te := range diffRes.TouchedEntities {
 			br := impact.ComputeBlastRadius(idx, te.ID.String(), impact.BlastRadiusConfig{
@@ -746,37 +755,36 @@ func RunGuard(
 	var repairs []string
 
 	ke := knowledge.NewEvaluator(st.Pool())
-	_, _, _ = ke.EvaluateWorkspace(ctx, tenantID, workspaceID)
+	if _, _, err := ke.EvaluateWorkspace(ctx, tenantID, workspaceID); err != nil {
+		return nil, fmt.Errorf("evaluate workspace document/code integrity: %w", err)
+	}
 	rows, rErr := st.Pool().Query(ctx, `
 		SELECT matched_entity_id, COALESCE(document_title, 'ADR'), subject, modality, predicate, object, COALESCE(contradiction_reason, '')
 		FROM document_claims
 		WHERE tenant_id = $1 AND workspace_id = $2 AND status = 'CONTRADICTED'
 	`, tenantID, workspaceID)
-	if rErr == nil {
-		for rows.Next() {
-			var matchedID *uuid.UUID
-			var doc, subj, mod, pred, obj, rsn string
-			if rows.Scan(&matchedID, &doc, &subj, &mod, &pred, &obj, &rsn) == nil {
-				isNetNew := !opts.NetNewOnly
-				if opts.NetNewOnly {
-					if matchedID != nil && scopeFilter != nil && scopeFilter.MatchesEntity(*matchedID, "") {
-						isNetNew = true
-					} else if touchedNames[subj] || touchedNames[obj] {
-						isNetNew = true
-					}
-				}
-				if isNetNew {
-					adrContradictions++
-					msg := fmt.Sprintf("[ADR:%s] %s %s %s %s (%s)", doc, subj, mod, pred, obj, rsn)
-					violations = append(violations, msg)
-					repairs = append(repairs, fmt.Sprintf("Remove forbidden %s edge from `%s` to `%s` to satisfy %s.", pred, subj, obj, doc))
-				} else {
-					baselineADRContradictions++
-				}
-			}
+	if rErr != nil { return nil, fmt.Errorf("query contradicted workspace ADR claims: %w", rErr) }
+	for rows.Next() {
+		var matchedID *uuid.UUID
+		var doc, subj, mod, pred, obj, rsn string
+		if err := rows.Scan(&matchedID, &doc, &subj, &mod, &pred, &obj, &rsn); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan contradicted workspace ADR claim: %w", err)
 		}
-		rows.Close()
+		isNetNew := !opts.NetNewOnly
+		if opts.NetNewOnly {
+			if matchedID != nil && scopeFilter != nil && scopeFilter.MatchesEntity(*matchedID, "") { isNetNew = true
+			} else if touchedNames[subj] || touchedNames[obj] { isNetNew = true }
+		}
+		if isNetNew {
+			adrContradictions++
+			msg := fmt.Sprintf("[ADR:%s] %s %s %s %s (%s)", doc, subj, mod, pred, obj, rsn)
+			violations = append(violations, msg)
+			repairs = append(repairs, fmt.Sprintf("Remove forbidden %s edge from `%s` to `%s` to satisfy %s.", pred, subj, obj, doc))
+		} else { baselineADRContradictions++ }
 	}
+	if err := rows.Err(); err != nil { rows.Close(); return nil, fmt.Errorf("iterate contradicted workspace ADR claims: %w", err) }
+	rows.Close()
 
 	eng := policy.NewEngine(st.Pool())
 	runRes, err := eng.Run(
@@ -819,7 +827,9 @@ func RunGuard(
 
 	var matrixResults []MatrixTargetVerdict
 	if opts.Matrix {
-		matrixResults, _ = RunMatrixVerification(ctx, absRepo, opts.WorkspaceName, nil)
+		var matrixErr error
+		matrixResults, matrixErr = RunMatrixVerification(ctx, absRepo, opts.WorkspaceName, nil)
+		if matrixErr != nil { return nil, fmt.Errorf("run Talon build matrix: %w", matrixErr) }
 	}
 
 	sideEffects := []string{}
@@ -865,7 +875,7 @@ func RunGuard(
 
 	if opts.SaveLedger {
 		garudaDir := filepath.Join(absRepo, ".garuda")
-		_ = os.MkdirAll(garudaDir, 0755)
+		if err := os.MkdirAll(garudaDir, 0755); err != nil { return nil, fmt.Errorf("create Garuda decision directory: %w", err) }
 		envLines := fmt.Sprintf("GARUDA_LAST_OUTCOME=%s\n", verdict.Outcome)
 		if verdict.MerkleBlockHeight != nil {
 			envLines += fmt.Sprintf("GARUDA_LAST_MERKLE_BLOCK=%d\n", *verdict.MerkleBlockHeight)
@@ -874,11 +884,14 @@ func RunGuard(
 			envLines += fmt.Sprintf("GARUDA_BUILD_RECEIPT=%q\n", verdict.BuildContext.SummaryLine())
 			envLines += fmt.Sprintf("GARUDA_REPRODUCE_CMD=%q\n", verdict.BuildContext.ReproduceCommand)
 		}
-		_ = os.WriteFile(filepath.Join(garudaDir, "LAST_DECISION.env"), []byte(envLines), 0644)
+		if err := os.WriteFile(filepath.Join(garudaDir, "LAST_DECISION.env"), []byte(envLines), 0644); err != nil {
+			return nil, fmt.Errorf("write last Talon decision receipt: %w", err)
+		}
 	}
 
 	return verdict, nil
 }
+
 
 func RunMatrixVerification(
 	ctx context.Context,
@@ -913,9 +926,9 @@ func RunMatrixVerification(
 			WorkspaceName: workspaceName,
 			BuildTarget:   &spec,
 		})
-		if aErr != nil || res == nil || res.BuildContext == nil {
-			continue
-		}
+		targetLabel := strings.TrimSpace(spec.TargetOS + "/" + spec.TargetArch)
+		if aErr != nil { return nil, fmt.Errorf("analyze matrix target %s: %w", targetLabel, aErr) }
+		if res == nil || res.BuildContext == nil { return nil, fmt.Errorf("analyze matrix target %s: analyzer returned no build context", targetLabel) }
 		bc := res.BuildContext
 		out = append(out, MatrixTargetVerdict{
 			TargetPlatform:          bc.TargetPlatform,
@@ -928,12 +941,13 @@ func RunMatrixVerification(
 			EdgesCount:              len(res.Relationships),
 			GraphFingerprint:        bc.GraphFingerprint,
 			ReceiptHash:             bc.ReceiptHash,
-			Outcome:                 "ALLOW",
+			Outcome:                 "UNVERIFIED",
 			ReproduceCommand:        bc.ReproduceCommand,
 		})
 	}
 	return out, nil
 }
+
 
 func BuildSelfRepairPrompt(v *GuardVerdict) string {
 	var b strings.Builder
