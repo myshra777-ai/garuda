@@ -2047,16 +2047,24 @@ function renderTalonHub() {
     var hubs = th.risk_hubs || [];
     var verdict = th.latest_verdict || {};
 
-    setText("talon-hooks-count", (th.active_hooks_count || hooks.length) + " / " + (th.total_hooks_count || hooks.length));
-    setText("talon-crit-badge", (th.critical_hubs_count || 0) + " CRITICAL");
-    setText("talon-total-hubs", String(hubs.length));
-    setText("talon-high-count", String(th.high_hubs_count || 0));
+    var unavailable = th.unavailable === true;
+    setText("talon-hooks-count", unavailable ? "— / —" : (th.active_hooks_count || 0) + " / " + (th.total_hooks_count || 0));
+    setText("talon-crit-badge", unavailable ? "Unavailable" : (th.critical_hubs_count || 0) + " CRITICAL");
+    setText("talon-total-hubs", unavailable ? "—" : String(hubs.length));
+    setText("talon-high-count", unavailable ? "—" : String(th.high_hubs_count || 0));
+    var modeBadge = document.getElementById("talon-mode-badge");
+    if (modeBadge) { modeBadge.textContent = th.enforcement_mode || (unavailable ? "Unavailable" : "Configured"); modeBadge.className = "badge-pill info"; }
 
     renderTalonVerdict(verdict);
 
     var hooksEl = document.getElementById("talon-hooks-list");
     if (hooksEl) {
         hooksEl.innerHTML = "";
+        if (state.talonHubData.unavailable) {
+            hooksEl.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">Hook status unavailable</div><div class="row-meta">No hook installation state was inferred.</div></div></div>';
+        } else if (hooks.length === 0) {
+            hooksEl.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No hook files found in the configured root</div><div class="row-meta">Sync installs supported files in the server-configured repository.</div></div></div>';
+        }
         hooks.forEach(function(h) {
             var card = document.createElement("div");
             card.className = "hook-card";
@@ -2078,6 +2086,7 @@ function renderTalonHub() {
     renderCriticalityTiersGrid();
 }
 
+
 function renderTalonVerdict(verdict) {
     verdict = verdict || {};
     var hasOutcome = typeof verdict.outcome === "string" && verdict.outcome.length > 0;
@@ -2089,9 +2098,9 @@ function renderTalonVerdict(verdict) {
         pill.className = "badge-pill " + (outcome === "BLOCK" ? "critical" : (outcome === "WARN" || outcome === "REVIEW" ? "warning" : (outcome === "ALLOW" ? "success" : "info")));
     }
     setText("nav-badge-talon", outcome === "BLOCK" ? "BLOCK" : (hasOutcome ? "Guard" : "—"));
-    setText("talon-netnew-count", String(verdict.net_new_violations_count || 0));
-    setText("talon-baseline-count", String(verdict.baseline_violations_count || 0));
-    setText("talon-adr-contra-count", String(verdict.adr_contradictions_count || 0));
+    setText("talon-netnew-count", hasOutcome ? String(verdict.net_new_violations_count || 0) : "—");
+    setText("talon-baseline-count", hasOutcome ? String(verdict.baseline_violations_count || 0) : "—");
+    setText("talon-adr-contra-count", hasOutcome ? String(verdict.adr_contradictions_count || 0) : "—");
     setText("talon-duration-ms", typeof verdict.duration_ms === "number" ? verdict.duration_ms + "ms" : "—");
     setText("talon-merkle-chip", verdict.merkle_block_height ? "block #" + verdict.merkle_block_height : "No anchor");
 
@@ -2133,6 +2142,7 @@ function renderTalonVerdict(verdict) {
     }
     renderBuildContextReceipt(verdict);
 }
+
 
 function renderBuildContextReceipt(verdict) {
     verdict = verdict || {};
@@ -2238,7 +2248,10 @@ function renderRiskHubsTable() {
 
     tbody.innerHTML = "";
     if (hubs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted); padding:16px;">No symbols in this risk tier.</td></tr>';
+        var emptyMessage = state.talonHubData.unavailable
+            ? "Risk candidates unavailable. No sample graph was substituted."
+            : "No indexed symbols are available in this workspace.";
+        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted); padding:16px;">' + escapeHTML(emptyMessage) + '</td></tr>';
         return;
     }
 
@@ -2258,7 +2271,7 @@ function renderRiskHubsTable() {
             '</td>' +
             '<td>' +
                 '<div class="mono" style="font-weight:700; font-size:12.5px; color:var(--text);">' + symbolIcon(h.kind) + ' ' + escapeHTML(h.name) + '</div>' +
-                '<div style="font-size:11px; color:var(--muted);">' + escapeHTML(h.kind) + ' · ' + escapeHTML(h.epistemic_status || "SUPPORTED") + '</div>' +
+                '<div style="font-size:11px; color:var(--muted);">' + escapeHTML(h.kind) + ' · ' + escapeHTML(h.epistemic_status || "UNVERIFIED") + '</div>' +
             '</td>' +
             '<td class="mono" style="font-size:11.5px; color:var(--text-2);">' +
                 '<div>' + escapeHTML(shortenPath(h.package)) + '</div>' +
@@ -2284,6 +2297,7 @@ function renderRiskHubsTable() {
     });
 }
 
+
 async function runTalonCheckFromUI(action) {
     var isSimulation = action === "simulate_violation" || action === "simulate_drift";
     showToast(isSimulation ? "Preparing the selected Talon simulation…" : "Running diff-scoped Talon Guard against HEAD…");
@@ -2296,11 +2310,18 @@ async function runTalonCheckFromUI(action) {
         var data = null;
         try { data = await res.json(); } catch (parseErr) {}
         if (!res.ok) throw new Error(data && (data.error || data.message) || ("Talon check failed (HTTP " + res.status + ")."));
+        if (action === "matrix_check") {
+            if (!data || data.status !== "ok" || !Array.isArray(data.matrix_results)) throw new Error("The server did not return a completed build matrix.");
+            renderBuildContextReceipt({ matrix_results: data.matrix_results });
+            showToast("Build matrix completed · " + data.matrix_results.length + " target(s) · " + (data.scope || "scope not reported") + ".");
+            return;
+        }
         if (!data || !data.verdict || typeof data.verdict.outcome !== "string") throw new Error("The server did not return a completed Talon verdict.");
+        if (data.simulated === true) data.verdict.simulated = true;
         if (!state.talonHubData) state.talonHubData = { hooks: [], risk_hubs: [] };
         state.talonHubData.latest_verdict = data.verdict;
         renderTalonVerdict(data.verdict);
-        showToast("Talon Gate Outcome: " + data.verdict.outcome);
+        showToast((data.simulated ? "Simulation · " : "Talon Gate Outcome: ") + data.verdict.outcome);
         return;
     } catch (err) {
         if (!isSimulation) {
@@ -2354,30 +2375,31 @@ async function runTalonCheckFromUI(action) {
     }
 }
 
+
 async function installTalonHooksFromUI() {
-    showToast("Compiling TALON_CONTRACT.md & installing 6 IDE/MCP/Git hooks…");
+    showToast("Compiling the workspace contract and installing supported hooks…");
     try {
         var res = await fetch("/api/v1/dashboard/talon-check?workspace=" + encodeURIComponent(WORKSPACE), {
             method: "POST",
             headers: { "Content-Type": "application/json", "Accept": "application/json" },
             body: JSON.stringify({ workspace: WORKSPACE, action: "install_hooks" })
         });
-        if (res.ok) {
-            var data = await res.json();
-            if (data && data.talon_hub) {
-                state.talonHubData = data.talon_hub;
-                renderTalonHub();
-                showToast("✓ Installed & synced all 6 Garuda Talon hooks!");
-                return;
-            }
+        var data = null;
+        try { data = await res.json(); } catch (parseErr) {}
+        if (!res.ok) throw new Error(data && (data.error || data.message) || ("Hook installation failed (HTTP " + res.status + ")."));
+        if (!data || data.status !== "installed" || !data.install_summary) throw new Error("The server did not confirm hook installation.");
+        if (data.talon_hub) {
+            state.talonHubData = data.talon_hub;
+            renderTalonHub();
+        } else {
+            state.talonHubData = null;
+            await loadTalonHub();
         }
-    } catch (e) {}
-
-    if (!state.talonHubData) state.talonHubData = buildDefaultTalonHub();
-    state.talonHubData.active_hooks_count = 6;
-    state.talonHubData.hooks.forEach(function(h) { h.installed = true; });
-    renderTalonHub();
-    showToast("✓ Installed & synced all 6 Garuda Talon IDE, MCP & Git hooks!");
+        if (data.refresh_warning) showToast("Hooks were installed, but their status could not be refreshed. Use Refresh to retry.");
+        else showToast("Hook installation completed in the configured Garuda repository root. Verify each status below.");
+    } catch (err) {
+        showToast(err && err.message ? err.message : "Hook installation failed. No local success state was applied.");
+    }
 }
 
 function copyTalonRepairPrompt() {
@@ -2394,47 +2416,96 @@ function copyTalonRepairPrompt() {
     }
 }
 
-function openPreEditBriefDrawer(symbolName) {
+async function openPreEditBriefDrawer(symbolName) {
     var drawer = document.getElementById("drawer");
     var overlay = document.getElementById("drawer-overlay");
     var body = document.getElementById("drawer-body");
     if (!drawer || !overlay || !body) return;
+    var target = (symbolName || "").trim();
+    if (!target) { showToast("Choose an indexed symbol before requesting a pre-edit briefing."); return; }
 
-    var hubs = (state.talonHubData && state.talonHubData.risk_hubs) || buildDefaultTalonHub().risk_hubs;
-    var h = hubs.find(function(x) { return x.name === symbolName || x.name.indexOf(symbolName) !== -1; }) || hubs[0];
-
-    setText("drawer-title", "Talon Pre-Edit Briefing: " + h.name);
-    setText("drawer-kind", "GARUDA TALON PRE-FLIGHT · RISK SCORE " + h.risk_score + " (" + h.risk_tier + ")");
-
-    var html = '<div class="detail-section"><div class="detail-section-title">Target Symbol &amp; Blast Radius</div>';
-    html += propertyRow("Symbol", h.name);
-    html += propertyRow("Package", h.package);
-    html += propertyRow("Source File", h.file || h.package);
-    html += propertyRow("Direct Callers", h.inbound_callers + " inbound edges");
-    html += propertyRow("Transitive Impact", "~" + h.transitive_radius + " downstream/upstream symbols");
-    html += propertyRow("Risk Tier", h.risk_tier + " (Score " + h.risk_score + "/100)");
-    html += '</div>';
-
-    html += '<div class="detail-section"><div class="detail-section-title">Governing ADRs &amp; YAML Policies</div>';
-    (h.governing_rules || []).forEach(function(r) {
-        html += '<div style="padding:6px 8px; margin-bottom:5px; background:var(--surface-2); border:1px solid var(--border); border-radius:6px; font-family:var(--font-mono); font-size:11.5px;">🛡️ ' + escapeHTML(r) + '</div>';
-    });
-    html += '</div>';
-
-    html += '<div class="detail-section"><div class="detail-section-title">Mandatory Agent Execution Protocol</div>';
-    html += '<div style="font-size:12px; color:var(--text-2); line-height:1.5;">' +
-        '1. Do not alter exported signature of <code>' + escapeHTML(h.name) + '</code> without updating all ' + h.inbound_callers + ' callers.<br>' +
-        '2. Respect all governing ADR claims and layer boundaries.<br>' +
-        '3. Run <code>garuda.talon_verify_edit</code> immediately after editing.' +
-    '</div>';
-    html += '<div style="margin-top:12px; display:flex; gap:8px;">' +
-        '<button class="btn-primary" onclick="closeDrawer(); focusSymbolOnArchitectureMap(\'' + escapeJS(h.name) + '\', \'' + escapeJS(h.package) + '\', null)">Open 1-Hop Map →</button>' +
-        '<button class="btn-secondary" onclick="closeDrawer(); showView(\'docsgraph\')">View Governing Docs →</button>' +
-    '</div></div>';
-
-    body.innerHTML = html;
+    setText("drawer-title", "Talon Pre-Edit Briefing");
+    setText("drawer-kind", "LIVE WORKSPACE BRIEF · " + target);
+    body.innerHTML = '<div class="detail-section"><div class="detail-section-title">Loading workspace evidence…</div><div class="row-meta">Resolving matching entities, blast radius, ADRs and active policies.</div></div>';
     drawer.classList.add("open");
     overlay.classList.add("open");
+    try {
+        var res = await fetch("/api/v1/dashboard/talon-check?workspace=" + encodeURIComponent(WORKSPACE), {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ workspace: WORKSPACE, action: "pre_edit_brief", target: target })
+        });
+        var payload = null;
+        try { payload = await res.json(); } catch (parseErr) {}
+        if (!res.ok) throw new Error(payload && (payload.error || payload.message) || ("Pre-edit briefing failed (HTTP " + res.status + ")."));
+        if (!payload || payload.status !== "ok" || !payload.briefing || payload.briefing.target !== target) {
+            throw new Error("The server did not return a workspace-scoped pre-edit briefing.");
+        }
+
+        var brief = payload.briefing;
+        var matches = Array.isArray(brief.matched_entities) ? brief.matched_entities : [];
+        var adrs = Array.isArray(brief.applicable_adrs) ? brief.applicable_adrs : [];
+        var policies = Array.isArray(brief.active_policies) ? brief.active_policies : [];
+        var protocol = Array.isArray(brief.mandatory_protocol) ? brief.mandatory_protocol : [];
+        var sev = brief.by_severity || {};
+        var html = '<div class="detail-section"><div class="detail-section-title">Workspace &amp; target</div>';
+        html += propertyRow("Workspace", brief.workspace || WORKSPACE);
+        html += propertyRow("Requested target", brief.target);
+        html += propertyRow("Matched entities", formatNumber(matches.length));
+        html += propertyRow("Blast radius", formatNumber(brief.blast_radius_total || 0));
+        html += propertyRow("Severity", "CRITICAL " + (sev.CRITICAL || 0) + " · HIGH " + (sev.HIGH || 0) + " · MEDIUM " + (sev.MEDIUM || 0) + " · LOW " + (sev.LOW || 0));
+        html += '</div>';
+
+        html += '<div class="detail-section"><div class="detail-section-title">Matched workspace entities</div>';
+        if (!matches.length) html += '<div class="row-meta">No indexed entity matched this target. The briefing does not infer callers or impact.</div>';
+        else matches.forEach(function(entity) {
+            html += '<div class="list-row"><div class="row-main"><div class="row-title mono">' + escapeHTML(entity.name || "Unnamed entity") + '</div>' +
+                '<div class="row-meta">' + escapeHTML(entity.kind || "entity") + ' · ' + escapeHTML(entity.package || "package unavailable") + ' · ' +
+                escapeHTML(entity.file_path || "source path unavailable") + '</div></div><span class="badge-pill info">' + formatNumber(entity.inbound_edges || 0) + ' inbound</span></div>';
+        });
+        html += '</div>';
+
+        html += '<div class="detail-section"><div class="detail-section-title">Applicable ADR claims</div>';
+        if (!adrs.length) html += '<div class="row-meta">No applicable ADR claims were returned for this target.</div>';
+        else adrs.forEach(function(adr) {
+            html += '<div class="list-row"><div class="row-main"><div class="row-title">' + escapeHTML(adr.document || "ADR") + ' · ' + escapeHTML(adr.modality || "UNSPECIFIED") + ' ' + escapeHTML(adr.predicate || "") + '</div>' +
+                '<div class="row-meta">' + escapeHTML(adr.subject || "") + ' → ' + escapeHTML(adr.object || "") + ' · ' + escapeHTML(adr.status || "UNVERIFIED") +
+                (adr.reason ? ' · ' + escapeHTML(adr.reason) : '') + '</div></div></div>';
+        });
+        html += '</div>';
+
+        html += '<div class="detail-section"><div class="detail-section-title">Active workspace policies</div>';
+        if (!policies.length) html += '<div class="row-meta">No active policies were returned from the compiled workspace contract.</div>';
+        else policies.forEach(function(policy) {
+            html += '<div class="list-row"><div class="row-main"><div class="row-title">' + escapeHTML(policy.title || policy.id || "Policy") + '</div>' +
+                '<div class="row-meta">' + escapeHTML(policy.id || "") + ' · ' + escapeHTML(policy.scope_domain || "workspace scope") + ' · ' +
+                escapeHTML(policy.decision || "UNVERIFIED") + (policy.reason ? ' · ' + escapeHTML(policy.reason) : '') + '</div></div></div>';
+        });
+        html += '</div>';
+
+        if (brief.build_context) {
+            var build = brief.build_context;
+            html += '<div class="detail-section"><div class="detail-section-title">Build context returned by Garuda</div>';
+            html += propertyRow("Language", build.language || "—") + propertyRow("Compiler", build.compiler_version || "—") +
+                propertyRow("Target", build.target_platform || "—") + propertyRow("Commit", build.commit_short || "—");
+            html += '</div>';
+        }
+
+        html += '<div class="detail-section"><div class="detail-section-title">Mandatory agent protocol</div>';
+        html += protocol.length
+            ? '<ol style="padding-left:20px;color:var(--text-2);font-size:12px;line-height:1.65;">' + protocol.map(function(step) { return '<li>' + escapeHTML(step) + '</li>'; }).join("") + '</ol>'
+            : '<div class="row-meta">No protocol steps were returned.</div>';
+        if (matches.length) {
+            var first = matches[0];
+            html += '<button class="btn-primary" onclick="closeDrawer(); focusSymbolOnArchitectureMap(\'' + escapeJS(first.name || target) + '\', \'' + escapeJS(first.package || "") + '\', null)">Open first matched entity in Architecture Map →</button>';
+        }
+        html += '</div>';
+        body.innerHTML = html;
+    } catch (err) {
+        body.innerHTML = '<div class="detail-section"><div class="detail-section-title">Briefing unavailable</div><div class="row-meta">' +
+            escapeHTML(err && err.message ? err.message : "No live pre-edit briefing was returned.") +
+            '</div><div class="row-meta" style="margin-top:8px;">No sample callers, severity counts, or governing rules were substituted.</div></div>';
+    }
 }
 
 function openContractModal() {
@@ -3377,7 +3448,8 @@ function selectReviewTarget(val) {
     var polEl = document.getElementById("rev-triad-policy");
     if (polEl) {
         polEl.textContent = decision;
-        polEl.className = "policy-badge " + decision;
+        var decisionClass = ["ALLOW", "BLOCK", "WARN", "REVIEW"].indexOf(decision) >= 0 ? decision : "UNVERIFIED";
+        polEl.className = "policy-badge " + decisionClass;
     }
     var ledEl = document.getElementById("rev-triad-ledger");
     if (ledEl) {
@@ -3388,7 +3460,9 @@ function selectReviewTarget(val) {
     setText("rev-dr-what", reasonText);
     setText("rev-dr-rule", ruleName);
     setText("rev-dr-evidence", evCounts);
-    var cliCmd = "./bin/garuda check --project " + (WORKSPACE || "default") + " --target " + targetName + " --policy policies --save";
+    var cliCmd = evalId
+        ? "No reproduce command was returned for this policy evaluation."
+        : "Select a recorded evaluation to inspect its reproduction details.";
     setText("rev-dr-cli", cliCmd);
 
     var actionsEl = document.getElementById("rev-dr-actions");

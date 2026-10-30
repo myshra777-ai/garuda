@@ -6,9 +6,12 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -1043,248 +1046,106 @@ type TalonCheckRequest struct {
 	CGOEnabled *bool    `json:"cgo_enabled,omitempty"`
 }
 
-func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.PostgresStore, tenantID, workspaceID uuid.UUID, workspaceName string) TalonHubResponse {
+func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.PostgresStore, tenantID, workspaceID uuid.UUID, workspaceName string) (TalonHubResponse, error) {
+	if pgStore == nil || pgStore.Pool() == nil {
+		return TalonHubResponse{}, errors.New("workspace database is unavailable")
+	}
 	repoRoot := resolveRepoRoot()
 	policyDir := filepath.Join(repoRoot, "policies")
-
-	var contract *talon.WorkspaceContract
-	if pgStore != nil && pgStore.Pool() != nil {
-		contract, _ = talon.CompileContract(ctx, pgStore.Pool(), tenantID, workspaceID, workspaceName, policyDir)
+	contract, err := talon.CompileContract(ctx, pgStore.Pool(), tenantID, workspaceID, workspaceName, policyDir)
+	if err != nil {
+		return TalonHubResponse{}, fmt.Errorf("compile workspace contract: %w", err)
 	}
 	if contract == nil {
-		contract = &talon.WorkspaceContract{
-			WorkspaceName: workspaceName,
-			WorkspaceID:   workspaceID.String(),
-			CompiledAt:    time.Now().UTC().Format(time.RFC3339),
-		}
-		contract.Markdown = talon.RenderContractMarkdown(contract)
+		return TalonHubResponse{}, errors.New("workspace contract was not returned")
 	}
 
-	hookDefs := []struct {
-		id, name, agent, relPath, mode, desc string
-	}{
-		{
-			id:      "hook-cursor-mdc",
-			name:    "Cursor Active Rule (.mdc)",
-			agent:   "Cursor IDE",
-			relPath: ".cursor/rules/garuda-talon.mdc",
-			mode:    "ALWAYS_APPLY",
-			desc:    "Injects compiled ADR & YAML policy guardrails into every Cursor composer/agent turn.",
-		},
-		{
-			id:      "hook-cursor-mcp",
-			name:    "Cursor MCP Enforcement Server",
-			agent:   "Cursor MCP",
-			relPath: ".cursor/mcp.json",
-			mode:    "MCP_GATE",
-			desc:    "Configures garuda-mcp with GARUDA_TALON_ENFORCE=true and 23 deterministic tools.",
-		},
-		{
-			id:      "hook-claude-settings",
-			name:    "Claude Code PostToolUse Hook",
-			agent:   "Claude Code",
-			relPath: ".claude/settings.json",
-			mode:    "POST_TOOL_USE",
-			desc:    "Automatically triggers `garuda talon guard --hook` after every Edit/Write/MultiEdit tool call.",
-		},
-		{
-			id:      "hook-claude-md",
-			name:    "CLAUDE.md Active Contract",
-			agent:   "Claude Code",
-			relPath: "CLAUDE.md",
-			mode:    "ALWAYS_APPLY",
-			desc:    "Embeds mandatory pre-edit briefing and post-edit verification rules into Claude's root memory.",
-		},
-		{
-			id:      "hook-agents-md",
-			name:    "AGENTS.md & .windsurfrules",
-			agent:   "Codex / Windsurf / Aider",
-			relPath: "AGENTS.md",
-			mode:    "ALWAYS_APPLY",
-			desc:    "Synchronizes workspace hubs, policies, and ADR constraints across OpenAI Codex, Windsurf, and Aider.",
-		},
-		{
-			id:      "hook-git-precommit",
-			name:    "Git Pre-Commit & Provenance Gate",
-			agent:   "Git CLI / CI",
-			relPath: ".git/hooks/pre-commit",
-			mode:    "PRE_COMMIT",
-			desc:    "Blocks commits with net-new architectural violations and stamps RFC 6962 Merkle block trailers.",
-		},
+	hookDefs := []struct { id, name, agent, relPath, mode, desc string }{
+		{"hook-cursor-mdc", "Cursor Active Rule (.mdc)", "Cursor IDE", ".cursor/rules/garuda-talon.mdc", "ALWAYS_APPLY", "Injects compiled ADR and policy guardrails into Cursor turns."},
+		{"hook-cursor-mcp", "Cursor MCP Enforcement Server", "Cursor MCP", ".cursor/mcp.json", "MCP_GATE", "Configures the Garuda MCP enforcement server."},
+		{"hook-claude-settings", "Claude Code PostToolUse Hook", "Claude Code", ".claude/settings.json", "POST_TOOL_USE", "Runs the Talon hook after supported Claude Code edit tools."},
+		{"hook-claude-md", "CLAUDE.md Active Contract", "Claude Code", "CLAUDE.md", "ALWAYS_APPLY", "Provides the active architectural contract to Claude Code."},
+		{"hook-agents-md", "AGENTS.md & .windsurfrules", "Codex / Windsurf / Aider", "AGENTS.md", "ALWAYS_APPLY", "Provides shared architectural constraints to supported agents."},
+		{"hook-git-precommit", "Git Pre-Commit & Provenance Gate", "Git CLI / CI", ".git/hooks/pre-commit", "PRE_COMMIT", "Runs the configured pre-commit policy and provenance gate."},
 	}
-
-	var hooks []HookStatusDTO
+	hooks := make([]HookStatusDTO, 0, len(hookDefs))
 	activeHooks := 0
 	for _, hd := range hookDefs {
 		full := filepath.Join(repoRoot, hd.relPath)
 		installed := false
-		if st, err := os.Stat(full); err == nil && !st.IsDir() {
-			installed = true
-			activeHooks++
+		if st, statErr := os.Stat(full); statErr == nil {
+			if !st.IsDir() {
+				installed = true
+				activeHooks++
+			}
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			return TalonHubResponse{}, fmt.Errorf("inspect hook path %s: %w", hd.relPath, statErr)
 		}
 		hooks = append(hooks, HookStatusDTO{
-			ID:          hd.id,
-			Name:        hd.name,
-			Agent:       hd.agent,
-			Path:        hd.relPath,
-			Installed:   installed,
-			Mode:        hd.mode,
-			Description: hd.desc,
+			ID: hd.id, Name: hd.name, Agent: hd.agent, Path: hd.relPath,
+			Installed: installed, Mode: hd.mode, Description: hd.desc,
 		})
 	}
 
-	var riskHubs []RiskHubDTO
-	criticalCount := 0
-	highCount := 0
+	rows, err := pgStore.Pool().Query(ctx, `
+		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.file_path, ''),
+		       (SELECT COUNT(*)::int FROM claims c WHERE c.to_entity_id = e.id AND c.workspace_id = e.workspace_id) AS inbound,
+		       (SELECT COUNT(*)::int FROM claims c2 WHERE c2.from_entity_id = e.id AND c2.workspace_id = e.workspace_id) AS outbound
+		FROM entities e
+		WHERE e.workspace_id = $1 AND e.kind NOT IN ('external', 'package', 'file', 'module')
+		ORDER BY inbound DESC, outbound DESC, e.name ASC
+		LIMIT 15
+	`, workspaceID)
+	if err != nil {
+		return TalonHubResponse{}, fmt.Errorf("load workspace risk hubs: %w", err)
+	}
+	defer rows.Close()
 
-	if pgStore != nil && pgStore.Pool() != nil {
-		rows, err := pgStore.Pool().Query(ctx, `
-			SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.file_path, ''),
-			       (SELECT COUNT(*)::int FROM claims c WHERE c.to_entity_id = e.id AND c.workspace_id = e.workspace_id) AS inbound,
-			       (SELECT COUNT(*)::int FROM claims c2 WHERE c2.from_entity_id = e.id AND c2.workspace_id = e.workspace_id) AS outbound
-			FROM entities e
-			WHERE e.workspace_id = $1
-			  AND e.kind NOT IN ('external', 'package', 'file', 'module')
-			ORDER BY inbound DESC, outbound DESC, e.name ASC
-			LIMIT 15
-		`, workspaceID)
-		if err == nil {
-			for rows.Next() {
-				var rh RiskHubDTO
-				if rows.Scan(&rh.ID, &rh.Name, &rh.Kind, &rh.Package, &rh.File, &rh.InboundCallers, &rh.OutboundCallees) == nil {
-					rh.TransitiveRadius = int(math.Min(float64(rh.InboundCallers*3+rh.OutboundCallees), 250))
-					score := 35 + rh.InboundCallers*4 + rh.OutboundCallees*2
-					if strings.Contains(rh.Package, "store") || strings.Contains(rh.Package, "merkle") || strings.Contains(rh.Package, "api") || strings.Contains(rh.Package, "policy") {
-						score += 12
-					}
-					if score > 98 {
-						score = 98
-					}
-					rh.RiskScore = score
-					switch {
-					case score >= 80:
-						rh.RiskTier = "CRITICAL"
-						criticalCount++
-					case score >= 65:
-						rh.RiskTier = "HIGH"
-						highCount++
-					case score >= 45:
-						rh.RiskTier = "MEDIUM"
-					default:
-						rh.RiskTier = "LOW"
-					}
-					rh.EpistemicStatus = "SUPPORTED"
-					rh.GoverningRules = inferGoverningRules(rh.Name, rh.Package)
-					rh.BlastRadiusSummary = fmt.Sprintf("%d direct callers · ~%d transitive symbols across %s", rh.InboundCallers, rh.TransitiveRadius, shortenString(rh.Package, 32))
-					riskHubs = append(riskHubs, rh)
-				}
-			}
-			rows.Close()
+	riskHubs := make([]RiskHubDTO, 0, 15)
+	criticalCount, highCount := 0, 0
+	for rows.Next() {
+		var rh RiskHubDTO
+		if err := rows.Scan(&rh.ID, &rh.Name, &rh.Kind, &rh.Package, &rh.File, &rh.InboundCallers, &rh.OutboundCallees); err != nil {
+			return TalonHubResponse{}, fmt.Errorf("scan workspace risk hub: %w", err)
 		}
-	}
-
-	if len(riskHubs) == 0 {
-		riskHubs = []RiskHubDTO{
-			{
-				ID: "hub:AppendLeafAndSealTx", Name: "PostgresStore.AppendLeafAndSealTx", Kind: "method",
-				Package: "github.com/myshra777-ai/garuda/internal/store", File: "internal/store/merkle_v1.go",
-				InboundCallers: 18, OutboundCallees: 6, TransitiveRadius: 60, RiskScore: 96, RiskTier: "CRITICAL",
-				EpistemicStatus: "SUPPORTED", GoverningRules: []string{"ADR-0002: RFC 6962 Canonical Merkle Layer", "Invariant I-11: Tenant & Workspace Scope Isolation"},
-				BlastRadiusSummary: "18 direct callers · ~60 transitive symbols across internal/store & internal/policy",
-			},
-			{
-				ID: "hub:Engine.Run", Name: "Engine.Run", Kind: "method",
-				Package: "github.com/myshra777-ai/garuda/internal/policy", File: "internal/policy/engine.go",
-				InboundCallers: 14, OutboundCallees: 9, TransitiveRadius: 51, RiskScore: 92, RiskTier: "CRITICAL",
-				EpistemicStatus: "SUPPORTED", GoverningRules: []string{"architecture-no-api-to-store-bypass", "ADR-0002: RFC 6962 Canonical Merkle Layer"},
-				BlastRadiusSummary: "14 direct callers · ~51 transitive symbols across CLI, MCP, and Talon gates",
-			},
-			{
-				ID: "hub:RunGuard", Name: "talon.RunGuard", Kind: "function",
-				Package: "github.com/myshra777-ai/garuda/internal/talon", File: "internal/talon/talon.go",
-				InboundCallers: 11, OutboundCallees: 8, TransitiveRadius: 41, RiskScore: 86, RiskTier: "CRITICAL",
-				EpistemicStatus: "SUPPORTED", GoverningRules: []string{"Spec: Active Talon MCP Watermarks", "architecture-layer-guardrails"},
-				BlastRadiusSummary: "11 direct callers · ~41 transitive symbols across pre-commit and MCP hooks",
-			},
-			{
-				ID: "hub:workspaceScopeFromRequest", Name: "workspaceScopeFromRequest", Kind: "function",
-				Package: "github.com/myshra777-ai/garuda/internal/api", File: "internal/api/workspace_scope.go",
-				InboundCallers: 12, OutboundCallees: 4, TransitiveRadius: 40, RiskScore: 84, RiskTier: "CRITICAL",
-				EpistemicStatus: "SUPPORTED", GoverningRules: []string{"Invariant I-11: Tenant & Workspace Scope Isolation", "architecture-no-api-to-store-bypass"},
-				BlastRadiusSummary: "12 direct callers · ~40 transitive symbols across all dashboard API handlers",
-			},
-			{
-				ID: "hub:RecomputeWorkspaceVerification", Name: "VerificationEngine.RecomputeWorkspaceVerification", Kind: "method",
-				Package: "github.com/myshra777-ai/garuda/internal/runtime", File: "internal/runtime/verifier.go",
-				InboundCallers: 8, OutboundCallees: 7, TransitiveRadius: 31, RiskScore: 76, RiskTier: "HIGH",
-				EpistemicStatus: "SUPPORTED", GoverningRules: []string{"Invariant I-4: 3-State Epistemic Honesty", "require-runtime-evidence-for-exported"},
-				BlastRadiusSummary: "8 direct callers · ~31 transitive symbols across runtime telemetry correlator",
-			},
+		rh.TransitiveRadius = int(math.Min(float64(rh.InboundCallers*3+rh.OutboundCallees), 250))
+		score := 35 + rh.InboundCallers*4 + rh.OutboundCallees*2
+		if strings.Contains(rh.Package, "store") || strings.Contains(rh.Package, "merkle") || strings.Contains(rh.Package, "api") || strings.Contains(rh.Package, "policy") {
+			score += 12
 		}
-		criticalCount = 4
-		highCount = 1
+		if score > 98 { score = 98 }
+		rh.RiskScore = score
+		switch {
+		case score >= 80: rh.RiskTier = "CRITICAL"; criticalCount++
+		case score >= 65: rh.RiskTier = "HIGH"; highCount++
+		case score >= 45: rh.RiskTier = "MEDIUM"
+		default: rh.RiskTier = "LOW"
+		}
+		// This is a prioritization heuristic from observed claim degree, not semantic verification.
+		rh.EpistemicStatus = "UNVERIFIED"
+		// These are not proven applicable rules. The pre-edit briefing returns actual workspace ADR claims and policies.
+		rh.GoverningRules = []string{}
+		rh.BlastRadiusSummary = fmt.Sprintf("%d direct callers · ~%d estimated related symbols across %s", rh.InboundCallers, rh.TransitiveRadius, shortenString(rh.Package, 32))
+		riskHubs = append(riskHubs, rh)
 	}
-
-	sort.Slice(riskHubs, func(i, j int) bool {
-		return riskHubs[i].RiskScore > riskHubs[j].RiskScore
-	})
-
-	var blockHeight int64 = 1
-	if pgStore != nil && pgStore.Pool() != nil {
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(MAX(block_height), 1) FROM merkle_roots WHERE tenant_id = $1`, tenantID).Scan(&blockHeight)
+	if err := rows.Err(); err != nil {
+		return TalonHubResponse{}, fmt.Errorf("iterate workspace risk hubs: %w", err)
 	}
-	buildCtx := analyzer.ResolveBuildContext(repoRoot, "go", workspaceName, nil)
-	if contract != nil && contract.BuildContext != nil {
-		buildCtx = contract.BuildContext
-	}
-	if buildCtx.GraphFingerprint == "" {
-		buildCtx.GraphFingerprint = "e4b89c1d3a7f0e29c5a1840f92b7d31e64a8f10c9b2e5d7a3c819204f6b1a3d8"
-		buildCtx.ActiveFilesCount = 148
-		buildCtx.SkippedByBuildTagsCount = 3
-		buildCtx.SkippedFilesSample = []string{"internal/ast/treesitter/cgo_bridge.go", "internal/runtime/ebpf_linux_cgo.go", "cmd/garuda/win_console_windows.go"}
-		buildCtx.ReceiptHash = buildCtx.ComputeReceiptHash()
-	}
-	driftReport := analyzer.DetectEnvironmentDrift(buildCtx, buildCtx, workspaceName)
-	matrixRows, _ := talon.RunMatrixVerification(ctx, repoRoot, workspaceName, nil)
-
-	latestVerdict := &talon.GuardVerdict{
-		Workspace:               workspaceName,
-		Outcome:                 "ALLOW",
-		AgentShouldProceed:      true,
-		TouchedFiles:            []string{},
-		TouchedSymbols:          []string{},
-		TouchedPackages:         []string{},
-		BlastRadiusAffected:     0,
-		BySeverity:              map[string]int{"CRITICAL": criticalCount, "HIGH": highCount, "MEDIUM": 4, "LOW": 2},
-		NetNewViolationsCount:   0,
-		BaselineViolationsCount: 0,
-		ADRContradictionsCount:  0,
-		Violations:              []string{},
-		SelfRepairInstructions: []string{
-			"Workspace is currently clean (0 net-new policy or ADR violations).",
-			"Before editing any CRITICAL or HIGH risk hub, run `garuda.talon_pre_edit` to inspect callers and layer guardrails.",
-		},
-		MerkleBlockHeight: &blockHeight,
-		BuildContext:      buildCtx,
-		EnvironmentDrift:  driftReport,
-		MatrixResults:     matrixRows,
-		ReproduceCommand:  buildCtx.ReproduceCommand,
-		DurationMs:        18,
-	}
+	sort.Slice(riskHubs, func(i, j int) bool { return riskHubs[i].RiskScore > riskHubs[j].RiskScore })
 
 	return TalonHubResponse{
-		Workspace:         workspaceName,
-		EnforcementMode:   "ACTIVE (FAIL-CLOSED)",
-		ActiveHooksCount:  activeHooks,
-		TotalHooksCount:   len(hooks),
-		Hooks:             hooks,
-		RiskHubs:          riskHubs,
+		Workspace: workspaceName,
+		EnforcementMode: "Configured · run a check for a verdict",
+		ActiveHooksCount: activeHooks,
+		TotalHooksCount: len(hooks),
+		Hooks: hooks,
+		RiskHubs: riskHubs,
 		CriticalHubsCount: criticalCount,
-		HighHubsCount:     highCount,
-		Contract:          contract,
-		LatestVerdict:     latestVerdict,
-		UpdatedAt:         time.Now().UTC().Format(time.RFC3339),
-	}
+		HighHubsCount: highCount,
+		Contract: contract,
+		// LatestVerdict remains nil until a real Talon evaluation returns one.
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+	}, nil
 }
 
 func inferGoverningRules(symbolName, pkg string) []string {
@@ -1313,122 +1174,142 @@ func inferGoverningRules(symbolName, pkg string) []string {
 func (s *Server) HandleDashboardTalonHub(w http.ResponseWriter, r *http.Request) {
 	applySecurityHeaders(w)
 	ctx := r.Context()
-
 	pgStore, ok := s.store.(*store.PostgresStore)
-	if !ok || pgStore == nil {
-		resp := s.buildTalonHubResponse(ctx, nil, uuid.Nil, uuid.Nil, "default")
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+	if !ok || pgStore == nil || pgStore.Pool() == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "workspace database is unavailable; no Talon hub data was returned", nil)
 		return
 	}
-
 	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
 	if err != nil {
-		resp := s.buildTalonHubResponse(ctx, pgStore, uuid.Nil, uuid.Nil, strings.TrimSpace(r.URL.Query().Get("workspace")))
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		if errors.Is(err, ErrNoWorkspaceAccess) {
+			writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
+			return
+		}
+		writeJSONError(w, http.StatusServiceUnavailable, "workspace scope could not be resolved; no Talon hub data was returned", nil)
 		return
 	}
-
-	resp := s.buildTalonHubResponse(ctx, pgStore, scope.TenantID, scope.WorkspaceID, scope.WorkspaceName)
+	resp, err := s.buildTalonHubResponse(ctx, pgStore, scope.TenantID, scope.WorkspaceID, scope.WorkspaceName)
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "Talon hub data is unavailable; no risk or verdict state was inferred", nil)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// HandleDashboardTalonCheck serves POST /api/v1/dashboard/talon-check.
 func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Request) {
 	applySecurityHeaders(w)
 	ctx := r.Context()
-
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	decoder := json.NewDecoder(r.Body)
+	var raw json.RawMessage
+	if err := decoder.Decode(&raw); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid Talon request JSON", nil)
+		return
+	}
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		writeJSONError(w, http.StatusBadRequest, "Talon request must be a JSON object", nil)
+		return
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		writeJSONError(w, http.StatusBadRequest, "request body must contain exactly one JSON object", nil)
+		return
+	}
 	var req TalonCheckRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
-
-	pgStore, _ := s.store.(*store.PostgresStore)
-	var tenantID, workspaceID uuid.UUID
-	workspaceName := strings.TrimSpace(req.Workspace)
-	if workspaceName == "" {
-		workspaceName = strings.TrimSpace(r.URL.Query().Get("workspace"))
+	if err := json.Unmarshal(raw, &req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid Talon request fields", nil)
+		return
 	}
-	if pgStore != nil {
-		if scope, err := workspaceScopeFromRequest(ctx, r, pgStore); err == nil {
-			tenantID = scope.TenantID
-			workspaceID = scope.WorkspaceID
-			workspaceName = scope.WorkspaceName
+	if req.Action == "" { req.Action = "run_guard" }
+	switch req.Action {
+	case "run_guard", "install_hooks", "pre_edit_brief", "matrix_check", "simulate_violation", "simulate_drift":
+	default:
+		writeJSONError(w, http.StatusBadRequest, "unsupported Talon action", map[string]any{"action": req.Action})
+		return
+	}
+
+	pgStore, ok := s.store.(*store.PostgresStore)
+	if !ok || pgStore == nil || pgStore.Pool() == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "workspace database is unavailable; no Talon action was performed", nil)
+		return
+	}
+	query := r.URL.Query()
+	queryWorkspace, bodyWorkspace := strings.TrimSpace(query.Get("workspace")), strings.TrimSpace(req.Workspace)
+	if queryWorkspace != "" && bodyWorkspace != "" && queryWorkspace != bodyWorkspace {
+		writeJSONError(w, http.StatusBadRequest, "workspace in request body does not match workspace query parameter", nil)
+		return
+	}
+	if queryWorkspace == "" && bodyWorkspace != "" {
+		query.Set("workspace", bodyWorkspace)
+		r.URL.RawQuery = query.Encode()
+	}
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
+	if err != nil {
+		if errors.Is(err, ErrNoWorkspaceAccess) {
+			writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
+			return
 		}
+		writeJSONError(w, http.StatusServiceUnavailable, "workspace scope could not be resolved; no Talon action was performed", nil)
+		return
 	}
-	if workspaceName == "" {
-		workspaceName = "default"
-	}
-
+	tenantID, workspaceID, workspaceName := scope.TenantID, scope.WorkspaceID, scope.WorkspaceName
+	req.Workspace = workspaceName
 	repoRoot := resolveRepoRoot()
 	policyDir := filepath.Join(repoRoot, "policies")
 
 	switch req.Action {
 	case "install_hooks":
-		var contract *talon.WorkspaceContract
-		if pgStore != nil && pgStore.Pool() != nil {
-			contract, _ = talon.CompileContract(ctx, pgStore.Pool(), tenantID, workspaceID, workspaceName, policyDir)
+		contract, err := talon.CompileContract(ctx, pgStore.Pool(), tenantID, workspaceID, workspaceName, policyDir)
+		if err != nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "workspace contract could not be compiled; hooks were not installed", nil)
+			return
 		}
 		summary, err := talon.InstallHooks(repoRoot, "", "", "", workspaceName, contract)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "failed to install hooks: "+err.Error(), nil)
 			return
 		}
-		hub := s.buildTalonHubResponse(ctx, pgStore, tenantID, workspaceID, workspaceName)
+		hub, hubErr := s.buildTalonHubResponse(ctx, pgStore, tenantID, workspaceID, workspaceName)
+		response := map[string]any{"status": "installed", "install_summary": summary}
+		if hubErr == nil {
+			response["talon_hub"] = hub
+		} else {
+			response["refresh_warning"] = "Hooks were installed, but their status could not be refreshed."
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status":          "installed",
-			"install_summary": summary,
-			"talon_hub":       hub,
-		})
+		_ = json.NewEncoder(w).Encode(response)
 		return
 
 	case "pre_edit_brief":
 		target := strings.TrimSpace(req.Target)
 		if target == "" {
-			target = "Server"
+			writeJSONError(w, http.StatusBadRequest, "pre-edit briefing requires a target symbol or path", nil)
+			return
 		}
-		if pgStore != nil && pgStore.Pool() != nil {
-			if brief, err := talon.BuildPreEditBriefing(ctx, pgStore, tenantID, workspaceID, workspaceName, target, policyDir); err == nil {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"status":   "ok",
-					"briefing": brief,
-				})
-				return
-			}
+		brief, err := talon.BuildPreEditBriefing(ctx, pgStore, tenantID, workspaceID, workspaceName, target, policyDir)
+		if err != nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "workspace pre-edit briefing could not be built; no sample briefing was substituted", nil)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "briefing": brief})
+		return
+
+	case "matrix_check":
+		matrixRows, err := talon.RunMatrixVerification(ctx, repoRoot, workspaceName, nil)
+		if err != nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "build matrix verification failed; no sample results were substituted", nil)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status": "ok",
-			"briefing": &talon.PreEditBriefing{
-				Workspace:        workspaceName,
-				Target:           target,
-				BlastRadiusTotal: 14,
-				BySeverity:       map[string]int{"CRITICAL": 2, "HIGH": 5, "MEDIUM": 5, "LOW": 2},
-				MandatoryProtocol: []string{
-					"1. Do not introduce direct edges that violate active layer_violation policies.",
-					"2. Respect all MUST and MUST_NOT ADR claims applicable to " + target + ".",
-					"3. Run garuda.talon_verify_edit immediately after editing.",
-				},
-			},
-		})
-		return
-
-	case "matrix_check":
-		matrixRows, _ := talon.RunMatrixVerification(ctx, repoRoot, workspaceName, nil)
-		hub := s.buildTalonHubResponse(ctx, pgStore, tenantID, workspaceID, workspaceName)
-		if hub.LatestVerdict != nil && len(matrixRows) > 0 {
-			hub.LatestVerdict.MatrixResults = matrixRows
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status":         "ok",
+			"scope": "configured Garuda repository root",
 			"matrix_results": matrixRows,
-			"verdict":        hub.LatestVerdict,
 		})
 		return
-
 	case "simulate_drift":
 		localCtx := analyzer.ResolveBuildContext(repoRoot, "go", workspaceName, nil)
 		localCtx.TargetOS = "darwin"
@@ -1483,7 +1364,8 @@ func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Reques
 		verdict.SelfRepairPrompt = talon.BuildSelfRepairPrompt(verdict)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status":  "drift_blocked",
+			"status": "drift_blocked",
+			"simulated": true,
 			"verdict": verdict,
 		})
 		return
@@ -1520,60 +1402,29 @@ func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Reques
 		verdict.SelfRepairPrompt = talon.BuildSelfRepairPrompt(verdict)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status":  "blocked",
+			"status": "blocked",
+			"simulated": true,
 			"verdict": verdict,
 		})
 		return
 
-	default: // "run_guard"
+
+	default: // run_guard
 		diffRev := strings.TrimSpace(req.DiffRev)
-		if diffRev == "" {
-			diffRev = "HEAD"
+		if diffRev == "" { diffRev = "HEAD" }
+		verdict, err := talon.RunGuard(ctx, pgStore, tenantID, workspaceID, talon.GuardOptions{
+			RepoDir: repoRoot, WorkspaceName: workspaceName, PolicyDir: policyDir,
+			DiffRev: diffRev, NetNewOnly: true, SaveLedger: false,
+		})
+		if err != nil || verdict == nil {
+			writeJSONError(w, http.StatusServiceUnavailable, "Talon evaluation failed; no policy verdict was produced", nil)
+			return
 		}
-		if pgStore != nil && pgStore.Pool() != nil {
-			verdict, err := talon.RunGuard(ctx, pgStore, tenantID, workspaceID, talon.GuardOptions{
-				RepoDir:       repoRoot,
-				WorkspaceName: workspaceName,
-				PolicyDir:     policyDir,
-				DiffRev:       diffRev,
-				NetNewOnly:    true,
-				SaveLedger:    false,
-			})
-			if err == nil && verdict != nil {
-				if strings.TrimSpace(req.Target) != "" && len(verdict.TouchedSymbols) == 0 {
-					verdict.TouchedSymbols = []string{req.Target}
-				}
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"status":  "ok",
-					"verdict": verdict,
-				})
-				return
-			}
-		}
-		var bh int64 = 52
-		verdict := &talon.GuardVerdict{
-			Workspace:               workspaceName,
-			Outcome:                 "ALLOW",
-			AgentShouldProceed:      true,
-			TouchedFiles:            []string{},
-			TouchedSymbols:          []string{},
-			TouchedPackages:         []string{},
-			BlastRadiusAffected:     0,
-			BySeverity:              map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
-			NetNewViolationsCount:   0,
-			BaselineViolationsCount: 0,
-			ADRContradictionsCount:  0,
-			Violations:              []string{},
-			SelfRepairInstructions:  []string{"0 net-new architectural or ADR violations detected against " + diffRev + "."},
-			MerkleBlockHeight:       &bh,
-			DurationMs:              14,
+		if strings.TrimSpace(req.Target) != "" && len(verdict.TouchedSymbols) == 0 {
+			verdict.TouchedSymbols = []string{req.Target}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status":  "ok",
-			"verdict": verdict,
-		})
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "verdict": verdict})
 	}
 }
 

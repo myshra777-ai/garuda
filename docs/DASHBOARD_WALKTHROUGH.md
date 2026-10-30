@@ -110,12 +110,12 @@ The dialog accepts a title, type, repository-relative path, and Markdown content
 
 This surface is the operational view of the Garuda Talon contract and risk profile of the indexed workspace.
 
-- **Hook status** shows whether supported agent/IDE/Git integration files are present at the server's configured repository root. It does not prove every external client is connected at that instant.
-- **Risk hubs** rank high-centrality or high-impact symbols. Select a hub for source, caller counts, risk tier, and governing-rule context.
-- **Pre-edit briefing** gathers architecture context for a selected target before an agent changes it.
-- **Run guard / Talon check** requests an evaluation against the current workspace and configured guardrails.
-- **Build matrix** evaluates configured platform/build profiles where supported.
-- **Simulate violation / drift** is a diagnostic demonstration; a simulation is not a production finding.
+- **Hook status** checks supported integration files under the server-configured `GARUDA_REPO_ROOT` (or detected server root). It is a file-presence check, not proof every external agent is connected. Sync Hooks also writes to that configured root; it does not automatically install hooks into every repository registered in a multi-repository workspace.
+- **Risk candidates** are heuristic rankings based on observed claim fan-in/fan-out and a package weighting. Estimated reach is not a computed transitive blast radius, and the score is not a policy verdict. Rule hints are not proof that a rule governs a symbol; use a live pre-edit briefing to inspect returned ADR claims and active workspace policies.
+- **Pre-edit briefing** calls the workspace-scoped briefing endpoint for the selected symbol or path and displays only returned matched entities, caller information, blast-radius counts, ADR claims, active policies, build context, and mandatory protocol. A failed request is shown as unavailable; no sample caller count or severity is substituted.
+- **Run guard / Talon check** requests a diff-scoped evaluation using the server-configured repository root and the selected workspace's indexed evidence. Database, scope, Git-diff, policy, or analysis failures return an unavailable/error state rather than an ALLOW verdict.
+- **Build matrix** analyzes configured platform/build profiles against the server-configured Garuda repository root. The dashboard labels this scope; it does not automatically run the matrix across every repository in a multi-repository workspace. Matrix graph-analysis rows are marked `UNVERIFIED`, not policy ALLOW verdicts.
+- **Simulate violation / drift** is a deterministic diagnostic demonstration. Simulated responses are labelled `DEMO`; they are not findings on the selected repository and do not replace a real guard run.
 - **Install/sync hooks** updates supported local integration files when the backend action is available. Verify the returned result and resulting files; do not assume success from a click.
 
 Use this surface to check agent readiness and investigate high-impact components. For actual enforcement, keep the CI/Talon command and MCP configuration authoritative.

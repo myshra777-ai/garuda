@@ -47,7 +47,7 @@
                 </div>
             </details>
         </nav> <div class="sidebar-footer">
-            <div class="trust-mini"> <span class="trust-dot"></span>
+            <div class="trust-mini"> <span class="trust-dot" style="background:var(--muted);box-shadow:none;"></span>
                 <span id="sidebar-trust-label">Ledger status follows workspace data</span> </div>
             <div class="sidebar-footer-actions"> <button type="button" class="footer-link-btn" onclick="openAPISpecModal()">API Spec</button>
                 <button type="button" class="footer-link-btn" onclick="openContractModal()">Talon Contract</button> <form method="POST" action="/logout" style="margin:0;">
@@ -318,14 +318,14 @@
                 <div class="card" style="padding:16px 20px; margin-bottom:16px;">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:14px;"> <div>
                             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;"> <h1 class="hero-title" style="font-size:20px;">Garuda Talon &amp; Risk Hub</h1>
-                                <span class="badge-pill success" id="talon-mode-badge">FAIL-CLOSED</span> <span class="badge-pill success" id="talon-verdict-pill">ALLOW</span>
-                                <span class="badge-pill critical" id="talon-crit-badge">4 CRITICAL</span> <span class="merkle-chip" id="talon-merkle-chip">block #52</span>
+                                <span class="badge-pill info" id="talon-mode-badge">Checking…</span> <span class="badge-pill info" id="talon-verdict-pill">No evaluation</span>
+                                <span class="badge-pill info" id="talon-crit-badge">—</span> <span class="merkle-chip" id="talon-merkle-chip">No anchor</span>
                             </div> <div style="font-size:12.5px; color:var(--text-secondary); margin-top:4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                                <span><strong class="mono" id="talon-hooks-count">6 / 6</strong> active IDE &amp; Git hooks</span> <span>·</span>
-                                <span><strong class="mono" id="talon-total-hubs">15</strong> risk hotspots (<strong class="mono" id="talon-high-count">5</strong> HIGH)</span> <span>·</span>
-                                <span><strong class="mono" id="talon-netnew-count">0</strong> net-new violations (<span id="talon-baseline-count">0</span> baseline · <span id="talon-adr-contra-count">0</span> ADR · <span id="talon-duration-ms">18ms</span>)</span> </div></div>
+                                <span><strong class="mono" id="talon-hooks-count">— / —</strong> hook files in configured root</span> <span>·</span>
+                                <span><strong class="mono" id="talon-total-hubs">—</strong> heuristic risk candidates (<strong class="mono" id="talon-high-count">—</strong> HIGH)</span> <span>·</span>
+                                <span><strong class="mono" id="talon-netnew-count">—</strong> net-new violations (<span id="talon-baseline-count">—</span> baseline · <span id="talon-adr-contra-count">—</span> ADR · <span id="talon-duration-ms">—</span>)</span> </div></div>
                         <div style="display:flex; gap:8px; flex-wrap:wrap;"> <button class="btn-secondary" onclick="openContractModal()">📄 Contract</button>
-                            <button class="btn-secondary" onclick="installTalonHooksFromUI()">🔧 Sync Hooks</button> <button class="btn-secondary" onclick="runTalonCheckFromUI('simulate_violation')">⚡ Simulate Violation</button>
+                            <button class="btn-secondary" onclick="installTalonHooksFromUI()">🔧 Sync configured-root hooks</button> <button class="btn-secondary" onclick="runTalonCheckFromUI('simulate_violation')">⚡ Simulate Violation</button>
                             <button class="btn-primary" onclick="runTalonCheckFromUI('run_guard')">▶ Run Diff Check</button> </div></div>
                     <div class="surface-tabs" role="tablist"> <button class="surface-tab-btn active" onclick="switchSurfaceSubTab('view-talon', 'talon-pane-gate', this)">01 · Live Enforcement Gate &amp; Hooks</button>
                         <button class="surface-tab-btn" onclick="switchSurfaceSubTab('view-talon', 'talon-pane-risk', this)">02 · Risk Hub Leaderboard &amp; Surface Criticality</button> <button class="surface-tab-btn" onclick="switchSurfaceSubTab('view-talon', 'talon-pane-matrix', this)">03 · Deterministic Build Matrix &amp; Receipt</button>
@@ -334,17 +334,15 @@
                     <div id="talon-pane-gate" class="surface-tab-pane active"> <div class="two-column" style="margin-bottom:0;">
                             <div> <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                                     <div class="sub-title">Live Talon Enforcement Gate &amp; Self-Repair Simulator</div> <div style="display:flex; gap:6px;">
-                                        <button class="btn-secondary" onclick="runTalonCheckFromUI('run_guard')">Check Clean Diff</button> <button class="btn-secondary" style="color:var(--red);" onclick="runTalonCheckFromUI('simulate_violation')">Simulate BLOCK</button>
+                                        <button class="btn-secondary" onclick="runTalonCheckFromUI('run_guard')">Run diff check</button> <button class="btn-secondary" style="color:var(--red);" onclick="runTalonCheckFromUI('simulate_violation')">Simulate BLOCK</button>
                                     </div></div> <div class="terminal-box" id="talon-terminal-box">
                                     <div class="talon-terminal-header"> <span>🦅 GARUDA TALON ACTIVE GUARD</span>
-                                        <span id="talon-term-status" style="color:#4ADE80;">OUTCOME: ALLOW</span> </div>
-                                    <div id="talon-term-body"> <div>Workspace: <strong style="color:#FFF;">{{ .WorkspaceName }}</strong></div>
-                                        <div>Diff Scope: 0 file(s), 0 touched symbol(s) (clean working tree)</div> <div>Blast Radius: 0 affected entities (CRITICAL=0, HIGH=0)</div>
-                                        <div>Violations: Net-New=0 | Baseline=0 | ADR Contradictions=0</div></div> <div class="talon-prompt-box" id="talon-repair-prompt-box">GARUDA TALON ENFORCEMENT GATE: WORKSPACE CLEAN (ALLOW)</div>
+                                        <span id="talon-term-status" style="color:var(--muted);">NO COMPLETED CHECK</span> </div>
+                                    <div id="talon-term-body">No completed Talon guard check has been returned for this workspace.</div> <div class="talon-prompt-box" id="talon-repair-prompt-box">Run a Talon check to obtain a workspace-specific verdict and evidence.</div>
                                     <div style="margin-top:10px; display:flex; justify-content:flex-end;"> <button class="btn-secondary" onclick="copyTalonRepairPrompt()">📋 Copy Self-Repair Prompt</button>
                                     </div></div> </div>
                             <div> <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                                    <div class="sub-title">Active IDE, MCP &amp; Git Enforcement Hooks</div> <button class="btn-primary" onclick="installTalonHooksFromUI()">Sync All Hooks</button>
+                                    <div class="sub-title">Active IDE, MCP &amp; Git Enforcement Hooks</div> <button class="btn-primary" onclick="installTalonHooksFromUI()">Sync configured-root hooks</button>
                                 </div> <div id="talon-hooks-list" style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px;"></div></div>
                         </div></div> <div id="talon-pane-risk" class="surface-tab-pane">
                         <div style="margin-bottom:20px;"> <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -352,41 +350,41 @@
                                     <div class="sub-subtitle">Freezes mission-critical surfaces while allowing informed trade-offs on non-blocking features.</div></div> <button class="btn-secondary" onclick="showView('audit')">⚖️ Formula Weights →</button>
                             </div> <div id="criticality-tiers-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px;"></div></div>
                         <div> <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
-                                <div class="sub-title">Architectural Risk Hub &amp; Blast-Radius Leaderboard</div> <div class="pill-group" id="risk-tier-filters">
+                                <div class="sub-title">Architectural risk candidates</div><div class="sub-subtitle">Heuristic ranking from observed claim fan-in/fan-out; not a policy verdict or transitive blast-radius calculation.</div> <div class="pill-group" id="risk-tier-filters">
                                     <button class="filter-pill active" onclick="filterRiskHubs('ALL', this)">All Risk Tiers</button> <button class="filter-pill" onclick="filterRiskHubs('CRITICAL', this)">Critical (80+)</button>
                                     <button class="filter-pill" onclick="filterRiskHubs('HIGH', this)">High (65–79)</button> <button class="filter-pill" onclick="filterRiskHubs('MEDIUM', this)">Medium (&lt;65)</button>
                                 </div></div> <div style="overflow-x:auto;">
                                 <table class="audit-table"> <thead>
                                         <tr> <th>Risk Score &amp; Tier</th>
                                             <th>Symbol / Architectural Hub</th> <th>Package &amp; Source File</th>
-                                            <th>Blast Radius (Callers / Transitive)</th> <th>Governing ADRs &amp; Policies</th>
+                                            <th>Callers / Estimated Reach</th> <th>Rule Hints</th>
                                             <th>Actions</th> </tr>
                                     </thead> <tbody id="talon-risk-hubs-tbody">
                                         <tr><td colspan="6" style="color:var(--muted); padding:16px;">Loading risk hubs…</td></tr> </tbody>
                                 </table> </div></div>
                     </div> <div id="talon-pane-matrix" class="surface-tab-pane">
                         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;"> <div>
-                                <div class="sub-title">Deterministic Build-Context Receipt &amp; Cross-Platform Matrix</div> <div class="sub-subtitle">Binds Target Platform (`GOOS/GOARCH`), `CGO_ENABLED`, Build Tags, Commit SHA, and Graph Fingerprint.</div></div>
-                            <div style="display:flex; gap:8px; flex-wrap:wrap;"> <span class="badge-pill success" id="talon-drift-badge">0 ENV DRIFT</span>
+                                <div class="sub-title">Build-context receipt &amp; platform matrix</div> <div class="sub-subtitle">Runs against the server-configured Garuda repository root; it does not automatically traverse every repository registered in this workspace.</div></div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;"> <span class="badge-pill info" id="talon-drift-badge">Not checked</span>
                                 <button class="btn-secondary" onclick="runTalonCheckFromUI('simulate_drift')">🔀 Simulate Drift</button> <button class="btn-secondary" onclick="runTalonCheckFromUI('matrix_check')">🌐 Verify Matrix</button>
                                 <button class="btn-primary" onclick="copyReproduceCommand()">📋 Copy Reproduce Command</button> </div></div>
                         <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin-bottom:12px;"> <div class="hook-tile">
                                 <div class="hook-tile-top"> <span class="hook-tile-title">Target Platform &amp; CGO</span>
-                                    <span class="badge-pill neutral mono" id="receipt-lang-badge">go</span> </div>
-                                <div class="mono" style="font-size:12.5px; font-weight:700;" id="receipt-platform-val">linux/amd64 · CGO=false</div> <div style="font-size:11px; color:var(--muted);" id="receipt-compiler-val">go/build constraint filter active</div></div>
+                                    <span class="badge-pill neutral mono" id="receipt-lang-badge">—</span> </div>
+                                <div class="mono" style="font-size:12.5px; font-weight:700;" id="receipt-platform-val">Not checked</div> <div style="font-size:11px; color:var(--muted);" id="receipt-compiler-val">Compiler context unavailable</div></div>
                             <div class="hook-tile"> <div class="hook-tile-top">
-                                    <span class="hook-tile-title">Build Tags &amp; File Scope</span> <span class="badge-pill neutral mono" id="receipt-skipped-badge">3 excluded</span>
-                                </div> <div class="mono" style="font-size:12.5px; font-weight:700;" id="receipt-tags-val">tags: [default / purego]</div>
-                                <div style="font-size:11px; color:var(--muted);" id="receipt-files-val">148 active files · 3 conditional skipped</div></div> <div class="hook-tile">
+                                    <span class="hook-tile-title">Build Tags &amp; File Scope</span> <span class="badge-pill neutral mono" id="receipt-skipped-badge">—</span>
+                                </div> <div class="mono" style="font-size:12.5px; font-weight:700;" id="receipt-tags-val">tags: —</div>
+                                <div style="font-size:11px; color:var(--muted);" id="receipt-files-val">No build-context receipt yet</div></div> <div class="hook-tile">
                                 <div class="hook-tile-top"> <span class="hook-tile-title">Exact Git Commit &amp; Tree</span>
-                                    <span class="badge-pill success mono" id="receipt-tree-badge">CLEAN TREE</span> </div>
-                                <div class="mono" style="font-size:12.5px; font-weight:700;" id="receipt-commit-val">HEAD @ 9f8bc3fa41e2</div> <div style="font-size:11px; color:var(--muted);" id="receipt-manifest-val">go.mod/sum lock: e7a1c904b2d81f30</div></div>
+                                    <span class="badge-pill info mono" id="receipt-tree-badge">Not checked</span> </div>
+                                <div class="mono" style="font-size:12.5px; font-weight:700;" id="receipt-commit-val">No commit receipt</div> <div style="font-size:11px; color:var(--muted);" id="receipt-manifest-val">Manifest lock unavailable</div></div>
                             <div class="hook-tile"> <div class="hook-tile-top">
                                     <span class="hook-tile-title">Graph &amp; Receipt Digest</span> <span class="merkle-chip" id="receipt-hash-chip">SHA-256</span>
-                                </div> <div class="mono" style="font-size:12px; font-weight:700;" id="receipt-fp-val">fp: e4b89c1d3a7f0e29…</div>
-                                <div style="font-size:11px; color:var(--muted);" id="receipt-sha-val">receipt: 6d92a4f01b8e3c71…</div></div> </div>
+                                </div> <div class="mono" style="font-size:12px; font-weight:700;" id="receipt-fp-val">fp: —</div>
+                                <div style="font-size:11px; color:var(--muted);" id="receipt-sha-val">receipt: —</div></div> </div>
                         <div id="talon-drift-alert-box" style="display:none; margin-bottom:12px; padding:10px 14px; border-radius:6px; border:1px solid var(--amber-border); background:var(--amber-bg); font-size:12px;"></div> <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 12px; border-radius:6px; background:var(--bg-primary); border:1px solid var(--border-subtle); margin-bottom:12px;">
-                            <code class="mono" style="font-size:11.5px;" id="receipt-reproduce-cmd">GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --commit 9f8bc3fa41e2 --workspace default</code> <button class="btn-secondary" onclick="copyReproduceCommand()">Copy</button>
+                            <code class="mono" style="font-size:11.5px;" id="receipt-reproduce-cmd">No reproduce command available until a receipt is returned.</code> <button class="btn-secondary" onclick="copyReproduceCommand()">Copy</button>
                         </div> <div style="overflow-x:auto;">
                             <table class="audit-table"> <thead>
                                     <tr> <th>Target Platform</th>
@@ -394,7 +392,7 @@
                                         <th>Graph Scale</th> <th>Graph Fingerprint</th>
                                         <th>Verdict &amp; Reproduce</th> </tr>
                                 </thead> <tbody id="talon-matrix-tbody">
-                                    <tr><td colspan="6" style="color:var(--muted); padding:12px;">Loading cross-platform build matrix…</td></tr> </tbody>
+                                    <tr><td colspan="6" style="color:var(--muted); padding:12px;">Run Verify Matrix to inspect the configured repository root.</td></tr> </tbody>
                             </table> </div></div>
                 </div>
             </section>
@@ -424,27 +422,27 @@
                     <div class="card" style="overflow:hidden;">
                         <div class="wb-pane-header"> <div>
                                 <div class="wb-pane-kicker">02 · IMPACT MAP</div> <div class="wb-pane-title" id="rev-center-title">Affected Graph Neighborhood &amp; Dependency Paths</div></div>
-                            <span class="kbd-chip" id="rev-blast-summary">0 callers · 0 callees</span> </div>
+                            <span class="kbd-chip" id="rev-blast-summary">No target selected</span> </div>
                         <div class="wb-pane-body" id="review-impact-stage"></div></div>
                     <div class="card" style="overflow:hidden;">
                         <div class="wb-pane-header"> <div>
                                 <div class="wb-pane-kicker">03 · DECISION &amp; EVIDENCE</div> <div class="wb-pane-title">3-Plane Verification</div></div>
                         </div> <div class="wb-pane-body">
                             <div class="state-triad"> <div class="triad-box">
-                                    <div class="triad-label">1. Epistemic</div> <span class="badge-pill state-supported" id="rev-triad-epistemic">SUPPORTED</span>
+                                    <div class="triad-label">1. Epistemic</div> <span class="badge-pill state-unverified" id="rev-triad-epistemic">UNVERIFIED</span>
                                 </div> <div class="triad-box">
-                                    <div class="triad-label">2. Policy</div> <span class="policy-badge ALLOW" id="rev-triad-policy">ALLOW</span>
+                                    <div class="triad-label">2. Policy</div> <span class="policy-badge UNVERIFIED" id="rev-triad-policy">No evaluation</span>
                                 </div> <div class="triad-box">
-                                    <div class="triad-label">3. Ledger</div> <span class="merkle-chip" id="rev-triad-ledger">ANCHORED</span>
+                                    <div class="triad-label">3. Ledger</div> <span class="merkle-chip" id="rev-triad-ledger">No anchor</span>
                                 </div></div> <div class="record-box" id="review-decision-record">
                                 <div class="dr-header"> <div class="dr-title">📄 Decision Record</div>
                                     <div class="dr-meta" id="rev-dr-id">Select a check</div></div> <div class="dr-grid">
                                     <div class="dr-row"> <div class="dr-key">What it evaluated</div>
-                                        <div class="dr-val" id="rev-dr-what">Workspace architectural invariants and call-graph blast radius.</div></div> <div class="dr-row">
-                                        <div class="dr-key">What rule applied</div> <div class="dr-val mono" id="rev-dr-rule">architecture-layer-guardrails</div></div>
+                                        <div class="dr-val" id="rev-dr-what">Select a policy evaluation or symbol to inspect its available evidence.</div></div> <div class="dr-row">
+                                        <div class="dr-key">What rule applied</div> <div class="dr-val mono" id="rev-dr-rule">No policy evaluation selected</div></div>
                                     <div class="dr-row"> <div class="dr-key">Evidence &amp; counts</div>
                                         <div class="dr-val" id="rev-dr-evidence">—</div></div> <div class="dr-row">
-                                        <div class="dr-key">Uncertainty note</div> <div class="dr-val" id="rev-dr-uncertainty">Static AST relationships resolved via go/types; unexecuted runtime branches remain UNVERIFIED.</div></div>
+                                        <div class="dr-key">Uncertainty note</div> <div class="dr-val" id="rev-dr-uncertainty">Evaluation status and uncertainty are shown after selecting a recorded result.</div></div>
                                     <div class="dr-row"> <div class="dr-key">CLI reproduction</div>
                                         <div class="dr-val"><code id="rev-dr-cli">./bin/garuda check --project {{ .WorkspaceName }} --policy policies</code></div></div> </div>
                                 <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;" id="rev-dr-actions"></div></div> </div></div>
@@ -458,11 +456,11 @@
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:12px;"> <div>
                             <h1 class="hero-title" style="font-size:20px;">Audit Log &amp; Epistemic Evidence</h1> <div class="hero-subtitle">Every claim and policy evaluation traces back to its file, line, resolution method, and RFC 6962 Merkle anchor.</div></div>
                         <div class="trust-badge"> <span class="trust-badge-dot"></span>
-                            <span>Ledger <span id="trust-status">Verified</span> · Block <span id="trust-height">#1</span></span> </div></div>
+                            <span>Ledger <span id="trust-status">Checking…</span> · Block <span id="trust-height">—</span></span> </div></div>
                     <div class="trust-strip" style="margin-bottom:0;"> <div class="trust-tile">
-                            <div class="trust-tile-title">Current Epoch Merkle Root</div> <div class="merkle" id="trust-merkle">Genesis verified</div></div>
+                            <div class="trust-tile-title">Current Epoch Merkle Root</div> <div class="merkle" id="trust-merkle">No anchor recorded</div></div>
                         <div class="trust-tile"> <div class="trust-tile-title">Parent Epoch Root</div>
-                            <div class="merkle" id="trust-parent">Genesis</div></div> <div class="trust-tile">
+                            <div class="merkle" id="trust-parent">No parent anchor</div></div> <div class="trust-tile">
                             <div class="trust-tile-title">Last Anchored Observation</div> <div class="mono" id="trust-updated" style="font-weight:600;">—</div></div>
                     </div></div>
                 <div class="card" style="margin-bottom:16px;">
