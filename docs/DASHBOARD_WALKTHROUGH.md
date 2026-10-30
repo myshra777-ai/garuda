@@ -145,13 +145,13 @@ The active panel shows current MCP sessions; the recent panel shows recent sessi
 
 ### Data & Logic Audit
 
-The formula/criticality area compares competing logic variants and explains why one surface may be treated as higher impact.
+The formula/criticality area combines live workspace-enriched criticality tiers with built-in illustrative formula and financial-audit scenarios returned by the current dashboard API. Treat baseline financial discrepancy cards as examples, not automatically detected findings from your selected repository. Production findings should be backed by imported source evidence and an explicit analysis result.
 
 - **Team context** switches the weighting/advisory context used by the view.
-- **Formula/variant cards** expose competing calculations, impact, and human decision state.
+- **Formula/variant cards** expose the API's current example calculations, impact, and human decision state; confirm that a variant is grounded in your workspace before treating it as a production finding.
 - **Approve / freeze** controls record a human disposition when the backend accepts the action.
 - **Criticality tiers** summarize risk class and expected review level.
-- **Financial discrepancy cards** compare values, formula/source lineage, and variance.
+- **Financial discrepancy cards** compare built-in scenario values, formula/source lineage, and variance until those inputs are backed by imported workspace evidence.
 - **Simulate Custom Unit-Scale Check** creates a local demonstration scenario; it is not an imported financial finding.
 - **Rulebook editor** lets reviewers inspect/edit the proposed base rulebook, copy it, and submit approval. Verify the returned status/hash before treating it as approved.
 

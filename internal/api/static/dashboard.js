@@ -1288,22 +1288,25 @@ function renderPolicies(data) {
     });
 }
 function verifyPolicyAnchor(evalID) {
-    var url = "/api/v1/dashboard/policies/verify?workspace=" +
-        encodeURIComponent(WORKSPACE) + "&id=" + encodeURIComponent(evalID);
-    fetch(url)
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-            if (data && data.valid) {
-                showProofDrawer(evalID, data.block_height || 52, data.epoch_root || data.new_root || "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4");
-            } else {
-                showProofDrawer(evalID, 52, "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4");
-            }
+    if (!evalID) {
+        showToast("Select a recorded policy evaluation before verifying its proof.");
+        return;
+    }
+    var url = "/api/v1/dashboard/policies/verify?workspace=" + encodeURIComponent(WORKSPACE) + "&id=" + encodeURIComponent(evalID);
+    fetch(url, { headers: { "Accept": "application/json" } })
+        .then(function(res) {
+            if (!res.ok) throw new Error("Proof verification failed (HTTP " + res.status + ").");
+            return res.json();
         })
-        .catch(function() {
-            showProofDrawer(evalID, 52, "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4");
-        });
+        .then(function(data) {
+            if (!data || data.valid !== true || !data.block_height || !(data.epoch_root || data.new_root)) {
+                showToast("No valid anchored proof was returned for this evaluation.");
+                return;
+            }
+            showProofDrawer(evalID, data.block_height, data.epoch_root || data.new_root);
+        })
+        .catch(function(err) { showToast(err && err.message ? err.message : "Proof verification is unavailable."); });
 }
-
 function showProofDrawer(evalID, blockHeight, epochRoot) {
     var drawer = document.getElementById("drawer");
     var overlay = document.getElementById("drawer-overlay");
@@ -1671,7 +1674,7 @@ function renderDocsD3Graph(filteredDocs, filteredComps) {
     if (svg.empty()) return;
     svg.selectAll("*").remove();
 
-    var dg = state.docsGraphData || buildDefaultDocsGraph();
+    var dg = state.docsGraphData || { documents: [], components: [], stats: {}, graph: { nodes: [], edges: [] } };
     var docs = filteredDocs || dg.documents || [];
     var comps = filteredComps || dg.components || [];
 
@@ -1971,148 +1974,53 @@ function fillIngestTemplate(tpl) {
 }
 
 async function submitIngestDoc() {
-    var title = (document.getElementById("ingest-doc-title").value || "").trim() || "ADR-0004: Custom Architectural Rule";
-    var docType = (document.getElementById("ingest-doc-type").value || "ADR").trim();
-    var path = (document.getElementById("ingest-doc-path").value || "docs/adr/custom-rule.md").trim();
-    var content = (document.getElementById("ingest-doc-content").value || "").trim();
-
+    var titleEl = document.getElementById("ingest-doc-title");
+    var typeEl = document.getElementById("ingest-doc-type");
+    var pathEl = document.getElementById("ingest-doc-path");
+    var contentEl = document.getElementById("ingest-doc-content");
+    var title = (titleEl && titleEl.value || "").trim() || "ADR-Custom: Architectural Guardrail";
+    var docType = (typeEl && typeEl.value || "ADR").trim();
+    var path = (pathEl && pathEl.value || "docs/adr/custom-rule.md").trim();
+    var content = (contentEl && contentEl.value || "").trim();
     if (!content) {
-        showToast("Please provide Markdown or rule statements to ingest.");
+        showToast("Add Markdown content before ingesting.");
+        if (contentEl) contentEl.focus();
         return;
     }
-
-    var ingestedViaServer = false;
     try {
         var res = await fetch("/api/v1/dashboard/docs-ingest?workspace=" + encodeURIComponent(WORKSPACE), {
             method: "POST",
             headers: { "Content-Type": "application/json", "Accept": "application/json" },
-            body: JSON.stringify({
-                workspace: WORKSPACE,
-                title: title,
-                doc_type: docType,
-                path: path,
-                content: content
-            })
+            body: JSON.stringify({ workspace: WORKSPACE, title: title, doc_type: docType, path: path, content: content })
         });
-        if (res.ok) {
-            var payload = await res.json();
-            if (payload && payload.docs_graph && payload.docs_graph.documents) {
-                state.docsGraphData = payload.docs_graph;
-                ingestedViaServer = true;
-            }
+        var payload = null;
+        try { payload = await res.json(); } catch (parseErr) {}
+        if (!res.ok) throw new Error(payload && (payload.error || payload.message) || ("Document ingestion failed (HTTP " + res.status + ")."));
+        if (!payload || payload.status !== "ingested" || !payload.docs_graph ||
+            !Array.isArray(payload.docs_graph.documents) || !Array.isArray(payload.docs_graph.components)) {
+            throw new Error("The server did not return a persisted document graph. No local preview was created.");
         }
-    } catch (e) {}
-
-    if (!state.docsGraphData) {
-        state.docsGraphData = buildDefaultDocsGraph();
+        state.docsGraphData = payload.docs_graph;
+        closeIngestDocModal();
+        showView("docsgraph");
+        renderDocsGraphAndTables();
+        showToast("Ingested “" + shortenLabel(title, 32) + "” · " + formatNumber(payload.extracted_count || 0) + " extracted claims.");
+    } catch (err) {
+        showToast(err && err.message ? err.message : "Document ingestion failed. No success state was recorded.");
     }
-    var docId = "doc:custom:" + Date.now();
-    var lines = content.split("\n");
-    var extracted = [];
-    var backtickRe = /`([^`]+)`/g;
-
-    lines.forEach(function(rawLine, idx) {
-        var line = rawLine.trim();
-        if (!line || line.indexOf("#") === 0) return;
-        var lower = line.toLowerCase();
-        var mod = "";
-        if (lower.indexOf("must not") !== -1 || lower.indexOf("shall not") !== -1 || lower.indexOf("cannot") !== -1) {
-            mod = "MUST_NOT";
-        } else if (lower.indexOf("must") !== -1 || lower.indexOf("shall") !== -1 || lower.indexOf("requires") !== -1) {
-            mod = "MUST";
-        }
-        if (!mod) return;
-        var syms = [];
-        var m;
-        while ((m = backtickRe.exec(line)) !== null) {
-            syms.push(m[1]);
-        }
-        var subj = syms[0] || "WorkspaceComponent";
-        var obj = syms[1] || (lower.indexOf("idempotent") !== -1 ? "IdempotencyKey" : "TargetContract");
-        var pred = lower.indexOf("idempotent") !== -1 ? "IDEMPOTENT" : "CALLS";
-
-        extracted.push({
-            id: "comp:custom:" + Date.now() + ":" + idx,
-            doc_id: docId,
-            doc_title: title,
-            doc_type: docType,
-            doc_path: path,
-            section: "Decision",
-            line: idx + 1,
-            modality: mod,
-            subject: subj,
-            predicate: pred,
-            object: obj,
-            statement: line.replace(/^[-*•]\s*/, ""),
-            status: "ENFORCED",
-            reason: "Ingested via Garuda Docs & Rules Hub and linked to AST symbols.",
-            policy_id: "architecture-no-api-to-store-bypass",
-            linked_code: [
-                { id: "sym:" + subj, name: subj, kind: "function", package: "internal/talon", file: path, relation: "GOVERNED_BY" },
-                { id: "sym:" + obj, name: obj, kind: "method", package: "internal/store", file: path, relation: "IMPLEMENTS" }
-            ]
-        });
-    });
-
-    if (extracted.length === 0) {
-        extracted.push({
-            id: "comp:custom:" + Date.now() + ":0",
-            doc_id: docId,
-            doc_title: title,
-            doc_type: docType,
-            doc_path: path,
-            section: "Decision",
-            line: 3,
-            modality: "MUST",
-            subject: "RunGuard",
-            predicate: "ENFORCES",
-            object: "CompileContract",
-            statement: content.slice(0, 120),
-            status: "ENFORCED",
-            reason: "Ingested via Garuda Docs & Rules Hub.",
-            policy_id: "architecture-no-api-to-store-bypass",
-            linked_code: [
-                { id: "sym:RunGuard", name: "talon.RunGuard", kind: "function", package: "internal/talon", file: "internal/talon/talon.go", relation: "GOVERNED_BY" }
-            ]
-        });
-    }
-
-    if (!ingestedViaServer) {
-        state.docsGraphData.documents.unshift({
-            id: docId,
-            title: title,
-            doc_type: docType,
-            path: path,
-            status: "ENFORCED",
-            components_count: extracted.length,
-            linked_symbols_count: extracted.length * 2,
-            enforced_by_talon: true,
-            summary: "Newly ingested " + docType + " connecting " + extracted.length + " extracted rule(s) to codebase AST symbols.",
-            tags: [docType, "Live Ingested", "Talon Enforced"],
-            updated_at: new Date().toISOString()
-        });
-        extracted.forEach(function(c) {
-            state.docsGraphData.components.unshift(c);
-        });
-        state.docsGraphData = synthesizeDocsGraphFromList(state.docsGraphData.documents, state.docsGraphData.components);
-    }
-
-    closeIngestDocModal();
-    showView("docsgraph");
-    renderDocsGraphAndTables();
-    showToast("✓ Ingested “" + shortenLabel(title, 32) + "” & connected " + extracted.length + " rule(s) to code graph!");
 }
-
 async function rescanWorkspaceDocs() {
     showToast("Scanning docs/adr, docs/specs, policies, and .garudarules…");
     state.docsGraphData = null;
     await loadDocsGraph();
-    showToast("✓ Synchronized " + (state.docsGraphData.documents.length) + " documents and " + (state.docsGraphData.components.length) + " rules with AST!");
+    if (!state.docsGraphData || state.docsGraphData.unavailable) {
+        showToast("Document scan failed. No synchronized state was reported.");
+        return;
+    }
+    var docsCount = Array.isArray(state.docsGraphData.documents) ? state.docsGraphData.documents.length : 0;
+    var componentCount = Array.isArray(state.docsGraphData.components) ? state.docsGraphData.components.length : 0;
+    showToast("Document index refreshed · " + docsCount + " documents · " + componentCount + " extracted components.");
 }
-
-/* ============================================================================
-   05 — GARUDA TALON & RISK HUB
-   ============================================================================ */
 async function loadTalonHub() {
     if (!state.talonHubData) {
         try {
@@ -2171,144 +2079,123 @@ function renderTalonHub() {
 }
 
 function renderTalonVerdict(verdict) {
-    if (!verdict) return;
-    var outcome = verdict.outcome || "ALLOW";
+    verdict = verdict || {};
+    var hasOutcome = typeof verdict.outcome === "string" && verdict.outcome.length > 0;
+    var outcome = hasOutcome ? verdict.outcome : "No evaluation";
     var pill = document.getElementById("talon-verdict-pill");
     if (pill) {
         pill.textContent = outcome;
-        pill.className = "badge-pill " + (outcome === "BLOCK" ? "critical" : (outcome === "WARN" || outcome === "REVIEW" ? "warning" : "success"));
+        pill.className = "badge-pill " + (outcome === "BLOCK" ? "critical" : (outcome === "WARN" || outcome === "REVIEW" ? "warning" : (outcome === "ALLOW" ? "success" : "info")));
     }
-    setText("nav-badge-talon", outcome === "BLOCK" ? "BLOCK" : "Guard");
+    setText("nav-badge-talon", outcome === "BLOCK" ? "BLOCK" : (hasOutcome ? "Guard" : "—"));
     setText("talon-netnew-count", String(verdict.net_new_violations_count || 0));
     setText("talon-baseline-count", String(verdict.baseline_violations_count || 0));
     setText("talon-adr-contra-count", String(verdict.adr_contradictions_count || 0));
-    setText("talon-duration-ms", (verdict.duration_ms || 18) + "ms");
-    if (verdict.merkle_block_height) {
-        setText("talon-merkle-chip", "block #" + verdict.merkle_block_height);
-    }
+    setText("talon-duration-ms", typeof verdict.duration_ms === "number" ? verdict.duration_ms + "ms" : "—");
+    setText("talon-merkle-chip", verdict.merkle_block_height ? "block #" + verdict.merkle_block_height : "No anchor");
 
     var termStatus = document.getElementById("talon-term-status");
     if (termStatus) {
-        termStatus.textContent = "OUTCOME: " + outcome;
-        termStatus.style.color = outcome === "BLOCK" ? "#F87171" : "#4ADE80";
+        termStatus.textContent = hasOutcome ? "OUTCOME: " + outcome : "NO COMPLETED CHECK";
+        termStatus.style.color = outcome === "BLOCK" ? "#F87171" : (hasOutcome ? "#4ADE80" : "var(--muted)");
     }
-
     var termBody = document.getElementById("talon-term-body");
     if (termBody) {
-        var filesCount = (verdict.touched_files && verdict.touched_files.length) || 0;
-        var symsCount = (verdict.touched_symbols && verdict.touched_symbols.length) || 0;
-        var sev = verdict.by_severity || { CRITICAL: 0, HIGH: 0 };
-        termBody.innerHTML =
-            '<div>Workspace:    <strong style="color:#FFF;">' + escapeHTML(verdict.workspace || WORKSPACE) + '</strong></div>' +
-            '<div>Diff Scope:   ' + filesCount + ' file(s), ' + symsCount + ' touched symbol(s)</div>' +
-            '<div>Blast Radius: ' + (verdict.blast_radius_affected || 0) + ' affected entities (CRITICAL=' + (sev.CRITICAL || 0) + ', HIGH=' + (sev.HIGH || 0) + ')</div>' +
-            '<div>Violations:   <strong style="color:' + (outcome === "BLOCK" ? "#F87171" : "#4ADE80") + ';">Net-New=' + (verdict.net_new_violations_count || 0) + '</strong>  |  Baseline=' + (verdict.baseline_violations_count || 0) + '  |  ADR Contradictions=' + (verdict.adr_contradictions_count || 0) + '</div>' +
-            '<div>Merkle Seal:  RFC 6962 block #' + (verdict.merkle_block_height || 52) + ' (' + (verdict.duration_ms || 18) + 'ms)</div>';
+        if (!hasOutcome) {
+            termBody.textContent = "No completed Talon verdict is available for this workspace. Run a guard check to populate this panel.";
+        } else {
+            var filesCount = Array.isArray(verdict.touched_files) ? verdict.touched_files.length : 0;
+            var symsCount = Array.isArray(verdict.touched_symbols) ? verdict.touched_symbols.length : 0;
+            var sev = verdict.by_severity || {};
+            termBody.innerHTML =
+                '<div>Workspace: <strong style="color:#FFF;">' + escapeHTML(verdict.workspace || WORKSPACE) + '</strong></div>' +
+                '<div>Diff scope: ' + filesCount + ' file(s), ' + symsCount + ' touched symbol(s)</div>' +
+                '<div>Blast radius: ' + (verdict.blast_radius_affected || 0) + ' affected entities (CRITICAL=' + (sev.CRITICAL || 0) + ', HIGH=' + (sev.HIGH || 0) + ')</div>' +
+                '<div>Violations: <strong>Net-new=' + (verdict.net_new_violations_count || 0) + '</strong> · Baseline=' + (verdict.baseline_violations_count || 0) + ' · ADR contradictions=' + (verdict.adr_contradictions_count || 0) + '</div>' +
+                '<div>Merkle seal: ' + (verdict.merkle_block_height ? "RFC 6962 block #" + verdict.merkle_block_height : "not anchored") +
+                (typeof verdict.duration_ms === "number" ? " · " + verdict.duration_ms + "ms" : "") + '</div>';
+        }
     }
-
     var promptBox = document.getElementById("talon-repair-prompt-box");
     if (promptBox) {
-        if (verdict.self_repair_prompt) {
+        if (!hasOutcome) {
+            promptBox.textContent = "No completed guard result is available. Run a Talon check to obtain a workspace-specific verdict.";
+        } else if (verdict.self_repair_prompt) {
             promptBox.textContent = verdict.self_repair_prompt;
         } else if (verdict.violations && verdict.violations.length > 0) {
             promptBox.textContent = "GARUDA TALON ENFORCEMENT GATE: CHANGE BLOCKED\n" +
-                verdict.violations.map(function(v) { return "  ✗ " + v; }).join("\n") + "\n\nMandatory Self-Repair Actions:\n" +
+                verdict.violations.map(function(v) { return "  ✗ " + v; }).join("\n") + "\n\nMandatory self-repair actions:\n" +
                 (verdict.self_repair_instructions || []).map(function(r, i) { return "  " + (i + 1) + ". " + r; }).join("\n");
         } else {
-            promptBox.textContent = "GARUDA TALON ENFORCEMENT GATE: WORKSPACE CLEAN (ALLOW)\n" +
-                "0 net-new architectural policy violations or ADR contradictions detected.\n" +
-                ((verdict.self_repair_instructions && verdict.self_repair_instructions.join("\n")) || "");
+            promptBox.textContent = "GARUDA TALON ENFORCEMENT GATE: " + outcome + "\nThis result applies to the submitted workspace check. Inspect its evidence and scope before merging.";
         }
     }
-
     renderBuildContextReceipt(verdict);
 }
-
 function renderBuildContextReceipt(verdict) {
-    var defVerdict = buildDefaultTalonHub().latest_verdict;
-    var bc = (verdict && verdict.build_context) || defVerdict.build_context;
-    var drift = (verdict && verdict.environment_drift) || defVerdict.environment_drift;
-    var matrix = (verdict && verdict.matrix_results && verdict.matrix_results.length > 0)
-        ? verdict.matrix_results
-        : defVerdict.matrix_results;
-
+    verdict = verdict || {};
+    var bc = verdict.build_context || null;
+    var drift = verdict.environment_drift || null;
+    var matrix = Array.isArray(verdict.matrix_results) ? verdict.matrix_results : [];
     if (bc) {
-        setText("receipt-lang-badge", bc.language || "go");
-        setText("receipt-platform-val", (bc.target_platform || (bc.target_os + "/" + bc.target_arch)) + " · CGO=" + (bc.cgo_enabled ? "true" : "false"));
-        setText("receipt-compiler-val", bc.compiler_version || "go/build constraint filter active");
-        var tagsArr = bc.build_tags && bc.build_tags.length > 0 ? bc.build_tags.join(", ") : "default (none)";
+        setText("receipt-lang-badge", bc.language || "—");
+        setText("receipt-platform-val", bc.target_platform || [bc.target_os, bc.target_arch].filter(Boolean).join("/") || "—");
+        setText("receipt-compiler-val", bc.compiler_version || "—");
+        var tagsArr = Array.isArray(bc.build_tags) && bc.build_tags.length ? bc.build_tags.join(", ") : "none";
         setText("receipt-tags-val", "tags: [" + tagsArr + "]");
         setText("receipt-skipped-badge", (bc.skipped_by_build_tags_count || 0) + " excluded");
-        setText("receipt-files-val", (bc.active_files_count || 148) + " active files · " + (bc.skipped_by_build_tags_count || 0) + " conditional skipped");
-        setText("receipt-tree-badge", bc.worktree_dirty ? "DIRTY (" + (bc.dirty_files_count || 1) + ")" : "CLEAN TREE");
-        var treeBadge = document.getElementById("receipt-tree-badge");
-        if (treeBadge) {
-            treeBadge.className = "badge-pill mono " + (bc.worktree_dirty ? "warning" : "success");
-        }
-        setText("receipt-commit-val", (bc.branch || "main") + " @ " + (bc.commit_short || (bc.commit_sha || "").slice(0, 12) || "HEAD"));
-        setText("receipt-manifest-val", "manifest lock: " + (bc.config_manifest_hash || "e7a1c904b2d81f30"));
-        setText("receipt-fp-val", "fp: " + ((bc.graph_fingerprint || "").slice(0, 18) || "e4b89c1d3a7f0e29") + "…");
-        setText("receipt-sha-val", "receipt: " + ((bc.receipt_hash || "").slice(0, 18) || "6d92a4f01b8e3c71") + "…");
-        setText("receipt-reproduce-cmd", bc.reproduce_command || verdict.reproduce_command || defVerdict.reproduce_command);
+        setText("receipt-files-val", (typeof bc.active_files_count === "number" ? bc.active_files_count : "—") + " active · " + (bc.skipped_by_build_tags_count || 0) + " conditional skipped");
+        setText("receipt-tree-badge", typeof bc.worktree_dirty === "boolean" ? (bc.worktree_dirty ? "DIRTY" : "CLEAN TREE") : "Unknown");
+        setText("receipt-commit-val", (bc.branch || "—") + " @ " + (bc.commit_short || (bc.commit_sha || "").slice(0, 12) || "—"));
+        setText("receipt-manifest-val", "manifest lock: " + (bc.config_manifest_hash || "—"));
+        setText("receipt-fp-val", "fp: " + ((bc.graph_fingerprint || "").slice(0, 18) || "—"));
+        setText("receipt-sha-val", "receipt: " + ((bc.receipt_hash || "").slice(0, 18) || "—"));
+        setText("receipt-reproduce-cmd", bc.reproduce_command || verdict.reproduce_command || "—");
+    } else {
+        ["receipt-lang-badge", "receipt-platform-val", "receipt-compiler-val", "receipt-tags-val", "receipt-skipped-badge",
+         "receipt-files-val", "receipt-tree-badge", "receipt-commit-val", "receipt-manifest-val", "receipt-fp-val",
+         "receipt-sha-val", "receipt-reproduce-cmd"].forEach(function(id) { setText(id, "—"); });
     }
-
     var driftBadge = document.getElementById("talon-drift-badge");
     var driftBox = document.getElementById("talon-drift-alert-box");
     if (drift && drift.drift_detected) {
-        if (driftBadge) {
-            driftBadge.textContent = "DRIFT DETECTED (" + ((drift.discrepancies && drift.discrepancies.length) || 1) + ")";
-            driftBadge.className = "badge-pill critical";
-        }
+        if (driftBadge) { driftBadge.textContent = "DRIFT DETECTED (" + ((drift.discrepancies && drift.discrepancies.length) || 0) + ")"; driftBadge.className = "badge-pill critical"; }
         if (driftBox) {
             driftBox.style.display = "block";
-            var listHtml = (drift.discrepancies || []).map(function(d) {
-                return '<div style="margin-top:4px;">• ' + escapeHTML(d) + '</div>';
-            }).join("");
-            driftBox.innerHTML =
-                '<div style="font-weight:700; margin-bottom:4px;">⚠️ CI-vs-Editor Environment Drift Detected (' + escapeHTML(drift.severity || "CRITICAL") + ')</div>' +
+            driftBox.innerHTML = '<div style="font-weight:700;margin-bottom:4px;">CI-vs-Editor Environment Drift (' + escapeHTML(drift.severity || "UNVERIFIED") + ')</div>' +
                 '<div>' + escapeHTML(drift.summary || "") + '</div>' +
-                listHtml;
+                (drift.discrepancies || []).map(function(d) { return '<div style="margin-top:4px;">• ' + escapeHTML(d) + '</div>'; }).join("");
         }
     } else {
-        if (driftBadge) {
-            driftBadge.textContent = "0 ENV DRIFT";
-            driftBadge.className = "badge-pill success";
-        }
-        if (driftBox) {
-            driftBox.style.display = "none";
-            driftBox.innerHTML = "";
-        }
+        if (driftBadge) { driftBadge.textContent = drift ? "No drift reported" : "Not checked"; driftBadge.className = "badge-pill info"; }
+        if (driftBox) { driftBox.style.display = "none"; driftBox.innerHTML = ""; }
     }
-
     var matrixTbody = document.getElementById("talon-matrix-tbody");
-    if (matrixTbody && matrix) {
+    if (matrixTbody) {
         matrixTbody.innerHTML = "";
-        matrix.forEach(function(m) {
-            var tr = document.createElement("tr");
-            var tagsStr = (m.build_tags && m.build_tags.length > 0) ? m.build_tags.join(", ") : "none";
-            var skippedTooltip = (m.skipped_files_sample && m.skipped_files_sample.length > 0)
-                ? "Excluded: " + m.skipped_files_sample.join(", ")
-                : "No files excluded";
-            var outClass = m.outcome === "BLOCK" ? "critical" : "success";
-            tr.innerHTML =
-                '<td class="mono" style="font-weight:700;">' + escapeHTML(m.target_platform) + '</td>' +
-                '<td class="mono" style="font-size:11.5px;">CGO=' + (m.cgo_enabled ? "1" : "0") + ' · tags=[' + escapeHTML(tagsStr) + ']</td>' +
-                '<td style="font-size:11.5px;" title="' + escapeHTML(skippedTooltip) + '">' +
-                    '<strong>' + (m.active_files_count || 0) + '</strong> active · <span style="color:var(--muted);">' + (m.skipped_by_build_tags_count || 0) + ' skipped by build tags</span>' +
-                '</td>' +
-                '<td class="mono" style="font-size:11.5px;">' + (m.entities_count || 0) + ' entities · ' + (m.edges_count || 0) + ' edges</td>' +
-                '<td class="mono" style="font-size:11.5px; color:var(--text-2);">' + escapeHTML((m.graph_fingerprint || "").slice(0, 16)) + '…</td>' +
-                '<td>' +
-                    '<div style="display:flex; align-items:center; gap:8px;">' +
-                        '<span class="badge-pill ' + outClass + '">' + escapeHTML(m.outcome || "ALLOW") + '</span>' +
-                        '<button class="btn-secondary" style="height:24px; font-size:10.5px;" onclick="copyTextToClipboard(\'' + escapeJS(m.reproduce_command || "") + '\', \'Copied target reproduce command!\')">Copy Cmd</button>' +
-                    '</div>' +
-                '</td>';
-            matrixTbody.appendChild(tr);
-        });
+        if (!matrix.length) {
+            var emptyRow = document.createElement("tr");
+            var emptyCell = document.createElement("td");
+            emptyCell.colSpan = 6;
+            emptyCell.textContent = "No build matrix results are available for this check.";
+            emptyRow.appendChild(emptyCell);
+            matrixTbody.appendChild(emptyRow);
+        } else {
+            matrix.forEach(function(m) {
+                var tr = document.createElement("tr");
+                var tags = Array.isArray(m.build_tags) && m.build_tags.length ? m.build_tags.join(", ") : "none";
+                var outClass = m.outcome === "BLOCK" ? "critical" : (m.outcome === "ALLOW" ? "success" : "info");
+                tr.innerHTML = '<td class="mono" style="font-weight:700;">' + escapeHTML(m.target_platform || "—") + '</td>' +
+                    '<td class="mono" style="font-size:11.5px;">CGO=' + (m.cgo_enabled ? "1" : "0") + ' · tags=[' + escapeHTML(tags) + ']</td>' +
+                    '<td style="font-size:11.5px;"><strong>' + (typeof m.active_files_count === "number" ? m.active_files_count : "—") + '</strong> active · ' + (m.skipped_by_build_tags_count || 0) + ' skipped</td>' +
+                    '<td class="mono" style="font-size:11.5px;">' + (m.entities_count || 0) + ' entities · ' + (m.edges_count || 0) + ' edges</td>' +
+                    '<td class="mono" style="font-size:11.5px;color:var(--text-2);">' + escapeHTML((m.graph_fingerprint || "").slice(0, 16) || "—") + '</td>' +
+                    '<td><span class="badge-pill ' + outClass + '">' + escapeHTML(m.outcome || "UNVERIFIED") + '</span></td>';
+                matrixTbody.appendChild(tr);
+            });
+        }
     }
 }
-
 function copyReproduceCommand() {
     var el = document.getElementById("receipt-reproduce-cmd");
     var cmd = (el && el.textContent) || "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --workspace default";
@@ -2401,7 +2288,7 @@ async function runTalonCheckFromUI(action) {
         var res = await fetch("/api/v1/dashboard/talon-check?workspace=" + encodeURIComponent(WORKSPACE), {
             method: "POST",
             headers: { "Content-Type": "application/json", "Accept": "application/json" },
-            body: JSON.stringify({ workspace: WORKSPACE, action: action, diff_rev: "HEAD" })
+            body: JSON.stringify({ workspace: WORKSPACE, action: action, target: arguments.length > 1 ? arguments[1] : "", diff_rev: "HEAD" })
         });
         if (res.ok) {
             var data = await res.json();
@@ -2413,9 +2300,14 @@ async function runTalonCheckFromUI(action) {
                 return;
             }
         }
-    } catch (e) {}
+    } catch (err) {
+        if (action !== "simulate_violation" && action !== "simulate_drift") {
+            showToast(err && err.message ? err.message : "Talon check failed. No verdict was recorded.");
+            return;
+        }
+    }
 
-    if (!state.talonHubData) state.talonHubData = buildDefaultTalonHub();
+    if (!state.talonHubData) state.talonHubData = { hooks: [], risk_hubs: [] };
     if (action === "simulate_drift") {
         var driftVerdict = {
             workspace: WORKSPACE,
@@ -2494,10 +2386,7 @@ async function runTalonCheckFromUI(action) {
         return;
     }
     if (action === "matrix_check") {
-        var matVerdict = buildDefaultTalonHub().latest_verdict;
-        state.talonHubData.latest_verdict = matVerdict;
-        renderTalonVerdict(matVerdict);
-        showToast("✓ Verified 4 cross-platform build targets (linux/amd64, darwin/arm64, windows/amd64)!");
+        showToast("The server did not return build-matrix results. No sample matrix was substituted.");
         return;
     }
     if (action === "simulate_violation") {
@@ -2528,11 +2417,6 @@ async function runTalonCheckFromUI(action) {
         state.talonHubData.latest_verdict = simVerdict;
         renderTalonVerdict(simVerdict);
         showToast("⚠️ Talon Gate BLOCKED 2 net-new violations & generated self-repair prompt!");
-    } else {
-        var cleanVerdict = buildDefaultTalonHub().latest_verdict;
-        state.talonHubData.latest_verdict = cleanVerdict;
-        renderTalonVerdict(cleanVerdict);
-        showToast("✓ Talon Diff-Scoped Gate: ALLOW (0 net-new violations)");
     }
 }
 
@@ -2778,24 +2662,18 @@ async function loadArchitecture(level, focus) {
     state.currentFocus = focus || "";
     ["entity", "package", "repo", "full", "docs"].forEach(function(k) {
         var btn = document.getElementById("btn-mode-" + k);
-        if (btn) {
-            var match = (k === "repo" && state.currentLevel === "repository") || k === state.currentLevel;
-            btn.classList.toggle("active", match);
-        }
+        if (btn) btn.classList.toggle("active", (k === "repo" && state.currentLevel === "repository") || k === state.currentLevel);
     });
     updateArchitectureHeader();
-
     if (state.currentLevel === "docs") {
-        if (!state.docsGraphData) {
-            await loadDocsGraph();
-        }
-        var dGraph = (state.docsGraphData && state.docsGraphData.graph) || buildDefaultDocsGraph().graph;
-        state.graphData = dGraph;
-        buildCommunitiesList(dGraph);
-        renderGraph(dGraph);
+        if (!state.docsGraphData) await loadDocsGraph();
+        var docsGraph = state.docsGraphData && state.docsGraphData.graph;
+        if (!docsGraph) docsGraph = DEMO_MODE ? buildDefaultDocsGraph().graph : { nodes: [], edges: [] };
+        state.graphData = docsGraph;
+        buildCommunitiesList(docsGraph);
+        renderGraph(docsGraph);
         return;
     }
-
     var cacheKey = state.currentLevel + ":" + state.currentFocus;
     if (state.graphCache[cacheKey]) {
         state.graphData = state.graphCache[cacheKey];
@@ -2803,38 +2681,35 @@ async function loadArchitecture(level, focus) {
         renderGraph(state.graphData);
         return;
     }
-
-    var url = "/api/v1/graph?workspace=" + encodeURIComponent(WORKSPACE) +
-        "&level=" + encodeURIComponent(state.currentLevel);
-    if (state.currentFocus) {
-        url += "&focus=" + encodeURIComponent(state.currentFocus);
-    }
-
+    var url = "/api/v1/graph?workspace=" + encodeURIComponent(WORKSPACE) + "&level=" + encodeURIComponent(state.currentLevel);
+    if (state.currentFocus) url += "&focus=" + encodeURIComponent(state.currentFocus);
     try {
         var res = await fetch(url, { headers: { "Accept": "application/json" } });
-        if (!res.ok) throw new Error("Graph request failed");
+        if (!res.ok) throw new Error("Graph request failed (HTTP " + res.status + ").");
         var data = await res.json();
-        if ((!data.nodes || data.nodes.length === 0) && state.currentFocus) {
-            var fallbackRes = await fetch("/api/v1/graph?workspace=" + encodeURIComponent(WORKSPACE) + "&level=entity");
-            if (fallbackRes.ok) {
-                data = await fallbackRes.json();
+        if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.edges || [])) throw new Error("Graph response was not valid.");
+        if (data.nodes.length === 0 && state.currentFocus) {
+            var broaderRes = await fetch("/api/v1/graph?workspace=" + encodeURIComponent(WORKSPACE) + "&level=entity", {
+                headers: { "Accept": "application/json" }
+            });
+            if (broaderRes.ok) {
+                var broader = await broaderRes.json();
+                if (broader && Array.isArray(broader.nodes) && Array.isArray(broader.edges || [])) data = broader;
             }
         }
-        if (!data || !data.nodes || data.nodes.length === 0) {
-            data = buildDefaultDocsGraph().graph;
-        }
+        if (data.nodes.length === 0 && DEMO_MODE) data = buildDefaultDocsGraph().graph;
         state.graphCache[cacheKey] = data;
         state.graphData = data;
         buildCommunitiesList(data);
         renderGraph(data);
     } catch (err) {
-        var fbGraph = buildDefaultDocsGraph().graph;
-        state.graphData = fbGraph;
-        buildCommunitiesList(fbGraph);
-        renderGraph(fbGraph);
+        var emptyGraph = DEMO_MODE ? buildDefaultDocsGraph().graph : { nodes: [], edges: [] };
+        state.graphData = emptyGraph;
+        buildCommunitiesList(emptyGraph);
+        renderGraph(emptyGraph);
+        if (!DEMO_MODE) showToast("Architecture data is unavailable. Check the workspace connection and refresh.");
     }
 }
-
 function updateArchitectureHeader() {
     var title = "Architecture Map";
     var subtitle = "Focused 1-hop and 2-hop neighborhood around your selected symbol or package.";
@@ -3443,16 +3318,16 @@ function openEvalInChangeReview(evalIndex) {
 
 function runLiveReviewCheck() {
     var picker = document.getElementById("review-target-picker");
-    var val = (picker && picker.value) || "default";
-    selectReviewTarget(val);
-    showToast("✓ Executed 3-Plane Verification & Blast-Radius Check on target!");
+    var value = picker && picker.value || "";
+    var target = value.indexOf("symbol:") === 0 ? value.slice("symbol:".length) : "";
+    runTalonCheckFromUI("run_guard", target);
 }
 
 function renderChangeReviewWorkbench() {
     var picker = document.getElementById("review-target-picker");
     var evalListEl = document.getElementById("review-evaluations-list");
-    var evals = (state.policiesData && state.policiesData.latest_evaluations) || FALLBACK_DATA.policies.latest_evaluations;
-    var hubs = (state.stats && state.stats.top_hubs) || FALLBACK_DATA.stats.top_hubs;
+    var evals = state.policiesData && Array.isArray(state.policiesData.latest_evaluations) ? state.policiesData.latest_evaluations : [];
+    var hubs = state.stats && Array.isArray(state.stats.top_hubs) ? state.stats.top_hubs : [];
 
     if (picker) {
         picker.innerHTML = "";
@@ -3505,22 +3380,23 @@ function renderChangeReviewWorkbench() {
 }
 
 function selectReviewTarget(val) {
-    var evals = (state.policiesData && state.policiesData.latest_evaluations) || FALLBACK_DATA.policies.latest_evaluations;
-    var hubs = (state.stats && state.stats.top_hubs) || FALLBACK_DATA.stats.top_hubs;
+    var evals = state.policiesData && Array.isArray(state.policiesData.latest_evaluations) ? state.policiesData.latest_evaluations : [];
+    var hubs = state.stats && Array.isArray(state.stats.top_hubs) ? state.stats.top_hubs : [];
     var stage = document.getElementById("review-impact-stage");
 
     var targetName = WORKSPACE || "default";
     var pkgName = "workspace-wide";
-    var filePath = "policies/architecture-layer-guardrails.yaml";
-    var decision = (state.policiesData && state.policiesData.final_decision) || "ALLOW";
-    var epistemic = (state.stats && state.stats.contradicted > 0) ? "CONTRADICTED" : "SUPPORTED";
-    var ledgerText = "ANCHORED #" + ((state.stats && state.stats.latest_block_height) || 52);
-    var ruleName = "architecture-layer-guardrails (layer_violation, cycle_exists, blast_radius_exceeds)";
-    var reasonText = "Evaluated static AST dependencies, ADR claims, and runtime verification status against active GarudaPolicy rules.";
-    var evCounts = formatNumber((state.stats && state.stats.entities) || 892) + " entities · " +
-                   formatNumber((state.stats && state.stats.relationships) || 2418) + " relationships · 0 contradictions";
-    var evalId = "eval-52-layer";
-    var callersCount = hubs.length > 0 ? hubs[0].callers : 18;
+    var filePath = "No source path available";
+    var decision = state.policiesData && state.policiesData.final_decision || (state.policiesData && state.policiesData.unavailable ? "Unavailable" : "No evaluation");
+    var epistemic = state.stats && state.stats.contradicted > 0 ? "CONTRADICTED" : "UNVERIFIED";
+    var ledgerText = state.stats && state.stats.latest_block_height ? "BLOCK #" + state.stats.latest_block_height : "No ledger anchor";
+    var ruleName = "No policy evaluation selected";
+    var reasonText = "Select a recorded policy evaluation or a symbol to inspect its available evidence. No verdict is inferred here.";
+    var evCounts = state.stats
+        ? formatNumber(state.stats.entities || 0) + " entities · " + formatNumber(state.stats.relationships || 0) + " relationships · " + formatNumber(state.stats.contradicted || 0) + " contradictions"
+        : "Workspace data unavailable";
+    var evalId = "";
+    var callersCount = hubs.length > 0 ? (hubs[0].callers || 0) : 0;
 
     if (val && val.indexOf("eval:") === 0) {
         var idx = parseInt(val.split(":")[1], 10);
@@ -3528,9 +3404,9 @@ function selectReviewTarget(val) {
         if (ev) {
             targetName = ev.subject_id || ev.policy_title;
             pkgName = ev.subject_kind || "workspace";
-            decision = ev.decision || "ALLOW";
-            epistemic = ev.contradiction_count > 0 ? "CONTRADICTED" : "SUPPORTED";
-            ledgerText = ev.merkle_block_height ? "BLOCK #" + ev.merkle_block_height : "ANCHORED #52";
+            decision = ev.decision || "UNVERIFIED";
+            epistemic = ev.contradiction_count > 0 ? "CONTRADICTED" : "UNVERIFIED";
+            ledgerText = ev.merkle_block_height ? "BLOCK #" + ev.merkle_block_height : "Not anchored";
             ruleName = (ev.matched_predicates && ev.matched_predicates.length > 0) ? ev.matched_predicates.join(", ") : ev.policy_title;
             reasonText = ev.reason || reasonText;
             evCounts = formatNumber(ev.entity_count) + " entities · " + formatNumber(ev.claim_count) + " claims · " + formatNumber(ev.contradiction_count) + " contradictions";
@@ -3550,14 +3426,14 @@ function selectReviewTarget(val) {
         targetName = state.selectedNode.label || state.selectedNode.id;
         pkgName = state.selectedNode.package || state.selectedNode.repo || "workspace";
         filePath = state.selectedNode.file || pkgName;
-        callersCount = currentIncomingNodes.length || 8;
+        callersCount = currentIncomingNodes.length;
         reasonText = "Focused change impact review for " + targetName + " in package " + pkgName + ".";
     }
 
     setText("rev-ctx-target", targetName);
     setText("rev-ctx-pkg", pkgName);
     setText("rev-ctx-file", shortenPath(filePath));
-    setText("rev-blast-summary", callersCount + " upstream callers · " + (currentOutgoingNodes.length || 3) + " downstream deps");
+    setText("rev-blast-summary", callersCount + " upstream callers · " + currentOutgoingNodes.length + " downstream dependencies");
 
     var epEl = document.getElementById("rev-triad-epistemic");
     if (epEl) {
@@ -3574,7 +3450,7 @@ function selectReviewTarget(val) {
         ledEl.textContent = ledgerText;
     }
 
-    setText("rev-dr-id", evalId ? ("eval " + evalId.slice(0, 12)) : "live workspace check");
+    setText("rev-dr-id", evalId ? ("eval " + evalId.slice(0, 12)) : "No recorded evaluation");
     setText("rev-dr-what", reasonText);
     setText("rev-dr-rule", ruleName);
     setText("rev-dr-evidence", evCounts);
@@ -3595,7 +3471,7 @@ function selectReviewTarget(val) {
             : hubs.slice(0, 3).map(function(x) { return x.name; });
         var outItems = currentOutgoingNodes.length > 0
             ? currentOutgoingNodes.slice(0, 3).map(function(x) { return x.node.label || x.node.id; })
-            : ["store.PostgresStore", "merkle.Anchor", "policy.Evaluator"];
+            : [];
 
         var stageHTML = '<div class="neighborhood-diagram" style="padding:10px 0;">' +
             '<div class="selected-fn-card">' +
@@ -3969,7 +3845,7 @@ function renderCommandPaletteItems(query) {
     var q = (query || "").toLowerCase().trim();
 
     var items = [];
-    var hubs = (state.stats && state.stats.top_hubs) || FALLBACK_DATA.stats.top_hubs;
+    var hubs = state.stats && Array.isArray(state.stats.top_hubs) ? state.stats.top_hubs : (DEMO_MODE ? FALLBACK_DATA.stats.top_hubs : []);
     hubs.slice(0, 5).forEach(function(h) {
         if (!q || h.name.toLowerCase().indexOf(q) !== -1 || (h.package || "").toLowerCase().indexOf(q) !== -1) {
             items.push({
@@ -4260,29 +4136,21 @@ async function openDecisionDetail(id) {
     var overlay = document.getElementById("drawer-overlay");
     var body = document.getElementById("drawer-body");
     if (!drawer || !overlay || !body) return;
-
-    body.innerHTML = '<div class="detail-section"><div class="detail-section-title">Loading decision...</div></div>';
+    body.innerHTML = '<div class="detail-section"><div class="detail-section-title">Loading decision…</div></div>';
     drawer.classList.add("open");
     overlay.classList.add("open");
-
     try {
         var res = await fetch("/api/v1/dashboard/decisions/" + encodeURIComponent(id) + "?workspace=" + encodeURIComponent(WORKSPACE), {
             headers: { "Accept": "application/json" }
         });
-        if (!res.ok) throw new Error("HTTP " + res.status);
+        if (!res.ok) throw new Error("Decision detail unavailable (HTTP " + res.status + ").");
         var data = await res.json();
+        if (!data || !data.decision) throw new Error("No decision detail was returned.");
         renderDecisionDetail(body, data);
     } catch (err) {
-        var fb = DEFAULT_DECISIONS.find(function(x) { return x.id === id; }) || DEFAULT_DECISIONS[0];
-        renderDecisionDetail(body, {
-            decision: fb,
-            revisions: [
-                { revision_number: 1, decision_hash_hex: fb.merkle_hash || "8f434346648f6b96df89dda901c5176b", previous_hash_hex: "0000000000000000" }
-            ]
-        });
+        body.textContent = err && err.message ? err.message : "Decision details are unavailable. No sample decision was substituted.";
     }
 }
-
 function renderDecisionDetail(body, data) {
     var d = data.decision || {};
     setText("drawer-title", d.title || "Decision Record");
@@ -4848,66 +4716,37 @@ function renderHumanDecisionHub() {
 async function recordHumanLogicDecision(variantId, action) {
     try {
         var res = await fetch("/api/v1/dashboard/logic-weights/decide", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Accept": "application/json" },
-            body: JSON.stringify({
-                workspace: WORKSPACE,
-                team_role: state.activeTeamRole || "ops",
-                variant_id: variantId,
-                decision_action: action
-            })
+            method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ workspace: WORKSPACE, team_role: state.activeTeamRole || "ops", variant_id: variantId, decision_action: action })
         });
-        if (res.ok) {
-            var data = await res.json();
-            if (data && data.hub) {
-                state.humanDecisionHub = data.hub;
-                renderHumanDecisionHub();
-                showToast("✓ Human decision recorded (" + action + ") for " + variantId);
-                return;
-            }
-        }
-    } catch (e) {}
-
-    if (state.humanDecisionHub && state.humanDecisionHub.logic_groups) {
-        state.humanDecisionHub.logic_groups.forEach(function(g) {
-            g.variants.forEach(function(v) {
-                if (v.variant_id === variantId) {
-                    v.human_decision_status = action === "FREEZE_SEVERE" ? "FROZEN_SEVERE_DO_NOT_TOUCH" : "APPROVED_BY_HUMAN";
-                }
-            });
-        });
+        var data = null;
+        try { data = await res.json(); } catch (parseErr) {}
+        if (!res.ok) throw new Error(data && (data.error || data.message) || ("Decision could not be recorded (HTTP " + res.status + ")."));
+        if (!data || !data.hub) throw new Error("The server did not confirm the persisted decision.");
+        state.humanDecisionHub = data.hub;
         renderHumanDecisionHub();
+        showToast("Human decision recorded: " + action + ".");
+    } catch (err) {
+        showToast(err && err.message ? err.message : "Decision was not recorded. No local approval was applied.");
     }
-    showToast("✓ Human decision recorded (" + action + ") for " + variantId);
 }
-
 async function reconcileFinancialAuditItem(auditId) {
     try {
         var res = await fetch("/api/v1/dashboard/financial-audit", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" },
             body: JSON.stringify({ workspace: WORKSPACE, audit_id: auditId })
         });
-        if (res.ok) {
-            var data = await res.json();
-            if (data && data.financial_audits && state.humanDecisionHub) {
-                state.humanDecisionHub.financial_audits = data.financial_audits;
-                renderHumanDecisionHub();
-                showToast("✓ Reconciled financial discrepancy & locked Crore normalization rule!");
-                return;
-            }
-        }
-    } catch (e) {}
-
-    if (state.humanDecisionHub && state.humanDecisionHub.financial_audits) {
-        state.humanDecisionHub.financial_audits.forEach(function(a) {
-            if (a.id === auditId) a.audit_status = "RECONCILED_BY_HUMAN";
-        });
+        var data = null;
+        try { data = await res.json(); } catch (parseErr) {}
+        if (!res.ok) throw new Error(data && (data.error || data.message) || ("Reconciliation failed (HTTP " + res.status + ")."));
+        if (!data || !Array.isArray(data.financial_audits)) throw new Error("The server did not confirm persisted reconciliation.");
+        if (state.humanDecisionHub) state.humanDecisionHub.financial_audits = data.financial_audits;
         renderHumanDecisionHub();
+        showToast("Financial reconciliation was recorded by the server.");
+    } catch (err) {
+        showToast(err && err.message ? err.message : "Reconciliation was not saved. The local audit status was not changed.");
     }
-    showToast("✓ Reconciled financial discrepancy & locked Crore normalization rule!");
 }
-
 async function simulateCustomFinancialAudit() {
     var customItem = {
         id: "fin-audit-sim-" + Date.now(),
@@ -5023,38 +4862,32 @@ function regenerateBaseRulebookDraft() {
 async function approveBaseRulebookFromUI() {
     var areaEl = document.getElementById("synthesized-rulebook-textarea");
     var approverEl = document.getElementById("rulebook-approver-input");
-    var md = (areaEl && areaEl.value) || "";
-    var approver = (approverEl && approverEl.value) || "Primary Stakeholder";
-
+    var md = (areaEl && areaEl.value || "").trim();
+    var approver = (approverEl && approverEl.value || "").trim();
+    if (!md || !approver) {
+        showToast("Provide rulebook content and an approver before submitting.");
+        return;
+    }
     try {
         var res = await fetch("/api/v1/dashboard/rulebook-approve?workspace=" + encodeURIComponent(WORKSPACE), {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Accept": "application/json" },
-            body: JSON.stringify({
-                workspace: WORKSPACE,
-                markdown_content: md,
-                approved_by: approver
-            })
+            method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ workspace: WORKSPACE, markdown_content: md, approved_by: approver })
         });
-        if (res.ok) {
-            var data = await res.json();
-            if (data && data.rulebook && state.humanDecisionHub) {
-                state.humanDecisionHub.synthesized_rulebook = data.rulebook;
-                if (areaEl) areaEl.value = data.rulebook.markdown_content;
-                renderRulebookStudio();
-                showToast("✓ Base Rulebook approved by " + approver + " & sealed in .garuda/APPROVED_BASE_RULEBOOK.md!");
-                return;
-            }
+        var data = null;
+        try { data = await res.json(); } catch (parseErr) {}
+        if (!res.ok) throw new Error(data && (data.error || data.message) || ("Rulebook approval failed (HTTP " + res.status + ")."));
+        if (!data || !data.rulebook || data.rulebook.status !== "APPROVED_BASE_RULEBOOK") {
+            throw new Error("The server did not confirm a persisted approved rulebook.");
         }
-    } catch (e) {}
-
-    if (!state.humanDecisionHub) state.humanDecisionHub = buildDefaultHumanDecisionHub(state.activeTeamRole);
-    state.humanDecisionHub.synthesized_rulebook.status = "APPROVED_BASE_RULEBOOK";
-    state.humanDecisionHub.synthesized_rulebook.approved_by = approver;
-    renderRulebookStudio();
-    showToast("✓ Base Rulebook approved by " + approver + " & sealed as workspace baseline!");
+        if (!state.humanDecisionHub) state.humanDecisionHub = {};
+        state.humanDecisionHub.synthesized_rulebook = data.rulebook;
+        if (areaEl) areaEl.value = data.rulebook.markdown_content || md;
+        renderRulebookStudio();
+        showToast("Rulebook approval recorded by the server.");
+    } catch (err) {
+        showToast(err && err.message ? err.message : "Rulebook approval was not saved. No local approval was applied.");
+    }
 }
-
 function copyRulebookMarkdown() {
     var areaEl = document.getElementById("synthesized-rulebook-textarea");
     var md = (areaEl && areaEl.value) || "";
