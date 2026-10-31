@@ -1,4 +1,4 @@
-# Garuda for Finance, Statutory Audit, Actuarial & RevOps Teams (`v1.9.1`)
+# Garuda for Finance, Statutory Audit, Actuarial & RevOps Teams (`v1.9.9`)
 
 **Catching Cross-Team Financial Number Discrepancies (e.g., 48 Crore vs. 4.8 Crore Claims Paid), Resolving Undocumented Formula Drift with 0.0–1.0 Team Weights, and Verifying RFC 6962 Audit Proofs—Before External Audits Occur**
 
@@ -10,9 +10,9 @@ In fast-growing insurance, fintech, e-commerce, and enterprise SaaS organization
 
 Historically, when two teams report conflicting numbers for the exact same metric—or when an AI coding agent quietly alters a calculation formula—**nobody notices until a statutory financial audit or board review**, when it is already too late and embarrassing.
 
-**Garuda `v1.9.1` solves this at the root** by bridging software AST/SQL lineage with continuous financial and business logic governance:
+**Garuda `v1.9.9` solves this at the root** by bridging software AST/SQL lineage with continuous financial and business logic governance:
 
-| Financial & Audit Risk | What Happens Without Garuda | How Garuda `v1.9.1` Prevents It |
+| Financial & Audit Risk | What Happens Without Garuda | How Garuda `v1.9.9` Prevents It |
 | :--- | :--- | :--- |
 | **10x Unit-Scaling & Decimal Drift** | Claims Ops reports **₹48.00 Crore** in settled claims while Finance's executive export reports **₹4.80 Crore** due to a Lakhs-to-Crore divisor bug (`/ 1000.0` instead of `/ 100.0`). Caught only during external audit. | **Continuous Financial Lineage Audit (`09 — Financial & Logic Audit`)**: Traces AST & SQL aggregation formulas across team boundaries, flags the **10.0x variance** immediately, and pinpoints the exact file, line, and divisor bug before any report leaves the building. |
 | **Competing Undocumented Formulas Across Teams** | Ops, Marketing, and Management each code their own undocumented formula for **Loss Ratio** or **Net Revenue**. An AI agent overwrites the core pricing formula with a marketing campaign formula. | **Human-in-the-Loop 0.0–1.0 Formula Weighting**: Never allows AI to silently pick or overwrite a business formula. Assigns **0.00–1.00 team weights** (`0.70` active team vs `0.10`/`0.10`), ranks each formula by **Least Architectural Harm**, and requires explicit human sign-off. |
@@ -99,7 +99,7 @@ Instead, Garuda computes a **0.00 to 1.00 relevance weight** based on which team
 
 Most companies do not have clean, up-to-date Architecture Decision Records (ADRs) or formal financial formula catalogs when they first adopt Garuda. Writing those rules from scratch is tedious grunt work.
 
-**Garuda `v1.9.1` does the grunt work for you—while keeping 100% of the authority with human stakeholders:**
+**Garuda `v1.9.9` does the grunt work for you—while keeping 100% of the authority with human stakeholders:**
 
 1. **Automated Discovery**: Garuda scans your repository's AST call graph, fan-in hubs, SQL queries, and package boundaries to infer 6 foundational rules covering Surface Criticality Tiers (`SYNTH-CRIT-001..003`), Formula Weights (`SYNTH-LOGIC-004`), Crore Financial Normalization (`SYNTH-AUDIT-005`), and Hexagonal Store Isolation (`SYNTH-ARCH-006`).
 2. **Human Review & Inline Editing**: Garuda writes the structured draft to `.garuda/DRAFT_BASE_RULEBOOK.md` and displays it in the **Auto-Synthesized Base Rulebook Studio** (`04 — Docs & Base Rulebook` in `/dashboard`). Finance leads and architects can edit any formula or threshold in plain Markdown.
@@ -129,17 +129,17 @@ Most companies do not have clean, up-to-date Architecture Decision Records (ADRs
 
 ```bash
 # 1. Run a Financial Discrepancy Audit (default: 48.0 Cr vs 4.8 Cr Claims Paid)
-./bin/garuda audit financial
+./bin/garuda audit data-logic
 
 # 2. Audit custom Crore amounts reported by two teams and output JSON for audit workpapers
-./bin/garuda audit financial \
+./bin/garuda audit data-logic \
   --metric "Q4 Claims Reserve Rollup" \
   --team-a-cr 64.50 \
   --team-b-cr 6.45 \
   --json
 
 # 3. Reconcile and lock a financial audit finding from the CLI
-./bin/garuda audit financial --reconcile fin-audit-claims-48cr-vs-4.8cr
+./bin/garuda audit data-logic --reconcile fin-audit-claims-48cr-vs-4.8cr
 
 # 4. Compare competing undocumented business formulas with 0.0-1.0 weights
 ./bin/garuda audit logic "Loss Ratio" --team ops

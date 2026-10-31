@@ -97,3 +97,9 @@ We credit reporters in the release notes and the advisory, unless they prefer to
 ## History
 
 No advisories have been published as of 2026-09-15.
+## MCP & Agent Security Controls (`v1.9.9`)
+1. **Zero Fabricated Human Attribution (`GARUDA_MCP_APPROVER`)**: AI agents cannot self-approve business formulas, data reconciliations, or Base Rulebooks. Without an attested `GARUDA_MCP_APPROVER`, mutations are recorded as `PROPOSED_BY_AGENT_AWAITING_HUMAN_CLI_COSIGN`.
+2. **Global Read-Only Enforcement (`GARUDA_MCP_READ_ONLY=true`)**: Blocks all mutating MCP tools across untrusted or exploratory agent sessions.
+3. **Strict Argument Whitelisting (`toolArgWhitelist`)**: Every one of the 54 MCP tools strips unlisted JSON arguments prior to handler execution (`TestToolArgWhitelistCoversAllTools`).
+4. **Raw SQL Rejection & Path-Traversal Confinement**: `garuda.query` rejects raw SQL statements (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `DROP`), and `garuda.docs_ingest` / `garuda.synthesize_rulebook` confine file paths to the repository root or `/tmp`.
+5. **Global Host-Path Sanitization (`SanitizeGlobalJSONString`)**: Strips local user home directory prefixes from all serialized MCP JSON responses.

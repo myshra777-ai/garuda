@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/myshra777-ai/garuda/internal/knowledge"
 )
 
 func TestBug01_NoFabricatedHumanAttribution(t *testing.T) {
@@ -132,7 +133,6 @@ func TestBug02_ReadOnlyMode_BlocksAllMutations(t *testing.T) {
 }
 
 func TestBug03_CrossToolCountsMatch(t *testing.T) {
-	// Verify LoadWorkspaceCounts returns consistent zeroes on nil pool and single struct definition
 	c := LoadWorkspaceCounts(context.Background(), nil, uuid.Nil, uuid.Nil)
 	if c.Entities != 0 || c.ExportedEntities != 0 || c.ExternalStubs != 0 || c.ASTRelationships != 0 {
 		t.Errorf("expected zero counts for nil pool, got %+v", c)
@@ -172,7 +172,6 @@ func TestBug04_QueryRejectsRawSQL(t *testing.T) {
 }
 
 func TestBug05_FindEntityMissReturnsEmpty(t *testing.T) {
-	// Verify garuda.find_entity schema and whitelist accept "name" as well as "name_pattern"
 	allow := toolArgWhitelist["garuda.find_entity"]
 	hasName := false
 	for _, k := range allow {
@@ -221,43 +220,57 @@ func TestBug13_CreateTask_ReturnsValidUUID(t *testing.T) {
 	}
 }
 
-func TestBug14_SynthesizeRulebookHonorsTmpOutputPath(t *testing.T) {
+func TestBug14_SynthesizeRulebookEmptyWorkspaceAndProposedFilename(t *testing.T) {
 	_ = os.Unsetenv("GARUDA_MCP_READ_ONLY")
 	srv := &MCPServer{clientName: "test-agent"}
-	tmpOut := filepath.Join(os.TempDir(), "garuda_smoke_rulebook_test.md")
-	_ = os.Remove(tmpOut)
-	defer os.Remove(tmpOut)
 
-	res, err := srv.handleSynthesizeRulebook(map[string]interface{}{
-		"workspace": "default",
-		"output":    tmpOut,
+	// B-01: Empty workspace returns INSUFFICIENT_DATA with zero fixture leakage
+	emptyRes, err := srv.handleSynthesizeRulebook(map[string]interface{}{
+		"workspace": "audit-sandbox",
 	})
 	if err != nil {
-		t.Fatalf("handleSynthesizeRulebook failed: %v", err)
+		t.Fatalf("handleSynthesizeRulebook on empty workspace failed: %v", err)
 	}
-	m := res.(map[string]interface{})
-	if m["output_path"] != tmpOut {
-		t.Errorf("expected output_path=%q, got %v", tmpOut, m["output_path"])
+	em := emptyRes.(map[string]interface{})
+	if em["status"] != "INSUFFICIENT_DATA" {
+		t.Errorf("expected status='INSUFFICIENT_DATA' on empty workspace, got %v", em["status"])
 	}
-	if _, stErr := os.Stat(tmpOut); stErr != nil {
-		t.Errorf("expected file to be written at %s: %v", tmpOut, stErr)
+	jsonText := mustJSON(em)
+	if strings.Contains(jsonText, "ComputeOpsRetention") || strings.Contains(jsonText, "142") {
+		t.Errorf("empty workspace rulebook leaked fixture data: %s", jsonText)
 	}
 }
 
-func TestBug15_DisambiguateLogicDeclaresMode(t *testing.T) {
+func TestBug15_DisambiguateLogicEmptyWorkspaceReturnsInsufficientData(t *testing.T) {
 	srv := &MCPServer{clientName: "test-agent"}
+	// B-01: Default production-only scope with 0 matching variants returns INSUFFICIENT_DATA
 	res, err := srv.handleDisambiguateLogic(map[string]interface{}{
-		"workspace": "default",
+		"workspace": "audit-sandbox",
 		"team":      "ops",
-		"concept":   "Loss Ratio",
+		"concept":   "Retention",
 	})
 	if err != nil {
 		t.Fatalf("handleDisambiguateLogic failed: %v", err)
 	}
 	m := res.(map[string]interface{})
-	mode, _ := m["mode"].(string)
-	if mode != "fixture" && mode != "live_ast" {
-		t.Errorf("expected mode to be 'fixture' or 'live_ast', got %q", mode)
+	if m["status"] != "INSUFFICIENT_DATA" {
+		t.Errorf("expected status='INSUFFICIENT_DATA' on empty workspace, got %v", m["status"])
+	}
+	if strings.Contains(mustJSON(m), "ComputeOpsRetention") {
+		t.Errorf("expected zero fixture leakage when include_fixtures=false")
+	}
+
+	// Explicit include_fixtures=true returns fixture mode
+	fixRes, err := srv.handleDisambiguateLogic(map[string]interface{}{
+		"workspace":        "default",
+		"include_fixtures": true,
+	})
+	if err != nil {
+		t.Fatalf("handleDisambiguateLogic with include_fixtures=true failed: %v", err)
+	}
+	fm := fixRes.(map[string]interface{})
+	if fm["mode"] != "fixture" {
+		t.Errorf("expected mode='fixture' when include_fixtures=true, got %v", fm["mode"])
 	}
 }
 
@@ -271,7 +284,6 @@ func TestBug17_TalonVerifyEditDefaultNoMerkleWrite(t *testing.T) {
 }
 
 func TestBug19_PolicyEvaluateDeterminism(t *testing.T) {
-	// Verify criticality_tiers and disambiguate_logic are deterministic across repeated calls
 	srv := &MCPServer{clientName: "test-agent"}
 	r1, _ := srv.handleCriticalityTiers(map[string]interface{}{"workspace": "default"})
 	r2, _ := srv.handleCriticalityTiers(map[string]interface{}{"workspace": "default"})
@@ -280,7 +292,67 @@ func TestBug19_PolicyEvaluateDeterminism(t *testing.T) {
 	}
 }
 
-func TestClaudeAudit_DocsGraphCountsAndPathSanitizer(t *testing.T) {
+func TestClaudeAudit_B02_NoShoppingSiteTemplateAndRejectsUnmatchedPattern(t *testing.T) {
+	srv := &MCPServer{clientName: "claude-retest-audit"}
+	res, err := srv.handleCriticalityTiers(map[string]interface{}{
+		"workspace": "audit-sandbox",
+	})
+	if err != nil {
+		t.Fatalf("handleCriticalityTiers failed: %v", err)
+	}
+	raw := mustJSON(res)
+	if strings.Contains(raw, "Product Image Box Alignment") || strings.Contains(raw, "Checkout & Payment Ledger") || strings.Contains(raw, "142") {
+		t.Errorf("criticality_tiers still contains shopping-site template or hardcoded 142 callers: %s", raw)
+	}
+
+	// Registering an unmatched package_pattern on an empty workspace must be rejected
+	regRes, err := srv.handleCriticalityTiers(map[string]interface{}{
+		"workspace":        "audit-sandbox",
+		"surface_name":     "Ghost Surface",
+		"package_pattern":  "internal/nonexistent",
+		"criticality_tier": "LOW",
+	})
+	if err != nil {
+		t.Fatalf("handleCriticalityTiers registration returned error: %v", err)
+	}
+	rm := regRes.(map[string]interface{})
+	if rm["status"] != "rejected_unmatched_package_pattern" {
+		t.Errorf("expected status='rejected_unmatched_package_pattern', got %v", rm["status"])
+	}
+}
+
+func TestClaudeAudit_B06_GovernanceStatusFailClosedOnUnverifiedOrPartial(t *testing.T) {
+	// B-06: UNVERIFIED (0 entities or 0 claims) and PARTIAL must return AgentProceed: false
+	vUnv := computeVerdict(&knowledge.HealthStats{
+		TotalEntities: 0,
+		TotalClaims:   10,
+		Supported:     0,
+	})
+	if vUnv.AgentProceed || vUnv.State != "UNVERIFIED" {
+		t.Errorf("expected State=UNVERIFIED and AgentProceed=false on UNVERIFIED workspace, got state=%s proceed=%v", vUnv.State, vUnv.AgentProceed)
+	}
+
+	vPartial := computeVerdict(&knowledge.HealthStats{
+		TotalEntities: 100,
+		TotalClaims:   10,
+		Supported:     5,
+		Unverified:    5,
+	})
+	if vPartial.AgentProceed || vPartial.State != "PARTIAL" {
+		t.Errorf("expected State=PARTIAL and AgentProceed=false on PARTIAL workspace, got state=%s proceed=%v", vPartial.State, vPartial.AgentProceed)
+	}
+
+	vVerified := computeVerdict(&knowledge.HealthStats{
+		TotalEntities: 100,
+		TotalClaims:   10,
+		Supported:     10,
+	})
+	if !vVerified.AgentProceed || vVerified.State != "CONFORMS" {
+		t.Errorf("expected State=CONFORMS and AgentProceed=true on CONFORMS workspace with 0 blockers, got state=%s proceed=%v", vVerified.State, vVerified.AgentProceed)
+	}
+}
+
+func TestClaudeAudit_DocsGraphCountsAndUniqueDocIDs(t *testing.T) {
 	srv := &MCPServer{clientName: "claude-blind-audit"}
 	res, err := srv.handleDocsGraph(map[string]interface{}{"workspace": "default"})
 	if err != nil {
@@ -292,6 +364,20 @@ func TestClaudeAudit_DocsGraphCountsAndPathSanitizer(t *testing.T) {
 	sumByType := byType["ADR"] + byType["SPEC"] + byType["POLICY"]
 	if sumByType != totalDocs {
 		t.Errorf("expected sum(by_doc_type)=%d to equal total_documents=%d", sumByType, totalDocs)
+	}
+
+	// B-11: Verify no duplicate doc_id values
+	docs, _ := m["documents"].([]map[string]interface{})
+	seenIDs := map[string]bool{}
+	for _, d := range docs {
+		id, _ := d["doc_id"].(string)
+		if id == "" {
+			t.Errorf("expected non-empty doc_id on document %v", d)
+		}
+		if seenIDs[id] {
+			t.Errorf("duplicate doc_id %q detected in docs_graph", id)
+		}
+		seenIDs[id] = true
 	}
 
 	raw := `{"file": "/home/rohit/garuda/internal/api/handler.go", "other": "/home/rohit/garuda-validation/go/chi/mux.go"}`
@@ -316,5 +402,23 @@ func TestClaudeAudit_NewToolsWorkCleanly(t *testing.T) {
 	}
 	if _, err := srv.handleCreateWorkspace(map[string]interface{}{"workspace": "audit-sandbox"}); err != nil {
 		t.Errorf("handleCreateWorkspace failed: %v", err)
+	}
+	if _, err := srv.handlePreflightBundle(map[string]interface{}{"workspace": "default", "target": "RefundHandler"}); err != nil {
+		t.Errorf("handlePreflightBundle failed: %v", err)
+	}
+
+	// B-05: docs_ingest in isolated workspace with relative path does not read host repo docs/adr
+	tmpWs := "test-isolated-ws-" + uuid.New().String()[:8]
+	defer os.RemoveAll(filepath.Join(os.TempDir(), "garuda-workspaces", tmpWs))
+	ingRes, err := srv.handleDocsIngest(map[string]interface{}{
+		"workspace": tmpWs,
+		"path":      "docs/adr",
+	})
+	if err != nil {
+		t.Fatalf("handleDocsIngest on isolated workspace failed: %v", err)
+	}
+	im := ingRes.(map[string]interface{})
+	if im["claims_extracted"] != 0 {
+		t.Errorf("expected claims_extracted=0 on empty isolated workspace, got %v", im["claims_extracted"])
 	}
 }

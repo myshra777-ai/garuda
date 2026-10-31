@@ -1,4 +1,4 @@
-# Garuda Data & Business Logic Audits Guide (`v1.9.3`)
+# Garuda Data & Business Logic Audits Guide (`v1.9.9`)
 
 **Resolving Cross-Team Metric Discrepancies, Active Architectural Contradictions, and Undocumented Formula Drift with 0.0–1.0 Team Weights—Without Fintech Regulatory Overhead**
 
@@ -92,4 +92,3 @@ A human engineer or architect reviews the diff and approves the canonical rulebo
 ```bash
 bash scripts/demo_active_contradiction.sh
 ```
-

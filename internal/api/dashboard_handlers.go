@@ -476,7 +476,11 @@ func (s *Server) HandleDashboard(w http.ResponseWriter, r *http.Request) {
 		WorkspaceName: scope.WorkspaceName,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = parsedProdDashboardTmpl.Execute(w, data)
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	escapedWS := template.HTMLEscapeString(data.WorkspaceName)
+	rendered := strings.ReplaceAll(prodDashboardHTML, "{{ .WorkspaceName }}", escapedWS)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(rendered))
 }
 
 // computeRepoStats — batched queries: 3 total instead of 3×N.

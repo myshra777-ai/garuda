@@ -1060,7 +1060,7 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 		return TalonHubResponse{}, errors.New("workspace contract was not returned")
 	}
 
-	hookDefs := []struct { id, name, agent, relPath, mode, desc string }{
+	hookDefs := []struct{ id, name, agent, relPath, mode, desc string }{
 		{"hook-cursor-mdc", "Cursor Active Rule (.mdc)", "Cursor IDE", ".cursor/rules/garuda-talon.mdc", "ALWAYS_APPLY", "Injects compiled ADR and policy guardrails into Cursor turns."},
 		{"hook-cursor-mcp", "Cursor MCP Enforcement Server", "Cursor MCP", ".cursor/mcp.json", "MCP_GATE", "Configures the Garuda MCP enforcement server."},
 		{"hook-claude-settings", "Claude Code PostToolUse Hook", "Claude Code", ".claude/settings.json", "POST_TOOL_USE", "Runs the Talon hook after supported Claude Code edit tools."},
@@ -1113,13 +1113,21 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 		if strings.Contains(rh.Package, "store") || strings.Contains(rh.Package, "merkle") || strings.Contains(rh.Package, "api") || strings.Contains(rh.Package, "policy") {
 			score += 12
 		}
-		if score > 98 { score = 98 }
+		if score > 98 {
+			score = 98
+		}
 		rh.RiskScore = score
 		switch {
-		case score >= 80: rh.RiskTier = "CRITICAL"; criticalCount++
-		case score >= 65: rh.RiskTier = "HIGH"; highCount++
-		case score >= 45: rh.RiskTier = "MEDIUM"
-		default: rh.RiskTier = "LOW"
+		case score >= 80:
+			rh.RiskTier = "CRITICAL"
+			criticalCount++
+		case score >= 65:
+			rh.RiskTier = "HIGH"
+			highCount++
+		case score >= 45:
+			rh.RiskTier = "MEDIUM"
+		default:
+			rh.RiskTier = "LOW"
 		}
 		// This is a prioritization heuristic from observed claim degree, not semantic verification.
 		rh.EpistemicStatus = "UNVERIFIED"
@@ -1134,15 +1142,15 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 	sort.Slice(riskHubs, func(i, j int) bool { return riskHubs[i].RiskScore > riskHubs[j].RiskScore })
 
 	return TalonHubResponse{
-		Workspace: workspaceName,
-		EnforcementMode: "Configured · run a check for a verdict",
-		ActiveHooksCount: activeHooks,
-		TotalHooksCount: len(hooks),
-		Hooks: hooks,
-		RiskHubs: riskHubs,
+		Workspace:         workspaceName,
+		EnforcementMode:   "Configured · run a check for a verdict",
+		ActiveHooksCount:  activeHooks,
+		TotalHooksCount:   len(hooks),
+		Hooks:             hooks,
+		RiskHubs:          riskHubs,
 		CriticalHubsCount: criticalCount,
-		HighHubsCount: highCount,
-		Contract: contract,
+		HighHubsCount:     highCount,
+		Contract:          contract,
 		// LatestVerdict remains nil until a real Talon evaluation returns one.
 		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
 	}, nil
@@ -1222,7 +1230,9 @@ func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Reques
 		writeJSONError(w, http.StatusBadRequest, "invalid Talon request fields", nil)
 		return
 	}
-	if req.Action == "" { req.Action = "run_guard" }
+	if req.Action == "" {
+		req.Action = "run_guard"
+	}
 	switch req.Action {
 	case "run_guard", "install_hooks", "pre_edit_brief", "matrix_check", "simulate_violation", "simulate_drift":
 	default:
@@ -1305,8 +1315,8 @@ func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Reques
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status": "ok",
-			"scope": "configured Garuda repository root",
+			"status":         "ok",
+			"scope":          "configured Garuda repository root",
 			"matrix_results": matrixRows,
 		})
 		return
@@ -1364,9 +1374,9 @@ func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Reques
 		verdict.SelfRepairPrompt = talon.BuildSelfRepairPrompt(verdict)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status": "drift_blocked",
+			"status":    "drift_blocked",
 			"simulated": true,
-			"verdict": verdict,
+			"verdict":   verdict,
 		})
 		return
 
@@ -1402,16 +1412,17 @@ func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Reques
 		verdict.SelfRepairPrompt = talon.BuildSelfRepairPrompt(verdict)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status": "blocked",
+			"status":    "blocked",
 			"simulated": true,
-			"verdict": verdict,
+			"verdict":   verdict,
 		})
 		return
 
-
 	default: // run_guard
 		diffRev := strings.TrimSpace(req.DiffRev)
-		if diffRev == "" { diffRev = "HEAD" }
+		if diffRev == "" {
+			diffRev = "HEAD"
+		}
 		verdict, err := talon.RunGuard(ctx, pgStore, tenantID, workspaceID, talon.GuardOptions{
 			RepoDir: repoRoot, WorkspaceName: workspaceName, PolicyDir: policyDir,
 			DiffRev: diffRev, NetNewOnly: true, SaveLedger: false,

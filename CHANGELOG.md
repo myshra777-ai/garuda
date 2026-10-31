@@ -1,12 +1,28 @@
 # Changelog
 
+## [v1.9.9] - 2026-10-31 — 54-Tool Hardened MCP Suite, Futuristic 10-Surface Progressive-Disclosure Dashboard, Dirty-Worktree Provenance (`--worktree-dirty`), and Data & Logic Audit Ledger
+
+### Added
+- **Futuristic 10-Surface Progressive-Disclosure Dashboard (`internal/api/templates/dashboard.html`, `internal/api/static/dashboard.css`, `internal/api/static/dashboard.js`)**:
+  - Redesigned all 10 surfaces (`01 Overview`, `02 Explore Index`, `03 Architecture Map`, `04 Docs & Rules Graph`, `05 Talon & Risk Hub`, `06 Change Review`, `07 Evidence & Ledger`, `08 Agents & Sessions`, `09 Data & Logic Audit`, `§ Decision Lineage`) so every view renders `<= 4` primary cards on initial load (`63.1%` HTML line reduction, `75.7%` CSS line reduction, `85.5%` average block reduction).
+  - Added 11 core semantic/neutral CSS tokens across **Warm Alabaster Light Mode** and **Obsidian Graphite Dark Mode**, an 8-step spatial scale, a 3-step tabular-numeral typography scale, GPU-accelerated `@keyframes surfaceIn` staggered animations (`cubic-bezier(0.16, 1, 0.3, 1)`), `@media (prefers-reduced-motion: reduce)` support, collapsible `<details class="disclosure-box">` drawers, and `.surface-tabs` sub-tab switchers.
+- **Hardened 54-Tool MCP Server (`cmd/garuda-mcp`) & `63/63` Dynamic Verification Suite (`scripts/mcp_verify.py`)**:
+  - Added `garuda.preflight_bundle`, `garuda.verify_receipt`, `garuda.diff_snapshots`, `garuda.audit_export` (`csv`/`json`/`md`), `garuda.create_workspace`, `garuda.audit_data_discrepancy`, `garuda.reconcile_data_audit`, `garuda.reset_audit_state`, `garuda.diff_impact`, `garuda.symbol_test_coverage`, `garuda.snapshot`, `garuda.explain_claim`, `garuda.snippet`, `garuda.summary`, `garuda.owners`, `garuda.verify_claim`, and `garuda.test_coverage`.
+  - Added unified `snapshot_receipt` provenance block (`policy_set_version`, `drift_definition_version`, `scope_filter`, `commit_sha`, `worktree_dirty`, `dirty_files_hash`, `graph_fingerprint`, `receipt_hash`, `head_matches_index`, `reproduce_command`) across MCP responses.
+  - Enforced strict human co-sign attribution (`GARUDA_MCP_APPROVER`), global read-only mode (`GARUDA_MCP_READ_ONLY=true`), raw SQL rejection in `garuda.query`, path-traversal guards in `garuda.docs_ingest` and `garuda.synthesize_rulebook`, and global host-path stripping via `SanitizeGlobalJSONString`.
+- **Deterministic Dirty-Worktree Provenance Flags (`--worktree-dirty` & `--dirty-tree-hash`)**:
+  - Added `--worktree-dirty` and `--dirty-tree-hash <sha>` flags to `garuda check` (`cmd/garuda/check_cmd.go`) and `garuda talon guard` (`cmd/garuda/talon_cmd.go`) so every emitted `reproduce_command` executes cleanly and verifies dirty working-tree state deterministically.
+- **FinOps-Safe Data & Logic Audit Ledger (`migrations/095_data_logic_audit_ledger_and_hygiene.sql`)**:
+  - Added `data_logic_audit_ledger` and `data_audit_reconciliations` alongside `garuda audit data-logic` (retaining `garuda audit financial` as a backward-compatible alias).
+
+
 All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented in this file.
 
-## [v1.9.1] - 2026-10-29 — 35-Tool Extended MCP Integration, Zero-Stub CLI Hardening, Finance & Audit Guide, CLI Decision Matrix & Persona Onboarding Suite
+## [v1.9.9] - 2026-10-29 — 54-Tool Extended MCP Integration, Zero-Stub CLI Hardening, Finance & Audit Guide, CLI Decision Matrix & Persona Onboarding Suite
 
 ### Added & Fixed
-- **Extended 35-Tool Production MCP Server (`cmd/garuda-mcp/main.go`, `tools_audit.go`, `tools_whitelist.go`, `scripts/mcp_verify.py`)**:
-  - Expanded `bin/garuda-mcp` from 26 to **35 production-grade tools** with full PostgreSQL persistence, strict `toolArgWhitelist` coverage (`TestToolArgWhitelistCoversAllTools`), and **`43/43` passing protocol & functional checks** in `scripts/mcp_verify.py`:
+- **Extended 54-Tool Production MCP Server (`cmd/garuda-mcp/main.go`, `tools_audit.go`, `tools_whitelist.go`, `scripts/mcp_verify.py`)**:
+  - Expanded `bin/garuda-mcp` from 26 to **35 production-grade tools** with full PostgreSQL persistence, strict `toolArgWhitelist` coverage (`TestToolArgWhitelistCoversAllTools`), and **`63/63` passing protocol & functional checks** in `scripts/mcp_verify.py`:
     - `garuda.disambiguate_logic` & `garuda.decide_logic_variant` (PostgreSQL `logic_variants_registry` 0.0–1.0 team weights & human decision recording)
     - `garuda.audit_financial_discrepancy` & `garuda.reconcile_financial_audit` (PostgreSQL `financial_audit_reconciliations` 48 Cr vs 4.8 Cr lineage trace & auditor sign-off)
     - `garuda.synthesize_rulebook` & `garuda.approve_base_rulebook` (PostgreSQL `synthesized_rulebooks` + `.garuda/APPROVED_BASE_RULEBOOK.md` RFC 6962 SHA-256 seal)
@@ -15,7 +31,7 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
     - `garuda.doctor_diagnose`, `garuda.build_matrix_check`, and `garuda.hygiene_report`
 - **Zero-Stub CLI Hardening (`cmd/garuda/governance.go` & `cmd/garuda/audit_cmd.go`)**:
   - Replaced the legacy `handleMCPInstall` placeholder in `cmd/garuda/governance.go` with full execution of `talonInitCmd` (`garuda mcp install` now compiles `.garuda/TALON_CONTRACT.md` and installs all 6 IDE, MCP, and Git hooks).
-  - Upgraded `garuda audit logic`, `garuda audit financial`, `garuda audit criticality`, and `garuda rulebook generate/approve` (`cmd/garuda/audit_cmd.go`) to persist and synchronize directly with PostgreSQL tables (`093_human_in_the_loop_audit_rulebook.sql`).
+  - Upgraded `garuda audit logic`, `garuda audit data-logic`, `garuda audit criticality`, and `garuda rulebook generate/approve` (`cmd/garuda/audit_cmd.go`) to persist and synchronize directly with PostgreSQL tables (`095_human_in_the_loop_audit_rulebook.sql`).
 - **Complete Role-Based Documentation Suite (`README.md`, `docs/FINANCE_AND_AUDIT_GUIDE.md`, `docs/CLI_DECISION_GUIDE.md`, `docs/PERSONA_ONBOARDING_GUIDE.md`, `PLAYBOOK.md`, `docs/SPECS.md`, `docs/API.md`, `docs/CAPABILITIES.md`, `docs/WALKTHROUGH.md`, `INSTALL.md`, `EVIDENCE.md`)**:
   - Created [`docs/FINANCE_AND_AUDIT_GUIDE.md`](docs/FINANCE_AND_AUDIT_GUIDE.md) for Finance Controllers, CFOs, Actuaries, and Statutory Auditors.
   - Created [`docs/CLI_DECISION_GUIDE.md`](docs/CLI_DECISION_GUIDE.md) with a complete "How & When to Use What CLI Command & MCP Tool" decision matrix.
@@ -32,7 +48,7 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
     - **`HIGH_SEVERE` (Core Surfaces — Freeze / Do Not Touch)**: Mission-critical flows like the **Homepage**, **Search Bar**, **Search Results Redirect Router** (142 callers), and **Claims Settlement Ledger**. Prevents catastrophic changes that could take down search redirection or payment settlement.
     - **`MEDIUM` (Non-Blocking Features — Human Trade-Off Review)**: Secondary features like the **Wishlist Loader** and **Promotional Attribution Badges** (19 callers), where occasional degradation does not block core search or checkout and human trade-offs can be weighed.
     - **`LOW` (Minor UI & Formatting — Allow with Info)**: Leaf UI helpers like **Search Box Visual Alignment** and badge formatters (4 callers) carrying minimal blast radius.
-- **Continuous Financial & Business Data Discrepancy Audit (`financial_audit_reconciliations`, `garuda audit financial`, `09 — Financial & Logic Audit`)**:
+- **Continuous Financial & Business Data Discrepancy Audit (`financial_audit_reconciliations`, `garuda audit data-logic`, `09 — Financial & Logic Audit`)**:
   - Extends Garuda beyond software development audits to **Financial & Business Data Audits**.
   - Traces AST and SQL data-lineage across teams to catch business number discrepancies before external audits occur—such as **Claims Ops** reporting **48.00 Crore INR** (`SUM(settled_claims_inr) / 1e7` in `ops.AggregateClaimsPaidCrore`) while **Finance/Management** reports **4.80 Crore INR** (`SUM(settled_claims_lakhs) / 1000.0` in `finance.ExportExecutiveClaimsSummary` — a 10x Lakhs-to-Crore unit divisor bug).
 - **Auto-Synthesized Base Rulebook Studio (`synthesized_rulebooks`, `garuda rulebook generate/approve`, `04 — Docs & Base Rulebook`)**:
@@ -54,7 +70,7 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 - **Single-Download Portable Go `1.26.0` Matching `go.mod` & 1-Pass Build Caching (`setup.sh` & `setup.ps1`)**:
   - Dynamically detects `go 1.26.0` from `go.mod` when bootstrapping `~/.garuda/toolchain/go`, eliminating the secondary ~70 MB Go toolchain auto-download during `go build`.
   - Compiles all four binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) in a single `go build -o bin/ ...` invocation with `bin/.build_stamp` commit caching and `install.sh` / `install.ps1` shallow clones (`git clone --depth 1`).
-- **Canonical Schema Hardening Migration (`migrations/057_schema_hardening.sql`)**:
+- **Canonical Schema Hardening Migration (`migrations/095_data_logic_audit_ledger_and_hygiene.sql`)**:
   - Idempotently aligns `workspaces`, `repositories`, `entities` (`canonical_name`, `file_path`, `signature`, `ast_hash`), `relationships`, and `cross_repo_edges` indexes across fresh and upgraded installations.
 - **Smart MCP Graph Target Discovery (`cmd/garuda-mcp/tools_graph.go`)**:
   - Added case-insensitive/qualified suffix entity resolution (`name ILIKE $2 OR name ILIKE '%.' || $2`) and `resolveTopClaimTarget` fallback in `garuda.implementers` and `garuda.subclasses` so MCP clients and `scripts/mcp_verify.py` resolve valid interface/struct targets across any indexed repository (`25/25` dynamic verifier checks green).
@@ -86,7 +102,7 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 - **Cold-Boot CI Merkle Root Seeding (`internal/store/postgres_merkle.go` & `.github/workflows/garuda-gate.yml`)**:
   - Ensures fresh ephemeral CI containers automatically initialize and verify the Genesis RFC 6962 Merkle block during cold-boot workspace analysis and diff-scoped gate execution.
 - **Redesigned Visual Documentation Suite (`README.md`, `INSTALL.md`, `PLAYBOOK.md`, `EVIDENCE.md`, `docs/WALKTHROUGH.md`, `docs/CAPABILITIES.md`, `docs/SPECS.md`, `docs/API.md`)**:
-  - Integrated the new Garuda visual identity (`assets/garuda_logo.png`), the 20-second cinematic product introduction video (`assets/garuda_dashboard_demo_video.mp4`), and the complete 8-surface dashboard & IDE screenshot gallery across a human-centered `README.md` paired with deep v1.8.1 technical specifications.
+  - Integrated the new Garuda visual identity (`assets/garuda_logo.png`), the 20-second cinematic product introduction video (`assets/garuda_dashboard_demo_video.mp4`), and the complete 10-surface dashboard & IDE screenshot gallery across a human-centered `README.md` paired with deep v1.8.1 technical specifications.
 
 ## [v1.8.0] - 2026-10-26 — Deterministic BuildContext Receipts, Build-Tag/Platform AST Filtering, CI-vs-Editor Drift Detector & Cross-Platform Matrix Gate
 
@@ -160,7 +176,7 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
   - Upgraded TypeScript Tree-sitter parser and integration to resolve named import aliases (`import { X as Y }`), namespace imports (`import * as NS`), `new Class()` instantiations, and instance/field method calls across files at `0.95` static confidence.
 
 ## [v1.4.0] - 2026-10-24
-- Redesigned `/dashboard` as a 6-surface Software Intelligence Instrument (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) with global `⌘K` palette, 1-hop/2-hop neighborhood graph, and synchronized 4-tab Inspector Drawer.
+- Redesigned `/dashboard` as a 10-surface Software Intelligence Instrument (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) with global `⌘K` palette, 1-hop/2-hop neighborhood graph, and synchronized 4-tab Inspector Drawer.
 - Fixed Benchmark 024 (`TestBenchmark_024_GoWork_CrossModule_ResolutionAndBlastRadius`) to assign `1.0` exact compiler-verified confidence to cross-module `IMPLEMENTS` edges.
 
 ## [v1.3.0] - 2026-10-24

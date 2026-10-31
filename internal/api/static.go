@@ -30,5 +30,9 @@ func (s *Server) HandleStatic() http.Handler {
 		// line, the binary was built incorrectly.
 		panic("api: static FS is missing 'static' directory: " + err.Error())
 	}
-	return http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
+	fsHandler := http.StripPrefix("/static/", http.FileServer(http.FS(sub)))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		fsHandler.ServeHTTP(w, r)
+	})
 }

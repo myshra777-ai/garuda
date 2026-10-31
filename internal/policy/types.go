@@ -19,10 +19,11 @@ import (
 type Decision string
 
 const (
-	DecisionAllow  Decision = "ALLOW"
-	DecisionWarn   Decision = "WARN"
-	DecisionReview Decision = "REVIEW"
-	DecisionBlock  Decision = "BLOCK"
+	DecisionAllow        Decision = "ALLOW"
+	DecisionInconclusive Decision = "INCONCLUSIVE"
+	DecisionWarn         Decision = "WARN"
+	DecisionReview       Decision = "REVIEW"
+	DecisionBlock        Decision = "BLOCK"
 )
 
 // Severity returns a numeric rank for decision precedence.
@@ -30,10 +31,12 @@ const (
 func (d Decision) Severity() int {
 	switch d {
 	case DecisionBlock:
-		return 4
+		return 5
 	case DecisionReview:
-		return 3
+		return 4
 	case DecisionWarn:
+		return 3
+	case DecisionInconclusive:
 		return 2
 	case DecisionAllow:
 		return 1
@@ -67,13 +70,6 @@ type Scope struct {
 }
 
 // Predicate is a single deterministic check.
-// Supported Type values:
-//
-//   - entity_exists         — an entity matching params matches exists
-//   - claim_exists          — a claim matching params exists
-//   - contradiction_exists  — a CONTRADICTED claim exists in scope
-//   - verification_missing  — an entity has no runtime observation
-//   - language_matches      — the scope contains entities of a language
 type Predicate struct {
 	Type   string         `yaml:"type"   json:"type"`
 	Params map[string]any `yaml:"params" json:"params"`
@@ -92,6 +88,7 @@ type DiffScopeFilter struct {
 	TouchedEntityIDs map[uuid.UUID]bool `json:"touched_entity_ids,omitempty"`
 	TouchedPackages  map[string]bool    `json:"touched_packages,omitempty"`
 	OnlyNetNew       bool               `json:"only_net_new"`
+	IncludeFixtures  bool               `json:"include_fixtures,omitempty"`
 }
 
 // MatchesEntity returns true if the filter is inactive or the entity/package
@@ -120,6 +117,7 @@ type Evaluation struct {
 	PolicyVersion           string                 `json:"policy_version"`
 	Decision                Decision               `json:"decision"`
 	Reason                  string                 `json:"reason"`
+	ScopedEntityCount       int                    `json:"scoped_entity_count"`
 	Evidence                Evidence               `json:"evidence"`
 	NetNewViolationsCount   int                    `json:"net_new_violations_count"`
 	BaselineViolationsCount int                    `json:"baseline_violations_count"`
@@ -133,12 +131,12 @@ type Evaluation struct {
 }
 
 // Evidence is the set of graph objects and build provenance that justified the decision.
-// Empty evidence + non-ALLOW decision = the policy fired on absence (e.g., missing verification).
 type Evidence struct {
 	ClaimIDs          []uuid.UUID            `json:"claim_ids,omitempty"`
 	EntityIDs         []uuid.UUID            `json:"entity_ids,omitempty"`
 	ContradictionIDs  []uuid.UUID            `json:"contradiction_ids,omitempty"`
 	MatchedPredicates []string               `json:"matched_predicates"`
+	ScopedEntityCount int                    `json:"scoped_entity_count"`
 	SnapshotID        *uuid.UUID             `json:"snapshot_id,omitempty"`
 	ReasoningNotes    []string               `json:"reasoning_notes,omitempty"`
 	BaselineNotes     []string               `json:"baseline_notes,omitempty"`

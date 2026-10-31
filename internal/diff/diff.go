@@ -63,6 +63,9 @@ type TouchedEntity struct {
 
 // TargetResolution holds the complete set of files, entities, and packages
 // affected by a git diff or file list.
+// TouchedScope is an alias for TargetResolution for compatibility with Talon guard gates.
+type TouchedScope = TargetResolution
+
 type TargetResolution struct {
 	Mode            string          `json:"mode"` // "staged", "diff", "working_tree", "files"
 	Revision        string          `json:"revision,omitempty"`
@@ -204,7 +207,9 @@ func CollectGitDeltas(repoDir string, staged bool, rev string, explicitFiles []s
 	if err != nil {
 		// A new repository without an initial commit can still be diffed without HEAD.
 		out, err = exec.Command("git", "-C", repoDir, "diff", "--unified=0", "--no-color").Output()
-		if err != nil { return "working_tree", nil, fmt.Errorf("git diff working tree: %w", err) }
+		if err != nil {
+			return "working_tree", nil, fmt.Errorf("git diff working tree: %w", err)
+		}
 	}
 	deltas := ParseUnifiedDiff(string(out))
 	seen := make(map[string]bool, len(deltas))
@@ -214,10 +219,14 @@ func CollectGitDeltas(repoDir string, staged bool, rev string, explicitFiles []s
 
 	// Also include untracked source files from `git ls-files --others --exclude-standard`
 	untrackedOut, uErr := exec.Command("git", "-C", repoDir, "ls-files", "--others", "--exclude-standard").Output()
-	if uErr != nil { return "working_tree", nil, fmt.Errorf("git ls-files untracked files: %w", uErr) }
+	if uErr != nil {
+		return "working_tree", nil, fmt.Errorf("git ls-files untracked files: %w", uErr)
+	}
 	for _, line := range strings.Split(string(untrackedOut), "\n") {
 		p := filepath.ToSlash(strings.TrimSpace(line))
-		if p == "" || seen[p] || !isSupportedSourceFile(p) { continue }
+		if p == "" || seen[p] || !isSupportedSourceFile(p) {
+			continue
+		}
 		seen[p] = true
 		deltas = append(deltas, FileDelta{FilePath: p, Status: "A", Hunks: []LineRange{{Start: 1, End: 1_000_000}}})
 	}

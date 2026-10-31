@@ -1,6 +1,6 @@
-# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (`v1.9.1` Universal)
+# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (`v1.9.9` Universal)
 
-This reference documents the complete command-line interface (`bin/garuda` and `bin/garuda-talon`), the **Garuda Talon** active agent harness, declarative policy specification (`policies/*.yaml`), Model Context Protocol surface (`bin/garuda-mcp` with 35 active tools), and HTTP REST / PWA gateway (`bin/garuda-api`).
+This reference documents the complete command-line interface (`bin/garuda` and `bin/garuda-talon`), the **Garuda Talon** active agent harness, declarative policy specification (`policies/*.yaml`), Model Context Protocol surface (`bin/garuda-mcp` with 54 active tools), and HTTP REST / PWA gateway (`bin/garuda-api`).
 
 ---
 
@@ -178,7 +178,7 @@ Extracts normative architectural claims (`MUST` / `MUST_NOT`) from Markdown ADRs
 ---
 
 ### `garuda dev` / `garuda up` / `garuda status`
-- `./bin/garuda dev` — Starts the unified Garuda daemon (HTTP API server + 6-surface `/dashboard` Software Intelligence Instrument + 10-second background runtime verification & Merkle epoch worker).
+- `./bin/garuda dev` — Starts the unified Garuda daemon (HTTP API server + 10-surface `/dashboard` Software Intelligence Instrument + 10-second background runtime verification & Merkle epoch worker).
 - `./bin/garuda up` — Starts PostgreSQL container, runs migrations, and launches the gateway stack.
 - `./bin/garuda status` — Verifies gateway health (`/health`).
 
@@ -204,7 +204,7 @@ Every policy file specifies `when` predicates evaluated against the workspace gr
 
 ## 4. Active MCP Surface (`bin/garuda-mcp`)
 
-`bin/garuda-mcp` speaks JSON-RPC 2.0 over stdio (`protocolVersion: "2025-06-18"`), advertises `tools`, `prompts`, and `resources` capabilities, and exposes **35 deterministic tools**:
+`bin/garuda-mcp` speaks JSON-RPC 2.0 over stdio (`protocolVersion: "2025-06-18"`), advertises `tools`, `prompts`, and `resources` capabilities, and exposes **54 deterministic tools**:
 
 | Category | Tool Name | Whitelisted Arguments | Purpose |
 | :--- | :--- | :--- | :--- |
@@ -236,7 +236,7 @@ Verify MCP and Talon compliance at any time by running:
 ```bash
 python3 scripts/mcp_verify.py
 ```
-Expected result: `═══ 25/25 checks passed ═══` (self-hosted dynamic verifier) or `═══ 43/43 checks passed ═══` (multi-repo benchmark suite).
+Expected result: `═══ 25/25 checks passed ═══` (self-hosted dynamic verifier) or `═══ 63/63 checks passed ═══` (multi-repo benchmark suite).
 
 ---
 
@@ -250,8 +250,8 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 | `GET /manifest.json`, `GET /sw.js`, `GET /icon.svg` | Public | Progressive Web App (PWA) manifest, service worker, and vector icon for Chromium/Android/Desktop installation |
 | `GET /signup`, `POST /signup` | Public | Browser & CLI/API account + tenant + workspace provisioning |
 | `GET /login`, `POST /login` | Public | Session authentication (`garuda_session` cookie) |
-| `GET /dashboard` | Session | 6-surface Software Intelligence Instrument (`Briefing`, `Map`, `Workbench`, `Policies`, `Contradictions`, `Ledger`) |
-| `GET /api/v1/dashboard/instrument` | Session / Bearer | Complete JSON payload powering the 6-surface dashboard instrument |
+| `GET /dashboard` | Session | 10-surface Software Intelligence Instrument (`Briefing`, `Map`, `Workbench`, `Policies`, `Contradictions`, `Ledger`) |
+| `GET /api/v1/dashboard/instrument` | Session / Bearer | Complete JSON payload powering the 10-surface dashboard instrument |
 | `GET /api/v1/dashboard/neighborhood` | Session / Bearer | 1-hop / 2-hop focal symbol neighborhood graph & 4-tab Inspector Drawer payload |
 | `POST /api/v1/dashboard/workbench/simulate` | Session / Bearer | Live Change Review Workbench pre-merge policy & blast-radius simulator |
 | `GET /graph`, `GET /api/v1/graph` | Session / Bearer | Interactive D3 force graph & JSON graph payload |
@@ -263,7 +263,7 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 
 ---
 
-## 6. v1.7–v1.9.1 New CLI Flags, Dashboard Lineage Endpoints & BuildContext Schema
+## 6. v1.7–v1.9.9 New CLI Flags, Dashboard Lineage Endpoints & BuildContext Schema
 
 ### 6.1 Cross-Platform Build Matrix & Build-Tag Flags (`garuda analyze`, `garuda check`, `garuda talon guard`)
 - `--tags string` — Comma-separated Go build tags (e.g., `--tags cgo,enterprise`) applied via `go/build.Context` during conditional AST file matching.
@@ -308,16 +308,16 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 
 ---
 
-## 7. v1.9.1 Extended CLI Commands, 12 New MCP Tools & Financial/Rulebook HTTP Endpoints
+## 7. v1.9.9 Extended CLI Commands, 12 New MCP Tools & Financial/Rulebook HTTP Endpoints
 
 ### 7.1 `garuda audit` & `garuda rulebook` CLI Commands (`cmd/garuda/audit_cmd.go`)
 - `garuda audit logic [concept] --team <ops|marketing|management> [--decide <variant_id> --action APPROVED_BY_HUMAN] [--json]`
-- `garuda audit financial --metric <name> --team-a-cr <float> --team-b-cr <float> [--reconcile <audit_id>] [--json]`
+- `garuda audit data-logic --metric <name> --team-a-cr <float> --team-b-cr <float> [--reconcile <audit_id>] [--json]`
 - `garuda audit criticality [--tier HIGH_SEVERE|MEDIUM|LOW] [--json]`
 - `garuda rulebook generate [--output .garuda/DRAFT_BASE_RULEBOOK.md]`
 - `garuda rulebook approve [--by "Stakeholder Name"]`
 
-### 7.2 12 New MCP Tools in `bin/garuda-mcp` (Total: 35 Tools)
+### 7.2 12 New MCP Tools in `bin/garuda-mcp` (Total: 54 Tools)
 
 | Tool Name | Whitelisted Arguments | Purpose |
 | :--- | :--- | :--- |
@@ -334,7 +334,7 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 | `garuda.build_matrix_check` | `workspace`, `repo_dir`, `diff`, `tenant_id` | Evaluates the 4-target Cross-Platform Build Matrix and returns the `BuildContext` receipt. |
 | `garuda.hygiene_report` | `workspace`, `limit`, `tenant_id` | Runs the static code hygiene analyzer over MCP. |
 
-### 7.3 v1.9.1 HTTP Endpoints (`internal/api/dashboard_audit_rulebook.go`)
+### 7.3 v1.9.9 HTTP Endpoints (`internal/api/dashboard_audit_rulebook.go`)
 - `GET  /api/v1/dashboard/logic-weights?workspace=<ws>&team=<ops|marketing|management>`
 - `POST /api/v1/dashboard/logic-weights/decide`
 - `GET  /api/v1/dashboard/criticality-tiers?workspace=<ws>`
@@ -343,3 +343,40 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 - `POST /api/v1/dashboard/financial-audit`
 - `GET  /api/v1/dashboard/rulebook-draft?workspace=<ws>`
 - `POST /api/v1/dashboard/rulebook-approve?workspace=<ws>`
+
+
+---
+
+## 5. `v1.9.9` Additions: Dirty-Worktree Provenance Flags, Security Controls & Extended MCP Tools
+
+### 5.1 Dirty-Worktree Provenance Flags on `garuda check` & `garuda talon guard`
+When a working tree has uncommitted edits, `BuildContext.ReproduceCommand` emits `--worktree-dirty` and `--dirty-tree-hash <12-char-sha256>` so CI or another developer can verify the exact dirty-tree state:
+
+```bash
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check \
+  --target linux/amd64 \
+  --cgo=false \
+  --commit ef749a162e01 \
+  --worktree-dirty \
+  --dirty-tree-hash 417801f9a311 \
+  --workspace default
+```
+
+- `--worktree-dirty` (`bool`) — Assert that the working tree is expected to be dirty when verifying the `BuildContext` receipt.
+- `--dirty-tree-hash string` — Assert the exact 12-character SHA-256 digest of modified/untracked source files (`BuildContext.DirtyFilesHash`).
+
+### 5.2 MCP Security & Attestation Environment Variables (`v1.9.9`)
+- `GARUDA_MCP_READ_ONLY=true` — Blocks all 13 mutating MCP tools (`propose_decision`, `decide_logic_variant`, `reconcile_data_audit`, `reconcile_financial_audit`, `approve_base_rulebook`, `synthesize_rulebook`, `docs_ingest`, `create_task`, `handoff`, `resume`, `reset_audit_state`, `create_workspace`, and `talon_verify_edit` when `save_to_ledger=true`), returning a structured `{"status": "rejected", "read_only": true}` response.
+- `GARUDA_MCP_APPROVER=<email-or-handle>` — Required for an MCP call to record `APPROVED_BY_HUMAN` or `RECONCILED_BY_HUMAN`. When unset, `decide_logic_variant`, `reconcile_data_audit`, and `approve_base_rulebook` record `PROPOSED_BY_AGENT_AWAITING_HUMAN_CLI_COSIGN` (`human_cli_verified: false`) until co-signed via the CLI or Web Dashboard.
+
+### 5.3 New `v1.9.9` MCP Tools (Completing the 54-Tool Surface)
+| Tool Name | Whitelisted Arguments | Purpose |
+| :--- | :--- | :--- |
+| `garuda.preflight_bundle` | `workspace`, `target`, `symbol`, `file`, `tenant_id` | Single-call pre-edit bundle combining `talon_pre_edit`, `blast_radius`, `neighbors`, `criticality_tiers`, `query_claims`, and `snapshot_receipt`. |
+| `garuda.verify_receipt` | `workspace`, `receipt_hash`, `graph_fingerprint`, `commit_sha`, `tenant_id` | Cryptographically verifies a `snapshot_receipt` or `BuildContext` hash against the live PostgreSQL workspace and RFC 6962 Merkle root. |
+| `garuda.diff_snapshots` | `workspace`, `from_revision`, `to_revision`, `tenant_id` | Diffs two workspace snapshots or git revisions, returning added/removed files, entities, claims, and policy posture delta. |
+| `garuda.audit_export` | `workspace`, `format` (`csv`/`json`/`md`), `limit`, `tenant_id` | Exports the tamper-evident governance, policy, logic-variant, and data-audit ledger in CSV, JSON, or Markdown format. |
+| `garuda.create_workspace` | `workspace`, `description`, `tenant_id` | Provisions an isolated workspace (returning an isolated empty `snapshot_receipt` until repositories are analyzed into it). |
+| `garuda.audit_data_discrepancy` | `workspace`, `metric_name`, `team_a_name`, `team_a_crore`, `team_b_name`, `team_b_crore`, `tenant_id` | FinOps-safe alias for cross-team metric & unit-scale discrepancy auditing (`data_logic_audit_ledger`). |
+| `garuda.reconcile_data_audit` | `workspace`, `audit_id`, `approved_by`, `resolution_note`, `tenant_id` | Reconciles a flagged data/logic discrepancy (requiring `GARUDA_MCP_APPROVER` for human sign-off). |
+| `garuda.reset_audit_state` | `workspace`, `confirm`, `tenant_id` | Resets demo/sandbox logic-variant and data-audit overrides back to clean baseline state. |

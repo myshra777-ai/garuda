@@ -30,7 +30,7 @@ func (s *MCPServer) recordSessionStart(ctx context.Context, clientName, clientVe
 	// Resolve workspace from env if set. A nil workspace is fine —
 	// the session simply has no workspace binding.
 	if wsName := os.Getenv("GARUDA_WORKSPACE"); wsName != "" {
-		if id, err := store.ResolveWorkspaceID(ctx, s.store.Pool(), tenantID, wsName); err == nil && id != uuid.Nil {
+		if id, err := store.ResolveWorkspaceID(ctx, s.safePool(), tenantID, wsName); err == nil && id != uuid.Nil {
 			workspaceID = &id
 		}
 	}
@@ -39,7 +39,7 @@ func (s *MCPServer) recordSessionStart(ctx context.Context, clientName, clientVe
 	defer cancel()
 
 	var id uuid.UUID
-	err := s.store.Pool().QueryRow(writeCtx, `
+	err := s.safePool().QueryRow(writeCtx, `
         INSERT INTO mcp_sessions (
             tenant_id, workspace_id, session_token, client_name, client_version, agent_id
         ) VALUES ($1, $2, $3, $4, $5, $6)
@@ -81,7 +81,7 @@ func (s *MCPServer) recordToolCall(ctx context.Context, toolName string, duratio
 	writeCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
 
-	tx, err := s.store.Pool().Begin(writeCtx)
+	tx, err := s.safePool().Begin(writeCtx)
 	if err != nil {
 		slog.Warn("mcp tool call tracking: begin failed", "error", err)
 		return
@@ -131,7 +131,7 @@ func (s *MCPServer) closeSession(ctx context.Context, reason string) {
 	writeCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
 
-	if _, err := s.store.Pool().Exec(writeCtx, `
+	if _, err := s.safePool().Exec(writeCtx, `
         UPDATE mcp_sessions
            SET closed_at = NOW(), close_reason = $2
          WHERE id = $1 AND closed_at IS NULL

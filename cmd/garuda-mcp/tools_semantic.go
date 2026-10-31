@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/myshra777-ai/garuda/internal/analyzer"
+	"github.com/myshra777-ai/garuda/internal/policy"
 )
 
 func sanitizeMCPFilePath(p string) string {
@@ -40,8 +41,7 @@ func sanitizeMCPFilePath(p string) string {
 	return clean
 }
 
-// handleEntities lists entities in a workspace, optionally filtered by
-// package or kind.
+// handleEntities lists entities in a workspace, optionally filtered by package or kind (B-07).
 func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, error) {
 	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
@@ -57,7 +57,8 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 		limit = int(v)
 	}
 
-	whereClause := " WHERE workspace_id = $1 AND kind != 'external'"
+	includeFixtures := IncludeFixturesRequested(args)
+	whereClause := " WHERE workspace_id = $1 AND kind != 'external'" + ExcludeFixturesSQL("file_path", includeFixtures)
 	dbArgs := []interface{}{workspaceID}
 	argPos := 2
 
@@ -72,7 +73,7 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 		argPos++
 	}
 
-	if s.store == nil || s.store.Pool() == nil {
+	if s.store == nil || s.safePool() == nil {
 		return map[string]interface{}{
 			"tenant_id":      tenantID.String(),
 			"workspace_id":   workspaceID.String(),
@@ -87,7 +88,7 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 	}
 
 	var totalCount int
-	_ = s.store.Pool().QueryRow(ctx, "SELECT COUNT(*)::int FROM entities"+whereClause, dbArgs...).Scan(&totalCount)
+	_ = s.safePool().QueryRow(ctx, "SELECT COUNT(*)::int FROM entities"+whereClause, dbArgs...).Scan(&totalCount)
 
 	offset := ParseCursorOffset(args)
 	q := `
@@ -97,7 +98,7 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 	` + whereClause + fmt.Sprintf(" ORDER BY package, name LIMIT $%d OFFSET $%d", argPos, argPos+1)
 	queryArgs := append(append([]interface{}{}, dbArgs...), limit, offset)
 
-	rows, err := s.store.Pool().Query(ctx, q, queryArgs...)
+	rows, err := s.safePool().Query(ctx, q, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query entities: %w", err)
 	}
@@ -137,6 +138,7 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 		"tenant_id":      tenantID.String(),
 		"workspace_id":   workspaceID.String(),
 		"workspace_name": workspaceName,
+		"scope_filter":   map[bool]string{true: "all_including_fixtures", false: "production_only"}[includeFixtures],
 		"filters":        map[string]any{"package": pkgFilter, "kind": kindFilter},
 		"count":          len(entities),
 		"returned_count": len(entities),
@@ -149,14 +151,14 @@ func (s *MCPServer) handleEntities(args map[string]interface{}) (interface{}, er
 	}, nil
 }
 
-// handleInspect returns one entity and its incoming and outgoing
-// relationships, including its canonical signature.
+// handleInspect returns one entity and its incoming and outgoing relationships (B-08).
 func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
 	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
+	includeFixtures := IncludeFixturesRequested(args)
 
 	entityIDStr, _ := args["entity_id"].(string)
 	nameStr, _ := args["name"].(string)
@@ -170,9 +172,9 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 		lookupTarget = nameStr
 	}
 	if _, parseErr := uuid.Parse(lookupTarget); parseErr != nil {
-		resolvedID, _, rErr := s.resolveSubjectEntity(ctx, workspaceID, "", lookupTarget)
+		resolvedID, _, rErr := s.resolveSubjectEntityWithOpts(ctx, workspaceID, "", lookupTarget, includeFixtures)
 		if rErr != nil {
-			return nil, fmt.Errorf("invalid entity_id %q: %w", lookupTarget, parseErr)
+			return nil, fmt.Errorf("invalid entity_id %q: %w", lookupTarget, rErr)
 		}
 		entityIDStr = resolvedID.String()
 	} else {
@@ -191,12 +193,13 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 		LineEnd      int    `json:"line_end,omitempty"`
 		Signature    string `json:"signature"`
 		Exported     bool   `json:"exported"`
+		IsFixture    bool   `json:"is_fixture,omitempty"`
 	}
-	if s.store == nil || s.store.Pool() == nil {
+	if s.store == nil || s.safePool() == nil {
 		return nil, fmt.Errorf("database not connected")
 	}
 
-	err = s.store.Pool().QueryRow(ctx, `
+	err = s.safePool().QueryRow(ctx, `
 		SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(receiver_type, ''),
 		       COALESCE(language, 'go'), COALESCE(file_path, ''),
 		       COALESCE(line_start, 0), COALESCE(line_end, 0),
@@ -213,6 +216,7 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 	}
 
 	entity.File = sanitizeMCPFilePath(entity.File)
+	entity.IsFixture = IsFixturePath(entity.File)
 	if strings.TrimSpace(entity.Signature) == "" {
 		switch entity.Kind {
 		case "method":
@@ -238,15 +242,16 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 		}
 	}
 
-	incoming, outgoing := QueryCanonicalEntityEdges(ctx, s.store.Pool(), workspaceID, entityIDStr, entity.Name)
+	incoming, outgoing := QueryCanonicalEntityEdges(ctx, s.safePool(), workspaceID, entityIDStr, entity.Name)
 	_ = analyzer.Relationship{}
 	snippet := ExtractSourceSnippet(entity.File, entity.LineStart)
 
-	return map[string]interface{}{
+	out := map[string]interface{}{
 		"tenant_id":       tenantID.String(),
 		"workspace_id":    workspaceID.String(),
 		"workspace_name":  workspaceName,
 		"entity":          entity,
+		"is_fixture":      entity.IsFixture,
 		"signature":       entity.Signature,
 		"content_snippet": snippet,
 		"incoming_count":  len(incoming),
@@ -255,11 +260,14 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 		"outbound_edges":  len(outgoing),
 		"incoming":        incoming,
 		"outgoing":        outgoing,
-	}, nil
+	}
+	if entity.IsFixture {
+		out["scope_note"] = "Entity resides in a test/fixture path and is excluded from production_only scope queries unless include_fixtures=true."
+	}
+	return out, nil
 }
 
-// handleBriefing returns a session-start briefing (BUG-03 & BUG-08).
-// Uses LoadWorkspaceCounts as the single source of truth for scale and epistemic counts.
+// handleBriefing returns a session-start briefing (B-07, B-14, B-16, B-17).
 func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, error) {
 	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
@@ -278,18 +286,20 @@ func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, er
 
 	sessionID := uuid.New().String()
 
-	if s.store == nil || s.store.Pool() == nil {
+	if s.store == nil || s.safePool() == nil {
 		counts := LoadWorkspaceCounts(ctx, nil, tenantID, workspaceID)
 		return map[string]interface{}{
-			"tenant_id":              tenantID.String(),
-			"workspace":              workspaceName,
-			"workspace_id":           workspaceID.String(),
-			"entity_count":           counts.Entities,
-			"exported_entity_count":  counts.ExportedEntities,
-			"external_stubs_count":   counts.ExternalStubs,
-			"ast_relationship_count": counts.ASTRelationships,
-			"document_claim_count":   counts.DocumentClaims,
-			"policy_verdict":         "NO_DATA",
+			"tenant_id":                      tenantID.String(),
+			"workspace":                      workspaceName,
+			"workspace_id":                   workspaceID.String(),
+			"entity_count":                   counts.Entities,
+			"exported_entity_count":          counts.ExportedEntities,
+			"external_stubs_count":           counts.ExternalStubs,
+			"ast_relationship_count":         counts.ASTRelationships,
+			"document_claim_count":           counts.DocumentClaims,
+			"undocumented_exported_entities": counts.UndocumentedExportedEntities,
+			"undocumented_drift_findings":    counts.UndocumentedDriftFindings,
+			"policy_verdict":                 "UNVERIFIED",
 			"epistemic": map[string]int{
 				"supported":           0,
 				"unverified":          0,
@@ -315,7 +325,7 @@ func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, er
 		return nil, fmt.Errorf("build briefing: %w", err)
 	}
 
-	counts := LoadWorkspaceCounts(ctx, s.store.Pool(), tenantID, workspaceID)
+	counts := LoadWorkspaceCounts(ctx, s.safePool(), tenantID, workspaceID)
 	briefing.Scale.Repositories = counts.Repositories
 	briefing.Scale.Entities = counts.Entities
 	briefing.Scale.ExportedEntities = counts.ExportedEntities
@@ -324,6 +334,23 @@ func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, er
 	briefing.Scale.ASTRelationships = counts.ASTRelationships
 	briefing.Scale.DocumentClaims = counts.DocumentClaims
 	briefing.Attention.OpenContradictions = counts.OpenContradictions
+	briefing.Attention.UndocumentedExportedEntities = counts.UndocumentedExportedEntities
+	briefing.Attention.UndocumentedDriftFindings = counts.UndocumentedDriftFindings
+	briefing.Attention.DriftFindings = counts.UndocumentedDriftFindings
+
+	// B-16: Populate briefing policy titles from the Single Policy Registry so policy.list and briefing agree 100%
+	activeParsed, activeIDs, _, _ := policy.LoadActivePolicies(ctx, s.safePool(), tenantID, resolveMCPPolicyDir(""))
+	canonTitles := make([]string, 0, len(activeParsed))
+	for _, pp := range activeParsed {
+		if pp.Policy != nil {
+			canonTitles = append(canonTitles, pp.Policy.ID)
+		}
+	}
+	if len(canonTitles) == 0 {
+		canonTitles = activeIDs
+	}
+	briefing.Policies.ActiveCount = len(activeIDs)
+	briefing.Policies.Titles = canonTitles
 
 	epistemic := map[string]int{
 		"supported":             counts.SupportedClaims,
@@ -342,25 +369,28 @@ func (s *MCPServer) handleBriefing(args map[string]interface{}) (interface{}, er
 		"TOTAL_AST_CLAIMS":      counts.ASTRelationships,
 	}
 
-	snapshot := ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, workspaceName)
+	snapshot := ComputeSnapshotReceipt(ctx, s.safePool(), tenantID, workspaceID, workspaceName)
 
 	return map[string]interface{}{
-		"tenant_id":              tenantID.String(),
-		"workspace":              workspaceName,
-		"workspace_id":           workspaceID.String(),
-		"entity_count":           counts.Entities,
-		"exported_entity_count":  counts.ExportedEntities,
-		"external_stubs_count":   counts.ExternalStubs,
-		"ast_relationship_count": counts.ASTRelationships,
-		"document_claim_count":   counts.DocumentClaims,
-		"policy_verdict":         briefing.PolicyVerdict,
-		"policy_set_version":     snapshot["policy_set_version"],
-		"snapshot_receipt":       snapshot,
+		"tenant_id":                      tenantID.String(),
+		"workspace":                      workspaceName,
+		"workspace_id":                   workspaceID.String(),
+		"entity_count":                   counts.Entities,
+		"exported_entity_count":          counts.ExportedEntities,
+		"external_stubs_count":           counts.ExternalStubs,
+		"ast_relationship_count":         counts.ASTRelationships,
+		"document_claim_count":           counts.DocumentClaims,
+		"undocumented_exported_entities": counts.UndocumentedExportedEntities,
+		"undocumented_drift_findings":    counts.UndocumentedDriftFindings,
+		"policy_verdict":                 briefing.PolicyVerdict,
+		"policy_set_version":             snapshot["policy_set_version"],
+		"snapshot_receipt":               snapshot,
 		"drift_summary": map[string]int{
-			"doc_to_code":           counts.DocToCodeDrift,
-			"code_to_doc":           counts.CodeToDocDrift,
-			"total_drift_findings":  counts.TotalDriftFindings,
-			"undocumented_entities": counts.CodeToDocDrift,
+			"doc_to_code":                    counts.DocToCodeDrift,
+			"code_to_doc":                    counts.CodeToDocDrift,
+			"total_drift_findings":           counts.TotalDriftFindings,
+			"undocumented_exported_entities": counts.UndocumentedExportedEntities,
+			"undocumented_drift_findings":    counts.UndocumentedDriftFindings,
 		},
 		"epistemic":        epistemic,
 		"epistemic_counts": briefing.EpistemicCounts,

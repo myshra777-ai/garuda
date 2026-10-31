@@ -15,23 +15,34 @@ import (
 )
 
 // resolveSubjectEntity turns a caller's (entity_id | name) into a
-// resolved UUID and canonical name. Either input may be provided; if
-// both are provided, entity_id wins.
+// resolved UUID and canonical name under the default production scope (B-08).
 func (s *MCPServer) resolveSubjectEntity(
 	ctx context.Context,
 	workspaceID uuid.UUID,
 	entityIDStr, nameStr string,
 ) (uuid.UUID, string, error) {
-	if s.store == nil || s.store.Pool() == nil {
+	return s.resolveSubjectEntityWithOpts(ctx, workspaceID, entityIDStr, nameStr, false)
+}
+
+// resolveSubjectEntityWithOpts is the single canonical symbol resolver used across
+// find_entity, talon_pre_edit, inspect, neighbors, implementers, subclasses, and blast_radius (fixes B-08).
+func (s *MCPServer) resolveSubjectEntityWithOpts(
+	ctx context.Context,
+	workspaceID uuid.UUID,
+	entityIDStr, nameStr string,
+	includeFixtures bool,
+) (uuid.UUID, string, error) {
+	if s.store == nil || s.safePool() == nil {
 		return uuid.Nil, nameStr, fmt.Errorf("database not connected")
 	}
+	scopeFilter := ExcludeFixturesSQL("file_path", includeFixtures)
 	if entityIDStr != "" {
 		parsed, err := uuid.Parse(entityIDStr)
 		if err != nil {
 			return uuid.Nil, "", fmt.Errorf("invalid entity_id %q: %w", entityIDStr, err)
 		}
 		var name string
-		err = s.store.Pool().QueryRow(ctx, `
+		err = s.safePool().QueryRow(ctx, `
 			SELECT name FROM entities WHERE workspace_id = $1 AND id = $2
 		`, workspaceID, parsed).Scan(&name)
 		if err != nil {
@@ -42,35 +53,33 @@ func (s *MCPServer) resolveSubjectEntity(
 	if nameStr != "" {
 		var id uuid.UUID
 		var name string
-		err := s.store.Pool().QueryRow(ctx, `
+		err := s.safePool().QueryRow(ctx, `
 			SELECT id, name FROM entities
 			 WHERE workspace_id = $1 AND name = $2 AND kind != 'external'
+		`+scopeFilter+`
 			 ORDER BY is_exported DESC
 			 LIMIT 1
 		`, workspaceID, nameStr).Scan(&id, &name)
 		if err == nil {
 			return id, name, nil
 		}
-		// Fallback to case-insensitive or qualified suffix match (e.g. "Router" -> "chi.Router")
-		err = s.store.Pool().QueryRow(ctx, `
+		err = s.safePool().QueryRow(ctx, `
 			SELECT id, name FROM entities
 			 WHERE workspace_id = $1
 			   AND (name ILIKE $2 OR name ILIKE '%.' || $2)
 			   AND kind != 'external'
+		`+scopeFilter+`
 			 ORDER BY is_exported DESC
 			 LIMIT 1
 		`, workspaceID, nameStr).Scan(&id, &name)
 		if err == nil {
 			return id, name, nil
 		}
-		return uuid.Nil, "", fmt.Errorf("no entity named %q in this workspace", nameStr)
+		return uuid.Nil, "", fmt.Errorf("no entity named %q in production scope of this workspace", nameStr)
 	}
 	return uuid.Nil, "", fmt.Errorf("one of entity_id or name is required")
 }
 
-// resolveTopClaimTarget finds the entity in workspaceID with the most incoming
-// claims of the given claimTypes. Used ONLY when a caller invokes subclasses or
-// implementers without specifying any entity_id or name.
 func (s *MCPServer) resolveTopClaimTarget(
 	ctx context.Context,
 	workspaceID uuid.UUID,
@@ -78,13 +87,14 @@ func (s *MCPServer) resolveTopClaimTarget(
 ) (uuid.UUID, string, error) {
 	var id uuid.UUID
 	var name string
-	err := s.store.Pool().QueryRow(ctx, `
+	err := s.safePool().QueryRow(ctx, `
 		SELECT e.id, e.name
 		  FROM claims c
 		  JOIN entities e ON e.id = c.to_entity_id
 		 WHERE c.workspace_id = $1
 		   AND c.claim_type = ANY($2)
 		   AND e.kind != 'external'
+	`+ExcludeFixturesSQL("e.file_path", false)+`
 		 GROUP BY e.id, e.name
 		 ORDER BY COUNT(*) DESC, e.name ASC
 		 LIMIT 1
@@ -95,15 +105,13 @@ func (s *MCPServer) resolveTopClaimTarget(
 	return id, name, nil
 }
 
-// handleSubclasses returns entities that inherit from or embed the subject (BUG-18).
-// Never silently substitutes an unrelated hub when a specific entity_id or name is requested,
-// and always reports total_count and truncated.
 func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
 	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
+	includeFixtures := IncludeFixturesRequested(args)
 
 	entityIDStr, _ := args["entity_id"].(string)
 	nameStr, _ := args["name"].(string)
@@ -123,7 +131,7 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 	var subjectName string
 
 	if explicitSubject {
-		subjectID, subjectName, err = s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
+		subjectID, subjectName, err = s.resolveSubjectEntityWithOpts(ctx, workspaceID, entityIDStr, nameStr, includeFixtures)
 		if err != nil {
 			reqTarget := nameStr
 			if reqTarget == "" {
@@ -167,21 +175,7 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 		}
 	}
 
-	countQ := `
-		SELECT COUNT(*)::int
-		  FROM claims c
-		  JOIN entities e ON e.id = c.from_entity_id
-		 WHERE c.workspace_id = $1
-		   AND c.claim_type = ANY($3)
-		   AND c.to_entity_id = $2
-		   AND e.kind != 'external'
-	`
-	countArgs := []interface{}{workspaceID, subjectID, claimTypes}
-	if languageFilter != "" {
-		countQ += " AND e.language = $4"
-		countArgs = append(countArgs, languageFilter)
-	}
-	if s.store == nil || s.store.Pool() == nil {
+	if s.store == nil || s.safePool() == nil {
 		return map[string]interface{}{
 			"tenant_id":      tenantID.String(),
 			"workspace_id":   workspaceID.String(),
@@ -194,12 +188,26 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 			"truncated":      false,
 			"results":        []interface{}{},
 			"limit_used":     limit,
-			"hint":           "database not connected",
 		}, nil
 	}
 
+	countQ := `
+		SELECT COUNT(*)::int
+		  FROM claims c
+		  JOIN entities e ON e.id = c.from_entity_id
+		 WHERE c.workspace_id = $1
+		   AND c.claim_type = ANY($3)
+		   AND c.to_entity_id = $2
+		   AND e.kind != 'external'
+	` + ExcludeFixturesSQL("e.file_path", includeFixtures)
+	countArgs := []interface{}{workspaceID, subjectID, claimTypes}
+	if languageFilter != "" {
+		countQ += " AND e.language = $4"
+		countArgs = append(countArgs, languageFilter)
+	}
+
 	var totalCount int
-	_ = s.store.Pool().QueryRow(ctx, countQ, countArgs...).Scan(&totalCount)
+	_ = s.safePool().QueryRow(ctx, countQ, countArgs...).Scan(&totalCount)
 
 	q := `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
@@ -214,7 +222,7 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 		   AND c.claim_type = ANY($3)
 		   AND c.to_entity_id = $2
 		   AND e.kind != 'external'
-	`
+	` + ExcludeFixturesSQL("e.file_path", includeFixtures)
 	dbArgs := []interface{}{workspaceID, subjectID, claimTypes}
 	argPos := 4
 
@@ -226,7 +234,7 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 	q += fmt.Sprintf(" ORDER BY e.name LIMIT $%d", argPos)
 	dbArgs = append(dbArgs, limit)
 
-	rows, err := s.store.Pool().Query(ctx, q, dbArgs...)
+	rows, err := s.safePool().Query(ctx, q, dbArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query subclasses: %w", err)
 	}
@@ -278,15 +286,13 @@ func (s *MCPServer) handleSubclasses(args map[string]interface{}) (interface{}, 
 	}, nil
 }
 
-// handleImplementers returns entities that implement the subject interface (BUG-18).
-// Never silently substitutes an unrelated hub when a specific entity_id or name is requested,
-// and always reports total_count and truncated.
 func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
 	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
+	includeFixtures := IncludeFixturesRequested(args)
 
 	entityIDStr, _ := args["entity_id"].(string)
 	nameStr, _ := args["name"].(string)
@@ -300,7 +306,7 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 		limit = int(v)
 	}
 
-	if s.store == nil || s.store.Pool() == nil {
+	if s.store == nil || s.safePool() == nil {
 		return map[string]interface{}{
 			"tenant_id":      tenantID.String(),
 			"workspace_id":   workspaceID.String(),
@@ -318,7 +324,7 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 	var subjectName string
 
 	if explicitSubject {
-		subjectID, subjectName, err = s.resolveSubjectEntity(ctx, workspaceID, entityIDStr, nameStr)
+		subjectID, subjectName, err = s.resolveSubjectEntityWithOpts(ctx, workspaceID, entityIDStr, nameStr, includeFixtures)
 		if err != nil {
 			reqTarget := nameStr
 			if reqTarget == "" {
@@ -363,7 +369,7 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 	}
 
 	var totalCount int
-	_ = s.store.Pool().QueryRow(ctx, `
+	_ = s.safePool().QueryRow(ctx, `
 		SELECT COUNT(*)::int
 		  FROM claims c
 		  JOIN entities e ON e.id = c.from_entity_id
@@ -371,9 +377,9 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 		   AND c.claim_type = ANY($3)
 		   AND c.to_entity_id = $2
 		   AND e.kind != 'external'
-	`, workspaceID, subjectID, claimFilter).Scan(&totalCount)
+	`+ExcludeFixturesSQL("e.file_path", includeFixtures), workspaceID, subjectID, claimFilter).Scan(&totalCount)
 
-	rows, err := s.store.Pool().Query(ctx, `
+	rows, err := s.safePool().Query(ctx, `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
 		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0),
 		       COALESCE(NULLIF(r.name, ''), NULLIF(r.module_path, ''), r.url, 'unknown') AS repo,
@@ -386,6 +392,7 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 		   AND c.claim_type = ANY($4)
 		   AND c.to_entity_id = $2
 		   AND e.kind != 'external'
+	`+ExcludeFixturesSQL("e.file_path", includeFixtures)+`
 		 ORDER BY e.name
 		 LIMIT $3
 	`, workspaceID, subjectID, limit, claimFilter)
@@ -438,15 +445,13 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 	}, nil
 }
 
-// handleNeighbors returns every entity connected to the subject in
-// either direction by a single edge, ensuring both incoming and outgoing
-// edges are represented even when incoming count exceeds limit.
 func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
 	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
+	includeFixtures := IncludeFixturesRequested(args)
 	ctx := context.Background()
 
 	entityIDStr, _ := args["entity_id"].(string)
@@ -459,7 +464,7 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 	var subjectName string
 	if parsed, pErr := uuid.Parse(entityIDStr); pErr == nil {
 		subjectID = parsed
-		err = s.store.Pool().QueryRow(ctx, `
+		err = s.safePool().QueryRow(ctx, `
 			SELECT name FROM entities WHERE workspace_id = $1 AND id = $2
 		`, workspaceID, subjectID).Scan(&subjectName)
 		if err != nil {
@@ -470,7 +475,7 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		if lookup == "" {
 			lookup = nameStr
 		}
-		subjectID, subjectName, err = s.resolveSubjectEntity(ctx, workspaceID, "", lookup)
+		subjectID, subjectName, err = s.resolveSubjectEntityWithOpts(ctx, workspaceID, "", lookup, includeFixtures)
 		if err != nil {
 			return nil, fmt.Errorf("invalid entity_id %q: %w", lookup, err)
 		}
@@ -495,7 +500,7 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		limit = int(v)
 	}
 
-	if s.store == nil || s.store.Pool() == nil {
+	if s.store == nil || s.safePool() == nil {
 		return map[string]interface{}{
 			"tenant_id":            tenantID.String(),
 			"workspace_id":         workspaceID.String(),
@@ -539,9 +544,9 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 			otherCol = "c.to_entity_id"
 		}
 
-		extFilter := ""
+		extFilter := ExcludeFixturesSQL("e.file_path", includeFixtures)
 		if !allowExt {
-			extFilter = " AND e.kind != 'external'"
+			extFilter = " AND e.kind != 'external'" + extFilter
 		}
 
 		countQ := fmt.Sprintf(`
@@ -551,7 +556,7 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 			 WHERE c.workspace_id = $1 AND %s%s
 		`, otherCol, colMatch, extFilter)
 		var totalDir int
-		_ = s.store.Pool().QueryRow(ctx, countQ, workspaceID, subjectID).Scan(&totalDir)
+		_ = s.safePool().QueryRow(ctx, countQ, workspaceID, subjectID).Scan(&totalDir)
 
 		q := fmt.Sprintf(`
 			SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, 'go'),
@@ -583,7 +588,7 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		q += fmt.Sprintf(" ORDER BY c.claim_type, e.name LIMIT $%d OFFSET $%d", argPos, argPos+1)
 		dbArgs = append(dbArgs, dirLimit, nbOffset)
 
-		rows, qErr := s.store.Pool().Query(ctx, q, dbArgs...)
+		rows, qErr := s.safePool().Query(ctx, q, dbArgs...)
 		if qErr != nil {
 			return nil, totalDir, qErr
 		}
@@ -675,9 +680,7 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 	}, nil
 }
 
-// handleFindEntity returns entities matching the given filters (BUG-05, BUG-18, CLASS-04, CLASS-06).
-// Accepts both `name` and `name_pattern`. When any filter is provided and 0 rows match,
-// returns an explicit not_found response with empty results instead of top hubs.
+// handleFindEntity returns entities matching the given filters (BUG-05, B-08).
 func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, error) {
 	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
@@ -685,6 +688,7 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 		return nil, err
 	}
 	workspaceName := s.resolveMCPWorkspaceName(args, workspaceID)
+	includeFixtures := IncludeFixturesRequested(args)
 
 	exactName, _ := args["name"].(string)
 	exactName = strings.TrimSpace(exactName)
@@ -709,7 +713,7 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 		limit = int(v)
 	}
 
-	whereClause := " WHERE e.workspace_id = $1 AND e.kind != 'external'"
+	whereClause := " WHERE e.workspace_id = $1 AND e.kind != 'external'" + ExcludeFixturesSQL("e.file_path", includeFixtures)
 	dbArgs := []interface{}{workspaceID}
 	argPos := 2
 
@@ -743,7 +747,7 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 	}
 
 	var totalCount int
-	_ = s.store.Pool().QueryRow(ctx, "SELECT COUNT(*)::int FROM entities e"+whereClause, dbArgs...).Scan(&totalCount)
+	_ = s.safePool().QueryRow(ctx, "SELECT COUNT(*)::int FROM entities e"+whereClause, dbArgs...).Scan(&totalCount)
 
 	q := `
 		SELECT e.id::text, e.name, e.kind, COALESCE(e.package, ''), COALESCE(e.language, ''),
@@ -754,15 +758,18 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 		  FROM entities e
 		  LEFT JOIN repositories r ON r.id = e.repository_id
 		  LEFT JOIN (
-		      SELECT to_entity_id, COUNT(*)::int AS cnt
-		        FROM claims
-		       WHERE workspace_id = $1
-		       GROUP BY to_entity_id
+		      SELECT c.to_entity_id, COUNT(*)::int AS cnt
+		        FROM claims c
+		        JOIN entities ef ON ef.id = c.from_entity_id
+		       WHERE c.workspace_id = $1
+		         AND ef.kind != 'external'
+		` + ExcludeFixturesSQL("ef.file_path", includeFixtures) + `
+		       GROUP BY c.to_entity_id
 		  ) inbound ON inbound.to_entity_id = e.id
 	` + whereClause + fmt.Sprintf(" ORDER BY inbound_edges DESC, e.name LIMIT $%d", argPos)
 	queryArgs := append(append([]interface{}{}, dbArgs...), limit)
 
-	rows, err := s.store.Pool().Query(ctx, q, queryArgs...)
+	rows, err := s.safePool().Query(ctx, q, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query entities: %w", err)
 	}
@@ -799,53 +806,34 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 		totalCount = len(results)
 	}
 
-	hasFilter := exactName != "" || namePattern != "" || kindFilter != "" || packageFilter != "" || fileFilter != ""
-	filtersMap := map[string]any{
-		"name":               exactName,
-		"name_pattern":       namePattern,
-		"kind":               kindFilter,
-		"package":            packageFilter,
-		"file_path_contains": fileFilter,
-		"exported_only":      exportedOnly,
-	}
-
-	if len(results) == 0 && hasFilter {
-		filterDesc := exactName
-		if filterDesc == "" {
-			filterDesc = namePattern
-		}
-		if filterDesc == "" {
-			filterDesc = packageFilter
-		}
-		return map[string]interface{}{
-			"tenant_id":      tenantID.String(),
-			"workspace_id":   workspaceID.String(),
-			"workspace_name": workspaceName,
-			"status":         "not_found",
-			"not_found":      true,
-			"filters":        filtersMap,
-			"count":          0,
-			"total_count":    0,
-			"truncated":      false,
-			"entities":       []entityRow{},
-			"results":        []entityRow{},
-			"limit_used":     limit,
-			"hint":           fmt.Sprintf("no symbol matching %q found in workspace %s", filterDesc, workspaceName),
-		}, nil
+	hasFilter := exactName != "" || namePattern != "" || kindFilter != "" || packageFilter != "" || fileFilter != "" || exportedOnly
+	status := "ok"
+	notFound := false
+	if hasFilter && len(results) == 0 {
+		status = "not_found"
+		notFound = true
 	}
 
 	return map[string]interface{}{
 		"tenant_id":      tenantID.String(),
 		"workspace_id":   workspaceID.String(),
 		"workspace_name": workspaceName,
-		"status":         "ok",
-		"not_found":      false,
-		"filters":        filtersMap,
-		"count":          len(results),
-		"total_count":    totalCount,
-		"truncated":      totalCount > len(results),
-		"entities":       results,
-		"results":        results,
-		"limit_used":     limit,
+		"status":         status,
+		"not_found":      notFound,
+		"scope_filter":   map[bool]string{true: "all_including_fixtures", false: "production_only"}[includeFixtures],
+		"filters": map[string]any{
+			"name":               exactName,
+			"name_pattern":       namePattern,
+			"kind":               kindFilter,
+			"package":            packageFilter,
+			"file_path_contains": fileFilter,
+			"exported_only":      exportedOnly,
+			"include_fixtures":   includeFixtures,
+		},
+		"count":       len(results),
+		"total_count": totalCount,
+		"truncated":   totalCount > len(results),
+		"results":     results,
+		"limit_used":  limit,
 	}, nil
 }

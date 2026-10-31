@@ -1,6 +1,6 @@
-# Garuda System Walkthrough (`v1.9.1` Universal)
+# Garuda System Walkthrough (`v1.9.9` Universal)
 
-**A complete visual and technical tour of Garuda's 9-surface Software Intelligence Instrument (`/dashboard` PWA), the `Garuda Talon` active AI execution harness, deterministic `BuildContext` provenance receipts, cross-platform `--matrix` gates, 35 active MCP tools, and IDE integrations.**
+**A complete visual and technical tour of Garuda's 10-surface Software Intelligence Instrument (`/dashboard` PWA), the `Garuda Talon` active AI execution harness, deterministic `BuildContext` provenance receipts, cross-platform `--matrix` gates, 35 active MCP tools, and IDE integrations.**
 
 ---
 
@@ -22,7 +22,7 @@ Before diving into the technical surfaces, watch the 20-second introduction vide
 
 ## 1. One-Command Zero-Dependency Universal Setup (`install.sh` / `install.ps1`)
 
-Garuda `v1.9.1` eliminates manual toolchain downloads, manual SQL migration loops, manual JWT key generation, and passive MCP configuration. Whether you are on Windows 10/11, macOS (Apple Silicon or Intel), Linux, Chromebook (Crostini), or Android (Termux), Garuda provisions its own portable runtime in user-space (`~/.garuda`) and boots in one command:
+Garuda `v1.9.9` eliminates manual toolchain downloads, manual SQL migration loops, manual JWT key generation, and passive MCP configuration. Whether you are on Windows 10/11, macOS (Apple Silicon or Intel), Linux, Chromebook (Crostini), or Android (Termux), Garuda provisions its own portable runtime in user-space (`~/.garuda`) and boots in one command:
 
 ### macOS, Linux, Chromebook (Crostini) & Android (Termux)
 ```bash
@@ -42,15 +42,15 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercont
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-### What Happens Automatically Under the Hood (`v1.9.1`)
+### What Happens Automatically Under the Hood (`v1.9.9`)
 1. **Fast Shallow Clone & Zero-Admin Portable PostgreSQL 16 (`127.0.0.1:5433`)**: `install.sh` and `install.ps1` clone with `--depth 1` (or unpack release archives via native `curl`/`tar`). If PostgreSQL is not running, Garuda downloads pre-built Portable PostgreSQL `16.4` (`~18 MB` on macOS/Linux, `~55 MB` on Windows) into `~/.garuda/runtime/postgres`, initializes a locale-safe cluster (`LC_ALL=C --no-locale`) in `~/.garuda/data/pg` with isolated sockets in `~/.garuda/data/run`, and binds to explicit IPv4 `127.0.0.1:5433`.
 2. **Single-Download Portable Go `1.26.0` & 1-Pass Pure-Go Build (`CGO_ENABLED=0`)**: Downloads Portable Go `1.26.0` (matching `go.mod` so Go never downloads a second toolchain) into `~/.garuda/toolchain/go` and compiles all four binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) in one pass with commit build-stamp caching (`bin/.build_stamp`).
-3. **Dynamic Identity, Schema Hardening (`057_schema_hardening.sql`) & Persistent `.env`**: Auto-discovers your email from `git config user.email`, runs all idempotent SQL migrations, and persists `DATABASE_URL` (normalized to `127.0.0.1:5433`), `GARUDA_WORKSPACE`, `GARUDA_TALON_ENFORCE=true`, `PORT=8080`, and Ed25519 JWT keys into `.env`.
-4. **Garuda Talon Active Agent Harness (`garuda talon init`)**: Compiles live workspace ADRs (`document_claims`), declarative YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc`, `.cursor/mcp.json`, `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit`, then verifies all 43/43 dynamic MCP checks (`scripts/mcp_verify.py`).
+3. **Dynamic Identity, Schema Hardening (`095_data_logic_audit_ledger_and_hygiene.sql`) & Persistent `.env`**: Auto-discovers your email from `git config user.email`, runs all idempotent SQL migrations, and persists `DATABASE_URL` (normalized to `127.0.0.1:5433`), `GARUDA_WORKSPACE`, `GARUDA_TALON_ENFORCE=true`, `PORT=8080`, and Ed25519 JWT keys into `.env`.
+4. **Garuda Talon Active Agent Harness (`garuda talon init`)**: Compiles live workspace ADRs (`document_claims`), declarative YAML policies (`policies/*.yaml`), and top high-blast-radius hubs into `.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc`, `.cursor/mcp.json`, `CLAUDE.md`, `.claude/settings.json` (`PostToolUse` hook), `AGENTS.md`, `.windsurfrules`, and `.git/hooks/pre-commit`, then verifies all 63/63 dynamic MCP checks (`scripts/mcp_verify.py`).
 
 ---
 
-## 2. Visual Tour of the 9-Surface Software Intelligence Instrument (`/dashboard` PWA)
+## 2. Visual Tour of the 10-Surface Software Intelligence Instrument (`/dashboard` PWA)
 
 Open `http://localhost:8080/dashboard` (or install it as a standalone desktop/Chromebook/Android Progressive Web App via `/manifest.json` and `/sw.js`). Every chart and graph uses Garuda's built-in **Zero-CDN Offline SVG Layout Engine** so it works 100% air-gapped.
 
@@ -87,7 +87,7 @@ Introduced in `v1.7` and refined in `v1.8.1`, this surface visualizes how human-
 &lt;/p&gt;
 
 ### Surface 05 — Garuda Talon & Architectural Risk Hub (`/dashboard#talon-hub`)
-The operational nerve center for AI agent governance and build-context determinism (`v1.9.1`):
+The operational nerve center for AI agent governance and build-context determinism (`v1.9.9`):
 - **Deterministic `BuildContext` Provenance Receipt & CI-vs-Editor Drift Banner**: Displays the active `receipt_hash`, `graph_fingerprint`, `GOOS/GOARCH`, `CGO_ENABLED`, `-tags`, `go.mod` hash, dirty worktree state, drift status (`CLEAN` vs `DRIFT DETECTED`), and a 1-click **Copy Reproduce Cmd** button.
 - **Cross-Platform Build Matrix Gate (`--matrix`)**: Shows real-time verification across `linux/amd64 (cgo=0)`, `linux/amd64 (cgo=1, tags=cgo)`, `darwin/arm64 (cgo=1)`, and `windows/amd64 (cgo=0)`.
 - **Live Talon Active Guard Terminal**: Run diff-scoped `talon guard` checks or simulate an architectural violation to inspect the exact **Self-Repair Prompt** fed back to Cursor/Claude Code.
@@ -115,14 +115,14 @@ A 3-pane pre-merge simulator where engineers select a target symbol and policy b
 
 ---
 
-## 3. Deterministic `BuildContext` Receipts & Cross-Platform Matrix CLI (`v1.9.1`)
+## 3. Deterministic `BuildContext` Receipts & Cross-Platform Matrix CLI (`v1.9.9`)
 
 One of the hardest problems in static analysis and architectural governance is **environment drift**: a developer runs a check on `darwin/arm64` with `CGO_ENABLED=1`, while CI runs on `linux/amd64` with `CGO_ENABLED=0` or custom `-tags`.
 
-In `v1.9.1`, every `garuda analyze`, `garuda check`, and `garuda talon guard` execution computes and seals a deterministic **`BuildContext` receipt**:
+In `v1.9.9`, every `garuda analyze`, `garuda check`, and `garuda talon guard` execution computes and seals a deterministic **`BuildContext` receipt**:
 
 ```bash
-# Re-index workspace with a sealed v1.9.1 BuildContext receipt and Merkle block
+# Re-index workspace with a sealed v1.9.9 BuildContext receipt and Merkle block
 ./bin/garuda analyze . --workspace default --save
 
 # Run the active Talon guard across your current git diff AND verify all 4 OS/CGO target profiles
@@ -131,7 +131,7 @@ In `v1.9.1`, every `garuda analyze`, `garuda check`, and `garuda talon guard` ex
 
 Example terminal output:
 ```text
-🔒 Garuda Talon Active Guard (v1.9.1)
+🔒 Garuda Talon Active Guard (v1.9.9)
    Workspace:         default
    Build Receipt:     bc_9f82d4a1e7c03b12 (graph: gf_4e19a82c01b7d3ef)
    Target Env:        linux/amd64 | CGO_ENABLED=0 | tags=[] | go1.24
@@ -152,7 +152,7 @@ Alongside the 23-tool MCP server and `.cursor/rules/garuda-talon.mdc` harness, G
 | &lt;img src=&quot;../assets/screenshots/ide-graph-view.png&quot; width=&quot;100%&quot; alt=&quot;IDE Graph View&quot;&gt; | &lt;img src=&quot;../assets/screenshots/ide-contradictions.png&quot; width=&quot;100%&quot; alt=&quot;IDE Contradictions Panel&quot;&gt; |
 
 
-### Surface 09 — Financial & Logic Audit Workbench (`/dashboard?tab=audit`)
-Added in `v1.9.0`–`v1.9.1`, Surface `09 — Financial & Logic Audit` brings together:
+### Surface 09 — Data & Logic Audit Workbench (`/dashboard?tab=audit`)
+Added in `v1.9.0`–`v1.9.9`, Surface `09 — Data & Logic Audit` brings together:
 1. **Multi-Team Formula Disambiguation & 0.0–1.0 Weight Allocation**: Switch between **Ops Team (0.70 Weight)**, **Marketing Team (0.70 Weight)**, and **Management Team (0.70 Weight)** to compare competing `Loss Ratio` formulas, inspect caller counts and surface criticality tiers (`LOW`, `MEDIUM`, `HIGH_SEVERE`), and record human decisions (`✓ Take Human Call: Approve` or `🔒 Keep Frozen`).
 2. **Continuous Financial & Business Data Discrepancy Detector (48 Crore vs. 4.8 Crore)**: Displays side-by-side team figures (`48.00 Crore INR` vs `4.80 Crore INR` — `10.00x Mismatch`), the AST & SQL data-lineage root cause trace, and 1-click **`✓ Approve Canonical Crore Fix`**.

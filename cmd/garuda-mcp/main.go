@@ -50,11 +50,11 @@ func main() {
 	for _, arg := range os.Args[1:] {
 		switch arg {
 		case "--help", "-h", "help":
-			fmt.Println("Garuda MCP Server v1.9.4 (JSON-RPC 2.0 over stdio — 40 governance & AST tools)")
+			fmt.Println("Garuda MCP Server v1.9.6 (JSON-RPC 2.0 over stdio — 40 governance & AST tools)")
 			fmt.Println("Usage: garuda-mcp [--version | --help]")
 			return
 		case "--version", "-v", "version":
-			fmt.Println("Garuda MCP Server v1.9.4")
+			fmt.Println("Garuda MCP Server v1.9.6")
 			return
 		}
 	}
@@ -1342,6 +1342,90 @@ var allTools = []map[string]interface{}{
 		},
 	},
 	{
+		"name":        "garuda.snapshot",
+		"description": "Return the current workspace snapshot ID, commit SHA, dirty-tree status, policy-set version, and freshness verdict (fresh, stale, dirty) in one lightweight call.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name (defaults to default)"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.explain_claim",
+		"description": "Return the compiler AST or policy derivation path and source snippet for a claim_id or symbol name.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"claim_id":  map[string]interface{}{"type": "string", "description": "Claim UUID or symbol name to explain"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.snippet",
+		"description": "Return hash-verified source lines around a symbol or file_path:line_start against the active snapshot.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace":  map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"entity_id":  map[string]interface{}{"type": "string", "description": "Entity UUID or symbol name"},
+				"name":       map[string]interface{}{"type": "string", "description": "Symbol name"},
+				"file_path":  map[string]interface{}{"type": "string", "description": "Optional repository-relative file path"},
+				"line_start": map[string]interface{}{"type": "number", "description": "Optional 1-indexed line number"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.summary",
+		"description": "Return a compact token-saving workspace summary (counts, active policies, and snapshot ID).",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"scope":     map[string]interface{}{"type": "string", "description": "Scope filter (default: production_only)"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.owners",
+		"description": "Return the declared owner and team for an entity from the ownership mapping, or UNASSIGNED if undeclared.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"entity_id": map[string]interface{}{"type": "string", "description": "Entity UUID or symbol name"},
+				"name":      map[string]interface{}{"type": "string", "description": "Symbol name"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.verify_claim",
+		"description": "Verify a structured edge (from_symbol, predicate, to_symbol) or prose claim against the indexed graph and return SUPPORTED, CONTRADICTED, or NOT_IN_GRAPH with a cryptographic receipt.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace":   map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"claim":       map[string]interface{}{"type": "string", "description": "Claim text (e.g. 'RefundHandler CALLS IdempotencyStore'), symbol, or claim_id"},
+				"from_symbol": map[string]interface{}{"type": "string", "description": "Structured caller/source symbol name"},
+				"predicate":   map[string]interface{}{"type": "string", "description": "Edge predicate (CALLS, IMPORTS, IMPLEMENTS, INHERITS, REFERENCES, WRITES, READS)"},
+				"to_symbol":   map[string]interface{}{"type": "string", "description": "Structured callee/target symbol name"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.test_coverage",
+		"description": "Alias for garuda.symbol_test_coverage: inspect which unit tests and runtime traces exercise a symbol.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"symbol":    map[string]interface{}{"type": "string", "description": "Symbol name"},
+				"package":   map[string]interface{}{"type": "string", "description": "Package filter"},
+			},
+		},
+	},
+	{
 		"name":        "garuda.audit_export",
 		"description": "Export workspace decisions, policy evaluations, and Merkle block anchors as structured JSON or CSV for compliance filing.",
 		"inputSchema": map[string]interface{}{
@@ -1350,6 +1434,20 @@ var allTools = []map[string]interface{}{
 				"workspace": map[string]interface{}{"type": "string", "description": "Workspace name"},
 				"format":    map[string]interface{}{"type": "string", "description": "Export format: 'json' or 'csv' (default 'json')"},
 				"tenant_id": map[string]interface{}{"type": "string", "description": "Optional tenant UUID"},
+			},
+		},
+	},
+	{
+		"name":        "garuda.preflight_bundle",
+		"description": "Single-call token-saving pre-edit bundle combining snapshot freshness, talon_pre_edit briefing, test coverage, and declared ownership for a symbol or file.",
+		"inputSchema": map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"workspace":        map[string]interface{}{"type": "string", "description": "Workspace name"},
+				"target":           map[string]interface{}{"type": "string", "description": "Target symbol or file path"},
+				"symbol":           map[string]interface{}{"type": "string", "description": "Alias for target symbol"},
+				"include_fixtures": map[string]interface{}{"type": "boolean", "description": "Include test/fixtures scope (default false)"},
+				"tenant_id":        map[string]interface{}{"type": "string", "description": "Optional tenant UUID"},
 			},
 		},
 	},
@@ -1426,7 +1524,7 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 			"instructions": "Garuda Talon Active Enforcement is enabled. Call garuda.talon_pre_edit before modifying code and garuda.talon_verify_edit immediately after editing to verify 0 net-new policy or ADR violations.",
 			"serverInfo": map[string]interface{}{
 				"name":    "garuda-mcp",
-				"version": "1.9.4",
+				"version": "1.9.6",
 			},
 		},
 	}
@@ -1594,8 +1692,24 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 		result, err = s.handleDiffImpact(args)
 	case "garuda.symbol_test_coverage":
 		result, err = s.handleSymbolTestCoverage(args)
+	case "garuda.snapshot":
+		result, err = s.handleSnapshot(args)
+	case "garuda.explain_claim":
+		result, err = s.handleExplainClaim(args)
+	case "garuda.snippet":
+		result, err = s.handleSnippet(args)
+	case "garuda.summary":
+		result, err = s.handleSummary(args)
+	case "garuda.owners":
+		result, err = s.handleOwners(args)
+	case "garuda.verify_claim":
+		result, err = s.handleVerifyClaim(args)
+	case "garuda.test_coverage":
+		result, err = s.handleSymbolTestCoverage(args)
 	case "garuda.audit_export":
 		result, err = s.handleAuditExport(args)
+	case "garuda.preflight_bundle":
+		result, err = s.handlePreflightBundle(args)
 	default:
 		return s.errorResponse(req.ID, -32601, "Tool not found: "+toolName)
 	}
@@ -1615,11 +1729,28 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 	if err != nil {
 		if strings.Contains(err.Error(), "resolve workspace") {
 			reqWs, _ := args["workspace"].(string)
+			avail := []string{"default", "audit-sandbox"}
+			if s.store != nil && s.safePool() != nil {
+				if rows, qErr := s.safePool().Query(context.Background(), `SELECT name FROM workspaces ORDER BY name ASC LIMIT 25`); qErr == nil {
+					var dbWs []string
+					for rows.Next() {
+						var wn string
+						if rows.Scan(&wn) == nil && wn != "" {
+							dbWs = append(dbWs, wn)
+						}
+					}
+					rows.Close()
+					if len(dbWs) > 0 {
+						avail = dbWs
+					}
+				}
+			}
 			notFoundPayload := map[string]interface{}{
-				"status":    "workspace_not_found",
-				"error":     "workspace_not_found",
-				"workspace": reqWs,
-				"reason":    fmt.Sprintf("workspace %q was not found in this tenant; call garuda.create_workspace with workspace=%q to provision it", reqWs, reqWs),
+				"status":               "workspace_not_found",
+				"error":                "workspace_not_found",
+				"workspace":            reqWs,
+				"available_workspaces": avail,
+				"reason":               fmt.Sprintf("workspace %q was not found; available workspaces in this tenant: %s", reqWs, strings.Join(avail, ", ")),
 			}
 			return MCPResponse{
 				JSONRPC: "2.0",
@@ -1783,7 +1914,7 @@ func (s *MCPServer) handleQuery(args map[string]interface{}) (interface{}, error
 
 	// 2. Search workspace entities and document_claims
 	if _, workspaceID, wErr := s.resolveTenantAndWorkspace(args); wErr == nil && workspaceID != uuid.Nil {
-		eRows, eErr := s.store.Pool().Query(ctx, `
+		eRows, eErr := s.safePool().Query(ctx, `
 			SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''), COALESCE(line_start, 0)
 			FROM entities
 			WHERE workspace_id = $1 AND kind != 'external'
@@ -1810,7 +1941,7 @@ func (s *MCPServer) handleQuery(args map[string]interface{}) (interface{}, error
 			eRows.Close()
 		}
 
-		cRows, cErr := s.store.Pool().Query(ctx, `
+		cRows, cErr := s.safePool().Query(ctx, `
 			SELECT COALESCE(document_title, 'ADR'), subject, modality, predicate, object, COALESCE(status, 'UNVERIFIED')
 			FROM document_claims
 			WHERE tenant_id = $1 AND workspace_id = $2
@@ -1886,7 +2017,7 @@ func (s *MCPServer) handleGetLineage(args map[string]interface{}) (interface{}, 
 	}
 
 	matchedDecisions := make([]map[string]interface{}, 0)
-	dRows, dErr := s.store.Pool().Query(ctx, `
+	dRows, dErr := s.safePool().Query(ctx, `
 		SELECT id::text, title, COALESCE(statement, ''), COALESCE(owner, ''), COALESCE(status::text, 'draft'), created_at
 		FROM decisions
 		WHERE tenant_id = $1
@@ -1915,7 +2046,7 @@ func (s *MCPServer) handleGetLineage(args map[string]interface{}) (interface{}, 
 	matchedEvaluations := make([]map[string]interface{}, 0)
 	matchedEntities := make([]map[string]interface{}, 0)
 	if _, workspaceID, wErr := s.resolveTenantAndWorkspace(args); wErr == nil && workspaceID != uuid.Nil {
-		evRows, evErr := s.store.Pool().Query(ctx, `
+		evRows, evErr := s.safePool().Query(ctx, `
 			SELECT id::text, policy_id::text, COALESCE(decision, ''), COALESCE(actor, ''),
 			       COALESCE(subject_kind, ''), COALESCE(subject_id, ''), COALESCE(merkle_block_height, 0), evaluated_at
 			FROM policy_evaluations
@@ -1945,7 +2076,7 @@ func (s *MCPServer) handleGetLineage(args map[string]interface{}) (interface{}, 
 			evRows.Close()
 		}
 
-		entRows, entErr := s.store.Pool().Query(ctx, `
+		entRows, entErr := s.safePool().Query(ctx, `
 			SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''), COALESCE(line_start, 0)
 			FROM entities
 			WHERE workspace_id = $1 AND kind != 'external'
@@ -2010,7 +2141,7 @@ func (s *MCPServer) handleDetectContradictions(args map[string]interface{}) (int
 
 	adrContradictions := make([]map[string]interface{}, 0)
 	if _, workspaceID, wErr := s.resolveTenantAndWorkspace(args); wErr == nil && workspaceID != uuid.Nil && !resolvedFlag {
-		rows, qErr := s.store.Pool().Query(ctx, `
+		rows, qErr := s.safePool().Query(ctx, `
 			SELECT id::text, COALESCE(document_title, 'ADR'), subject, modality, predicate, object, COALESCE(contradiction_reason, '')
 			FROM document_claims
 			WHERE tenant_id = $1 AND workspace_id = $2 AND status = 'CONTRADICTED'

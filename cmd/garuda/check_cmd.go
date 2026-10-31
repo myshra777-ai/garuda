@@ -26,22 +26,24 @@ import (
 )
 
 var (
-	checkSymbolFlag      string
-	checkPoliciesDirFlag string
-	checkWorkspaceFlag   string
-	checkSaveFlag        bool
-	checkFailOnBlockFlag bool
-	checkJSONFlag        bool
-	checkDiffFlag        string
-	checkStagedFlag      bool
-	checkFilesFlag       string
-	checkNetNewOnlyFlag  bool
-	checkAutoIndexFlag   bool
-	checkTagsFlag        string
-	checkPlatformFlag    string
-	checkCGOFlag         bool
-	checkCommitFlag      string
-	checkMatrixFlag      bool
+	checkSymbolFlag        string
+	checkPoliciesDirFlag   string
+	checkWorkspaceFlag     string
+	checkSaveFlag          bool
+	checkFailOnBlockFlag   bool
+	checkJSONFlag          bool
+	checkDiffFlag          string
+	checkStagedFlag        bool
+	checkFilesFlag         string
+	checkNetNewOnlyFlag    bool
+	checkAutoIndexFlag     bool
+	checkTagsFlag          string
+	checkPlatformFlag      string
+	checkCGOFlag           bool
+	checkCommitFlag        string
+	checkMatrixFlag        bool
+	checkWorktreeDirtyFlag bool
+	checkDirtyTreeHashFlag string
 )
 
 // ChangeControlDecision represents the unified governance decision across
@@ -154,7 +156,6 @@ var checkCmd = &cobra.Command{
 				analyzeTargetFlag = platformStr
 				analyzeTagsFlag = checkTagsFlag
 				analyzeCGOFlag = cgoVal
-				analyzeCGOExplicit = cgoChanged
 				if !checkJSONFlag {
 					handleAnalyze(absDir)
 				}
@@ -302,6 +303,16 @@ var checkCmd = &cobra.Command{
 		if checkCommitFlag != "" {
 			activeBuildCtx.CommitSHA = checkCommitFlag
 			activeBuildCtx.CommitShort = checkCommitFlag[:min(12, len(checkCommitFlag))]
+			activeBuildCtx.ReproduceCommand = activeBuildCtx.FormatReproduceCommand(wsName)
+			activeBuildCtx.ReceiptHash = activeBuildCtx.ComputeReceiptHash()
+		}
+		if checkWorktreeDirtyFlag {
+			activeBuildCtx.WorktreeDirty = true
+			activeBuildCtx.ReproduceCommand = activeBuildCtx.FormatReproduceCommand(wsName)
+			activeBuildCtx.ReceiptHash = activeBuildCtx.ComputeReceiptHash()
+		}
+		if checkDirtyTreeHashFlag != "" {
+			activeBuildCtx.DirtyFilesHash = checkDirtyTreeHashFlag
 			activeBuildCtx.ReproduceCommand = activeBuildCtx.FormatReproduceCommand(wsName)
 			activeBuildCtx.ReceiptHash = activeBuildCtx.ComputeReceiptHash()
 		}
@@ -493,6 +504,8 @@ func init() {
 	checkCmd.Flags().StringVar(&checkTagsFlag, "tags", "", "Comma-separated build tags / environment markers (e.g. integration,purego)")
 	checkCmd.Flags().BoolVar(&checkCGOFlag, "cgo", false, "Enable CGO when evaluating Go //go:build cgo constraints")
 	checkCmd.Flags().StringVar(&checkCommitFlag, "commit", "", "Exact git commit SHA for build-context receipt verification")
+	checkCmd.Flags().BoolVar(&checkWorktreeDirtyFlag, "worktree-dirty", false, "Assert working tree dirty state when checking build-context receipt")
+	checkCmd.Flags().StringVar(&checkDirtyTreeHashFlag, "dirty-tree-hash", "", "Dirty working tree files hash for receipt verification")
 	checkCmd.Flags().BoolVar(&checkMatrixFlag, "matrix", false, "Verify graph across cross-platform build matrix (linux/amd64, darwin/arm64, windows/amd64, cgo/purego)")
 	checkCmd.Flags().StringVar(&checkDiffFlag, "diff", "", "Git revision or range to target (e.g. HEAD~1..HEAD or main...HEAD)")
 	checkCmd.Flags().BoolVar(&checkStagedFlag, "staged", false, "Target staged git index changes (git diff --cached)")

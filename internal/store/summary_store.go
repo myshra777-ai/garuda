@@ -65,18 +65,18 @@ type SymbolSummaryDetail struct {
 	OutboundCount int
 }
 
-// ResolveWorkspaceTarget resolves workspace by name or falls back to the first available workspace.
-// ResolveWorkspaceTarget resolves a workspace by name within the given
-// tenant, or falls back to the most recently updated workspace for
-// that tenant.
-//
-// The tenant_id filter is required on both queries. Without it the
-// named lookup could match a workspace in a different tenant that
-// happened to share a name, and the fallback returned whichever
-// workspace was first in the table across the entire deployment.
-//
-// Same class of bug fixed in resolveWorkspaceID at the api layer
-// (9ecf281) and in the tenant package.
+// ProductionEntityScopeSQL is the canonical production-only scope filter shared across
+// store, briefing, entities, find_entity, talon_pre_edit, and hygiene_report (B-07, B-14, D7).
+const ProductionEntityScopeSQL = `
+	AND COALESCE(file_path, '') NOT ILIKE '%fixture%'
+	AND COALESCE(file_path, '') NOT ILIKE '%/testdata/%'
+	AND COALESCE(file_path, '') NOT ILIKE '%active_contradictions%'
+	AND COALESCE(file_path, '') NOT ILIKE '%garuda-bench%'
+	AND COALESCE(file_path, '') NOT ILIKE '%docs_src%'
+	AND COALESCE(file_path, '') NOT ILIKE '%conftest%'
+	AND COALESCE(package, '') NOT ILIKE '%conftest%'
+`
+
 func (s *PostgresStore) ResolveWorkspaceTarget(ctx context.Context, tenantID uuid.UUID, name string) (uuid.UUID, string, error) {
 	var wsID uuid.UUID
 	err := s.pool.QueryRow(ctx, `
@@ -102,7 +102,6 @@ func (s *PostgresStore) ResolveWorkspaceTarget(ctx context.Context, tenantID uui
 	return wsID, fallbackName, nil
 }
 
-// FindRepoByTarget searches for a repository by module path or URL match.
 func (s *PostgresStore) FindRepoByTarget(ctx context.Context, workspaceID uuid.UUID, target string) (uuid.UUID, string, string, error) {
 	var repoID uuid.UUID
 	var repoURL, modPath string
@@ -117,24 +116,39 @@ func (s *PostgresStore) FindRepoByTarget(ctx context.Context, workspaceID uuid.U
 	return repoID, repoURL, modPath, nil
 }
 
-// GetWorkspaceCounts retrieves counts of repositories, internal entities, and claims.
+// GetWorkspaceCounts retrieves production-scoped counts of repositories, internal entities, and claims.
 func (s *PostgresStore) GetWorkspaceCounts(ctx context.Context, workspaceID uuid.UUID) (WorkspaceCounts, error) {
 	var c WorkspaceCounts
 	_ = s.pool.QueryRow(ctx, `SELECT count(*) FROM repositories WHERE workspace_id = $1`, workspaceID).Scan(&c.Repositories)
-	_ = s.pool.QueryRow(ctx, `SELECT count(*) FROM entities WHERE workspace_id = $1 AND kind != 'external'`, workspaceID).Scan(&c.Entities)
+	_ = s.pool.QueryRow(ctx, `SELECT count(*) FROM entities WHERE workspace_id = $1 AND kind != 'external'`+ProductionEntityScopeSQL, workspaceID).Scan(&c.Entities)
 	_ = s.pool.QueryRow(ctx, `SELECT count(*) FROM claims WHERE workspace_id = $1`, workspaceID).Scan(&c.Claims)
 	return c, nil
 }
 
-// GetTopArchitecturalHubs returns entities with the most inbound callers.
+// GetTopArchitecturalHubs returns first-party production entities with the most inbound callers,
+// excluding fixtures, test helpers (tests.conftest), benchmarks (garuda-bench), and third-party
+// validation packages (sqlmodel, go/chi, go/cobra) when first-party packages exist (fixes D7 & B-14).
 func (s *PostgresStore) GetTopArchitecturalHubs(ctx context.Context, workspaceID uuid.UUID, limit int) ([]ArchitecturalHub, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT e.name, e.kind, e.package, count(c.id) as callers
+		SELECT e.name, e.kind, COALESCE(e.package, ''), COUNT(c.id)::int AS callers
 		FROM entities e
-		JOIN claims c ON c.to_entity_id = e.id
-		WHERE e.workspace_id = $1 AND e.kind != 'external'
+		JOIN claims c ON c.to_entity_id = e.id AND c.workspace_id = e.workspace_id
+		WHERE e.workspace_id = $1
+		  AND e.kind NOT IN ('external', 'package', 'file', 'module')
+		  AND COALESCE(e.file_path, '') NOT ILIKE '%fixture%'
+		  AND COALESCE(e.file_path, '') NOT ILIKE '%/testdata/%'
+		  AND COALESCE(e.file_path, '') NOT ILIKE '%active_contradictions%'
+		  AND COALESCE(e.file_path, '') NOT ILIKE '%garuda-bench%'
+		  AND COALESCE(e.file_path, '') NOT ILIKE '%docs_src%'
+		  AND COALESCE(e.file_path, '') NOT ILIKE '%conftest%'
+		  AND COALESCE(e.file_path, '') NOT ILIKE '%/tests/%'
+		  AND COALESCE(e.file_path, '') NOT ILIKE '%_test.go'
+		  AND COALESCE(e.file_path, '') NOT ILIKE '%garuda-validation%'
+		  AND COALESCE(e.package, '') NOT ILIKE '%conftest%'
+		  AND COALESCE(e.package, '') NOT ILIKE 'sqlmodel%'
+		  AND COALESCE(e.package, '') NOT ILIKE 'tests.%'
 		GROUP BY e.id, e.name, e.kind, e.package
-		ORDER BY callers DESC
+		ORDER BY callers DESC, e.name ASC
 		LIMIT $2;
 	`, workspaceID, limit)
 	if err != nil {
@@ -152,17 +166,7 @@ func (s *PostgresStore) GetTopArchitecturalHubs(ctx context.Context, workspaceID
 	return hubs, nil
 }
 
-// GetCrossRepoBridges returns cross-repository calls in a workspace.
 func (s *PostgresStore) GetCrossRepoBridges(ctx context.Context, workspaceID uuid.UUID, limit int) ([]CrossRepoBridge, error) {
-	// cross_repo_edges is the authoritative table for cross-repository
-	// bridges. The analyzer writes to it in detectCrossRepoImports and
-	// the dashboard reads it in HandleDashboardStats. The previous
-	// query derived bridges by joining claims to entities to
-	// repositories and filtering on r1.id != r2.id. That query
-	// produced zero rows on workspaces where the bridge rows exist,
-	// because the claims join does not surface the same tuples the
-	// analyzer wrote. Same class of defect as GetLatestMerkleRoot
-	// reading decision_revisions.merkle_root instead of merkle_roots.
 	rows, err := s.pool.Query(ctx, `
 		SELECT COALESCE(r1.module_path, r1.name, 'unknown') AS from_module,
 		       COALESCE(r2.module_path, r2.name, 'unknown') AS to_module,
@@ -190,19 +194,18 @@ func (s *PostgresStore) GetCrossRepoBridges(ctx context.Context, workspaceID uui
 	return bridges, nil
 }
 
-// GetRepoMetrics returns entity and distinct package counts for a repo.
 func (s *PostgresStore) GetRepoMetrics(ctx context.Context, repoID uuid.UUID) (RepoSummaryMetrics, error) {
 	var m RepoSummaryMetrics
-	err := s.pool.QueryRow(ctx, `SELECT count(*), count(DISTINCT package) FROM entities WHERE repository_id = $1 AND kind != 'external'`, repoID).Scan(&m.EntityCount, &m.PackageCount)
+	err := s.pool.QueryRow(ctx, `SELECT count(*), count(DISTINCT package) FROM entities WHERE repository_id = $1 AND kind != 'external'`+ProductionEntityScopeSQL, repoID).Scan(&m.EntityCount, &m.PackageCount)
 	return m, err
 }
 
-// GetExportedSymbols returns top exported symbols for a repository.
 func (s *PostgresStore) GetExportedSymbols(ctx context.Context, repoID uuid.UUID, limit int) ([]ExportedSymbol, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT name, kind, COALESCE(receiver_type, '')
 		FROM entities 
 		WHERE repository_id = $1 AND is_exported = true AND kind IN ('function', 'struct', 'interface')
+	`+ProductionEntityScopeSQL+`
 		ORDER BY kind DESC, name ASC
 		LIMIT $2;
 	`, repoID, limit)
@@ -221,7 +224,6 @@ func (s *PostgresStore) GetExportedSymbols(ctx context.Context, repoID uuid.UUID
 	return exports, nil
 }
 
-// GetExternalDependencies returns external or cross-repo package references.
 func (s *PostgresStore) GetExternalDependencies(ctx context.Context, repoID uuid.UUID, limit int) ([]DependencyRef, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT DISTINCT e2.package, count(*) as count
@@ -248,7 +250,6 @@ func (s *PostgresStore) GetExternalDependencies(ctx context.Context, repoID uuid
 	return deps, nil
 }
 
-// GetSymbolSummaryDetail resolves an entity by ID or name and counts inbound/outbound claims.
 func (s *PostgresStore) GetSymbolSummaryDetail(ctx context.Context, workspaceID uuid.UUID, target string) (*SymbolSummaryDetail, error) {
 	var det SymbolSummaryDetail
 	var err error
@@ -271,6 +272,7 @@ func (s *PostgresStore) GetSymbolSummaryDetail(ctx context.Context, workspaceID 
 			       COALESCE(NULLIF(line, 0), line_start, 0)
 			FROM entities 
 			WHERE workspace_id = $1 AND (name = $2 OR name ILIKE $2)
+		`+ProductionEntityScopeSQL+`
 			ORDER BY (kind != 'external') DESC, is_exported DESC
 			LIMIT 1
 		`, workspaceID, sym).Scan(&det.ID, &det.Name, &det.Kind, &det.Package, &det.ReceiverType, &det.FilePath, &det.Signature, &det.IsExported, &det.Line)
@@ -286,20 +288,6 @@ func (s *PostgresStore) GetSymbolSummaryDetail(ctx context.Context, workspaceID 
 	return &det, nil
 }
 
-// BriefingDTO is the session-start summary for an MCP agent.
-//
-// Seven sections are always returned:
-//
-//	workspace   — which workspace the briefing describes
-//	trust       — the tenant's Merkle state (root, block height, verification status)
-//	scale       — repositories, entities, claims
-//	hubs        — top entities by inbound edge count
-//	policies    — active policy count and titles
-//	attention   — open runtime contradictions and undocumented code
-//	new_since   — diff against the caller's last briefing
-//
-// session_id and agent_id are returned for correlation. They are not
-// keys; the watermark is keyed on agent_id only.
 type BriefingDTO struct {
 	Workspace       string               `json:"workspace"`
 	WorkspaceID     uuid.UUID            `json:"workspace_id"`
@@ -345,9 +333,11 @@ type BriefingPolicyDTO struct {
 }
 
 type BriefingAttentionDTO struct {
-	OpenContradictions   int `json:"open_contradictions"`
-	UndocumentedEntities int `json:"undocumented_entities"`
-	DriftFindings        int `json:"drift_findings"`
+	OpenContradictions           int `json:"open_contradictions"`
+	UndocumentedExportedEntities int `json:"undocumented_exported_entities"`
+	UndocumentedEntities         int `json:"undocumented_entities"`
+	UndocumentedDriftFindings    int `json:"undocumented_drift_findings"`
+	DriftFindings                int `json:"drift_findings"`
 }
 
 type BriefingDiffDTO struct {
@@ -357,8 +347,7 @@ type BriefingDiffDTO struct {
 	HasPriorBriefing   bool `json:"has_prior_briefing"`
 }
 
-// CountActivePolicies returns the number of active policies for a
-// tenant and the titles of up to five of them.
+// CountActivePolicies returns the number of active policies for a tenant and canonical IDs/titles (B-16).
 func (s *PostgresStore) CountActivePolicies(ctx context.Context, tenantID uuid.UUID) (int, []string, error) {
 	var count int
 	err := s.pool.QueryRow(ctx, `
@@ -370,11 +359,11 @@ func (s *PostgresStore) CountActivePolicies(ctx context.Context, tenantID uuid.U
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT COALESCE(metadata->>'title', statement, 'unnamed policy') AS title
+		SELECT LOWER(TRIM(REGEXP_REPLACE(COALESCE(statement, ''), '^POLICY:', ''))) AS pid
 		  FROM policies
 		 WHERE tenant_id = $1 AND status = 'active'
-		 ORDER BY created_at DESC
-		 LIMIT 5
+		 ORDER BY pid ASC
+		 LIMIT 10
 	`, tenantID)
 	if err != nil {
 		return count, nil, fmt.Errorf("policy titles: %w", err)
@@ -384,16 +373,13 @@ func (s *PostgresStore) CountActivePolicies(ctx context.Context, tenantID uuid.U
 	var titles []string
 	for rows.Next() {
 		var t string
-		if err := rows.Scan(&t); err == nil {
+		if err := rows.Scan(&t); err == nil && t != "" {
 			titles = append(titles, t)
 		}
 	}
 	return count, titles, rows.Err()
 }
 
-// CountOpenContradictions returns the number of runtime contradictions
-// for a workspace. Reads claim_verifications, the same table the
-// dashboard's "Needs Attention" panel reads.
 func (s *PostgresStore) CountOpenContradictions(ctx context.Context, workspaceID uuid.UUID) (int, error) {
 	var count int
 	err := s.pool.QueryRow(ctx, `
@@ -407,9 +393,6 @@ func (s *PostgresStore) CountOpenContradictions(ctx context.Context, workspaceID
 	return count, nil
 }
 
-// GetOrCreateWatermark returns the last briefing timestamp for an
-// agent in a workspace. If no watermark exists, it writes one and
-// returns a zero time.
 func (s *PostgresStore) GetOrCreateWatermark(ctx context.Context, tenantID, workspaceID uuid.UUID, agentID string) (time.Time, int64, bool, error) {
 	var lastBriefedAt time.Time
 	var lastHeight int64
@@ -425,8 +408,6 @@ func (s *PostgresStore) GetOrCreateWatermark(ctx context.Context, tenantID, work
 		return time.Time{}, 0, false, fmt.Errorf("read watermark: %w", err)
 	}
 
-	// No prior watermark. Write a zero-height row so the next call
-	// has a starting point.
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO mcp_agent_watermarks (tenant_id, workspace_id, agent_id)
 		VALUES ($1, $2, $3)
@@ -438,7 +419,6 @@ func (s *PostgresStore) GetOrCreateWatermark(ctx context.Context, tenantID, work
 	return time.Time{}, 0, false, nil
 }
 
-// UpdateWatermark records the moment of the current briefing.
 func (s *PostgresStore) UpdateWatermark(ctx context.Context, tenantID, workspaceID uuid.UUID, agentID string, height int64) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO mcp_agent_watermarks (tenant_id, workspace_id, agent_id, last_briefed_at, last_merkle_height)
@@ -453,12 +433,6 @@ func (s *PostgresStore) UpdateWatermark(ctx context.Context, tenantID, workspace
 	return nil
 }
 
-// GetBriefing composes the seven-section briefing for an MCP agent.
-//
-// The watermark is read first. If a prior briefing exists, the diff
-// is computed against it. Otherwise HasPriorBriefing is false and the
-// diff counts are zero. After composition, the watermark is updated
-// to the current moment and block height.
 func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID uuid.UUID, workspaceName, agentID, sessionID string) (*BriefingDTO, error) {
 	lastBriefedAt, _, hasPrior, err := s.GetOrCreateWatermark(ctx, tenantID, workspaceID, agentID)
 	if err != nil {
@@ -470,11 +444,6 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 		return nil, err
 	}
 
-	// Cross-repo bridges: distinct (from_repo, to_repo) pairs in the
-	// workspace. GetCrossRepoBridges returns one entry per pair. The
-	// limit is high enough not to truncate a realistic workspace;
-	// a dedicated COUNT(DISTINCT) method would remove the limit
-	// entirely, tracked as a follow-up.
 	bridges, _ := s.GetCrossRepoBridges(ctx, workspaceID, 1000)
 
 	hubsData, err := s.GetTopArchitecturalHubs(ctx, workspaceID, 5)
@@ -512,7 +481,7 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 	}
 
 	var exportedEntities, externalStubs, docClaimsTotal, docSupported, docContradicted, docUnverified int
-	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1 AND kind != 'external' AND is_exported = true`, workspaceID).Scan(&exportedEntities)
+	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1 AND kind != 'external' AND is_exported = true`+ProductionEntityScopeSQL, workspaceID).Scan(&exportedEntities)
 	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1 AND kind = 'external'`, workspaceID).Scan(&externalStubs)
 	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1`, workspaceID).Scan(&docClaimsTotal)
 	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1 AND status = 'SUPPORTED'`, workspaceID).Scan(&docSupported)
@@ -521,7 +490,9 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 
 	totalContradictions := contradictions + docContradicted
 	policyVerdict := "ALLOW"
-	if totalContradictions > 0 {
+	if counts.Entities == 0 {
+		policyVerdict = "UNVERIFIED"
+	} else if totalContradictions > 0 {
 		policyVerdict = "BLOCK"
 	} else if docClaimsTotal > 0 && docSupported == 0 {
 		policyVerdict = "UNVERIFIED"
@@ -535,6 +506,11 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 		"UNVERIFIED":            docUnverified,
 		"TOTAL_DOCUMENT_CLAIMS": docClaimsTotal,
 		"TOTAL_AST_CLAIMS":      counts.Claims,
+	}
+
+	undocExported := exportedEntities - docSupported
+	if undocExported < 0 {
+		undocExported = 0
 	}
 
 	briefing := &BriefingDTO{
@@ -561,9 +537,11 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 			Titles:      policyTitles,
 		},
 		Attention: BriefingAttentionDTO{
-			OpenContradictions:   totalContradictions,
-			UndocumentedEntities: exportedEntities - docSupported,
-			DriftFindings:        docUnverified,
+			OpenContradictions:           totalContradictions,
+			UndocumentedExportedEntities: undocExported,
+			UndocumentedEntities:         undocExported,
+			UndocumentedDriftFindings:    docUnverified,
+			DriftFindings:                docUnverified,
 		},
 		NewSince: BriefingDiffDTO{
 			HasPriorBriefing: hasPrior,
@@ -590,4 +568,3 @@ func (s *PostgresStore) GetBriefing(ctx context.Context, tenantID, workspaceID u
 
 	return briefing, nil
 }
-

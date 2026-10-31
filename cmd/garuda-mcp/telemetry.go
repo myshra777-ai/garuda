@@ -111,7 +111,7 @@ func (s *MCPServer) emitToolInvocation(
 		}
 	}
 
-	_, err := s.store.Pool().Exec(ctx, `
+	_, err := s.safePool().Exec(ctx, `
 		INSERT INTO telemetry_events (
 			instance_hash, session_id, mode, garuda_version, agent_runtime,
 			decision_status, decision_scope,

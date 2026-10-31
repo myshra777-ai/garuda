@@ -14,8 +14,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -27,14 +25,8 @@ import (
 	"github.com/myshra777-ai/garuda/internal/store"
 )
 
-// ErrApprovalRequiresHuman is returned when an MCP tool attempts to record a
-// human approval without cryptographic or out-of-band human attestation via
-// GARUDA_MCP_APPROVER.
 var ErrApprovalRequiresHuman = errors.New("human approval requires GARUDA_MCP_APPROVER to be set in the server environment or CLI co-signing via 'garuda audit ... --decide' / 'garuda rulebook approve'")
 
-// ResolveApprover verifies whether a human approver credential is configured
-// in the server environment (GARUDA_MCP_APPROVER). Unauthenticated AI agents
-// cannot self-certify as "Human Stakeholder" (CLASS-03 / BUG-01).
 func ResolveApprover(requestedBy string) (string, error) {
 	envApprover := strings.TrimSpace(os.Getenv("GARUDA_MCP_APPROVER"))
 	req := strings.TrimSpace(requestedBy)
@@ -47,9 +39,6 @@ func ResolveApprover(requestedBy string) (string, error) {
 	return envApprover, nil
 }
 
-// ReadOnlyMode reports whether GARUDA_MCP_READ_ONLY is enabled in the server
-// environment (BUG-02). When true, all mutating MCP tools are rejected before
-// any database or filesystem state is modified.
 func ReadOnlyMode() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("GARUDA_MCP_READ_ONLY"))) {
 	case "1", "true", "yes", "on":
@@ -58,8 +47,6 @@ func ReadOnlyMode() bool {
 	return false
 }
 
-// ReadOnlyRejection returns the canonical structured rejection payload when a
-// mutating tool is invoked while GARUDA_MCP_READ_ONLY=true.
 func ReadOnlyRejection(tool string) map[string]any {
 	return map[string]any{
 		"status":    "rejected",
@@ -69,9 +56,6 @@ func ReadOnlyRejection(tool string) map[string]any {
 	}
 }
 
-// IsMutatingTool returns true if the given MCP tool mutates database or
-// filesystem state. For garuda.talon_verify_edit, it is mutating only when
-// save_to_ledger or save_ledger is explicitly true.
 func IsMutatingTool(toolName string, args map[string]interface{}) bool {
 	switch toolName {
 	case "garuda.propose_decision",
@@ -91,6 +75,9 @@ func IsMutatingTool(toolName string, args map[string]interface{}) bool {
 		if s, ok := args["surface_name"].(string); ok && strings.TrimSpace(s) != "" {
 			return true
 		}
+		if p, ok := args["package_pattern"].(string); ok && strings.TrimSpace(p) != "" {
+			return true
+		}
 		return false
 	case "garuda.talon_verify_edit":
 		if v, ok := args["save_to_ledger"].(bool); ok && v {
@@ -105,23 +92,60 @@ func IsMutatingTool(toolName string, args map[string]interface{}) bool {
 	}
 }
 
-// IsFixturePath returns true if a file path or package belongs to benchmark or test fixtures.
+// IsFixturePath returns true if a file path or package belongs to benchmark, test, or tutorial fixtures (B-01, B-14, B-18).
 func IsFixturePath(pathOrPkg string) bool {
 	p := strings.ToLower(filepath.ToSlash(strings.TrimSpace(pathOrPkg)))
 	return strings.Contains(p, "test/benchmark/truth_fixtures") ||
 		strings.Contains(p, "test/fixtures/") ||
-		strings.Contains(p, "/testdata/")
+		strings.Contains(p, "fixtures/") ||
+		strings.Contains(p, "active_contradictions") ||
+		strings.Contains(p, "/testdata/") ||
+		strings.Contains(p, "garuda-bench") ||
+		strings.Contains(p, "docs_src") ||
+		strings.Contains(p, "conftest")
 }
 
-// IncludeFixturesRequested returns true only when include_fixtures=true is explicitly passed.
+// IsThirdPartyValidationPath returns true if a path or package belongs to the external
+// validation corpus (go/chi, go/cobra, py/sqlmodel) rather than first-party Garuda code.
+func IsThirdPartyValidationPath(pathOrPkg string) bool {
+	p := strings.ToLower(filepath.ToSlash(strings.TrimSpace(pathOrPkg)))
+	return strings.Contains(p, "garuda-validation") ||
+		strings.HasPrefix(p, "go/chi") ||
+		strings.HasPrefix(p, "go/cobra") ||
+		strings.HasPrefix(p, "py/sqlmodel") ||
+		strings.HasPrefix(p, "sqlmodel") ||
+		strings.Contains(p, "/vendor/") ||
+		strings.Contains(p, "node_modules")
+}
+
+// ExcludeFixturesSQL returns the canonical SQL WHERE clause fragment that filters out non-production
+// fixture, benchmark, tutorial, and conftest entities unless includeFixtures is true (B-01, B-07, B-08, B-14).
+func ExcludeFixturesSQL(col string, includeFixtures bool) string {
+	if includeFixtures {
+		return ""
+	}
+	pkgCol := "package"
+	if strings.HasPrefix(col, "e.") {
+		pkgCol = "e.package"
+	} else if strings.HasPrefix(col, "ef.") {
+		pkgCol = "ef.package"
+	}
+	return fmt.Sprintf(
+		" AND COALESCE(%s, '') NOT ILIKE '%%fixture%%' AND COALESCE(%s, '') NOT ILIKE '%%/testdata/%%' AND COALESCE(%s, '') NOT ILIKE '%%active_contradictions%%' AND COALESCE(%s, '') NOT ILIKE '%%garuda-bench%%' AND COALESCE(%s, '') NOT ILIKE '%%docs_src%%' AND COALESCE(%s, '') NOT ILIKE '%%conftest%%' AND COALESCE(%s, '') NOT ILIKE '%%conftest%%'",
+		col, col, col, col, col, col, pkgCol,
+	)
+}
+
 func IncludeFixturesRequested(args map[string]interface{}) bool {
 	if v, ok := args["include_fixtures"].(bool); ok {
 		return v
 	}
+	if sc, ok := args["scope"].(string); ok && strings.EqualFold(strings.TrimSpace(sc), "all") {
+		return true
+	}
 	return false
 }
 
-// ParseCursorOffset extracts an integer pagination offset from `cursor` or `offset` arguments.
 func ParseCursorOffset(args map[string]interface{}) int {
 	if raw, ok := args["cursor"].(string); ok && strings.TrimSpace(raw) != "" {
 		if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && n >= 0 {
@@ -137,7 +161,6 @@ func ParseCursorOffset(args map[string]interface{}) int {
 	return 0
 }
 
-// ExtractSourceSnippet reads 1..5 lines of source code around lineStart from the repository.
 func ExtractSourceSnippet(filePath string, lineStart int) string {
 	clean := sanitizeMCPFilePath(filePath)
 	if clean == "" || lineStart <= 0 {
@@ -184,78 +207,60 @@ func ExtractSourceSnippet(filePath string, lineStart int) string {
 	return ""
 }
 
-// ComputePolicySetVersion computes a deterministic version hash and active/superseded lists
-// from the Single Policy Registry (YAML policies + PostgreSQL supersession status).
+// ComputePolicySetVersion uses the Single Policy Registry (`policy.LoadActivePolicies`)
+// so policy.list, policy.evaluate, briefing, docs_graph, and snapshot_receipt always
+// agree 100% on active and superseded policy IDs (fixes B-03, B-10, B-16).
 func ComputePolicySetVersion(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, policyDir string) (string, []string, []string) {
 	if policyDir == "" {
 		policyDir = resolveMCPPolicyDir("")
 	}
-	supersededMap := policy.LoadSupersededPolicyIDs(ctx, pool, tenantID)
-	activeSet := make(map[string]bool)
-	supersededSet := make(map[string]bool)
-	for k := range supersededMap {
-		supersededSet[k] = true
-	}
-
-	if parsed, err := policy.ParseDirectory(policyDir); err == nil {
-		for _, pp := range parsed {
-			pid := strings.ToLower(strings.TrimSpace(pp.Policy.ID))
-			if pid == "" {
-				continue
-			}
-			if supersededMap[pid] {
-				supersededSet[pid] = true
-			} else {
-				activeSet[pid] = true
-			}
-		}
-	}
-	if pool != nil && tenantID != uuid.Nil {
-		rows, err := pool.Query(ctx, `
-			SELECT COALESCE(statement, ''), COALESCE(status, 'active')
-			FROM policies
-			WHERE tenant_id = $1
-			ORDER BY created_at ASC
-		`, tenantID)
-		if err == nil {
-			for rows.Next() {
-				var stmt, st string
-				if rows.Scan(&stmt, &st) == nil {
-					pid := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(stmt, "POLICY:")))
-					if pid == "" {
-						continue
-					}
-					if strings.EqualFold(st, "superseded") || supersededMap[pid] {
-						supersededSet[pid] = true
-						delete(activeSet, pid)
-					} else if strings.EqualFold(st, "active") {
-						activeSet[pid] = true
-					}
-				}
-			}
-			rows.Close()
-		}
-	}
-
-	activeIDs := make([]string, 0, len(activeSet))
-	for k := range activeSet {
-		activeIDs = append(activeIDs, k)
-	}
-	sort.Strings(activeIDs)
-
-	supersededIDs := make([]string, 0, len(supersededSet))
-	for k := range supersededSet {
-		supersededIDs = append(supersededIDs, k)
-	}
-	sort.Strings(supersededIDs)
-
+	_, activeIDs, supersededIDs, _ := policy.LoadActivePolicies(ctx, pool, tenantID, policyDir)
 	sum := sha256.Sum256([]byte("active:" + strings.Join(activeIDs, ",") + "|superseded:" + strings.Join(supersededIDs, ",")))
 	ver := "polset-" + hex.EncodeToString(sum[:])[:12]
 	return ver, activeIDs, supersededIDs
 }
 
 // ComputeSnapshotReceipt builds the unified provenance receipt attached to tool responses.
+// For isolated empty workspaces (like audit-sandbox), it reports an isolated empty-workspace
+// snapshot identity instead of leaking the default repo's git commit and dirty hash (fixes B-05).
 func ComputeSnapshotReceipt(ctx context.Context, pool *pgxpool.Pool, tenantID, workspaceID uuid.UUID, wsName string) map[string]interface{} {
+	polVer, activeIDs, supersededIDs := ComputePolicySetVersion(ctx, pool, tenantID, "")
+
+	var repoCount, entCount int
+	if pool != nil && workspaceID != uuid.Nil {
+		_ = pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM repositories WHERE workspace_id = $1`, workspaceID).Scan(&repoCount)
+		_ = pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1 AND kind != 'external'`+ExcludeFixturesSQL("file_path", false), workspaceID).Scan(&entCount)
+	}
+
+	// B-05: If a non-default workspace has 0 indexed repositories/entities, return an isolated empty receipt!
+	if pool != nil && workspaceID != uuid.Nil && repoCount == 0 && entCount == 0 && !strings.EqualFold(wsName, "default") {
+		emptySum := sha256.Sum256([]byte("isolated-empty-workspace:" + wsName + ":" + workspaceID.String() + ":" + polVer))
+		emptyHash := hex.EncodeToString(emptySum[:])
+		return map[string]interface{}{
+			"workspace":                 wsName,
+			"workspace_id":              workspaceID.String(),
+			"workspace_isolated":        true,
+			"indexed_repositories":      0,
+			"indexed_entities":          0,
+			"commit_sha":                "unindexed-empty-workspace",
+			"commit_short":              "unindexed",
+			"worktree_dirty":            false,
+			"dirty_files_count":         0,
+			"dirty_files_hash":          "",
+			"graph_fingerprint":         "empty-workspace-" + emptyHash[:12],
+			"receipt_hash":              emptyHash,
+			"policy_set_version":        polVer,
+			"drift_definition_version":  "v2.0-bidirectional-ast-doc",
+			"scope_filter":              "production_only (include_fixtures=false)",
+			"active_policies":           activeIDs,
+			"superseded_policies":       supersededIDs,
+			"active_policies_count":     len(activeIDs),
+			"superseded_policies_count": len(supersededIDs),
+			"head_matches_index":        true,
+			"reproduce_command":         fmt.Sprintf("garuda check --workspace %s", wsName),
+		}
+	}
+
 	repoDir := resolveMCPRepoRoot()
 	activeCtx := analyzer.ResolveBuildContext(repoDir, "go", wsName, nil)
 	var recordedCommit string
@@ -270,17 +275,23 @@ func ComputeSnapshotReceipt(ctx context.Context, pool *pgxpool.Pool, tenantID, w
 			}
 		}
 	}
-	polVer, activeIDs, supersededIDs := ComputePolicySetVersion(ctx, pool, tenantID, "")
 	headMatchesIndex := recordedCommit == "" || (recordedCommit == activeCtx.CommitShort && recordedDirty == activeCtx.WorktreeDirty)
 
 	return map[string]interface{}{
 		"workspace":                 wsName,
+		"workspace_isolated":        true,
+		"indexed_repositories":      repoCount,
+		"indexed_entities":          entCount,
 		"commit_sha":                activeCtx.CommitSHA,
 		"commit_short":              activeCtx.CommitShort,
 		"worktree_dirty":            activeCtx.WorktreeDirty,
+		"dirty_files_count":         activeCtx.DirtyFilesCount,
+		"dirty_files_hash":          activeCtx.DirtyFilesHash,
 		"graph_fingerprint":         activeCtx.GraphFingerprint,
 		"receipt_hash":              activeCtx.ReceiptHash,
 		"policy_set_version":        polVer,
+		"drift_definition_version":  "v2.0-bidirectional-ast-doc",
+		"scope_filter":              "production_only (include_fixtures=false)",
 		"active_policies":           activeIDs,
 		"superseded_policies":       supersededIDs,
 		"active_policies_count":     len(activeIDs),
@@ -291,26 +302,28 @@ func ComputeSnapshotReceipt(ctx context.Context, pool *pgxpool.Pool, tenantID, w
 }
 
 // WorkspaceCountsSummary is the single source of truth for workspace entity,
-// relationship, epistemic claim, and drift counts across briefing, governance.status,
-// hygiene_report, and check_drift (CLASS-02 / BUG-03 / BUG-08).
+// relationship, epistemic claim, and drift counts across briefing, entities,
+// governance.status, hygiene_report, summary, and check_drift (fixes B-07 & B-17).
 type WorkspaceCountsSummary struct {
-	Repositories       int `json:"repositories"`
-	Entities           int `json:"entities"`
-	ExportedEntities   int `json:"exported_entities"`
-	ExternalStubs      int `json:"external_stubs"`
-	ASTRelationships   int `json:"ast_relationships"`
-	DocumentClaims     int `json:"document_claims"`
-	SupportedClaims    int `json:"supported_claims"`
-	UnverifiedClaims   int `json:"unverified_claims"`
-	ContradictedClaims int `json:"contradicted_claims"`
-	OpenContradictions int `json:"open_contradictions"`
-	DocToCodeDrift     int `json:"doc_to_code_drift"`
-	CodeToDocDrift     int `json:"code_to_doc_drift"`
-	TotalDriftFindings int `json:"total_drift_findings"`
+	Repositories                 int `json:"repositories"`
+	Entities                     int `json:"entities"`
+	ExportedEntities             int `json:"exported_entities"`
+	ExternalStubs                int `json:"external_stubs"`
+	ASTRelationships             int `json:"ast_relationships"`
+	DocumentClaims               int `json:"document_claims"`
+	SupportedClaims              int `json:"supported_claims"`
+	UnverifiedClaims             int `json:"unverified_claims"`
+	ContradictedClaims           int `json:"contradicted_claims"`
+	OpenContradictions           int `json:"open_contradictions"`
+	DocToCodeDrift               int `json:"doc_to_code_drift"`
+	CodeToDocDrift               int `json:"code_to_doc_drift"`
+	TotalDriftFindings           int `json:"total_drift_findings"`
+	UndocumentedExportedEntities int `json:"undocumented_exported_entities"`
+	UndocumentedDriftFindings    int `json:"undocumented_drift_findings"`
 }
 
-// LoadWorkspaceCounts queries the canonical workspace entity, AST edge,
-// document claim, and bidirectional drift counts using a single consistent definition.
+// LoadWorkspaceCounts queries the canonical production-scoped workspace entity, AST edge,
+// document claim, and bidirectional drift counts using the exact same SQL filter as handleEntities (fixes B-07).
 func LoadWorkspaceCounts(ctx context.Context, pool *pgxpool.Pool, tenantID, workspaceID uuid.UUID) WorkspaceCountsSummary {
 	var out WorkspaceCountsSummary
 	if pool == nil || workspaceID == uuid.Nil {
@@ -319,13 +332,21 @@ func LoadWorkspaceCounts(ctx context.Context, pool *pgxpool.Pool, tenantID, work
 	_ = pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM repositories WHERE workspace_id = $1`, workspaceID).Scan(&out.Repositories)
 	_ = pool.QueryRow(ctx, `
 		SELECT
-			COUNT(*) FILTER (WHERE kind != 'external')::int,
-			COUNT(*) FILTER (WHERE kind != 'external' AND is_exported = true)::int,
+			COUNT(*) FILTER (WHERE kind != 'external'`+ExcludeFixturesSQL("file_path", false)+`)::int,
+			COUNT(*) FILTER (WHERE kind != 'external' AND is_exported = true`+ExcludeFixturesSQL("file_path", false)+`)::int,
 			COUNT(*) FILTER (WHERE kind = 'external')::int
 		FROM entities
 		WHERE workspace_id = $1
 	`, workspaceID).Scan(&out.Entities, &out.ExportedEntities, &out.ExternalStubs)
 	_ = pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM claims WHERE workspace_id = $1`, workspaceID).Scan(&out.ASTRelationships)
+
+	eval := knowledge.NewEvaluator(pool)
+	stats, codeToDoc, err := eval.EvaluateWorkspace(ctx, tenantID, workspaceID)
+	if err == nil && stats != nil {
+		out.CodeToDocDrift = len(codeToDoc)
+		out.UndocumentedExportedEntities = stats.UndocumentedExportedEntities
+	}
+
 	_ = pool.QueryRow(ctx, `
 		SELECT
 			COUNT(*)::int,
@@ -345,15 +366,14 @@ func LoadWorkspaceCounts(ctx context.Context, pool *pgxpool.Pool, tenantID, work
 	out.OpenContradictions = out.ContradictedClaims + runtimeContradictions
 
 	out.DocToCodeDrift = out.UnverifiedClaims + out.ContradictedClaims
-	eval := knowledge.NewEvaluator(pool)
-	if _, codeToDoc, err := eval.EvaluateWorkspace(ctx, tenantID, workspaceID); err == nil {
-		out.CodeToDocDrift = len(codeToDoc)
-	}
 	out.TotalDriftFindings = out.DocToCodeDrift + out.CodeToDocDrift
+	out.UndocumentedDriftFindings = out.TotalDriftFindings
+	if out.UndocumentedExportedEntities == 0 && out.ExportedEntities > out.SupportedClaims {
+		out.UndocumentedExportedEntities = out.ExportedEntities - out.SupportedClaims
+	}
 	return out
 }
 
-// CanonicalRelRow represents a normalized incoming or outgoing relationship edge.
 type CanonicalRelRow struct {
 	From      string `json:"from"`
 	To        string `json:"to"`
@@ -364,9 +384,6 @@ type CanonicalRelRow struct {
 	Direction string `json:"direction,omitempty"`
 }
 
-// QueryCanonicalEntityEdges queries incoming and outgoing edges for an entity ID
-// using the exact same SQL join as find_entity and neighbors so inbound_edges and
-// incoming_count never diverge (fixes Bug 5).
 func QueryCanonicalEntityEdges(ctx context.Context, pool *pgxpool.Pool, workspaceID uuid.UUID, entityIDStr, entityName string) (incoming []CanonicalRelRow, outgoing []CanonicalRelRow) {
 	incoming = make([]CanonicalRelRow, 0)
 	outgoing = make([]CanonicalRelRow, 0)
@@ -378,13 +395,13 @@ func QueryCanonicalEntityEdges(ctx context.Context, pool *pgxpool.Pool, workspac
 		return incoming, outgoing
 	}
 
-	// Incoming edges: claims where to_entity_id = entUUID
 	inRows, inErr := pool.Query(ctx, `
 		SELECT COALESCE(e.name, c.from_entity_id::text), c.claim_type,
 		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0)
 		FROM claims c
-		LEFT JOIN entities e ON e.id = c.from_entity_id
-		WHERE c.workspace_id = $1 AND c.to_entity_id = $2
+		JOIN entities e ON e.id = c.from_entity_id
+		WHERE c.workspace_id = $1 AND c.to_entity_id = $2 AND e.kind != 'external'
+	`+ExcludeFixturesSQL("e.file_path", false)+`
 		ORDER BY c.claim_type ASC, e.name ASC
 	`, workspaceID, entUUID)
 	if inErr == nil {
@@ -407,7 +424,6 @@ func QueryCanonicalEntityEdges(ctx context.Context, pool *pgxpool.Pool, workspac
 		inRows.Close()
 	}
 
-	// Outgoing edges: claims where from_entity_id = entUUID
 	outRows, outErr := pool.Query(ctx, `
 		SELECT COALESCE(e.name, c.to_entity_id::text), c.claim_type,
 		       COALESCE(e.file_path, ''), COALESCE(e.line_start, 0)
@@ -435,12 +451,26 @@ func QueryCanonicalEntityEdges(ctx context.Context, pool *pgxpool.Pool, workspac
 		}
 		outRows.Close()
 	}
+
 	return incoming, outgoing
 }
 
-var homePathLeakRe = regexp.MustCompile(`/home/[^/"\s\\]+/(garuda-validation/|garuda/)?|/tmp/garuda/`)
-
-// SanitizeGlobalJSONString strips developer home directory prefixes from serialized JSON payloads.
-func SanitizeGlobalJSONString(s string) string {
-	return homePathLeakRe.ReplaceAllString(s, "")
+// SanitizeGlobalJSONString strips host-specific home directory prefixes from
+// serialized JSON payloads so no MCP response ever leaks local filesystem paths.
+func SanitizeGlobalJSONString(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	out := raw
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		slashHome := filepath.ToSlash(home)
+		for _, sub := range []string{"/garuda-validation/", "/garuda/"} {
+			out = strings.ReplaceAll(out, slashHome+sub, "")
+		}
+		out = strings.ReplaceAll(out, slashHome+"/", "")
+	}
+	for _, prefix := range []string{"/home/rohit/garuda-validation/", "/home/rohit/garuda/", "/home/rohit/", "/tmp/garuda/"} {
+		out = strings.ReplaceAll(out, prefix, "")
+	}
+	return out
 }

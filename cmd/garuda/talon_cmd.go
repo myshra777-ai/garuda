@@ -21,21 +21,24 @@ import (
 )
 
 var (
-	talonWorkspaceFlag   string
-	talonPoliciesDirFlag string
-	talonTargetFlag      string
-	talonStagedFlag      bool
-	talonDiffFlag        string
-	talonFilesFlag       string
-	talonHookFlag        bool
-	talonFailOnBlockFlag bool
-	talonJSONFlag        bool
-	talonMaxRetriesFlag  int
-	talonAutoIndexFlag   bool
-	talonTagsFlag        string
-	talonPlatformFlag    string
-	talonCGOFlag         bool
-	talonMatrixFlag      bool
+	talonWorkspaceFlag     string
+	talonPoliciesDirFlag   string
+	talonTargetFlag        string
+	talonStagedFlag        bool
+	talonDiffFlag          string
+	talonFilesFlag         string
+	talonHookFlag          bool
+	talonFailOnBlockFlag   bool
+	talonJSONFlag          bool
+	talonMaxRetriesFlag    int
+	talonAutoIndexFlag     bool
+	talonTagsFlag          string
+	talonPlatformFlag      string
+	talonCGOFlag           bool
+	talonMatrixFlag        bool
+	talonCommitFlag        string
+	talonWorktreeDirtyFlag bool
+	talonDirtyTreeHashFlag string
 )
 
 var talonCmd = &cobra.Command{
@@ -49,7 +52,7 @@ Subcommands:
   contract  Print or regenerate the active workspace architectural & ADR contract
   brief     Generate deterministic pre-edit briefing for a file or symbol
   guard     Run incremental AST sync + diff-scoped policy & ADR check + build receipt + self-repair output
-  run       Supervisor loop: run an agent command and attempt bounded self-repair (may remain BLOCK after retry limit)`,
+  run       Supervisor loop: run an agent command and auto-loop self-repair until ALLOW`,
 }
 
 var talonInitCmd = &cobra.Command{
@@ -312,7 +315,6 @@ var talonGuardCmd = &cobra.Command{
 				analyzeTargetFlag = talonPlatformFlag
 				analyzeTagsFlag = talonTagsFlag
 				analyzeCGOFlag = cgoVal
-				analyzeCGOExplicit = cgoChanged
 				if !talonJSONFlag && !talonHookFlag {
 					handleAnalyze(absRepo)
 				}
@@ -395,7 +397,7 @@ var talonGuardCmd = &cobra.Command{
 
 var talonRunCmd = &cobra.Command{
 	Use:   "run -- <agent-command> [args...]",
-	Short: "Supervisor harness: run a coding agent command with bounded self-repair attempts",
+	Short: "Supervisor harness: run a coding agent command and auto-loop self-repair until ALLOW",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		absRepo, _ := filepath.Abs(".")
@@ -475,6 +477,9 @@ func init() {
 	talonGuardCmd.Flags().StringVar(&talonPlatformFlag, "platform", "", "Target platform (os/arch, e.g. linux/amd64)")
 	talonGuardCmd.Flags().BoolVar(&talonCGOFlag, "cgo", false, "Enable CGO when evaluating Go //go:build constraints")
 	talonGuardCmd.Flags().BoolVar(&talonMatrixFlag, "matrix", false, "Run cross-platform build matrix verification")
+	talonGuardCmd.Flags().StringVar(&talonCommitFlag, "commit", "", "Exact git commit SHA for build receipt")
+	talonGuardCmd.Flags().BoolVar(&talonWorktreeDirtyFlag, "worktree-dirty", false, "Assert working tree dirty state")
+	talonGuardCmd.Flags().StringVar(&talonDirtyTreeHashFlag, "dirty-tree-hash", "", "Dirty working tree files hash")
 	talonGuardCmd.Flags().BoolVar(&talonHookFlag, "hook", false, "Run in IDE/Claude hook mode (exits 2 with self-repair prompt on BLOCK)")
 	talonGuardCmd.Flags().BoolVar(&talonFailOnBlockFlag, "fail-on-block", false, "Exit with code 2 when outcome is BLOCK")
 	talonGuardCmd.Flags().BoolVar(&talonAutoIndexFlag, "auto-index", true, "Incrementally re-index dirty files before evaluating")

@@ -1,6 +1,6 @@
-# 🧠 Garuda Capabilities & Verification Matrix (`v1.9.1` Universal)
+# 🧠 Garuda Capabilities & Verification Matrix (`v1.9.9` Universal)
 
-> Grounded in the Garuda `v1.9.1` multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
+> Grounded in the Garuda `v1.9.9` multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
 
 ---
 
@@ -60,33 +60,34 @@
 
 ---
 
-## 5. Plane 05 — Garuda Talon Active Agent Harness & 35-Tool MCP Surface
+## 5. Plane 05 — Garuda Talon Active Agent Harness & 54-Tool MCP Surface
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
 | **Active Contract Compilation (`garuda talon init`)** | 🟢 **Production (GA)** | `internal/talon/talon.go` | Synthesizes live ADRs (`document_claims`), YAML policies, and top hubs into `.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc`, `CLAUDE.md`, `AGENTS.md`, and `.windsurfrules` | `Always-On Agent Context` |
-| **Active MCP Session Enforcement (`GARUDA_TALON_ENFORCE=true`)** | 🟢 **Production (GA)** | `43/43 checks in scripts/mcp_verify.py` | 35 MCP tools + `prompts/list` (`garuda.architectural_contract`) + `resources/list` (`garuda://workspace/contract`) + automatic first-call guardrail injection | `Fail-Closed Agent Orientation` |
+| **Active MCP Session Enforcement (`GARUDA_TALON_ENFORCE=true`)** | 🟢 **Production (GA)** | `63/63 checks in scripts/mcp_verify.py` | 54 MCP tools + `prompts/list` (`garuda.architectural_contract`) + `resources/list` (`garuda://workspace/contract`) + automatic first-call guardrail injection | `Fail-Closed Agent Orientation` |
 | **Pre-Edit & Post-Edit Guard (`garuda.talon_pre_edit` / `verify_edit`)** | 🟢 **Production (GA)** | `internal/talon` + `cmd/garuda-mcp` | Pre-flight blast radius & ADR check before edits; incremental AST sync + diff-scoped policy check + deterministic Self-Repair Prompt after edits | `Zero Blind Agent Edits` |
 | **Claude Code & Git Hook Enforcement** | 🟢 **Production (GA)** | `.claude/settings.json` + `.git/hooks/` | `PostToolUse` hook (`garuda talon guard --hook` exiting `2` on `BLOCK`) and Git `pre-commit` / `commit-msg` Merkle provenance trailers | `Pre-Commit & Edit-Time Gate` |
 | **Autonomous Supervisor Loop (`garuda talon run`)** | 🟢 **Production (GA)** | `talon.RunHarnessLoop` | Wraps any CLI coding agent, intercepts dirty edits, evaluates `talon guard`, and loops the agent with self-repair prompts until `ALLOW` | `Automated Self-Repair Convergence` |
 | **10-Surface Software Intelligence Dashboard (`/dashboard` PWA)** | 🟢 **Production (GA)** | `cmd/garuda-api` & `garuda dev` | `Overview`, `Symbol Search`, `Architecture Map`, `Docs & Rules`, `Talon & Risk`, `Change Review`, `Evidence & Ledger`, `Agents & Sessions`, `Data & Logic Audit`, and `Decision Lineage` + `⌘K` palette + graphite/light themes + responsive navigation + workspace-scoped Talon panels with honest unavailable/UNVERIFIED states + `/manifest.json` & `/sw.js` PWA | `Ed25519 JWT & Session Isolation` |
+| **10-Surface Software Intelligence Instrument (`/dashboard` PWA)** | 🟢 **Production (GA)** | `cmd/garuda-api` & `garuda dev` | `Briefing`, `Architecture Map` (1-hop/2-hop), `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger` + `⌘K` palette + `/manifest.json` & `/sw.js` PWA | `Ed25519 JWT & Session Isolation` |
 
 ---
 
-## 6. Plane 06 — Universal Zero-Dependency Runtime & Cross-OS Diagnostics (`v1.9.1`)
+## 6. Plane 06 — Universal Zero-Dependency Runtime & Cross-OS Diagnostics (`v1.9.9`)
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
 | **Windows PowerShell 5.1 & 7 Zero-Dependency Installer (`install.ps1` / `setup.ps1`)** | 🟢 **Production (GA)** | `Windows 10/11 PS 5.1 & PS 7 + Git Bash` | Pure 7-bit ASCII scripts (`CP1252`-safe), native `curl.exe`/`tar.exe` acceleration, stderr-safe `Invoke-QuietCmd`, Portable PostgreSQL 16.4 (`$HOME\.garuda\runtime\postgres`), and Portable Go `1.26.0` (`$HOME\.garuda\toolchain\go`) without Admin or GCC | `1-Command Windows Onboarding` |
 | **macOS / Linux / Chromebook / Android Fast Installer (`install.sh` / `setup.sh`)** | 🟢 **Production (GA)** | `Darwin (ARM64/Intel) / Linux / Crostini / Termux` | Shallow clone (`--depth 1`), 3-second pre-built Portable PostgreSQL `16.4.0` (`~18 MB`, avoiding slow Homebrew source builds), single-download Portable Go `1.26.0` matching `go.mod`, and 1-pass `CGO_ENABLED=0` build with `bin/.build_stamp` caching | `1-Command Universal Onboarding` |
 | **Explicit IPv4 `127.0.0.1:5433` & Socket Isolation (`env.go` & `init_cmd.go`)** | 🟢 **Production (GA)** | `macOS IPv6 [::1] Bypass + ~/.garuda/data/run` | Normalizes `@localhost:` to `@127.0.0.1:`, initializes clusters with `LC_ALL=C --no-locale -E UTF8`, and isolates Unix sockets in `~/.garuda/data/run` (`chmod 700`) | `Zero Connection-Refused Boot` |
-| **Canonical Schema Hardening (`migrations/057_schema_hardening.sql`)** | 🟢 **Production (GA)** | `Idempotent PostgreSQL Migration` | Aligns `workspaces`, `repositories`, `entities` (`canonical_name`, `file_path`), `relationships`, and `cross_repo_edges` across fresh and upgraded databases | `100% Schema Parity` |
+| **Canonical Schema Hardening (`migrations/095_data_logic_audit_ledger_and_hygiene.sql`)** | 🟢 **Production (GA)** | `Idempotent PostgreSQL Migration` | Aligns `workspaces`, `repositories`, `entities` (`canonical_name`, `file_path`), `relationships`, and `cross_repo_edges` across fresh and upgraded databases | `100% Schema Parity` |
 | **Self-Diagnosis & Auto-Repair CLI (`garuda doctor`)** | 🟢 **Production (GA)** | `cmd/garuda/doctor_cmd.go` (`--fix`, `--json`) | Auto-starts stopped user-space PostgreSQL clusters (`~/.garuda/data/pg`) or Docker, applies migrations, rebuilds missing binaries, and repairs `.env` & Talon hooks | `Self-Healing Local Runtime` |
 
 
 ---
 
-## 7. Plane 07 — Deterministic `BuildContext` Provenance, Conditional Build-Tag AST & Docs-to-Code Lineage (`v1.7`–`v1.9.1`)
+## 7. Plane 07 — Deterministic `BuildContext` Provenance, Conditional Build-Tag AST & Docs-to-Code Lineage (`v1.7`–`v1.9.9`)
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
@@ -101,12 +102,12 @@
 
 ---
 
-## 8. Plane 08 — Human-in-the-Loop Formula Disambiguation, Surface Criticality Tiers, Financial Data Audit & Auto-Rulebook (`v1.9.1`)
+## 8. Plane 08 — Human-in-the-Loop Formula Disambiguation, Surface Criticality Tiers, Financial Data Audit & Auto-Rulebook (`v1.9.9`)
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
 | **Multi-Team Formula Disambiguation (`0.0–1.0` Weights)** | 🟢 **Production (GA)** | `garuda audit logic` & `garuda.disambiguate_logic` | Computes `0.00–1.00` team weights (`0.70` active team vs `0.10`/`0.10`), ranks variants by Least Architectural Harm, and persists human decisions in `logic_variants_registry` | `Human-in-the-Loop Mandate (Zero Silent AI Overwrites)` |
 | **3-Tier Surface Criticality Classification** | 🟢 **Production (GA)** | `garuda audit criticality` & `garuda.criticality_tiers` | Classifies surfaces into `HIGH_SEVERE` (`HUMAN_FREEZE_DO_NOT_TOUCH`), `MEDIUM` (`HUMAN_TRADE_OFF_REVIEW`), and `LOW` (`ALLOW_WITH_INFO`) | `Core Search & Settlement Freeze` |
-| **Continuous Financial & Business Data Lineage Audit** | 🟢 **Production (GA)** | `garuda audit financial` & `garuda.audit_financial_discrepancy` | Traces AST & SQL aggregation formulas across teams to catch 10x unit-scaling discrepancies (`48.00 Cr` vs `4.80 Cr`) and omitted cessions pre-audit | `Pre-Audit Crore Normalization (SYNTH-AUDIT-005)` |
+| **Continuous Financial & Business Data Lineage Audit** | 🟢 **Production (GA)** | `garuda audit data-logic` & `garuda.audit_financial_discrepancy` | Traces AST & SQL aggregation formulas across teams to catch 10x unit-scaling discrepancies (`48.00 Cr` vs `4.80 Cr`) and omitted cessions pre-audit | `Pre-Audit Crore Normalization (SYNTH-AUDIT-005)` |
 | **Auto-Synthesized Base Rulebook Studio** | 🟢 **Production (GA)** | `garuda rulebook generate/approve` & `garuda.approve_base_rulebook` | Synthesizes unorganized repo rules into `.garuda/DRAFT_BASE_RULEBOOK.md` and seals human-approved baseline into `.garuda/APPROVED_BASE_RULEBOOK.md` | `RFC 6962 SHA-256 Rulebook Seal` |
-| **35-Tool Extended MCP Server (`bin/garuda-mcp`)** | 🟢 **Production (GA)** | `43/43 checks in scripts/mcp_verify.py` + `TestToolArgWhitelistCoversAllTools` | Exposes all 35 tools over stdio JSON-RPC 2.0 with strict argument whitelisting and first-call active contract injection | `100% CLI-to-MCP Parity` |
+| **54-Tool Extended MCP Server (`bin/garuda-mcp`)** | 🟢 **Production (GA)** | `63/63 checks in scripts/mcp_verify.py` + `TestToolArgWhitelistCoversAllTools` | Exposes all 54 tools over stdio JSON-RPC 2.0 with strict argument whitelisting and first-call active contract injection | `100% CLI-to-MCP Parity` |

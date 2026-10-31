@@ -82,12 +82,12 @@ func (s *MCPServer) handleCreateTask(args map[string]interface{}) (interface{}, 
 	}
 
 	now := time.Now().UTC()
-	if s.store != nil && s.store.Pool() != nil {
-		_, _ = s.store.Pool().Exec(ctx, `
+	if s.store != nil && s.safePool() != nil {
+		_, _ = s.safePool().Exec(ctx, `
 			INSERT INTO tenants (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING
 		`, tenantID, "tenant-"+tenantID.String()[:8])
 
-		_, _ = s.store.Pool().Exec(ctx, `
+		_, _ = s.safePool().Exec(ctx, `
 			INSERT INTO agents (id, tenant_id, name, model_type, session_id, status)
 			VALUES ($1, $2, $3, 'mcp-agent', $4, 'idle'),
 			       ($5, $2, $6, 'mcp-agent', $7, 'idle')
@@ -109,7 +109,7 @@ func (s *MCPServer) handleCreateTask(args map[string]interface{}) (interface{}, 
 			UpdatedAt:    now,
 		}
 		if saveErr := s.store.SaveTask(ctx, taskObj); saveErr != nil {
-			_, _ = s.store.Pool().Exec(ctx, `
+			_, _ = s.safePool().Exec(ctx, `
 				INSERT INTO tasks (id, tenant_id, title, description, status, priority, owner_agent_id)
 				VALUES ($1, $2, $3, $4, 'in_progress', $5, $6)
 				ON CONFLICT (id) DO UPDATE SET owner_agent_id = EXCLUDED.owner_agent_id, status = 'in_progress', updated_at = NOW()

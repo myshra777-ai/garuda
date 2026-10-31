@@ -30,8 +30,6 @@ type Engine struct {
 
 // LoadSupersededPolicyIDs returns the set of policy IDs (lowercase) whose latest
 // status in the tenant's policies table is 'superseded', 'deprecated', or 'disabled'.
-// This provides a single authoritative policy registry across policy.list,
-// policy.evaluate, talon_pre_edit, talon_verify_edit, and docs_graph.
 func LoadSupersededPolicyIDs(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID) map[string]bool {
 	superseded := make(map[string]bool)
 	if pool == nil || tenantID == uuid.Nil {
@@ -65,6 +63,165 @@ func LoadSupersededPolicyIDs(ctx context.Context, pool *pgxpool.Pool, tenantID u
 	return superseded
 }
 
+// LoadActivePolicies is the Single Policy Registry across policy.list, policy.evaluate,
+// briefing, docs_graph, talon_pre_edit, and talon_verify_edit (fixes B-03, B-10, B-16).
+// It merges YAML policies from policyDir with active database policies (such as
+// warn-missing-runtime), excludes superseded policies, and assigns one canonical
+// title per policy ID.
+func LoadActivePolicies(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, policyDir string) ([]ParsedPolicy, []string, []string, error) {
+	supersededMap := LoadSupersededPolicyIDs(ctx, pool, tenantID)
+	supersededSet := make(map[string]bool)
+	for k := range supersededMap {
+		supersededSet[k] = true
+	}
+
+	byID := make(map[string]ParsedPolicy)
+	if policyDir != "" {
+		if parsed, err := ParseDirectory(policyDir); err == nil {
+			for _, pp := range parsed {
+				if pp.Policy == nil {
+					continue
+				}
+				pid := strings.ToLower(strings.TrimSpace(pp.Policy.ID))
+				if pid == "" {
+					continue
+				}
+				if supersededMap[pid] {
+					supersededSet[pid] = true
+					continue
+				}
+				if pp.Policy.ExpiresAt != nil && time.Now().After(*pp.Policy.ExpiresAt) {
+					supersededSet[pid] = true
+					continue
+				}
+				pp.Policy.ID = pid
+				if strings.TrimSpace(pp.Policy.Title) == "" {
+					pp.Policy.Title = pid
+				}
+				byID[pid] = pp
+			}
+		}
+	}
+
+	if pool != nil && tenantID != uuid.Nil {
+		rows, err := pool.Query(ctx, `
+			SELECT COALESCE(statement, ''), COALESCE(scope_domain, ''),
+			       COALESCE(scope_system, ''), COALESCE(actor, ''), COALESCE(status, 'active'),
+			       COALESCE(metadata, '{}'::jsonb), COALESCE(source_path, ''), COALESCE(source_hash, '')
+			FROM policies
+			WHERE tenant_id = $1
+			ORDER BY created_at ASC
+		`, tenantID)
+		if err == nil {
+			for rows.Next() {
+				var stmt, sDom, sSys, actor, status, srcPath, srcHash string
+				var metaBytes []byte
+				if rows.Scan(&stmt, &sDom, &sSys, &actor, &status, &metaBytes, &srcPath, &srcHash) != nil {
+					continue
+				}
+				pid := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(stmt, "POLICY:")))
+				if pid == "" {
+					continue
+				}
+				if strings.EqualFold(status, "superseded") || supersededMap[pid] {
+					supersededSet[pid] = true
+					delete(byID, pid)
+					continue
+				}
+				if !strings.EqualFold(status, "active") {
+					continue
+				}
+
+				var meta map[string]any
+				_ = json.Unmarshal(metaBytes, &meta)
+				metaTitle, _ := meta["title"].(string)
+				metaDesc, _ := meta["description"].(string)
+				metaVer, _ := meta["version"].(string)
+				if metaVer == "" {
+					metaVer = "v1"
+				}
+
+				// If already loaded from YAML, keep YAML definition and synchronize canonical title
+				if existing, ok := byID[pid]; ok {
+					if existing.Policy.Title == "" && metaTitle != "" {
+						existing.Policy.Title = metaTitle
+						byID[pid] = existing
+					}
+					continue
+				}
+
+				// Reconstruct active DB-only policy (e.g. warn-missing-runtime) so it is NEVER skipped (fixes B-03 & B-10)
+				title := strings.TrimSpace(metaTitle)
+				if title == "" {
+					if pid == "warn-missing-runtime" {
+						title = "Exported functions should have runtime evidence"
+					} else {
+						title = pid
+					}
+				}
+				pol := &Policy{
+					ID:          pid,
+					Version:     metaVer,
+					Title:       title,
+					Description: metaDesc,
+					Priority:    100,
+					Language:    "go",
+					Authority:   actor,
+					Scope: Scope{
+						Domain: sDom,
+						System: sSys,
+					},
+					When: []Predicate{
+						{
+							Type: "verification_missing",
+							Params: map[string]any{
+								"kind":     "function",
+								"exported": true,
+								"limit":    25,
+							},
+						},
+					},
+					Then: Outcome{
+						Decision: DecisionWarn,
+						Reason:   title,
+					},
+				}
+				if srcPath == "" {
+					srcPath = "policies/" + pid + ".yaml"
+				}
+				byID[pid] = ParsedPolicy{
+					Policy:     pol,
+					SourcePath: srcPath,
+					SourceHash: srcHash,
+				}
+			}
+			rows.Close()
+		}
+	}
+
+	activeList := make([]ParsedPolicy, 0, len(byID))
+	activeIDs := make([]string, 0, len(byID))
+	for pid, pp := range byID {
+		activeIDs = append(activeIDs, pid)
+		activeList = append(activeList, pp)
+	}
+	sort.Strings(activeIDs)
+	sort.SliceStable(activeList, func(i, j int) bool {
+		if activeList[i].Policy.Priority != activeList[j].Policy.Priority {
+			return activeList[i].Policy.Priority > activeList[j].Policy.Priority
+		}
+		return activeList[i].Policy.ID < activeList[j].Policy.ID
+	})
+
+	supersededIDs := make([]string, 0, len(supersededSet))
+	for k := range supersededSet {
+		supersededIDs = append(supersededIDs, k)
+	}
+	sort.Strings(supersededIDs)
+
+	return activeList, activeIDs, supersededIDs, nil
+}
+
 func NewEngine(pool *pgxpool.Pool) *Engine {
 	return &Engine{
 		pool:      pool,
@@ -92,23 +249,19 @@ type RunResult struct {
 
 // RunOptions tunes the behavior of one policy pass.
 type RunOptions struct {
-	DryRun       bool
-	Reconcile    bool
-	DiffScope    *DiffScopeFilter
-	RepoDir      string
-	BuildTarget  *analyzer.BuildTargetSpec
-	BuildContext *analyzer.BuildContext
+	DryRun          bool
+	Reconcile       bool
+	DiffScope       *DiffScopeFilter
+	RepoDir         string
+	BuildTarget     *analyzer.BuildTargetSpec
+	BuildContext    *analyzer.BuildContext
+	IncludeFixtures bool
 }
 
-// Run loads all policies under policyDir, evaluates them against the
-// workspace, attaches the deterministic BuildContext receipt (build tags,
-// target platform, CGO state, exact commit SHA, graph fingerprint, and
-// 1-command reproduction string), persists the evaluations, and anchors
-// them to the Merkle ledger.
-//
-// Fail-Closed Invariant: Any policy parse error, predicate evaluation error,
-// or non-dry-run persistence/Merkle anchoring error aborts the pass and returns
-// an error rather than silently continuing with ALLOW.
+// Run loads all active policies from the Single Policy Registry (YAML + DB),
+// evaluates every single active policy against the workspace (guaranteeing
+// len(Evaluations) == len(activePolicies), fixing B-03), prevents vacuous ALLOW
+// when 0 entities match scope (fixing B-04), and anchors non-dry-run evaluations.
 func (e *Engine) Run(
 	ctx context.Context,
 	tenantID, workspaceID uuid.UUID,
@@ -118,12 +271,11 @@ func (e *Engine) Run(
 ) (*RunResult, error) {
 	dryRun := opts.DryRun
 
-	parsed, err := ParseDirectory(policyDir)
+	activePolicies, _, _, err := LoadActivePolicies(ctx, e.pool, tenantID, policyDir)
 	if err != nil {
-		return nil, fmt.Errorf("load policies: %w", err)
+		return nil, fmt.Errorf("load active policies: %w", err)
 	}
 
-	// Resolve active BuildContext and compare against recorded graph BuildContext
 	repoDir := opts.RepoDir
 	if repoDir == "" && policyDir != "" {
 		repoDir = filepath.Dir(policyDir)
@@ -141,16 +293,11 @@ func (e *Engine) Run(
 		activeBuildCtx = analyzer.ResolveBuildContext(repoDir, "", wsLabel, opts.BuildTarget)
 	}
 	recordedBuildCtx := store.GetLatestRecordedBuildContext(ctx, e.pool, tenantID, workspaceID)
-	if recordedBuildCtx != nil && activeBuildCtx.GraphFingerprint == "" {
+	if recordedBuildCtx != nil && recordedBuildCtx.GraphFingerprint != "" {
 		activeBuildCtx.GraphFingerprint = recordedBuildCtx.GraphFingerprint
 		activeBuildCtx.ReceiptHash = activeBuildCtx.ComputeReceiptHash()
 	}
 	driftReport := analyzer.DetectEnvironmentDrift(recordedBuildCtx, activeBuildCtx, wsLabel)
-
-	// Sort by priority descending (higher = evaluated first)
-	sort.SliceStable(parsed, func(i, j int) bool {
-		return parsed[i].Policy.Priority > parsed[j].Policy.Priority
-	})
 
 	result := &RunResult{
 		WorkspaceID:      workspaceID,
@@ -160,40 +307,25 @@ func (e *Engine) Run(
 		EnvironmentDrift: driftReport,
 	}
 
-	seenStatements := make(map[string]bool, len(parsed))
-
-	supersededMap := LoadSupersededPolicyIDs(ctx, e.pool, tenantID)
-
-	for _, pp := range parsed {
-		p := pp.Policy
-		if supersededMap[strings.ToLower(strings.TrimSpace(p.ID))] {
-			slog.Debug("policy superseded in registry, skipping enforcement", "policy_id", p.ID)
-			continue
+	seenStatements := make(map[string]bool, len(activePolicies))
+	diffScope := opts.DiffScope
+	if opts.IncludeFixtures {
+		if diffScope == nil {
+			diffScope = &DiffScopeFilter{IncludeFixtures: true}
+		} else {
+			diffScope.IncludeFixtures = true
 		}
+	}
+
+	for _, pp := range activePolicies {
+		p := pp.Policy
 		seenStatements["POLICY:"+p.ID] = true
 
-		// Skip expired policies
-		if p.ExpiresAt != nil && time.Now().After(*p.ExpiresAt) {
-			slog.Debug("policy expired, skipping", "policy_id", p.ID)
-			continue
-		}
-
-		// Filter by language if the policy targets a specific one
-		if p.Language != "" && p.Language != "any" {
-			hasLang, _, _ := e.evaluator.evalLanguageMatches(
-				ctx, p, &Predicate{Type: "language_matches", Params: map[string]any{"language": p.Language}},
-				tenantID, workspaceID,
-			)
-			if !hasLang {
-				continue
-			}
-		}
-
-		ev, err := e.evaluator.EvaluateWithScope(ctx, p, tenantID, workspaceID, subjectKind, subjectID, actor, opts.DiffScope)
-		if err != nil {
+		ev, evalErr := e.evaluator.EvaluateWithScope(ctx, p, tenantID, workspaceID, subjectKind, subjectID, actor, diffScope)
+		if evalErr != nil {
 			slog.Error("policy evaluation failed (fail-closed)",
-				"policy_id", p.ID, "workspace_id", workspaceID, "error", err)
-			return nil, fmt.Errorf("fail-closed: policy %s evaluation failed: %w", p.ID, err)
+				"policy_id", p.ID, "workspace_id", workspaceID, "error", evalErr)
+			return nil, fmt.Errorf("fail-closed: policy %s evaluation failed: %w", p.ID, evalErr)
 		}
 		ev.PolicyExternalID = p.ID
 		ev.PolicyTitle = p.Title
@@ -219,30 +351,23 @@ func (e *Engine) Run(
 			continue
 		}
 
-		// Persist the policy row (idempotent upsert by policy_id)
-		policyUUID, err := e.upsertPolicy(ctx, tenantID, pp)
-		if err != nil {
-			slog.Error("failed to upsert policy (fail-closed)", "policy_id", p.ID, "error", err)
-			return nil, fmt.Errorf("fail-closed: failed to persist policy %s: %w", p.ID, err)
+		policyUUID, uErr := e.upsertPolicy(ctx, tenantID, pp)
+		if uErr != nil {
+			return nil, fmt.Errorf("fail-closed: failed to persist policy %s: %w", p.ID, uErr)
 		}
 		ev.PolicyID = policyUUID
 
-		// Anchor to Merkle BEFORE persisting the evaluation, so we can store the block height
-		blockHeight, proof, err := e.anchors.AppendEvaluation(ctx, ev)
-		if err != nil {
-			slog.Error("failed to anchor evaluation (fail-closed)", "policy_id", p.ID, "error", err)
-			return nil, fmt.Errorf("fail-closed: failed to anchor evaluation for policy %s: %w", p.ID, err)
+		blockHeight, proof, aErr := e.anchors.AppendEvaluation(ctx, ev)
+		if aErr != nil {
+			return nil, fmt.Errorf("fail-closed: failed to anchor evaluation for policy %s: %w", p.ID, aErr)
 		}
 		ev.MerkleBlockHeight = &blockHeight
 
-		if err := e.persistEvaluation(ctx, ev, proof); err != nil {
-			slog.Error("failed to persist evaluation (fail-closed)", "policy_id", p.ID, "error", err)
-			return nil, fmt.Errorf("fail-closed: failed to persist evaluation for policy %s: %w", p.ID, err)
+		if pErr := e.persistEvaluation(ctx, ev, proof); pErr != nil {
+			return nil, fmt.Errorf("fail-closed: failed to persist evaluation for policy %s: %w", p.ID, pErr)
 		}
 
 		result.Evaluations = append(result.Evaluations, ev)
-
-		// Update final decision
 		if ev.Decision.Severity() > result.FinalDecision.Severity() {
 			result.FinalDecision = ev.Decision
 			id := ev.PolicyID
@@ -252,45 +377,31 @@ func (e *Engine) Run(
 		}
 	}
 
-	reconcile := opts.Reconcile
-	if !dryRun && reconcile {
+	if !dryRun && opts.Reconcile {
 		seenList := make([]string, 0, len(seenStatements))
 		for s := range seenStatements {
 			seenList = append(seenList, s)
 		}
-
-		orphaned, err := e.pool.Exec(ctx, `
+		if orphaned, oErr := e.pool.Exec(ctx, `
 			UPDATE policies
 			   SET status = 'superseded',
 			       updated_at = NOW()
 			 WHERE tenant_id = $1
 			   AND status = 'active'
 			   AND NOT (statement = ANY($2::text[]))
-		`, tenantID, seenList)
-		if err != nil {
-			slog.Error("policy reconcile failed", "error", err, "tenant_id", tenantID)
-		} else {
-			n := orphaned.RowsAffected()
-			result.ReconcileCount = int(n)
-			if n > 0 {
-				slog.Debug("policy reconcile: marked orphaned policies superseded",
-					"tenant_id", tenantID, "count", n)
-			}
+		`, tenantID, seenList); oErr == nil {
+			result.ReconcileCount = int(orphaned.RowsAffected())
 		}
 	}
 
 	result.Summary = fmt.Sprintf(
 		"workspace=%s policies=%d evaluations=%d final=%s net_new=%d baseline=%d (%s)",
-		workspaceID, len(parsed), len(result.Evaluations), result.FinalDecision,
+		workspaceID, len(activePolicies), len(result.Evaluations), result.FinalDecision,
 		result.NetNewViolationsCount, result.BaselineViolationsCount,
 		activeBuildCtx.SummaryLine(),
 	)
 	return result, nil
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Persistence
-// ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Engine) upsertPolicy(
 	ctx context.Context,
@@ -298,7 +409,6 @@ func (e *Engine) upsertPolicy(
 	pp ParsedPolicy,
 ) (uuid.UUID, error) {
 	p := pp.Policy
-
 	statement := "POLICY:" + p.ID
 	metadataJSON := policyMetadataJSON(p)
 
@@ -384,10 +494,6 @@ func (e *Engine) persistEvaluation(ctx context.Context, ev *Evaluation, proof []
 	}
 	return nil
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 func policyMetadataJSON(p *Policy) []byte {
 	b, _ := json.Marshal(map[string]any{

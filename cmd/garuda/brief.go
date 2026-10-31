@@ -103,7 +103,7 @@ var briefCmd = &cobra.Command{
 
 		fmt.Println("\n⚠️  Attention")
 		fmt.Printf("   • Open contradictions:   %d\n", briefing.Attention.OpenContradictions)
-		fmt.Printf("   • Undocumented entities: %d\n", briefing.Attention.UndocumentedEntities)
+		fmt.Printf("   • Undocumented entities: %d\n", briefing.Attention.UndocumentedExportedEntities)
 		fmt.Printf("   • Drift findings:        %d\n", briefing.Attention.DriftFindings)
 
 		fmt.Println("\n🆕 New since last briefing")

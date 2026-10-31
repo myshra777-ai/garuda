@@ -57,7 +57,7 @@ func (s *MCPServer) handlePromptsGet(req MCPRequest) MCPResponse {
 	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
 	policyDir := resolveMCPPolicyDir("")
 
-	contract, err := talon.CompileContract(context.Background(), s.store.Pool(), tenantID, workspaceID, wsName, policyDir)
+	contract, err := talon.CompileContract(context.Background(), s.safePool(), tenantID, workspaceID, wsName, policyDir)
 	if err != nil {
 		return s.errorResponse(req.ID, -32000, err.Error())
 	}
@@ -128,7 +128,7 @@ func (s *MCPServer) handleResourcesRead(req MCPRequest) MCPResponse {
 	wsName := s.resolveMCPWorkspaceName(resArgs, workspaceID)
 	policyDir := resolveMCPPolicyDir("")
 
-	contract, err := talon.CompileContract(context.Background(), s.store.Pool(), tenantID, workspaceID, wsName, policyDir)
+	contract, err := talon.CompileContract(context.Background(), s.safePool(), tenantID, workspaceID, wsName, policyDir)
 	if err != nil {
 		return s.errorResponse(req.ID, -32000, err.Error())
 	}
@@ -158,7 +158,8 @@ func (s *MCPServer) handleResourcesRead(req MCPRequest) MCPResponse {
 	}
 }
 
-// handleTalonPreEdit is the active pre-edit MCP tool (`garuda.talon_pre_edit`) (BUG-16 & CLASS-10).
+// handleTalonPreEdit is the active pre-edit MCP tool (`garuda.talon_pre_edit`) (B-08 & D2).
+// Enforces the exact same production-only scope filter as `garuda.find_entity` unless `include_fixtures: true`.
 func (s *MCPServer) handleTalonPreEdit(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
@@ -172,12 +173,12 @@ func (s *MCPServer) handleTalonPreEdit(args map[string]interface{}) (interface{}
 	if target == "" {
 		target, _ = args["file"].(string)
 	}
+	includeFixtures := IncludeFixturesRequested(args)
 
 	policyDir := resolveMCPPolicyDir("")
-
 	s.markOriented()
 
-	brief, err := talon.BuildPreEditBriefing(
+	brief, err := talon.BuildPreEditBriefingWithOpts(
 		context.Background(),
 		s.store,
 		tenantID,
@@ -185,6 +186,7 @@ func (s *MCPServer) handleTalonPreEdit(args map[string]interface{}) (interface{}
 		wsName,
 		target,
 		policyDir,
+		includeFixtures,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build pre-edit briefing: %w", err)
@@ -195,9 +197,7 @@ func (s *MCPServer) handleTalonPreEdit(args map[string]interface{}) (interface{}
 	return brief, nil
 }
 
-// handleTalonVerifyEdit is the active post-edit MCP tool (`garuda.talon_verify_edit`) (BUG-17 & CLASS-10).
-// Runs in dry-run mode (zero Merkle block writes) unless `save_to_ledger: true` or `save_ledger: true`
-// is explicitly passed, and declares `side_effects` in its response.
+// handleTalonVerifyEdit is the active post-edit MCP tool (`garuda.talon_verify_edit`) (BUG-17 & B-13).
 func (s *MCPServer) handleTalonVerifyEdit(args map[string]interface{}) (interface{}, error) {
 	saveLedger := false
 	if explicitSave, ok := args["save_to_ledger"].(bool); ok {
@@ -270,9 +270,6 @@ func (s *MCPServer) markOriented() {
 	s.sessionMu.Unlock()
 }
 
-// injectActiveContract tracks session orientation and attaches declarative
-// Talon contract metadata on the initial call when GARUDA_TALON_ENFORCE=true
-// (without imperative prompt-injection directives, satisfying both BUG-21 and mcp_verify.py).
 func (s *MCPServer) injectActiveContract(toolName string, result interface{}) interface{} {
 	if toolName == "garuda.briefing" || toolName == "garuda.talon_pre_edit" || toolName == "garuda.talon_verify_edit" {
 		s.markOriented()

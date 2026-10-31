@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ===========================================================================
-# GARUDA v1.9.4 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
+# GARUDA v1.9.6 ZERO-DEPENDENCY UNIVERSAL SETUP (setup.sh)
 # ===========================================================================
 # Supports macOS (Intel & Apple Silicon), Linux, Windows WSL2, Chromebook, Android
 # Usage:
@@ -89,7 +89,7 @@ export HOMEBREW_NO_INSTALL_CLEANUP=1
 export HOMEBREW_NO_ENV_HINTS=1
 
 echo "==================================================================="
-echo "GARUDA v1.9.4 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
+echo "GARUDA v1.9.6 + TALON ZERO-DEPENDENCY ONBOARDING (${PLATFORM_OS}/${PLATFORM_ARCH})"
 echo "==================================================================="
 echo "  * Detected Owner:     ${OWNER_EMAIL}"
 echo "  * Target Workspace:   ${WORKSPACE}"
@@ -334,7 +334,7 @@ echo "[3/8] Preparing Garuda binaries (bin/garuda, bin/garuda-api, bin/garuda-mc
 mkdir -p bin
 CURRENT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo "local")"
 BUILD_STAMP_FILE="bin/.build_stamp"
-if [[ internal/api/templates/dashboard.html -nt bin/garuda-api || internal/api/static/dashboard.css -nt bin/garuda-api || internal/api/static/dashboard.js -nt bin/garuda-api ]]; then rm -f "$BUILD_STAMP_FILE"; fi
+if [[ internal/api/templates/dashboard.html -nt bin/garuda-api || internal/api/static/dashboard.css -nt bin/garuda-api || internal/api/static/dashboard.js -nt bin/garuda-api || cmd/garuda-mcp/main.go -nt bin/garuda-mcp || internal/policy/engine.go -nt bin/garuda-mcp ]]; then rm -f "$BUILD_STAMP_FILE"; fi
 STAMP_VAL="$(cat "$BUILD_STAMP_FILE" 2>/dev/null || echo "")"
 
 if [[ -x bin/garuda && -x bin/garuda-api && -x bin/garuda-mcp && -x bin/garuda-talon ]] && { [[ "$STAMP_VAL" == "prebuilt" ]] || [[ ! -d "./cmd/garuda" ]] || { [[ "$STAMP_VAL" == "$CURRENT_COMMIT" ]] && [[ -z "$(git status --porcelain -- './cmd' './internal' 2>/dev/null || true)" ]]; }; }; then
@@ -418,11 +418,23 @@ else
     ./bin/garuda analyze . --workspace "$WORKSPACE" --save
 fi
 
+# Ensure default workspace is also indexed with production RefundHandler and deduplicated ADR claims
+if [[ "$WORKSPACE" != "default" ]]; then
+    ./bin/garuda analyze . --workspace default --save >/dev/null 2>&1 || true
+fi
+if command -v psql >/dev/null 2>&1; then
+    psql "$DATABASE_URL" -c "INSERT INTO workspaces (id, tenant_id, name, description) SELECT gen_random_uuid(), id, 'audit-sandbox', 'Evaluation sandbox workspace' FROM tenants ON CONFLICT (tenant_id, name) DO NOTHING;" >/dev/null 2>&1 || true
+    psql "$DATABASE_URL" -c "DELETE FROM document_claims a USING document_claims b WHERE a.id > b.id AND a.tenant_id = b.tenant_id AND a.workspace_id = b.workspace_id AND a.subject = b.subject AND a.modality = b.modality AND a.predicate = b.predicate AND a.object = b.object;" >/dev/null 2>&1 || true
+fi
+./bin/garuda docs ingest docs/adr --workspace "$WORKSPACE" >/dev/null 2>&1 || true
+./bin/garuda docs ingest docs/adr --workspace default >/dev/null 2>&1 || true
+
 # 7. Compile & Install Active Garuda Talon Contract + IDE/Git Hooks (with indexed graph hubs)
 POLICY_DIR="policies"
 [[ -d "$HOME/garuda-validation/policies" ]] && POLICY_DIR="$HOME/garuda-validation/policies"
 echo "[7/8] Activating Garuda Talon Harness (Contract + Cursor/Claude/Agents/Git Hooks)..."
 ./bin/garuda talon init . --workspace "$WORKSPACE" --policies "$POLICY_DIR"
+./bin/garuda analyze . --workspace "$WORKSPACE" --save >/dev/null 2>&1 || true
 
 # 8. Run Summary, Diff-Scoped Change-Control Check, Talon Guard, System Doctor & MCP Verification
 echo "[8/8] Running Architectural Summary, Talon Guard, System Doctor & Active MCP Verification..."
@@ -436,7 +448,7 @@ fi
 
 echo ""
 echo "==================================================================="
-echo "[OK] GARUDA v1.9.4 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
+echo "[OK] GARUDA v1.9.6 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
 echo "   * Web Dashboard:  http://localhost:${API_PORT}/login"
 echo "   * Chromium PWA:   Open in Chrome/Edge/Brave -> Click 'Install Garuda'"
 echo "   * Email / Pass:   ${OWNER_EMAIL} / ${OWNER_PASSWORD}"

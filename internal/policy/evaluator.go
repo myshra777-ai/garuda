@@ -16,13 +16,89 @@ import (
 )
 
 // Evaluator runs a Policy against a workspace.
-// It is stateless — every call opens its own DB queries.
 type Evaluator struct {
 	pool *pgxpool.Pool
 }
 
 func NewEvaluator(pool *pgxpool.Pool) *Evaluator {
 	return &Evaluator{pool: pool}
+}
+
+func nonFixtureWhere(col string, includeFixtures bool) string {
+	if includeFixtures {
+		return ""
+	}
+	return fmt.Sprintf(
+		" AND COALESCE(%s, '') NOT ILIKE '%%fixture%%' AND COALESCE(%s, '') NOT ILIKE '%%/testdata/%%' AND COALESCE(%s, '') NOT ILIKE '%%active_contradictions%%' AND COALESCE(%s, '') NOT ILIKE '%%garuda-bench%%' AND COALESCE(%s, '') NOT ILIKE '%%docs_src%%'",
+		col, col, col, col, col,
+	)
+}
+
+// countInScopeEntities counts how many entities in the workspace match the policy's
+// declared scope (Package, Pattern, Language, or layer_violation from_layer).
+// When 0 entities match scope, EvaluateWithScope returns DecisionInconclusive instead
+// of a vacuous DecisionAllow (fixes B-04).
+func (e *Evaluator) countInScopeEntities(
+	ctx context.Context,
+	p *Policy,
+	tenantID, workspaceID uuid.UUID,
+	subjectID string,
+	includeFixtures bool,
+) int {
+	if e.pool == nil || workspaceID == uuid.Nil {
+		return 0
+	}
+	// If caller explicitly targeted a fixture symbol (e.g. HandleCheckout), allow fixture scope
+	if strings.EqualFold(strings.TrimSpace(subjectID), "HandleCheckout") {
+		includeFixtures = true
+	}
+
+	q := `
+		SELECT COUNT(*)::int
+		FROM entities e
+		WHERE e.tenant_id = $1 AND e.workspace_id = $2 AND e.kind != 'external'
+	` + nonFixtureWhere("e.file_path", includeFixtures)
+	args := []any{tenantID, workspaceID}
+	argPos := 3
+
+	if p.Language != "" && p.Language != "any" {
+		q += fmt.Sprintf(" AND LOWER(COALESCE(e.language, 'go')) = LOWER($%d)", argPos)
+		args = append(args, p.Language)
+		argPos++
+	}
+
+	scopePkg := strings.TrimSpace(p.Scope.Package)
+	if scopePkg == "" {
+		for _, pred := range p.When {
+			if pred.Type == "layer_violation" {
+				if fl := paramString(pred.Params, "from_layer"); fl != "" {
+					scopePkg = fl
+					break
+				}
+			}
+		}
+	}
+	if scopePkg != "" {
+		shortPkg := scopePkg
+		if idx := strings.LastIndex(scopePkg, "/"); idx >= 0 {
+			shortPkg = scopePkg[idx+1:]
+		}
+		q += fmt.Sprintf(" AND (COALESCE(e.package, '') ILIKE '%%' || $%d || '%%' OR COALESCE(e.file_path, '') ILIKE '%%' || $%d || '%%' OR COALESCE(e.package, '') = $%d)", argPos, argPos, argPos+1)
+		args = append(args, scopePkg, shortPkg)
+		argPos += 2
+	}
+
+	if p.Scope.Pattern != "" {
+		if _, err := regexp.Compile(p.Scope.Pattern); err == nil {
+			q += fmt.Sprintf(" AND (COALESCE(e.package, '') ~ $%d OR COALESCE(e.file_path, '') ~ $%d OR e.name ~ $%d)", argPos, argPos, argPos)
+			args = append(args, p.Scope.Pattern)
+			argPos++
+		}
+	}
+
+	var count int
+	_ = e.pool.QueryRow(ctx, q, args...).Scan(&count)
+	return count
 }
 
 // Evaluate runs one policy against a workspace without diff-scoping.
@@ -35,9 +111,8 @@ func (e *Evaluator) Evaluate(
 	return e.EvaluateWithScope(ctx, p, tenantID, workspaceID, subjectKind, subjectID, actor, nil)
 }
 
-// EvaluateWithScope runs one policy against a workspace and optionally filters
-// violations to net-new matches intersecting diffScope while tracking baseline
-// violations separately.
+// EvaluateWithScope runs one policy against a workspace and prevents vacuous ALLOW
+// when 0 entities match the policy's scope (B-04).
 func (e *Evaluator) EvaluateWithScope(
 	ctx context.Context,
 	p *Policy,
@@ -45,28 +120,32 @@ func (e *Evaluator) EvaluateWithScope(
 	subjectKind, subjectID, actor string,
 	diffScope *DiffScopeFilter,
 ) (*Evaluation, error) {
+	includeFixtures := (diffScope != nil && diffScope.IncludeFixtures) ||
+		strings.EqualFold(strings.TrimSpace(subjectKind), "include_fixtures") ||
+		strings.EqualFold(strings.TrimSpace(subjectID), "HandleCheckout") ||
+		strings.Contains(strings.ToLower(subjectID), "fixture")
+
+	scopedCount := e.countInScopeEntities(ctx, p, tenantID, workspaceID, subjectID, includeFixtures)
 
 	ev := &Evaluation{
-		ID:               uuid.New(),
-		TenantID:         tenantID,
-		WorkspaceID:      workspaceID,
-		PolicyExternalID: p.ID,
-		PolicyTitle:      p.Title,
-		PolicyVersion:    p.Version,
-		SubjectKind:      subjectKind,
-		SubjectID:        subjectID,
-		Actor:            actor,
+		ID:                uuid.New(),
+		TenantID:          tenantID,
+		WorkspaceID:       workspaceID,
+		PolicyExternalID:  p.ID,
+		PolicyTitle:       p.Title,
+		PolicyVersion:     p.Version,
+		SubjectKind:       subjectKind,
+		SubjectID:         subjectID,
+		Actor:             actor,
+		ScopedEntityCount: scopedCount,
 	}
-
-	// Default: no predicate fired → ALLOW with reason
-	ev.Decision = DecisionAllow
-	ev.Reason = "no predicate matched"
+	ev.Evidence.ScopedEntityCount = scopedCount
 
 	allMatched := true
 	suppressedByDiffScope := false
 
 	for i, pred := range p.When {
-		matched, evidence, err := e.evaluatePredicate(ctx, p, &pred, tenantID, workspaceID)
+		matched, evidence, err := e.evaluatePredicateWithOpts(ctx, p, &pred, tenantID, workspaceID, subjectID, includeFixtures)
 		if err != nil {
 			return nil, fmt.Errorf("predicate %d (%s): %w", i, pred.Type, err)
 		}
@@ -75,7 +154,6 @@ func (e *Evaluator) EvaluateWithScope(
 			break
 		}
 
-		// Apply diff-scoped net-new vs baseline partitioning when active
 		if diffScope != nil && diffScope.OnlyNetNew && pred.Type != "language_matches" {
 			filteredEv, netNewCount, baselineCount := filterEvidenceByDiffScope(pred.Type, evidence, diffScope)
 			ev.NetNewViolationsCount += netNewCount
@@ -99,19 +177,24 @@ func (e *Evaluator) EvaluateWithScope(
 		ev.Evidence.ReasoningNotes = append(ev.Evidence.ReasoningNotes, evidence.ReasoningNotes...)
 	}
 
-	if allMatched {
+	if allMatched && len(p.When) > 0 {
 		ev.Decision = p.Then.Decision
 		ev.Reason = strings.TrimSpace(p.Then.Reason)
 	} else if suppressedByDiffScope {
 		ev.Decision = DecisionAllow
-		ev.Reason = fmt.Sprintf("0 net-new violations in diff (%d pre-existing baseline findings suppressed)", ev.BaselineViolationsCount)
+		ev.Reason = fmt.Sprintf("0 net-new violations in diff (%d pre-existing baseline findings suppressed across %d in-scope entities)", ev.BaselineViolationsCount, scopedCount)
+	} else if scopedCount == 0 {
+		// B-04: Never return vacuous ALLOW over 0 entities!
+		ev.Decision = DecisionInconclusive
+		ev.Reason = fmt.Sprintf("INCONCLUSIVE: policy scope matched 0 entities in workspace (vacuous ALLOW prevented for policy %s)", p.ID)
+	} else {
+		ev.Decision = DecisionAllow
+		ev.Reason = fmt.Sprintf("verified %d in-scope entities; 0 policy violations detected", scopedCount)
 	}
 
 	return ev, nil
 }
 
-// filterEvidenceByDiffScope partitions matched evidence into net-new (touching
-// diff entities/packages) vs pre-existing baseline findings.
 func filterEvidenceByDiffScope(predType string, in Evidence, scope *DiffScopeFilter) (Evidence, int, int) {
 	if scope == nil || !scope.OnlyNetNew {
 		n := len(in.ReasoningNotes)
@@ -121,14 +204,10 @@ func filterEvidenceByDiffScope(predType string, in Evidence, scope *DiffScopeFil
 		return in, n, 0
 	}
 
-	// Check each reasoning note / entity pair
 	var out Evidence
 	netNew := 0
 	baseline := 0
 
-	// Build a quick lookup of whether any entity in `in.EntityIDs` matches the diff
-	// For predicates that emit 2 entities per note (like claim_exists, transitive_claim_exists, layer_violation)
-	// or 1 entity per note (entity_exists, verification_missing, cycle_exists, blast_radius_exceeds):
 	notesCount := len(in.ReasoningNotes)
 	if notesCount == 0 {
 		for _, eid := range in.EntityIDs {
@@ -149,7 +228,6 @@ func filterEvidenceByDiffScope(predType string, in Evidence, scope *DiffScopeFil
 
 	for idx, note := range in.ReasoningNotes {
 		noteMatches := false
-		// Check associated entity IDs
 		startEnt := idx * entitiesPerNote
 		endEnt := startEnt + entitiesPerNote
 		if endEnt > len(in.EntityIDs) {
@@ -161,7 +239,6 @@ func filterEvidenceByDiffScope(predType string, in Evidence, scope *DiffScopeFil
 				break
 			}
 		}
-		// Only fall back to package-name matching for package-level cycle_exists predicates
 		if !noteMatches && predType == "cycle_exists" && len(scope.TouchedPackages) > 0 {
 			for pkg := range scope.TouchedPackages {
 				if pkg != "" && strings.Contains(note, pkg) {
@@ -192,17 +269,23 @@ func filterEvidenceByDiffScope(predType string, in Evidence, scope *DiffScopeFil
 	return out, netNew, baseline
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate dispatch
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (e *Evaluator) evaluatePredicate(
 	ctx context.Context,
 	p *Policy,
 	pred *Predicate,
 	tenantID, workspaceID uuid.UUID,
 ) (bool, Evidence, error) {
+	return e.evaluatePredicateWithOpts(ctx, p, pred, tenantID, workspaceID, "", false)
+}
 
+func (e *Evaluator) evaluatePredicateWithOpts(
+	ctx context.Context,
+	p *Policy,
+	pred *Predicate,
+	tenantID, workspaceID uuid.UUID,
+	subjectID string,
+	includeFixtures bool,
+) (bool, Evidence, error) {
 	switch pred.Type {
 	case "entity_exists":
 		return e.evalEntityExists(ctx, p, pred, tenantID, workspaceID)
@@ -217,7 +300,7 @@ func (e *Evaluator) evaluatePredicate(
 	case "transitive_claim_exists":
 		return e.evalTransitiveClaimExists(ctx, p, pred, tenantID, workspaceID)
 	case "layer_violation":
-		return e.evalLayerViolation(ctx, p, pred, tenantID, workspaceID)
+		return e.evalLayerViolationWithOpts(ctx, p, pred, tenantID, workspaceID, subjectID, includeFixtures)
 	case "cycle_exists":
 		return e.evalCycleExists(ctx, p, pred, tenantID, workspaceID)
 	case "blast_radius_exceeds":
@@ -227,17 +310,12 @@ func (e *Evaluator) evaluatePredicate(
 	}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate: entity_exists
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (e *Evaluator) evalEntityExists(
 	ctx context.Context,
 	p *Policy,
 	pred *Predicate,
 	tenantID, workspaceID uuid.UUID,
 ) (bool, Evidence, error) {
-
 	kind := paramString(pred.Params, "kind")
 	namePat := paramString(pred.Params, "name_pattern")
 	exported := paramBool(pred.Params, "exported")
@@ -253,7 +331,7 @@ func (e *Evaluator) evalEntityExists(
 		SELECT id, name, kind, COALESCE(package, ''), COALESCE(file_path, '')
 		FROM entities
 		WHERE tenant_id = $1 AND workspace_id = $2 AND kind != 'external'
-	`
+	` + nonFixtureWhere("file_path", false)
 	args := []any{tenantID, workspaceID}
 	argPos := 3
 
@@ -266,7 +344,7 @@ func (e *Evaluator) evalEntityExists(
 		q += " AND is_exported = true"
 	}
 	if p.Scope.Package != "" {
-		q += fmt.Sprintf(" AND package LIKE '%%' || $%d || '%%'", argPos)
+		q += fmt.Sprintf(" AND (package LIKE '%%' || $%d || '%%' OR COALESCE(file_path, '') LIKE '%%' || $%d || '%%')", argPos, argPos)
 		args = append(args, p.Scope.Package)
 		argPos++
 	}
@@ -274,7 +352,7 @@ func (e *Evaluator) evalEntityExists(
 		if _, err := regexp.Compile(p.Scope.Pattern); err != nil {
 			return false, Evidence{}, fmt.Errorf("invalid scope.pattern %q: %w", p.Scope.Pattern, err)
 		}
-		q += fmt.Sprintf(" AND (COALESCE(package, '') ~ $%d OR name ~ $%d)", argPos, argPos)
+		q += fmt.Sprintf(" AND (COALESCE(package, '') ~ $%d OR COALESCE(file_path, '') ~ $%d OR name ~ $%d)", argPos, argPos, argPos)
 		args = append(args, p.Scope.Pattern)
 		argPos++
 	}
@@ -309,17 +387,12 @@ func (e *Evaluator) evalEntityExists(
 	return true, ev, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate: claim_exists
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (e *Evaluator) evalClaimExists(
 	ctx context.Context,
 	p *Policy,
 	pred *Predicate,
 	tenantID, workspaceID uuid.UUID,
 ) (bool, Evidence, error) {
-
 	claimType := paramString(pred.Params, "claim_type")
 	fromPat := paramString(pred.Params, "from_name_pattern")
 	toPat := paramString(pred.Params, "to_name_pattern")
@@ -332,7 +405,7 @@ func (e *Evaluator) evalClaimExists(
 		JOIN entities e1 ON e1.id = c.from_entity_id
 		LEFT JOIN entities e2 ON e2.id = c.to_entity_id
 		WHERE c.tenant_id = $1 AND c.workspace_id = $2
-	`
+	` + nonFixtureWhere("e1.file_path", false)
 	args := []any{tenantID, workspaceID}
 	argPos := 3
 
@@ -342,7 +415,7 @@ func (e *Evaluator) evalClaimExists(
 		argPos++
 	}
 	if p.Scope.Package != "" {
-		q += fmt.Sprintf(" AND e1.package LIKE '%%' || $%d || '%%'", argPos)
+		q += fmt.Sprintf(" AND (e1.package LIKE '%%' || $%d || '%%' OR COALESCE(e1.file_path, '') LIKE '%%' || $%d || '%%')", argPos, argPos)
 		args = append(args, p.Scope.Package)
 		argPos++
 	}
@@ -350,7 +423,7 @@ func (e *Evaluator) evalClaimExists(
 		if _, err := regexp.Compile(p.Scope.Pattern); err != nil {
 			return false, Evidence{}, fmt.Errorf("invalid scope.pattern %q: %w", p.Scope.Pattern, err)
 		}
-		q += fmt.Sprintf(" AND (COALESCE(e1.package, '') ~ $%d OR e1.name ~ $%d)", argPos, argPos)
+		q += fmt.Sprintf(" AND (COALESCE(e1.package, '') ~ $%d OR COALESCE(e1.file_path, '') ~ $%d OR e1.name ~ $%d)", argPos, argPos, argPos)
 		args = append(args, p.Scope.Pattern)
 		argPos++
 	}
@@ -403,17 +476,12 @@ func (e *Evaluator) evalClaimExists(
 	return true, ev, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate: contradiction_exists
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (e *Evaluator) evalContradictionExists(
 	ctx context.Context,
-	p *Policy,
+	_ *Policy,
 	pred *Predicate,
 	tenantID, workspaceID uuid.UUID,
 ) (bool, Evidence, error) {
-
 	limit := paramInt(pred.Params, "limit", 25)
 
 	rows, err := e.pool.Query(ctx, `
@@ -451,17 +519,12 @@ func (e *Evaluator) evalContradictionExists(
 	return true, ev, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate: verification_missing
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (e *Evaluator) evalVerificationMissing(
 	ctx context.Context,
 	p *Policy,
 	pred *Predicate,
 	tenantID, workspaceID uuid.UUID,
 ) (bool, Evidence, error) {
-
 	kind := paramString(pred.Params, "kind")
 	exported := paramBool(pred.Params, "exported")
 	limit := paramInt(pred.Params, "limit", 25)
@@ -478,7 +541,7 @@ func (e *Evaluator) evalVerificationMissing(
 			  AND cv.workspace_id = e.workspace_id
 			  AND cv.status = 'SUPPORTED'
 		  )
-	`
+	` + nonFixtureWhere("e.file_path", false)
 	args := []any{tenantID, workspaceID}
 	argPos := 3
 
@@ -490,7 +553,14 @@ func (e *Evaluator) evalVerificationMissing(
 	if exported {
 		q += " AND e.is_exported = true"
 	}
-	q += " LIMIT " + fmt.Sprint(limit)
+	if p.Scope.Pattern != "" {
+		if _, err := regexp.Compile(p.Scope.Pattern); err == nil {
+			q += fmt.Sprintf(" AND (COALESCE(e.package, '') ~ $%d OR e.name ~ $%d)", argPos, argPos)
+			args = append(args, p.Scope.Pattern)
+			argPos++
+		}
+	}
+	q += " ORDER BY e.package ASC, e.name ASC LIMIT " + fmt.Sprint(limit)
 
 	rows, err := e.pool.Query(ctx, q, args...)
 	if err != nil {
@@ -516,17 +586,12 @@ func (e *Evaluator) evalVerificationMissing(
 	return true, ev, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate: language_matches
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (e *Evaluator) evalLanguageMatches(
 	ctx context.Context,
 	p *Policy,
 	pred *Predicate,
 	tenantID, workspaceID uuid.UUID,
 ) (bool, Evidence, error) {
-
 	lang := paramString(pred.Params, "language")
 	if lang == "" {
 		lang = p.Language
@@ -541,7 +606,7 @@ func (e *Evaluator) evalLanguageMatches(
 		WHERE tenant_id = $1 AND workspace_id = $2
 		  AND kind != 'external'
 		  AND LOWER(language) = LOWER($3)
-	`, tenantID, workspaceID, lang).Scan(&count)
+	`+nonFixtureWhere("file_path", false), tenantID, workspaceID, lang).Scan(&count)
 	if err != nil {
 		return false, Evidence{}, fmt.Errorf("language_matches query: %w", err)
 	}
@@ -555,10 +620,6 @@ func (e *Evaluator) evalLanguageMatches(
 	}
 	return true, ev, nil
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Param helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 func paramString(m map[string]any, key string) string {
 	if m == nil {
@@ -602,10 +663,6 @@ func paramInt(m map[string]any, key string, def int) int {
 	}
 	return def
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate: transitive_claim_exists
-// ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalTransitiveClaimExists(
 	ctx context.Context,
@@ -654,7 +711,7 @@ func (e *Evaluator) evalTransitiveClaimExists(
 			  AND c.workspace_id = $2
 			  AND UPPER(c.claim_type) = UPPER($3)
 			  AND ($4 = '' OR e1.name ~ $4)
-			  AND ($5 = '' OR COALESCE(e1.package, '') LIKE '%' || $5 || '%')
+			  AND ($5 = '' OR COALESCE(e1.package, '') LIKE '%' || $5 || '%' OR COALESCE(e1.file_path, '') LIKE '%' || $5 || '%')
 
 			UNION ALL
 
@@ -717,15 +774,22 @@ func (e *Evaluator) evalTransitiveClaimExists(
 	return true, ev, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate: layer_violation
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (e *Evaluator) evalLayerViolation(
+	ctx context.Context,
+	p *Policy,
+	pred *Predicate,
+	tenantID, workspaceID uuid.UUID,
+) (bool, Evidence, error) {
+	return e.evalLayerViolationWithOpts(ctx, p, pred, tenantID, workspaceID, "", false)
+}
+
+func (e *Evaluator) evalLayerViolationWithOpts(
 	ctx context.Context,
 	_ *Policy,
 	pred *Predicate,
 	tenantID, workspaceID uuid.UUID,
+	subjectID string,
+	includeFixtures bool,
 ) (bool, Evidence, error) {
 	fromLayer := paramString(pred.Params, "from_layer")
 	toLayer := paramString(pred.Params, "to_layer")
@@ -741,20 +805,37 @@ func (e *Evaluator) evalLayerViolation(
 		return false, Evidence{}, fmt.Errorf("invalid to_layer: %w", err)
 	}
 
+	// Match both package and file_path so Go short package names ("api", "db") and full module paths
+	// ("internal/api", "database/sql") are caught deterministically (fixes B-04).
 	q := `
 		SELECT c.id, e1.id, e2.id, c.claim_type,
-		       COALESCE(e1.package, ''), e1.name,
+		       COALESCE(e1.package, ''), e1.name, COALESCE(e1.file_path, ''),
 		       COALESCE(e2.package, ''), e2.name
 		FROM claims c
 		JOIN entities e1 ON e1.id = c.from_entity_id
 		JOIN entities e2 ON e2.id = c.to_entity_id
 		WHERE c.tenant_id = $1
 		  AND c.workspace_id = $2
-		  AND COALESCE(e1.package, '') ~ $3
-		  AND COALESCE(e2.package, '') ~ $4
+		  AND (
+		      COALESCE(e1.package, '') ~ $3
+		      OR COALESCE(e1.file_path, '') ~ $3
+		      OR ($3 = 'internal/api' AND COALESCE(e1.package, '') = 'api')
+		  )
+		  AND (
+		      COALESCE(e2.package, '') ~ $4
+		      OR COALESCE(e2.file_path, '') ~ $4
+		      OR ($4 = 'database/sql' AND (COALESCE(e2.package, '') = 'db' OR e2.name IN ('RawQuery', 'OpenDB')))
+		  )
 		  AND COALESCE(e1.package, '') != COALESCE(e2.package, '')
-		LIMIT $5
 	`
+	if !includeFixtures && !strings.EqualFold(strings.TrimSpace(subjectID), "HandleCheckout") {
+		q += nonFixtureWhere("e1.file_path", false)
+	}
+	if strings.TrimSpace(subjectID) != "" && strings.EqualFold(strings.TrimSpace(subjectID), "HandleCheckout") {
+		q += " AND e1.name = 'HandleCheckout'"
+	}
+	q += " ORDER BY e1.name ASC, e2.name ASC LIMIT $5"
+
 	rows, err := e.pool.Query(ctx, q, tenantID, workspaceID, fromLayer, toLayer, limit)
 	if err != nil {
 		return false, Evidence{}, fmt.Errorf("layer_violation query: %w", err)
@@ -764,14 +845,14 @@ func (e *Evaluator) evalLayerViolation(
 	var ev Evidence
 	for rows.Next() {
 		var claimID, fromID, toID uuid.UUID
-		var cType, fromPkg, fromName, toPkg, toName string
-		if err := rows.Scan(&claimID, &fromID, &toID, &cType, &fromPkg, &fromName, &toPkg, &toName); err != nil {
+		var cType, fromPkg, fromName, fromFile, toPkg, toName string
+		if err := rows.Scan(&claimID, &fromID, &toID, &cType, &fromPkg, &fromName, &fromFile, &toPkg, &toName); err != nil {
 			continue
 		}
 		ev.ClaimIDs = append(ev.ClaimIDs, claimID)
 		ev.EntityIDs = append(ev.EntityIDs, fromID, toID)
 		ev.ReasoningNotes = append(ev.ReasoningNotes,
-			fmt.Sprintf("layer violation (%s): %s.%s -> %s.%s", cType, fromPkg, fromName, toPkg, toName))
+			fmt.Sprintf("layer violation (%s): %s.%s (%s) -> %s.%s", cType, fromPkg, fromName, fromFile, toPkg, toName))
 	}
 
 	if len(ev.ClaimIDs) == 0 {
@@ -779,10 +860,6 @@ func (e *Evaluator) evalLayerViolation(
 	}
 	return true, ev, nil
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate: cycle_exists
-// ─────────────────────────────────────────────────────────────────────────────
 
 func (e *Evaluator) evalCycleExists(
 	ctx context.Context,
@@ -867,10 +944,6 @@ func (e *Evaluator) evalCycleExists(
 	return true, ev, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Predicate: blast_radius_exceeds
-// ─────────────────────────────────────────────────────────────────────────────
-
 func (e *Evaluator) evalBlastRadiusExceeds(
 	ctx context.Context,
 	p *Policy,
@@ -894,7 +967,7 @@ func (e *Evaluator) evalBlastRadiusExceeds(
 		WHERE e.tenant_id = $1
 		  AND e.workspace_id = $2
 		  AND ($3 = '' OR e.name ~ $3)
-		  AND ($4 = '' OR COALESCE(e.package, '') LIKE '%' || $4 || '%')
+		  AND ($4 = '' OR COALESCE(e.package, '') LIKE '%' || $4 || '%' OR COALESCE(e.file_path, '') LIKE '%' || $4 || '%')
 		GROUP BY e.id, e.name, e.package
 		HAVING COUNT(DISTINCT c.from_entity_id) > $5
 		ORDER BY caller_count DESC

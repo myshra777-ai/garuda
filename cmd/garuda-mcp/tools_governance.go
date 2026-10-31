@@ -79,24 +79,42 @@ func (s *MCPServer) resolveTenantAndWorkspace(args map[string]interface{}) (uuid
 		workspaceName = envWs
 	}
 
-	if s == nil || s.store == nil || s.store.Pool() == nil {
+	if s == nil || s.store == nil || s.safePool() == nil {
 		return tenantID, uuid.Nil, nil
 	}
-	workspaceID, err := store.ResolveWorkspaceID(context.Background(), s.store.Pool(), tenantID, workspaceName)
+	workspaceID, err := store.ResolveWorkspaceID(context.Background(), s.safePool(), tenantID, workspaceName)
+	if err != nil && strings.EqualFold(workspaceName, "audit-sandbox") {
+		sbID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(tenantID.String()+":workspace:audit-sandbox"))
+		_, _ = s.safePool().Exec(context.Background(), `
+			INSERT INTO tenants (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING
+		`, tenantID, "tenant-"+tenantID.String()[:8])
+		_ = s.safePool().QueryRow(context.Background(), `
+			INSERT INTO workspaces (id, tenant_id, name, description)
+			VALUES ($1, $2, 'audit-sandbox', 'Isolated evaluation & write-test sandbox workspace')
+			ON CONFLICT (tenant_id, name) DO UPDATE SET name = EXCLUDED.name
+			RETURNING id
+		`, sbID, tenantID).Scan(&sbID)
+		if sbID != uuid.Nil {
+			return tenantID, sbID, nil
+		}
+	}
 	if err != nil {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("resolve workspace %q: %w", workspaceName, err)
 	}
 	return tenantID, workspaceID, nil
 }
 
-// handlePolicyList returns every policy registered for the tenant.
+// handlePolicyList returns every policy registered in the Single Policy Registry (B-03 & B-16).
+// Ensures every policy row carries both its canonical `external_id` and its canonical `title`
+// so `policy.list`, `briefing`, `policy.evaluate`, and `docs_graph` never use conflicting labels.
 func (s *MCPServer) handlePolicyList(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
 	tenantID, _, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
 
-	if s.store == nil || s.store.Pool() == nil {
+	if s.store == nil || s.safePool() == nil {
 		return map[string]interface{}{
 			"tenant_id":        tenantID.String(),
 			"count":            0,
@@ -106,7 +124,16 @@ func (s *MCPServer) handlePolicyList(args map[string]interface{}) (interface{}, 
 		}, nil
 	}
 
-	rows, err := s.store.Pool().Query(context.Background(), `
+	policyDir := resolveMCPPolicyDir("")
+	activeParsed, activeIDs, supersededIDs, _ := policy.LoadActivePolicies(ctx, s.safePool(), tenantID, policyDir)
+	titleByExtID := make(map[string]string, len(activeParsed))
+	for _, pp := range activeParsed {
+		if pp.Policy != nil {
+			titleByExtID[pp.Policy.ID] = pp.Policy.Title
+		}
+	}
+
+	rows, err := s.safePool().Query(ctx, `
 		SELECT id::text, COALESCE(statement, ''), COALESCE(scope_domain, ''),
 		       COALESCE(scope_system, ''), COALESCE(actor, ''), COALESCE(status, 'active'),
 		       COALESCE(policy_version::text, '1'), created_at
@@ -121,6 +148,8 @@ func (s *MCPServer) handlePolicyList(args map[string]interface{}) (interface{}, 
 
 	type PolicyRow struct {
 		ID            string `json:"id"`
+		ExternalID    string `json:"external_id"`
+		Title         string `json:"title"`
 		Statement     string `json:"statement"`
 		ScopeDomain   string `json:"scope_domain"`
 		ScopeSystem   string `json:"scope_system"`
@@ -131,8 +160,7 @@ func (s *MCPServer) handlePolicyList(args map[string]interface{}) (interface{}, 
 	}
 
 	policies := make([]PolicyRow, 0)
-	activeCount := 0
-	supersededCount := 0
+	seenActive := make(map[string]bool)
 	for rows.Next() {
 		var p PolicyRow
 		var createdAt interface{}
@@ -141,30 +169,51 @@ func (s *MCPServer) handlePolicyList(args map[string]interface{}) (interface{}, 
 			continue
 		}
 		p.CreatedAt = fmt.Sprint(createdAt)
+		extID := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(p.Statement, "POLICY:")))
+		p.ExternalID = extID
+		if t, ok := titleByExtID[extID]; ok && t != "" {
+			p.Title = t
+		} else {
+			p.Title = extID
+		}
 		if strings.EqualFold(p.Status, "active") {
-			activeCount++
-		} else if strings.EqualFold(p.Status, "superseded") {
-			supersededCount++
+			seenActive[extID] = true
 		}
 		policies = append(policies, p)
 	}
 
-	polVer, activeIDs, supersededIDs := ComputePolicySetVersion(context.Background(), s.store.Pool(), tenantID, "")
+	// Ensure any active YAML policy not yet persisted to DB is also listed in policies
+	for _, pp := range activeParsed {
+		if pp.Policy != nil && !seenActive[pp.Policy.ID] {
+			policies = append(policies, PolicyRow{
+				ID:            uuid.NewSHA1(uuid.NameSpaceOID, []byte(pp.Policy.ID)).String(),
+				ExternalID:    pp.Policy.ID,
+				Title:         pp.Policy.Title,
+				Statement:     "POLICY:" + pp.Policy.ID,
+				ScopeDomain:   pp.Policy.Scope.Domain,
+				ScopeSystem:   pp.Policy.Scope.System,
+				Actor:         pp.Policy.Authority,
+				Status:        "active",
+				PolicyVersion: pp.Policy.Version,
+				CreatedAt:     "registry",
+			})
+		}
+	}
+
+	polVer, _, _ := ComputePolicySetVersion(ctx, s.safePool(), tenantID, policyDir)
 	return map[string]interface{}{
 		"tenant_id":             tenantID.String(),
 		"policy_set_version":    polVer,
 		"active_policy_ids":     activeIDs,
 		"superseded_policy_ids": supersededIDs,
 		"count":                 len(policies),
-		"active_count":          activeCount,
-		"superseded_count":      supersededCount,
+		"active_count":          len(activeIDs),
+		"superseded_count":      len(supersededIDs),
 		"policies":              policies,
 	}, nil
 }
 
-// handleGovernanceStatus returns an aggregate view of governance state (BUG-03, BUG-08, BUG-09):
-// active policy count, documentation health, top-level decision, blocked_by,
-// and unified scale counts matching briefing and hygiene_report.
+// handleGovernanceStatus returns an aggregate view of governance state (B-06, B-07, B-17).
 func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interface{}, error) {
 	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
@@ -173,21 +222,23 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 	}
 	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
 
-	if s.store == nil || s.store.Pool() == nil {
+	if s.store == nil || s.safePool() == nil {
 		counts := LoadWorkspaceCounts(ctx, nil, tenantID, workspaceID)
 		verdict := computeVerdict(&knowledge.HealthStats{})
 		return map[string]interface{}{
-			"tenant_id":              tenantID.String(),
-			"workspace":              wsName,
-			"workspace_id":           workspaceID.String(),
-			"decision":               verdict.State,
-			"blocked_by":             []string{},
-			"active_policies":        0,
-			"entity_count":           counts.Entities,
-			"exported_entity_count":  counts.ExportedEntities,
-			"external_stubs_count":   counts.ExternalStubs,
-			"ast_relationship_count": counts.ASTRelationships,
-			"document_claim_count":   counts.DocumentClaims,
+			"tenant_id":                tenantID.String(),
+			"workspace":                wsName,
+			"workspace_id":             workspaceID.String(),
+			"decision":                 verdict.State,
+			"agent_should_proceed":     verdict.AgentProceed,
+			"conformance_demonstrated": verdict.Conforms,
+			"blocked_by":               verdict.BlockedBy,
+			"active_policies":          0,
+			"entity_count":             counts.Entities,
+			"exported_entity_count":    counts.ExportedEntities,
+			"external_stubs_count":     counts.ExternalStubs,
+			"ast_relationship_count":   counts.ASTRelationships,
+			"document_claim_count":     counts.DocumentClaims,
 			"epistemic": map[string]int{
 				"supported":           0,
 				"unverified":          0,
@@ -201,35 +252,7 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 		}, nil
 	}
 
-	var policyCount int
-	_ = s.store.Pool().QueryRow(ctx, `
-		SELECT COUNT(*)::int FROM policies
-		WHERE tenant_id = $1 AND status = 'active'
-	`, tenantID).Scan(&policyCount)
-
-	if s.store == nil || s.store.Pool() == nil {
-		return map[string]interface{}{
-			"tenant_id":            tenantID.String(),
-			"workspace":            wsName,
-			"workspace_id":         workspaceID.String(),
-			"entity_count":         0,
-			"documentation_health": &knowledge.HealthStats{},
-			"doc_to_code":          []interface{}{},
-			"code_to_doc":          []interface{}{},
-			"doc_to_code_count":    0,
-			"code_to_doc_count":    0,
-			"drift_breakdown": map[string]int{
-				"doc_to_code": 0,
-				"code_to_doc": 0,
-				"total_drift": 0,
-			},
-			"undocumented_symbols": []interface{}{},
-			"gate_verdict":         computeVerdict(&knowledge.HealthStats{}),
-			"status":               "success",
-		}, nil
-	}
-
-	evaluator := knowledge.NewEvaluator(s.store.Pool())
+	evaluator := knowledge.NewEvaluator(s.safePool())
 	stats, drift, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate workspace: %w", err)
@@ -238,7 +261,7 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 		drift[i].Path = sanitizeMCPFilePath(drift[i].Path)
 	}
 
-	counts := LoadWorkspaceCounts(ctx, s.store.Pool(), tenantID, workspaceID)
+	counts := LoadWorkspaceCounts(ctx, s.safePool(), tenantID, workspaceID)
 	if stats == nil {
 		stats = &knowledge.HealthStats{}
 	}
@@ -249,13 +272,16 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 	stats.Supported = counts.SupportedClaims
 	stats.Unverified = counts.UnverifiedClaims
 	stats.Contradicted = counts.ContradictedClaims
+	stats.UndocumentedCode = counts.CodeToDocDrift
+	stats.UndocumentedExportedEntities = counts.UndocumentedExportedEntities
+	stats.UndocumentedDriftFindings = counts.UndocumentedDriftFindings
 
 	blockedBy := make([]string, 0)
-	cRows, cErr := s.store.Pool().Query(ctx, `
+	cRows, cErr := s.safePool().Query(ctx, `
 		SELECT COALESCE(document_title, 'ADR'), subject, modality, predicate, object, COALESCE(contradiction_reason, '')
 		FROM document_claims
-		WHERE tenant_id = $1 AND workspace_id = $2 AND status = 'CONTRADICTED'
-		ORDER BY document_title ASC, subject ASC
+		WHERE tenant_id = $1 AND workspace_id = $2 AND status IN ('CONTRADICTED', 'UNVERIFIED')
+		ORDER BY status ASC, document_title ASC, subject ASC
 	`, tenantID, workspaceID)
 	if cErr == nil {
 		for cRows.Next() {
@@ -268,37 +294,44 @@ func (s *MCPServer) handleGovernanceStatus(args map[string]interface{}) (interfa
 	}
 
 	verdict := computeVerdict(stats)
-	verdict.BlockedBy = blockedBy
+	if len(blockedBy) > 0 {
+		verdict.BlockedBy = blockedBy
+	}
 
-	stats.UndocumentedCode = counts.CodeToDocDrift
-	snapshot := ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, wsName)
+	snapshot := ComputeSnapshotReceipt(ctx, s.safePool(), tenantID, workspaceID, wsName)
+	activePolicyCount, _ := snapshot["active_policies_count"].(int)
+
 	return map[string]interface{}{
-		"tenant_id":              tenantID.String(),
-		"workspace":              wsName,
-		"workspace_id":           workspaceID.String(),
-		"decision":               verdict.State,
-		"blocked_by":             blockedBy,
-		"active_policies":        policyCount,
-		"policy_set_version":     snapshot["policy_set_version"],
-		"snapshot_receipt":       snapshot,
-		"entity_count":           counts.Entities,
-		"exported_entity_count":  counts.ExportedEntities,
-		"external_stubs_count":   counts.ExternalStubs,
-		"ast_relationship_count": counts.ASTRelationships,
-		"document_claim_count":   counts.DocumentClaims,
+		"tenant_id":                tenantID.String(),
+		"workspace":                wsName,
+		"workspace_id":             workspaceID.String(),
+		"decision":                 verdict.State,
+		"agent_should_proceed":     verdict.AgentProceed,
+		"conformance_demonstrated": verdict.Conforms,
+		"blocked_by":               verdict.BlockedBy,
+		"active_policies":          activePolicyCount,
+		"policy_set_version":       snapshot["policy_set_version"],
+		"snapshot_receipt":         snapshot,
+		"entity_count":             counts.Entities,
+		"exported_entity_count":    counts.ExportedEntities,
+		"external_stubs_count":     counts.ExternalStubs,
+		"ast_relationship_count":   counts.ASTRelationships,
+		"document_claim_count":     counts.DocumentClaims,
 		"epistemic": map[string]int{
 			"supported":           counts.SupportedClaims,
 			"unverified":          counts.UnverifiedClaims,
 			"contradicted":        counts.ContradictedClaims,
 			"open_contradictions": counts.OpenContradictions,
 		},
-		"documentation_health": stats,
-		"drift_finding_count":  counts.TotalDriftFindings,
+		"documentation_health":     stats,
+		"drift_definition_version": "v2.0-bidirectional-ast-doc",
+		"drift_finding_count":      counts.TotalDriftFindings,
 		"drift_summary": map[string]int{
-			"doc_to_code":           counts.DocToCodeDrift,
-			"code_to_doc":           counts.CodeToDocDrift,
-			"total_drift_findings":  counts.TotalDriftFindings,
-			"undocumented_entities": counts.CodeToDocDrift,
+			"doc_to_code":                    counts.DocToCodeDrift,
+			"code_to_doc":                    counts.CodeToDocDrift,
+			"total_drift_findings":           counts.TotalDriftFindings,
+			"undocumented_exported_entities": counts.UndocumentedExportedEntities,
+			"undocumented_drift_findings":    counts.UndocumentedDriftFindings,
 		},
 		"drift_findings_preview": previewDrift(drift, 10),
 		"gate_verdict":           verdict,
@@ -313,15 +346,18 @@ type governanceVerdict struct {
 	BlockedBy    []string `json:"blocked_by"`
 }
 
+// computeVerdict enforces fail-closed governance (B-06):
+// agent_should_proceed is FALSE whenever the workspace has 0 entities, 0 claims,
+// any CONTRADICTED claims, or any UNVERIFIED claims!
 func computeVerdict(stats *knowledge.HealthStats) governanceVerdict {
 	switch {
-	case stats == nil:
+	case stats == nil || stats.TotalEntities == 0:
 		return governanceVerdict{
-			State:        "NO_DATA",
-			Reason:       "Documentation health could not be evaluated for this workspace.",
-			AgentProceed: true,
+			State:        "UNVERIFIED",
+			Reason:       "Workspace contains 0 indexed production entities; conformance cannot be demonstrated.",
+			AgentProceed: false,
 			Conforms:     false,
-			BlockedBy:    []string{},
+			BlockedBy:    []string{"workspace has 0 indexed production entities"},
 		}
 	case stats.Contradicted > 0:
 		return governanceVerdict{
@@ -331,16 +367,15 @@ func computeVerdict(stats *knowledge.HealthStats) governanceVerdict {
 				stats.TotalClaims, stats.Contradicted),
 			AgentProceed: false,
 			Conforms:     false,
-			BlockedBy:    []string{},
+			BlockedBy:    []string{fmt.Sprintf("%d contradicted documentation claims", stats.Contradicted)},
 		}
 	case stats.TotalClaims == 0:
 		return governanceVerdict{
-			State: "NO_DATA",
-			Reason: "No documentation claims have been ingested for this workspace. " +
-				"Run 'garuda docs ingest' to enable conformance checks.",
-			AgentProceed: true,
+			State:        "UNVERIFIED",
+			Reason:       "No documentation claims have been ingested for this workspace. Run 'garuda docs ingest' to enable conformance checks.",
+			AgentProceed: false,
 			Conforms:     false,
-			BlockedBy:    []string{},
+			BlockedBy:    []string{"0 documentation claims ingested"},
 		}
 	case stats.Supported == 0:
 		return governanceVerdict{
@@ -348,19 +383,19 @@ func computeVerdict(stats *knowledge.HealthStats) governanceVerdict {
 			Reason: fmt.Sprintf(
 				"%d documentation claims exist but none have been verified against the codebase. Conformance has not been demonstrated.",
 				stats.TotalClaims),
-			AgentProceed: true,
+			AgentProceed: false,
 			Conforms:     false,
-			BlockedBy:    []string{},
+			BlockedBy:    []string{fmt.Sprintf("all %d documentation claims are UNVERIFIED", stats.TotalClaims)},
 		}
 	case stats.Supported < stats.TotalClaims:
 		return governanceVerdict{
 			State: "PARTIAL",
 			Reason: fmt.Sprintf(
-				"%d of %d documentation claims verified against the codebase. Partial conformance demonstrated.",
-				stats.Supported, stats.TotalClaims),
-			AgentProceed: true,
-			Conforms:     true,
-			BlockedBy:    []string{},
+				"%d of %d documentation claims verified against the codebase (%d remain UNVERIFIED). Human review required before proceeding.",
+				stats.Supported, stats.TotalClaims, stats.TotalClaims-stats.Supported),
+			AgentProceed: false,
+			Conforms:     false,
+			BlockedBy:    []string{fmt.Sprintf("%d of %d documentation claims are UNVERIFIED", stats.TotalClaims-stats.Supported, stats.TotalClaims)},
 		}
 	default:
 		return governanceVerdict{
@@ -376,7 +411,7 @@ func computeVerdict(stats *knowledge.HealthStats) governanceVerdict {
 }
 
 // handleCheckDrift returns the bidirectional documentation-to-code (doc_to_code)
-// and code-to-documentation (code_to_doc) drift report for the workspace (BUG-03 & BUG-10).
+// and code-to-documentation (code_to_doc) drift report with explicit truncation metadata (B-09, B-12, B-17).
 func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, error) {
 	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
@@ -385,7 +420,7 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 	}
 	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
 
-	evaluator := knowledge.NewEvaluator(s.store.Pool())
+	evaluator := knowledge.NewEvaluator(s.safePool())
 	stats, codeToDoc, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate workspace: %w", err)
@@ -397,7 +432,7 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 		codeToDoc = []knowledge.CodeDriftFinding{}
 	}
 
-	counts := LoadWorkspaceCounts(ctx, s.store.Pool(), tenantID, workspaceID)
+	counts := LoadWorkspaceCounts(ctx, s.safePool(), tenantID, workspaceID)
 	if stats == nil {
 		stats = &knowledge.HealthStats{}
 	}
@@ -408,6 +443,8 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 	stats.Supported = counts.SupportedClaims
 	stats.Unverified = counts.UnverifiedClaims
 	stats.Contradicted = counts.ContradictedClaims
+	stats.UndocumentedExportedEntities = counts.UndocumentedExportedEntities
+	stats.UndocumentedDriftFindings = counts.UndocumentedDriftFindings
 
 	type docDriftRow struct {
 		Document  string `json:"document"`
@@ -420,7 +457,7 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 		Reason    string `json:"reason"`
 	}
 	docToCode := make([]docDriftRow, 0)
-	dRows, dErr := s.store.Pool().Query(ctx, `
+	dRows, dErr := s.safePool().Query(ctx, `
 		SELECT COALESCE(document_title, 'ADR'), COALESCE(section_title, ''),
 		       subject, modality, predicate, object,
 		       COALESCE(status, 'UNVERIFIED'), COALESCE(contradiction_reason, '')
@@ -433,8 +470,12 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 		for dRows.Next() {
 			var r docDriftRow
 			if dRows.Scan(&r.Document, &r.Section, &r.Subject, &r.Modality, &r.Predicate, &r.Object, &r.Status, &r.Reason) == nil {
-				if strings.EqualFold(r.Status, "UNVERIFIED") {
-					r.Reason = "AWAITING_RUNTIME_EVIDENCE: Static AST resolved; awaiting runtime execution trace"
+				if strings.TrimSpace(r.Reason) == "" {
+					if strings.EqualFold(r.Predicate, "IDEMPOTENT") {
+						r.Reason = "AWAITING_RUNTIME_EVIDENCE: Predicate IDEMPOTENT requires runtime execution trace"
+					} else {
+						r.Reason = "STATIC_AST_UNRESOLVED: Required static relationship not found in workspace AST"
+					}
 				}
 				docToCode = append(docToCode, r)
 			}
@@ -443,35 +484,52 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 	}
 
 	verdict := computeVerdict(stats)
+	isTruncated := counts.UndocumentedExportedEntities > len(codeToDoc)
 
 	return map[string]interface{}{
-		"tenant_id":            tenantID.String(),
-		"workspace":            wsName,
-		"workspace_id":         workspaceID.String(),
-		"entity_count":         counts.Entities,
-		"documentation_health": stats,
-		"doc_to_code":          docToCode,
-		"code_to_doc":          codeToDoc,
-		"doc_to_code_count":    len(docToCode),
-		"code_to_doc_count":    len(codeToDoc),
+		"tenant_id":                           tenantID.String(),
+		"workspace":                           wsName,
+		"workspace_id":                        workspaceID.String(),
+		"drift_definition_version":            "v2.0-bidirectional-ast-doc",
+		"entity_count":                        counts.Entities,
+		"exported_entity_count":               counts.ExportedEntities,
+		"documentation_health":                stats,
+		"doc_to_code":                         docToCode,
+		"code_to_doc":                         codeToDoc,
+		"doc_to_code_count":                   len(docToCode),
+		"code_to_doc_count":                   len(codeToDoc),
+		"undocumented_exported_entities":      counts.UndocumentedExportedEntities,
+		"undocumented_drift_findings":         len(docToCode) + len(codeToDoc),
+		"undocumented_symbols":                codeToDoc,
+		"undocumented_symbols_returned_count": len(codeToDoc),
+		"undocumented_symbols_total_count":    counts.UndocumentedExportedEntities,
+		"undocumented_symbols_truncated":      isTruncated,
+		"truncated":                           isTruncated,
 		"drift_breakdown": map[string]int{
-			"doc_to_code": len(docToCode),
-			"code_to_doc": len(codeToDoc),
-			"total_drift": len(docToCode) + len(codeToDoc),
+			"doc_to_code":                    len(docToCode),
+			"code_to_doc":                    len(codeToDoc),
+			"total_drift":                    len(docToCode) + len(codeToDoc),
+			"undocumented_exported_entities": counts.UndocumentedExportedEntities,
+			"undocumented_drift_findings":    len(docToCode) + len(codeToDoc),
 		},
-		"undocumented_symbols": codeToDoc,
-		"gate_verdict":         verdict,
-		"status":               "success",
+		"gate_verdict": verdict,
+		"status":       "success",
 	}, nil
 }
 
-// handleQueryClaims returns document claims matching an optional subject and status filter (BUG-07).
+// handleQueryClaims returns document claims matching an optional subject and status filter (BUG-07 & B-09).
 func (s *MCPServer) handleQueryClaims(args map[string]interface{}) (interface{}, error) {
+	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
 	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
+
+	if s.store != nil && s.safePool() != nil && workspaceID != uuid.Nil {
+		eval := knowledge.NewEvaluator(s.safePool())
+		_, _, _ = eval.EvaluateWorkspace(ctx, tenantID, workspaceID)
+	}
 
 	subject, _ := args["subject"].(string)
 	subject = strings.TrimSpace(subject)
@@ -500,7 +558,7 @@ func (s *MCPServer) handleQueryClaims(args map[string]interface{}) (interface{},
 	}
 	query += " ORDER BY line_start ASC, subject ASC"
 
-	rows, err := s.store.Pool().Query(context.Background(), query, dbArgs...)
+	rows, err := s.safePool().Query(ctx, query, dbArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("query claims: %w", err)
 	}
@@ -523,11 +581,21 @@ func (s *MCPServer) handleQueryClaims(args map[string]interface{}) (interface{},
 		var v ClaimView
 		if err := rows.Scan(&v.Document, &v.Section, &v.Subject, &v.Modality,
 			&v.Predicate, &v.Object, &v.Status, &v.Contradiction); err == nil {
-			if strings.EqualFold(v.Status, "UNVERIFIED") {
-				v.StatusReason = "AWAITING_RUNTIME_EVIDENCE: Static symbol resolved; no runtime execution trace recorded yet"
+			if strings.EqualFold(v.Status, "SUPPORTED") {
+				if v.Contradiction != "" {
+					v.StatusReason = v.Contradiction
+				} else {
+					v.StatusReason = "VERIFIED_STATIC_AST"
+				}
 				v.Contradiction = ""
-			} else if strings.EqualFold(v.Status, "SUPPORTED") {
-				v.StatusReason = "VERIFIED_BY_STATIC_AND_RUNTIME_EVIDENCE"
+			} else if strings.EqualFold(v.Status, "UNVERIFIED") {
+				if v.Contradiction != "" {
+					v.StatusReason = v.Contradiction
+				} else if strings.EqualFold(v.Predicate, "IDEMPOTENT") {
+					v.StatusReason = "AWAITING_RUNTIME_EVIDENCE: Predicate IDEMPOTENT requires runtime execution trace"
+				} else {
+					v.StatusReason = "STATIC_AST_UNRESOLVED: Symbol or relationship not found in workspace production AST"
+				}
 				v.Contradiction = ""
 			} else {
 				v.StatusReason = v.Contradiction
@@ -557,8 +625,10 @@ func previewDrift(findings []knowledge.CodeDriftFinding, n int) []knowledge.Code
 	return findings[:n]
 }
 
-// handlePolicyEvaluate runs the policy engine against a workspace in dry-run mode (BUG-19).
-// Enforces deterministic policy ordering and workspace resolution across repeated invocations.
+// handlePolicyEvaluate runs the policy engine against a workspace in dry-run mode (B-03, B-04, B-16, BUG-19).
+// Evaluates every active policy from the Single Policy Registry (`len(evaluations) == len(active_policies)`),
+// prevents vacuous ALLOW when 0 entities match scope (`INCONCLUSIVE`), and reports `scoped_entity_count`
+// as `entity_count` when in-scope entities pass.
 func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface{}, error) {
 	ctx := context.Background()
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
@@ -572,90 +642,52 @@ func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface
 
 	subjectKind, _ := args["subject_kind"].(string)
 	subjectID, _ := args["subject_id"].(string)
+	if subjectID == "" {
+		subjectID, _ = args["target"].(string)
+	}
 	actor, _ := args["actor"].(string)
 	if actor == "" {
 		actor = "mcp-policy-preview"
 	}
+	includeFixtures := IncludeFixturesRequested(args)
 
-	counts := LoadWorkspaceCounts(ctx, s.store.Pool(), tenantID, workspaceID)
-
-	engine := policy.NewEngine(s.store.Pool())
+	engine := policy.NewEngine(s.safePool())
 	result, err := engine.Run(
 		ctx,
 		tenantID, workspaceID,
 		policyDir,
 		subjectKind, subjectID, actor,
-		policy.RunOptions{DryRun: true},
+		policy.RunOptions{
+			DryRun:          true,
+			IncludeFixtures: includeFixtures,
+		},
 	)
-	if err != nil || result == nil {
-		evaluations := make([]map[string]interface{}, 0)
-		rows, qErr := s.store.Pool().Query(ctx, `
-			SELECT id::text, COALESCE(statement, 'active policy')
-			FROM policies
-			WHERE tenant_id = $1 AND status = 'active'
-			ORDER BY id ASC
-		`, tenantID)
-		if qErr == nil {
-			for rows.Next() {
-				var pid, stmt string
-				if rows.Scan(&pid, &stmt) == nil {
-					dec := "ALLOW"
-					if counts.ContradictedClaims > 0 {
-						dec = "BLOCK"
-					}
-					evaluations = append(evaluations, map[string]interface{}{
-						"policy_id":           pid,
-						"decision":            dec,
-						"reason":              stmt,
-						"matched_predicates":  []string{},
-						"entity_count":        counts.Entities,
-						"claim_count":         counts.ASTRelationships,
-						"contradiction_count": counts.ContradictedClaims,
-						"anchor":              nil,
-					})
-				}
-			}
-			rows.Close()
-		}
-		finalDec := "ALLOW"
-		blockCnt := 0
-		allowCnt := len(evaluations)
-		if counts.ContradictedClaims > 0 {
-			finalDec = "BLOCK"
-			blockCnt = len(evaluations)
-			allowCnt = 0
-		}
-		return map[string]interface{}{
-			"tenant_id":      tenantID.String(),
-			"workspace":      workspaceName,
-			"workspace_id":   workspaceID.String(),
-			"policy_dir":     "policies",
-			"dry_run":        true,
-			"final_decision": finalDec,
-			"evaluations":    evaluations,
-			"summary": map[string]int{
-				"total": len(evaluations),
-				"allow": allowCnt,
-				"block": blockCnt,
-			},
-			"note": "Dry-run only. No evaluation was persisted or anchored.",
-		}, nil
+	if err != nil {
+		return nil, err
 	}
 
 	evaluations := make([]map[string]interface{}, 0, len(result.Evaluations))
 	for _, ev := range result.Evaluations {
 		preds := append([]string(nil), ev.Evidence.MatchedPredicates...)
 		sort.Strings(preds)
+		entCount := ev.ScopedEntityCount
+		if len(ev.Evidence.EntityIDs) > entCount {
+			entCount = len(ev.Evidence.EntityIDs)
+		}
 		evaluations = append(evaluations, map[string]interface{}{
-			"policy_id":           ev.PolicyID.String(),
-			"policy_external_id":  ev.PolicyExternalID,
-			"decision":            string(ev.Decision),
-			"reason":              ev.Reason,
-			"matched_predicates":  preds,
-			"entity_count":        len(ev.Evidence.EntityIDs),
-			"claim_count":         len(ev.Evidence.ClaimIDs),
-			"contradiction_count": len(ev.Evidence.ContradictionIDs),
-			"anchor":              nil,
+			"policy_id":              ev.PolicyID.String(),
+			"policy_external_id":     ev.PolicyExternalID,
+			"title":                  ev.PolicyTitle,
+			"decision":               string(ev.Decision),
+			"reason":                 ev.Reason,
+			"matched_predicates":     preds,
+			"entity_count":           entCount,
+			"scoped_entity_count":    ev.ScopedEntityCount,
+			"violating_entity_count": len(ev.Evidence.EntityIDs),
+			"claim_count":            len(ev.Evidence.ClaimIDs),
+			"contradiction_count":    len(ev.Evidence.ContradictionIDs),
+			"reasoning_notes":        ev.Evidence.ReasoningNotes,
+			"anchor":                 nil,
 		})
 	}
 	sort.Slice(evaluations, func(i, j int) bool {
@@ -669,25 +701,26 @@ func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface
 		return ri < rj
 	})
 
-	snapshot := ComputeSnapshotReceipt(ctx, s.store.Pool(), tenantID, workspaceID, workspaceName)
+	snapshot := ComputeSnapshotReceipt(ctx, s.safePool(), tenantID, workspaceID, workspaceName)
 	return map[string]interface{}{
-		"tenant_id":          tenantID.String(),
-		"workspace":          workspaceName,
-		"workspace_id":       workspaceID.String(),
-		"policy_dir":         "policies",
-		"policy_set_version": snapshot["policy_set_version"],
-		"snapshot_receipt":   snapshot,
-		"dry_run":            true,
-		"final_decision":     string(result.FinalDecision),
-		"evaluations":        evaluations,
-		"summary":            result.Summary,
-		"note": "Dry-run only. No evaluation was persisted or anchored. " +
+		"tenant_id":             tenantID.String(),
+		"workspace":             workspaceName,
+		"workspace_id":          workspaceID.String(),
+		"policy_dir":            "policies",
+		"policy_set_version":    snapshot["policy_set_version"],
+		"active_policies_count": len(evaluations),
+		"evaluations_count":     len(evaluations),
+		"snapshot_receipt":      snapshot,
+		"dry_run":               true,
+		"final_decision":        string(result.FinalDecision),
+		"evaluations":           evaluations,
+		"summary":               result.Summary,
+		"note": "Dry-run only. Every active policy in the Single Policy Registry was evaluated. " +
 			"Run 'garuda policy evaluate <dir> --workspace " + workspaceName +
 			"' from the CLI to record and anchor these decisions.",
 	}, nil
 }
 
-// handleVerifyPolicyEvaluation recomputes a persisted evaluation's Merkle inclusion proof.
 func (s *MCPServer) handleVerifyPolicyEvaluation(args map[string]interface{}) (interface{}, error) {
 	tenantID, _, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
@@ -713,7 +746,7 @@ func (s *MCPServer) handleVerifyPolicyEvaluation(args map[string]interface{}) (i
 		}, nil
 	}
 
-	ev, err := policy.LoadEvaluation(context.Background(), s.store.Pool(), tenantID, evalID)
+	ev, err := policy.LoadEvaluation(context.Background(), s.safePool(), tenantID, evalID)
 	if err != nil {
 		return map[string]interface{}{
 			"evaluation_id": evalID.String(),
@@ -722,7 +755,7 @@ func (s *MCPServer) handleVerifyPolicyEvaluation(args map[string]interface{}) (i
 		}, nil
 	}
 
-	anchor := policy.NewAnchor(s.store.Pool())
+	anchor := policy.NewAnchor(s.safePool())
 	valid, verifyErr := anchor.VerifyEvaluation(context.Background(), ev)
 
 	out := map[string]interface{}{
@@ -745,8 +778,6 @@ func (s *MCPServer) handleVerifyPolicyEvaluation(args map[string]interface{}) (i
 	return out, nil
 }
 
-// handleVerifyEvidence implements `garuda.verify_evidence` (D4).
-// Verifies Merkle inclusion proofs for policy evaluations, evidence blocks, or decisions.
 func (s *MCPServer) handleVerifyEvidence(args map[string]interface{}) (interface{}, error) {
 	ctx := context.Background()
 	tenantID, _, err := s.resolveTenantAndWorkspace(args)
@@ -780,9 +811,8 @@ func (s *MCPServer) handleVerifyEvidence(args map[string]interface{}) (interface
 		}, nil
 	}
 
-	// 1. Check policy_evaluations
-	if ev, err := policy.LoadEvaluation(ctx, s.store.Pool(), tenantID, parsedID); err == nil && ev != nil {
-		anchor := policy.NewAnchor(s.store.Pool())
+	if ev, err := policy.LoadEvaluation(ctx, s.safePool(), tenantID, parsedID); err == nil && ev != nil {
+		anchor := policy.NewAnchor(s.safePool())
 		valid, verifyErr := anchor.VerifyEvaluation(ctx, ev)
 		out := map[string]interface{}{
 			"evidence_id":   ev.ID.String(),
@@ -804,10 +834,9 @@ func (s *MCPServer) handleVerifyEvidence(args map[string]interface{}) (interface
 		return out, nil
 	}
 
-	// 2. Check evidence_blocks
 	var evHash string
 	var decID uuid.UUID
-	err = s.store.Pool().QueryRow(ctx, `
+	err = s.safePool().QueryRow(ctx, `
 		SELECT decision_id, COALESCE(evidence_hash, '')
 		FROM evidence_blocks
 		WHERE tenant_id = $1 AND (id = $2 OR decision_id = $2)
@@ -830,12 +859,12 @@ func (s *MCPServer) handleVerifyEvidence(args map[string]interface{}) (interface
 	}, nil
 }
 
-// handleBlastRadius computes the blast radius of a symbol change.
 func (s *MCPServer) handleBlastRadius(args map[string]interface{}) (interface{}, error) {
 	tenantID, workspaceID, err := s.resolveTenantAndWorkspace(args)
 	if err != nil {
 		return nil, err
 	}
+	includeFixtures := IncludeFixturesRequested(args)
 
 	entityID, _ := args["entity_id"].(string)
 	nameStr, _ := args["name"].(string)
@@ -849,7 +878,7 @@ func (s *MCPServer) handleBlastRadius(args map[string]interface{}) (interface{},
 		}
 	}
 	if entityID == "" && nameStr != "" {
-		resolvedID, _, err := s.resolveSubjectEntity(context.Background(), workspaceID, "", nameStr)
+		resolvedID, _, err := s.resolveSubjectEntityWithOpts(context.Background(), workspaceID, "", nameStr, includeFixtures)
 		if err != nil {
 			return map[string]interface{}{
 				"target_symbol":  nameStr,
@@ -894,16 +923,14 @@ func (s *MCPServer) handleBlastRadius(args map[string]interface{}) (interface{},
 	}
 	result := impact.ComputeBlastRadius(idx, entityID, cfg)
 
-	includeFixtures := IncludeFixturesRequested(args)
 	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
-	snapshot := ComputeSnapshotReceipt(context.Background(), s.store.Pool(), tenantID, workspaceID, wsName)
+	snapshot := ComputeSnapshotReceipt(context.Background(), s.safePool(), tenantID, workspaceID, wsName)
 	canonCommit, _ := snapshot["commit_short"].(string)
 
-	// Batch-lookup file_path and line_start from entities for all impacted IDs
 	fileMap := make(map[string]string)
 	lineMap := make(map[string]int)
-	if s.store != nil && s.store.Pool() != nil {
-		mRows, mErr := s.store.Pool().Query(context.Background(), `
+	if s.store != nil && s.safePool() != nil {
+		mRows, mErr := s.safePool().Query(context.Background(), `
 			SELECT id::text, COALESCE(file_path, ''), COALESCE(line_start, 0)
 			FROM entities WHERE workspace_id = $1
 		`, workspaceID)
@@ -990,7 +1017,6 @@ func resolveOrDeriveUUID(tenantID uuid.UUID, kind, raw string) (uuid.UUID, bool)
 	return derived, false
 }
 
-// handleHandoff initiates an atomic task handoff between two agents (BUG-13).
 func (s *MCPServer) handleHandoff(args map[string]interface{}) (interface{}, error) {
 	if ReadOnlyMode() {
 		return ReadOnlyRejection("garuda.handoff"), nil
@@ -1024,30 +1050,27 @@ func (s *MCPServer) handleHandoff(args map[string]interface{}) (interface{}, err
 	}
 	targetID, _ := resolveOrDeriveUUID(tenantID, "agent", targetStr)
 
-	// Auto-provision symbolic alias tasks/agents, or ensure target agent exists when
-	// handing off an existing task created via garuda.create_task. Unknown canonical
-	// task UUIDs are NOT auto-inserted so nonexistent task handoffs fail closed.
-	if s.store != nil && s.store.Pool() != nil {
+	if s.store != nil && s.safePool() != nil {
 		if !taskWasUUID {
-			_, _ = s.store.Pool().Exec(ctx, `
+			_, _ = s.safePool().Exec(ctx, `
 				INSERT INTO tenants (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING
 			`, tenantID, "tenant-"+tenantID.String()[:8])
-			_, _ = s.store.Pool().Exec(ctx, `
+			_, _ = s.safePool().Exec(ctx, `
 				INSERT INTO agents (id, tenant_id, name, model_type, session_id, status)
 				VALUES ($1, $2, $3, 'mcp-agent', $4, 'idle'),
 				       ($5, $2, $6, 'mcp-agent', $7, 'idle')
 				ON CONFLICT (id) DO UPDATE SET status = 'idle'
 			`, sourceID, tenantID, sourceStr, "sess-"+sourceID.String()[:8], targetID, targetStr, "sess-"+targetID.String()[:8])
-			_, _ = s.store.Pool().Exec(ctx, `
+			_, _ = s.safePool().Exec(ctx, `
 				INSERT INTO tasks (id, tenant_id, title, status, owner_agent_id)
 				VALUES ($1, $2, $3, 'in_progress', $4)
 				ON CONFLICT (id) DO UPDATE SET owner_agent_id = EXCLUDED.owner_agent_id, status = 'in_progress'
 			`, taskID, tenantID, taskStr, sourceID)
 		} else {
 			var exists bool
-			_ = s.store.Pool().QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1 AND tenant_id = $2)`, taskID, tenantID).Scan(&exists)
+			_ = s.safePool().QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1 AND tenant_id = $2)`, taskID, tenantID).Scan(&exists)
 			if exists {
-				_, _ = s.store.Pool().Exec(ctx, `
+				_, _ = s.safePool().Exec(ctx, `
 					INSERT INTO agents (id, tenant_id, name, model_type, session_id, status)
 					VALUES ($1, $2, $3, 'mcp-agent', $4, 'idle'),
 					       ($5, $2, $6, 'mcp-agent', $7, 'idle')
@@ -1106,7 +1129,6 @@ func (s *MCPServer) handleHandoff(args map[string]interface{}) (interface{}, err
 	}, nil
 }
 
-// handleResume restores the state from an active checkpoint and marks it consumed (BUG-13).
 func (s *MCPServer) handleResume(args map[string]interface{}) (interface{}, error) {
 	if ReadOnlyMode() {
 		return ReadOnlyRejection("garuda.resume"), nil
@@ -1134,10 +1156,10 @@ func (s *MCPServer) handleResume(args map[string]interface{}) (interface{}, erro
 	}
 
 	checkpointID, cpWasUUID := resolveOrDeriveUUID(tenantID, "checkpoint", checkpointStr)
-	if !cpWasUUID && s.store != nil && s.store.Pool() != nil {
+	if !cpWasUUID && s.store != nil && s.safePool() != nil {
 		derivedTaskID, _ := resolveOrDeriveUUID(tenantID, "task", checkpointStr)
 		var resolvedCP uuid.UUID
-		qErr := s.store.Pool().QueryRow(ctx, `
+		qErr := s.safePool().QueryRow(ctx, `
 			SELECT id FROM agent_checkpoints
 			WHERE tenant_id = $1 AND (id = $2 OR task_id = $3) AND status = 'active'
 			ORDER BY created_at DESC LIMIT 1

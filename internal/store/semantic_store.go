@@ -921,4 +921,3 @@ func (s *PostgresStore) FindEntityIDByNameAndPackage(ctx context.Context, worksp
 	}
 	return entityID, nil
 }
-

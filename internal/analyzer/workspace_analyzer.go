@@ -338,7 +338,6 @@ func deriveWorkspaceInterfaceImplementations(allEntities []Entity, existing []Re
 	return rels
 }
 
-
 // deriveWorkspaceStructEmbeddings computes deterministic EMBEDS edges from AST struct
 // anonymous fields (where Field.Name == Field.Type) across workspace entities when
 // go/types could not resolve third-party imports in the containing package.

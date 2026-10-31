@@ -1,8 +1,8 @@
-# Garuda Role-by-Role Persona Onboarding & Readability Guide (`v1.9.1`)
+# Garuda Role-by-Role Persona Onboarding & Readability Guide (`v1.9.9`)
 
 **Start Here Based on Your Role: Software Engineer · Staff Architect · Finance/Audit Controller · Founder/PM · DevOps/SRE · AI Coding Agent · Investor/Technical Evaluator**
 
-Garuda `v1.9.1` serves both technical and non-technical stakeholders across the entire software and business lifecycle. Use this guide to jump straight to the workflows, dashboard surfaces, and commands designed for your exact role.
+Garuda `v1.9.9` serves both technical and non-technical stakeholders across the entire software and business lifecycle. Use this guide to jump straight to the workflows, dashboard surfaces, and commands designed for your exact role.
 
 ---
 
@@ -15,8 +15,8 @@ Garuda `v1.9.1` serves both technical and non-technical stakeholders across the 
 | **3. Finance Controller, CFO, Actuary & Statutory Auditor** | Catch cross-team financial number drift (e.g., 48 Cr vs 4.8 Cr Claims Paid) pre-audit; govern competing business formulas (`0.0–1.0` weights). | `09 — Financial & Logic Audit` + `07 — Evidence & Ledger` | [Section 3](#3-finance-controller-cfo-actuary--statutory-auditor) |
 | **4. Non-Technical Founder, Product Manager & Engineering Lead** | Install in 1 command with zero setup friction; view a visual health scorecard of architecture, blast-radius tiers, and AI agent activity. | `01 — Overview` + `05 — Talon, Criticality & Risk Hub` | [Section 4](#4-non-technical-founder-product-manager--engineering-lead) |
 | **5. DevOps, Platform Engineer & SRE** | Prevent "works on Mac, fails in Linux CI" build-tag drift; correlate live OpenTelemetry runtime spans against static AST claims. | `05 — Talon & Risk Hub` (`--matrix`) + `POST /api/v1/telemetry/spans` | [Section 5](#5-devops-platform-engineer--sre) |
-| **6. AI Coding Agent (`Cursor`, `Claude Code`, `Codex`, `Windsurf`)** | Receive active architectural contracts automatically; query 35 MCP tools; self-repair violations in <20 ms before committing. | `bin/garuda-mcp` (35 Tools) + `.garuda/TALON_CONTRACT.md` | [Section 6](#6-ai-coding-agents-cursor-claude-code-codex-windsurf) |
-| **7. Investor & Technical Due-Diligence Evaluator** | Verify reproducible benchmarks (`24/24` compiler suite, `43/43` MCP checks, `10/10` runtime quarantine, `18 ms` gate latency) in minutes. | `EVIDENCE.md` + `make benchmark-strict` + `scripts/mcp_verify.py` | [Section 7](#7-investor--technical-due-diligence-evaluator) |
+| **6. AI Coding Agent (`Cursor`, `Claude Code`, `Codex`, `Windsurf`)** | Receive active architectural contracts automatically; query 54 MCP tools; self-repair violations in <20 ms before committing. | `bin/garuda-mcp` (54 Tools) + `.garuda/TALON_CONTRACT.md` | [Section 6](#6-ai-coding-agents-cursor-claude-code-codex-windsurf) |
+| **7. Investor & Technical Due-Diligence Evaluator** | Verify reproducible benchmarks (`24/24` compiler suite, `63/63` MCP checks, `10/10` runtime quarantine, `18 ms` gate latency) in minutes. | `EVIDENCE.md` + `make benchmark-strict` + `scripts/mcp_verify.py` | [Section 7](#7-investor--technical-due-diligence-evaluator) |
 
 ---
 
@@ -80,7 +80,7 @@ Garuda `v1.9.1` serves both technical and non-technical stakeholders across the 
 2. Inspect the **48.00 Crore vs. 4.80 Crore** side-by-side lineage card and click **`✓ Approve Canonical Crore Fix`**.
 3. Or run from the terminal:
    ```bash
-   ./bin/garuda audit financial --metric "Total Claims Paid" --team-a-cr 48.0 --team-b-cr 4.8
+   ./bin/garuda audit data-logic --metric "Total Claims Paid" --team-a-cr 48.0 --team-b-cr 4.8
    ./bin/garuda verify
    ```
 - **Next Read**: **[`docs/FINANCE_AND_AUDIT_GUIDE.md`](FINANCE_AND_AUDIT_GUIDE.md)**
@@ -142,13 +142,13 @@ Then open **`http://localhost:8080/login`** (or install as a desktop/mobile Chro
 
 ### Reproducible Proof Points in 3 Commands
 ```bash
-# 1. Zero-dependency 1-command provisioning, migration, AST scan, and 43/43 MCP verification
+# 1. Zero-dependency 1-command provisioning, migration, AST scan, and 63/63 MCP verification
 ./setup.sh
 
 # 2. Run the 24/24 ground-truth compiler & determinism benchmark suite (100% precision/recall, 0.0% FP)
 make benchmark-strict
 
-# 3. Verify all 35 MCP tools, Talon active contract injection, and v1.9.1 financial/logic audit tools
+# 3. Verify all 54 MCP tools, Talon active contract injection, and v1.9.9 financial/logic audit tools
 python3 scripts/mcp_verify.py
 ```
 - **Next Read**: [`EVIDENCE.md`](../EVIDENCE.md) and [`docs/CAPABILITIES.md`](CAPABILITIES.md)

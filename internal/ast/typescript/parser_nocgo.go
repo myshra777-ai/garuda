@@ -27,16 +27,16 @@ func NewParser() *Parser {
 func (p *Parser) Close() {}
 
 var (
-	reTSImport       = regexp.MustCompile(`(?m)^\s*import\s+(.+?)\s+from\s+['"]([^'"]+)['"]`)
-	reTSClass        = regexp.MustCompile(`^\s*(export\s+)?(abstract\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+([A-Za-z0-9_$.<>]+))?(?:\s+implements\s+([^{]+))?\s*\{`)
-	reTSInterface    = regexp.MustCompile(`^\s*(export\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+([^{]+))?\s*\{`)
-	reTSFunc         = regexp.MustCompile(`^\s*(export\s+)?(async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*(?::\s*([^{]+))?\s*\{`)
-	reTSArrow        = regexp.MustCompile(`^\s*(export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::[^=]+)?=\s*(async\s+)?\(([^)]*)\)\s*(?::\s*([^=]+))?=>`)
-	reTSMethod       = regexp.MustCompile(`^\s*(?:(?:public|private|protected|readonly|static|override|abstract)\s+)*(async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*(?::\s*([^{;]+))?\s*\{`)
-	reTSProperty     = regexp.MustCompile(`^\s*(?:(?:public|private|protected)\s+)?(readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)(\?)?\s*:\s*([^;=]+)\s*[;=]?`)
-	reTSNewAssign    = regexp.MustCompile(`(?:(?:const|let|var)\s+)?((?:this\.)?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?::[^=]+)?=\s*new\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*\(`)
-	reTSNewExpr      = regexp.MustCompile(`\bnew\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*\(`)
-	reTSCallExpr     = regexp.MustCompile(`\b((?:this\.)?[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\s*\(`)
+	reTSImport    = regexp.MustCompile(`(?m)^\s*import\s+(.+?)\s+from\s+['"]([^'"]+)['"]`)
+	reTSClass     = regexp.MustCompile(`^\s*(export\s+)?(abstract\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+([A-Za-z0-9_$.<>]+))?(?:\s+implements\s+([^{]+))?\s*\{`)
+	reTSInterface = regexp.MustCompile(`^\s*(export\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+([^{]+))?\s*\{`)
+	reTSFunc      = regexp.MustCompile(`^\s*(export\s+)?(async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*(?::\s*([^{]+))?\s*\{`)
+	reTSArrow     = regexp.MustCompile(`^\s*(export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::[^=]+)?=\s*(async\s+)?\(([^)]*)\)\s*(?::\s*([^=]+))?=>`)
+	reTSMethod    = regexp.MustCompile(`^\s*(?:(?:public|private|protected|readonly|static|override|abstract)\s+)*(async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*(?::\s*([^{;]+))?\s*\{`)
+	reTSProperty  = regexp.MustCompile(`^\s*(?:(?:public|private|protected)\s+)?(readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)(\?)?\s*:\s*([^;=]+)\s*[;=]?`)
+	reTSNewAssign = regexp.MustCompile(`(?:(?:const|let|var)\s+)?((?:this\.)?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?::[^=]+)?=\s*new\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*\(`)
+	reTSNewExpr   = regexp.MustCompile(`\bnew\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*\(`)
+	reTSCallExpr  = regexp.MustCompile(`\b((?:this\.)?[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\s*\(`)
 )
 
 // Parse parses TypeScript source bytes into a structured Module without requiring CGO.

@@ -34,6 +34,9 @@ func NewPostgresStore(connString string) (*PostgresStore, error) {
 
 // Pool exposes the underlying connection pool for ledger queries and transactions.
 func (s *PostgresStore) Pool() *pgxpool.Pool {
+	if s == nil {
+		return nil
+	}
 	return s.pool
 }
 

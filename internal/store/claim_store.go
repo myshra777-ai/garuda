@@ -8,6 +8,8 @@ package store
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,25 +24,18 @@ func NewClaimStore(pool *pgxpool.Pool) *ClaimStore {
 	return &ClaimStore{pool: pool}
 }
 
+func normalizeClaimDocPath(p string) string {
+	clean := filepath.ToSlash(strings.TrimSpace(p))
+	for _, marker := range []string{"/garuda/", "/garuda-validation/"} {
+		if idx := strings.Index(clean, marker); idx >= 0 {
+			return clean[idx+len(marker):]
+		}
+	}
+	return clean
+}
+
 // ResolveWorkspaceID returns the UUID of the named workspace, or the
 // most recently updated workspace for the tenant if name is empty.
-//
-// The empty-name case is the "no explicit choice" path: a caller that
-// does not know which workspace to use gets the most recently active
-// one. This matches the empty-name branch of the dashboard's
-// resolveWorkspaceID. It replaces the previous pattern where callers
-// defaulted to the literal string "default", which does not correspond
-// to any workspace row unless `garuda init` has seeded it.
-//
-// A non-empty name that does not match any workspace is an error. The
-// caller asked for something specific; silently returning zero rows
-// would be the same class of lie the workspace_id migration was
-// introduced to end.
-//
-// Every lookup is tenant-scoped. A fallback that drops the tenant
-// filter would allow a caller in tenant A to resolve a workspace
-// belonging to tenant B, which is the class of bug fixed in
-// resolveWorkspaceID at the api layer and in the tenant package.
 func ResolveWorkspaceID(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, name string) (uuid.UUID, error) {
 	var id uuid.UUID
 
@@ -69,7 +64,8 @@ func ResolveWorkspaceID(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.U
 	return id, nil
 }
 
-// SaveClaims clears existing claims for the target document path and persists the fresh batch atomically.
+// SaveClaims clears existing claims for the target document path (both relative and absolute forms)
+// and persists the fresh deduplicated batch atomically.
 func (s *ClaimStore) SaveClaims(ctx context.Context, claims []knowledge.ClaimIR) error {
 	if len(claims) == 0 {
 		return nil
@@ -81,39 +77,30 @@ func (s *ClaimStore) SaveClaims(ctx context.Context, claims []knowledge.ClaimIR)
 	}
 	defer tx.Rollback(ctx)
 
-	// Group by document path and extract scope metadata
 	docPaths := make(map[string]bool)
 	var tenantID uuid.UUID
 	var workspace string
 
-	for _, c := range claims {
-		docPaths[c.DocumentPath] = true
-		tenantID = c.TenantID
-		workspace = c.Workspace
+	for i := range claims {
+		claims[i].DocumentPath = normalizeClaimDocPath(claims[i].DocumentPath)
+		docPaths[claims[i].DocumentPath] = true
+		tenantID = claims[i].TenantID
+		workspace = claims[i].Workspace
 	}
 
-	// Resolve the workspace UUID once. Migration 075 made
-	// document_claims.workspace_id NOT NULL; every INSERT must carry
-	// it. The name is retained in the workspace column for display and
-	// for the transition period until every reader uses workspace_id.
-	//
-	// A workspace name that does not resolve is an error, not a silent
-	// default. The previous code would have inserted under a stale
-	// string and later returned zero rows to every reader.
 	workspaceID, err := ResolveWorkspaceID(ctx, s.pool, tenantID, workspace)
 	if err != nil {
 		return fmt.Errorf("resolve workspace %q: %w", workspace, err)
 	}
 
 	for path := range docPaths {
-		// Scoped by workspace_id. Migration 075 backfilled every row and
-		// set NOT NULL, so no NULL rows remain to fall back to.
+		base := filepath.Base(path)
 		_, err := tx.Exec(ctx, `
 			DELETE FROM document_claims 
 			WHERE tenant_id = $1
 			  AND workspace_id = $2
-			  AND document_path = $3
-		`, tenantID, workspaceID, path)
+			  AND (document_path = $3 OR document_path LIKE '%' || $3 OR document_path LIKE '%/' || $4)
+		`, tenantID, workspaceID, path, base)
 		if err != nil {
 			return fmt.Errorf("failed to clear old claims for %s: %w", path, err)
 		}
@@ -129,7 +116,14 @@ func (s *ClaimStore) SaveClaims(ctx context.Context, claims []knowledge.ClaimIR)
 		)
 	`
 
+	seenKey := make(map[string]bool)
 	for _, c := range claims {
+		dedupKey := strings.ToLower(fmt.Sprintf("%s|%s|%s|%s", c.Subject, c.Modality, c.Predicate, c.Object))
+		if seenKey[dedupKey] {
+			continue
+		}
+		seenKey[dedupKey] = true
+
 		_, err := tx.Exec(ctx, stmt,
 			c.ID,
 			c.Workspace,
@@ -158,13 +152,6 @@ func (s *ClaimStore) SaveClaims(ctx context.Context, claims []knowledge.ClaimIR)
 	return tx.Commit(ctx)
 }
 
-// GetClaimsByWorkspace resolves the workspace name to its UUID, then
-// returns every document claim scoped to that workspace.
-//
-// This function has no callers in the current tree. It is retained
-// because the resolution path it demonstrates is the pattern every
-// future reader should follow. Delete it if a future commit removes
-// it for hygiene.
 func (s *ClaimStore) GetClaimsByWorkspace(ctx context.Context, tenantID uuid.UUID, workspace string) ([]knowledge.ClaimIR, error) {
 	workspaceID, err := ResolveWorkspaceID(ctx, s.pool, tenantID, workspace)
 	if err != nil {

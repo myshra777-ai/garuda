@@ -241,6 +241,16 @@ func (bc *BuildContext) FormatReproduceCommand(workspaceName string) string {
 		cleanSHA := strings.TrimSuffix(bc.CommitShort, "-dirty")
 		parts = append(parts, fmt.Sprintf("--commit %s", cleanSHA))
 	}
+	if bc.WorktreeDirty {
+		parts = append(parts, "--worktree-dirty")
+		if bc.DirtyFilesHash != "" {
+			dh := bc.DirtyFilesHash
+			if len(dh) > 12 {
+				dh = dh[:12]
+			}
+			parts = append(parts, fmt.Sprintf("--dirty-tree-hash %s", dh))
+		}
+	}
 	parts = append(parts, fmt.Sprintf("--workspace %s", workspaceName))
 	return strings.Join(parts, " ")
 }
@@ -415,7 +425,7 @@ func extractTagsFromGOFLAGS(goFlags string) []string {
 		p := parts[i]
 		if strings.HasPrefix(p, "-tags=") || strings.HasPrefix(p, "--tags=") {
 			val := strings.SplitN(p, "=", 2)[1]
-			tags = append(tags, splitBuildTags( strings.Trim(val, `"'`) )...)
+			tags = append(tags, splitBuildTags(strings.Trim(val, `"'`))...)
 		} else if (p == "-tags" || p == "--tags") && i+1 < len(parts) {
 			tags = append(tags, splitBuildTags(strings.Trim(parts[i+1], `"'`))...)
 			i++

@@ -183,4 +183,3 @@ func Analyze(entities []analyzer.Entity, relationships []analyzer.Relationship) 
 	}
 	return report
 }
-
