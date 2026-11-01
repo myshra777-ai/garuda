@@ -1739,7 +1739,7 @@ func (s *MCPServer) handleToolsCall(req MCPRequest) MCPResponse {
 			reqWs, _ := args["workspace"].(string)
 			avail := []string{"default", "audit-sandbox"}
 			if s.store != nil && s.safePool() != nil {
-				if rows, qErr := s.safePool().Query(context.Background(), `SELECT name FROM workspaces ORDER BY name ASC LIMIT 25`); qErr == nil {
+				if rows, qErr := s.safePool().Query(context.Background(), `SELECT DISTINCT name FROM workspaces ORDER BY name ASC LIMIT 25`); qErr == nil {
 					var dbWs []string
 					for rows.Next() {
 						var wn string

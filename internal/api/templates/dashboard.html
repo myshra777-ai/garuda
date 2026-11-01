@@ -12,11 +12,11 @@
             <div class="brand-left"> <div class="brand-mark">G</div>
                 <div class="brand-text"> <div class="brand-name">GARUDA</div>
                     <div class="brand-subtitle">Software Intelligence v1.9.9</div></div> </div>
-            <button class="footer-link-btn" onclick="toggleTheme()" id="theme-toggle-btn" title="Switch Light / Graphite Dark Mode">☀</button> </div>
+            <div style="display:flex; gap:5px; align-items:center;"><button class="footer-link-btn" onclick="toggleTheme()" id="theme-toggle-btn" title="Switch Light / Graphite Dark Mode">☀</button><button type="button" class="sidebar-toggle-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Collapse Sidebar (⌘B)">«</button></div> </div>
         <div class="workspace-switcher-box"> <div class="workspace-mini">
                 <div class="workspace-mini-header"> <div class="workspace-mini-name" id="sidebar-workspace">{{ .WorkspaceName }}</div>
                     <span class="badge-pill success">synced</span> </div>
-                <div class="workspace-mini-meta" id="sidebar-meta">Loading workspace index...</div> <select id="workspace-picker" class="workspace-picker" onchange="switchWorkspace(this.value)" aria-label="Switch workspace"></select>
+                <div class="workspace-mini-meta" id="sidebar-meta">Loading workspace index...</div> <select id="workspace-picker" class="workspace-picker" onchange="switchWorkspace(this.value)" aria-label="Switch workspace"></select> <button type="button" class="ws-create-btn" onclick="openCreateWorkspaceModal()" title="Create a new workspace or index a repository from the Dashboard">+ New Workspace</button>
             </div></div> <button class="cmd-trigger-btn" onclick="openCommandPalette()">
             <span>⌕ Jump or run command…</span> <span class="kbd-chip">⌘K</span>
         </button> <nav class="sidebar-nav" aria-label="Primary Working Surfaces">
@@ -51,7 +51,7 @@
          
     <section class="main">
         <header class="topbar">
-            <div class="topbar-breadcrumbs"> <span class="crumb-root" style="cursor:pointer;" onclick="showView('workspace')">Workspace</span>
+            <div class="topbar-breadcrumbs"> <button type="button" class="sidebar-toggle-btn" id="topbar-sidebar-toggle" onclick="toggleSidebarCollapse()" title="Toggle Sidebar (⌘B)" style="margin-right:4px;">☰</button> <span class="crumb-root" style="cursor:pointer;" onclick="showView('workspace')">Workspace</span>
                 <span class="crumb-sep">/</span> <span class="crumb-ws" id="workspace-breadcrumb">{{ .WorkspaceName }}</span>
                 <span class="crumb-sep">/</span> <span class="crumb-surface" id="topbar-surface-name">00 — About Garuda</span>
             </div> <div class="global-search">
@@ -59,7 +59,7 @@
                 <span class="search-shortcut" style="cursor:pointer;" onclick="openCommandPalette()">⌘K</span> </div>
             <div class="topbar-right"> <div class="live-pill" id="honest-system-pill" style="cursor:pointer;" onclick="showView('talon')" title="Click to inspect Talon &amp; Risk Hub">
                     <span class="live-dot" id="honest-system-dot"></span> <span id="honest-system-text">Static AST synced</span>
-                </div> <button class="btn-primary" style="height:30px; font-size:11.5px;" onclick="openIngestRepoModal()">🔗 + Index Repo URL</button> <button class="btn-secondary" onclick="openIngestDocModal()">+ Ingest Doc / Rule</button>
+                </div> <button class="btn-secondary" style="height:30px; font-size:11.5px;" onclick="openCreateWorkspaceModal()">✦ + New Workspace</button> <button class="btn-primary" style="height:30px; font-size:11.5px;" onclick="openIngestRepoModal()">🔗 + Index Repo URL</button> <button class="btn-secondary" onclick="openIngestDocModal()">+ Ingest Doc / Rule</button>
                 <button class="refresh-button" onclick="refreshAllWithToast()">↻ Refresh</button> </div>
         </header> <nav class="tab-strip" role="tablist">
             <button class="tab active" data-tab="about" role="tab" aria-selected="true" onclick="showView('about')">00 About Garuda</button> <button class="tab" data-tab="workspace" role="tab" aria-selected="false" onclick="showView('workspace')">01 Overview</button> <button class="tab" data-tab="search" role="tab" aria-selected="false" onclick="showView('search')">02 Explore</button>
@@ -109,7 +109,7 @@
                         Garuda unifies compiler ASTs, architectural decision records, multi-team formula weights, and fail-closed AI coding guardrails into one cryptographically anchored truth graph.
                     </p>
                     <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                        <button type="button" class="about-cta-dark" onclick="showView('workspace')">Enter Command Center →</button>
+                        <button type="button" class="about-cta-dark" onclick="showView('workspace')">Enter Command Center →</button> <button type="button" class="about-cta-light" onclick="openCreateWorkspaceModal()">✦ + Create New Workspace</button>
                         <button type="button" class="about-cta-light" onclick="copyAboutCommand('./setup.sh', this)">📋 Copy 1-Line Setup Command</button>
                         <button type="button" class="about-cta-light" onclick="scrollToAboutSection('about-features')">Read Feature Guide ↓</button>
                     </div>
@@ -1368,18 +1368,28 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <div>
                 <div class="wb-pane-kicker">ZERO-CLI REPOSITORY ONBOARDING</div>
-                <h2 style="margin:2px 0 0; font-size:17px; font-weight:700;">Index Repository via GitHub URL or Local Path</h2>
+                <h2 style="margin:2px 0 0; font-size:18px; font-weight:600; font-family:var(--font-serif);" id="ingest-repo-modal-title">Create Workspace &amp; Index Repository (Zero-CLI Studio)</h2>
             </div>
             <button class="drawer-close" onclick="closeIngestRepoModal()">×</button>
         </div>
         <p style="color:var(--text-2); font-size:12.5px; margin:0 0 12px;">
             Paste any GitHub / Git repository link (e.g., <code>https://github.com/myshra777-ai/garuda</code>) or local directory path. Garuda clones the repo, extracts its AST call graph, evaluates ADRs &amp; YAML policies, and seals an RFC 6962 receipt automatically.
         </p>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+            <span style="font-size:11px; color:var(--muted); align-self:center;">Workspace Presets:</span>
+            <button type="button" class="hint" onclick="fillWorkspaceNamePreset('demo-live')">demo-live</button>
+            <button type="button" class="hint" onclick="fillWorkspaceNamePreset('payments-v2')">payments-v2</button>
+            <button type="button" class="hint" onclick="fillWorkspaceNamePreset('chi-router')">chi-router</button>
+            <button type="button" class="hint" onclick="fillWorkspaceNamePreset('cobra-cli')">cobra-cli</button>
+            <button type="button" class="hint" onclick="fillWorkspaceNamePreset('audit-sandbox')">audit-sandbox</button>
+        </div>
         <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">
-            <span style="font-size:11px; color:var(--muted); align-self:center;">Quick Presets:</span>
+            <span style="font-size:11px; color:var(--muted); align-self:center;">Repo / Path Presets:</span>
+            <button type="button" class="hint" onclick="fillRepoPreset('.', '')">. (Current Repo)</button>
+            <button type="button" class="hint" onclick="fillRepoPreset('~/garuda-validation/go/chi', '')">~/garuda-validation/go/chi</button>
+            <button type="button" class="hint" onclick="fillRepoPreset('~/garuda-validation/go/cobra', '')">~/garuda-validation/go/cobra</button>
             <button type="button" class="hint" onclick="fillRepoPreset('https://github.com/myshra777-ai/garuda', '')">myshra777-ai/garuda</button>
-            <button type="button" class="hint" onclick="fillRepoPreset('https://github.com/go-chi/chi', '')">go-chi/chi</button>
-            <button type="button" class="hint" onclick="fillRepoPreset('https://github.com/spf13/cobra', '')">spf13/cobra</button>
+            <button type="button" class="hint" onclick="fillRepoPreset('', '')">Empty Workspace (No Repo)</button>
         </div>
         <div class="form-field">
             <label class="form-label" for="ingest-repo-url">Repository Git URL or Local Path</label>
@@ -1402,9 +1412,12 @@
             </div>
             <div class="pulse-bar-track"><div id="ingest-repo-bar" style="background:var(--accent-emerald); width:35%; transition:width 260ms ease;"></div></div>
         </div>
-        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
-            <button type="button" class="btn-secondary" onclick="closeIngestRepoModal()">Cancel</button>
-            <button type="button" class="btn-primary" id="ingest-repo-submit-btn" onclick="submitIngestRepo()">🚀 Clone &amp; Index into Garuda →</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:16px; flex-wrap:wrap;">
+            <button type="button" class="btn-secondary" onclick="submitCreateEmptyWorkspace()">✨ Create Empty Workspace &amp; Switch</button>
+            <div style="display:flex; gap:8px;">
+                <button type="button" class="btn-secondary" onclick="closeIngestRepoModal()">Cancel</button>
+                <button type="button" class="btn-primary" id="ingest-repo-submit-btn" onclick="submitIngestRepo()">🚀 Create Workspace &amp; Index Repo →</button>
+            </div>
         </div>
     </div>
 </div>

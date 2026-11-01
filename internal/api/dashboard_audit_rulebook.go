@@ -830,9 +830,11 @@ func (s *Server) HandleDashboardRepoIngest(w http.ResponseWriter, r *http.Reques
 	}
 
 	var body struct {
-		RepoURL   string `json:"repo_url"`
-		Workspace string `json:"workspace"`
-		Branch    string `json:"branch"`
+		RepoURL     string `json:"repo_url"`
+		Workspace   string `json:"workspace"`
+		Description string `json:"description"`
+		Branch      string `json:"branch"`
+		CreateOnly  bool   `json:"create_only"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
@@ -846,12 +848,55 @@ func (s *Server) HandleDashboardRepoIngest(w http.ResponseWriter, r *http.Reques
 	if wsName == "" {
 		wsName = "default"
 	}
-	if repoURL == "" {
+
+	// Ensure the target workspace and workspace_members rows exist in PostgreSQL
+	// so the user can immediately switch to it in the Dashboard Workspace Picker.
+	if pgStore != nil && pgStore.Pool() != nil {
+		if tenantID == uuid.Nil {
+			tenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		}
+		_, _ = pgStore.Pool().Exec(ctx, `
+			INSERT INTO tenants (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING
+		`, tenantID, "tenant-"+tenantID.String()[:8])
+		wsDesc := strings.TrimSpace(body.Description)
+		if wsDesc == "" {
+			wsDesc = "Workspace created via Garuda Dashboard"
+		}
+		derivedID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(tenantID.String()+":workspace:"+strings.ToLower(wsName)))
+		_ = pgStore.Pool().QueryRow(ctx, `
+			INSERT INTO workspaces (id, tenant_id, name, description)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (tenant_id, name) DO UPDATE SET updated_at = NOW()
+			RETURNING id
+		`, derivedID, tenantID, wsName, wsDesc).Scan(&workspaceID)
+		if workspaceID == uuid.Nil {
+			workspaceID = derivedID
+		}
+		if sess, ok := SessionFromContext(ctx); ok && sess.UserID != "" {
+			_, _ = pgStore.Pool().Exec(ctx, `
+				INSERT INTO workspace_members (user_id, workspace_id, role, created_at)
+				VALUES ($1, $2, 'owner', NOW())
+				ON CONFLICT (user_id, workspace_id) DO NOTHING
+			`, sess.UserID, workspaceID)
+		}
+		_, _ = pgStore.Pool().Exec(ctx, `
+			INSERT INTO workspace_members (user_id, workspace_id, role, created_at)
+			SELECT u.id, $1, 'owner', NOW() FROM users u
+			ON CONFLICT (user_id, workspace_id) DO NOTHING
+		`, workspaceID)
+	}
+
+	if repoURL == "" || body.CreateOnly {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "error",
-			"reason": "repo_url is required (e.g. https://github.com/myshra777-ai/garuda)",
+			"status":                "created",
+			"workspace":             wsName,
+			"workspace_id":          workspaceID.String(),
+			"repositories_indexed":  0,
+			"entities_indexed":      0,
+			"packages_indexed":      0,
+			"relationships_indexed": 0,
+			"indexed_at":            time.Now().UTC().Format(time.RFC3339),
 		})
 		return
 	}

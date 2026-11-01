@@ -88,17 +88,21 @@ func (s *MCPServer) resolveTenantAndWorkspace(args map[string]interface{}) (uuid
 		return tenantID, derivedWsID, nil
 	}
 	workspaceID, err := store.ResolveWorkspaceID(context.Background(), s.safePool(), tenantID, workspaceName)
-	if err != nil && strings.EqualFold(workspaceName, "audit-sandbox") {
-		sbID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(tenantID.String()+":workspace:audit-sandbox"))
+	if err != nil && (workspaceName == "" || strings.EqualFold(workspaceName, "default") || strings.EqualFold(workspaceName, "audit-sandbox")) {
+		targetWs := strings.ToLower(strings.TrimSpace(workspaceName))
+		if targetWs == "" {
+			targetWs = "default"
+		}
+		sbID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(tenantID.String()+":workspace:"+targetWs))
 		_, _ = s.safePool().Exec(context.Background(), `
 			INSERT INTO tenants (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING
 		`, tenantID, "tenant-"+tenantID.String()[:8])
 		_ = s.safePool().QueryRow(context.Background(), `
 			INSERT INTO workspaces (id, tenant_id, name, description)
-			VALUES ($1, $2, 'audit-sandbox', 'Isolated evaluation & write-test sandbox workspace')
+			VALUES ($1, $2, $3, 'Auto-provisioned canonical workspace')
 			ON CONFLICT (tenant_id, name) DO UPDATE SET name = EXCLUDED.name
 			RETURNING id
-		`, sbID, tenantID).Scan(&sbID)
+		`, sbID, tenantID, targetWs).Scan(&sbID)
 		if sbID != uuid.Nil {
 			return tenantID, sbID, nil
 		}

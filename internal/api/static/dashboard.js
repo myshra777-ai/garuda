@@ -900,6 +900,7 @@ function refreshAllWithToast() {
 }
 
 function initTheme() {
+    initSidebarCollapseState();
     var saved = "light";
     try { saved = localStorage.getItem("garuda_theme") || "light"; } catch (e) {}
     document.documentElement.setAttribute("data-theme", saved);
@@ -5185,6 +5186,115 @@ function copyRulebookMarkdown() {
 /* ============================================================================
    ZERO-CLI REPOSITORY URL ONBOARDING (+ INDEX REPO URL MODAL)
    ============================================================================ */
+
+/* ============================================================================
+   COLLAPSIBLE SIDEBAR (⌘B / CTRL+B) & NEW WORKSPACE CREATOR STUDIO
+   ============================================================================ */
+function initSidebarCollapseState() {
+    var collapsed = false;
+    try { collapsed = localStorage.getItem("garuda_sidebar_collapsed") === "true"; } catch (e) {}
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    var btn = document.getElementById("sidebar-collapse-btn");
+    if (btn) btn.textContent = collapsed ? "»" : "«";
+}
+
+function toggleSidebarCollapse() {
+    var isCollapsed = document.body.classList.toggle("sidebar-collapsed");
+    try { localStorage.setItem("garuda_sidebar_collapsed", isCollapsed ? "true" : "false"); } catch (e) {}
+    var btn = document.getElementById("sidebar-collapse-btn");
+    if (btn) btn.textContent = isCollapsed ? "»" : "«";
+    showToast(isCollapsed ? "Sidebar collapsed (press ⌘B or click ☰ to expand)" : "Sidebar expanded");
+    setTimeout(function() {
+        if (state.currentView === "graph") fitGraph();
+        if (state.currentView === "docsgraph") fitDocsGraph();
+        if (state.currentView === "agents" && typeof renderAgentNeuralGraph === "function") renderAgentNeuralGraph();
+    }, 280);
+}
+
+window.addEventListener("keydown", function(e) {
+    if ((e.metaKey || e.ctrlKey) && (e.key === "b" || e.key === "B")) {
+        e.preventDefault();
+        toggleSidebarCollapse();
+    }
+});
+
+function fillWorkspaceNamePreset(wsName) {
+    var wsEl = document.getElementById("ingest-repo-workspace");
+    if (wsEl) {
+        wsEl.value = wsName;
+        wsEl.focus();
+    }
+}
+
+function openCreateWorkspaceModal() {
+    var modal = document.getElementById("ingest-repo-modal");
+    if (!modal) return;
+    modal.classList.add("open");
+    var titleEl = document.getElementById("ingest-repo-modal-title");
+    if (titleEl) titleEl.textContent = "Create New Workspace & Optional Repo Index";
+    var wsInput = document.getElementById("ingest-repo-workspace");
+    if (wsInput) {
+        wsInput.value = "demo-" + Math.floor(100 + Math.random() * 900);
+        setTimeout(function() { wsInput.focus(); wsInput.select(); }, 60);
+    }
+    var prog = document.getElementById("ingest-repo-progress");
+    if (prog) prog.style.display = "none";
+}
+
+function registerAndSwitchWorkspaceInUI(targetWs) {
+    if (!targetWs) return;
+    WORKSPACE = targetWs;
+    var sel = document.getElementById("workspace-picker");
+    if (sel) {
+        var found = false;
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === targetWs) {
+                sel.selectedIndex = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            var opt = document.createElement("option");
+            opt.value = targetWs;
+            opt.textContent = targetWs + " (owner)";
+            opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
+    setText("sidebar-workspace", targetWs);
+    setText("workspace-breadcrumb", targetWs);
+    setText("repo-list-ws", targetWs);
+    try {
+        var params = new URLSearchParams(window.location.search);
+        params.set("workspace", targetWs);
+        history.pushState({ tab: state.currentView, workspace: targetWs }, "", window.location.pathname + "?" + params.toString());
+    } catch (e) {}
+}
+
+function submitCreateEmptyWorkspace() {
+    var wsEl = document.getElementById("ingest-repo-workspace");
+    var targetWs = (wsEl && wsEl.value || "").trim();
+    if (!targetWs) {
+        showToast("Please enter a name for the new workspace.");
+        if (wsEl) wsEl.focus();
+        return;
+    }
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/v1/dashboard/repo-ingest?workspace=" + encodeURIComponent(targetWs), true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState !== 4) return;
+        closeIngestRepoModal();
+        registerAndSwitchWorkspaceInUI(targetWs);
+        showToast("✨ Created & switched to workspace '" + targetWs + "'!");
+        loadWorkspacePicker();
+        loadAll();
+    };
+    xhr.send(JSON.stringify({ workspace: targetWs, repo_url: "", create_only: true }));
+}
+
 function openIngestRepoModal() {
     var modal = document.getElementById("ingest-repo-modal");
     if (!modal) return;
@@ -5222,7 +5332,7 @@ function submitIngestRepo() {
     var branch = (brEl && brEl.value || "").trim();
 
     if (!repoURL) {
-        showToast("Please enter a GitHub / Git repository URL or local directory path.");
+        submitCreateEmptyWorkspace();
         return;
     }
 
@@ -5271,6 +5381,8 @@ function submitIngestRepo() {
 
         setTimeout(function() {
             closeIngestRepoModal();
+            registerAndSwitchWorkspaceInUI(targetWs);
+            loadWorkspacePicker();
             showToast("🦅 Indexed repository " + (slug || repoURL) + " into workspace '" + targetWs + "'!");
             loadAll();
         }, 420);

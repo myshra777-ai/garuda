@@ -8,7 +8,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -1327,10 +1329,8 @@ func (s *Server) HandleDashboardTalonHub(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 
 	pgStore, ok := s.store.(*store.PostgresStore)
-	if !ok || pgStore == nil {
-		resp := s.buildTalonHubResponse(ctx, nil, uuid.Nil, uuid.Nil, "default")
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+	if !ok || pgStore == nil || pgStore.Pool() == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "talon hub requires active postgres store", nil)
 		return
 	}
 
@@ -1353,20 +1353,43 @@ func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 
 	var req TalonCheckRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if r.Body == nil {
+		writeJSONError(w, http.StatusBadRequest, "request body is required", nil)
+		return
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON payload", map[string]any{"detail": err.Error()})
+		return
+	}
 
-	pgStore, _ := s.store.(*store.PostgresStore)
+	action := strings.TrimSpace(req.Action)
+	if action == "" {
+		action = "run_guard"
+	}
+	switch action {
+	case "run_guard", "pre_edit_brief", "install_hooks", "simulate_violation", "matrix_check", "simulate_drift":
+	default:
+		writeJSONError(w, http.StatusBadRequest, "unsupported talon check action: "+req.Action, nil)
+		return
+	}
+
+	pgStore, ok := s.store.(*store.PostgresStore)
+	if !ok || pgStore == nil || pgStore.Pool() == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "talon check requires active postgres store", nil)
+		return
+	}
+
 	var tenantID, workspaceID uuid.UUID
 	workspaceName := strings.TrimSpace(req.Workspace)
 	if workspaceName == "" {
 		workspaceName = strings.TrimSpace(r.URL.Query().Get("workspace"))
 	}
-	if pgStore != nil {
-		if scope, err := workspaceScopeFromRequest(ctx, r, pgStore); err == nil {
-			tenantID = scope.TenantID
-			workspaceID = scope.WorkspaceID
-			workspaceName = scope.WorkspaceName
-		}
+	if scope, err := workspaceScopeFromRequest(ctx, r, pgStore); err == nil {
+		tenantID = scope.TenantID
+		workspaceID = scope.WorkspaceID
+		workspaceName = scope.WorkspaceName
 	}
 	if workspaceName == "" {
 		workspaceName = "default"
@@ -1375,7 +1398,7 @@ func (s *Server) HandleDashboardTalonCheck(w http.ResponseWriter, r *http.Reques
 	repoRoot := resolveRepoRoot()
 	policyDir := filepath.Join(repoRoot, "policies")
 
-	switch req.Action {
+	switch action {
 	case "install_hooks":
 		var contract *talon.WorkspaceContract
 		if pgStore != nil && pgStore.Pool() != nil {
