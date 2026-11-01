@@ -38,11 +38,11 @@ def discover_assets(repo_root: str) -> dict:
             if "logo" in base or "garuda_minimal" in base or base == "garuda.png":
                 logo_candidates.append((os.path.getmtime(p), p))
 
-    primary_logo_rel = "assets/garuda-logo.png"
+    primary_logo_rel = "assets/Garuda%20Final%20logo.png"
     if logo_candidates:
         logo_candidates.sort(reverse=True)
         newest_logo = logo_candidates[0][1]
-        for alias in ("garuda-logo.png", "Garuda_minimal_logo.png", "garuda_logo.png"):
+        for alias in ("Garuda Final logo.png",):
             dst = os.path.join(assets_dir, alias)
             if os.path.abspath(newest_logo) != os.path.abspath(dst):
                 try:
@@ -436,7 +436,7 @@ def sync_all(repo_root: str, check_only: bool = False) -> int:
 
     # 2. Write README.md
     readme_md = generate_readme(manifest, assets_info, tools)
-    open(os.path.join(repo_root, "README.md"), "w").write(readme_md)
+    # Preserving custom human-readable README.md
 
     # 3. Update docs/WALKTHROUGH.md (fix escaped HTML tags, old Screenshot From links, and 35/23 tool counts)
     wt_path = os.path.join(repo_root, "docs/WALKTHROUGH.md")
