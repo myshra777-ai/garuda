@@ -806,20 +806,6 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 			"limit_used":     limit,
 		}, nil
 	}
-	if s.store == nil || s.safePool() == nil {
-		return map[string]interface{}{
-			"tenant_id":      tenantID.String(),
-			"workspace_id":   workspaceID.String(),
-			"workspace_name": workspaceName,
-			"count":          0,
-			"returned_count": 0,
-			"total_count":    0,
-			"truncated":      false,
-			"results":        []interface{}{},
-			"entities":       []interface{}{},
-			"limit_used":     limit,
-		}, nil
-	}
 	var totalCount int
 	_ = s.safePool().QueryRow(ctx, "SELECT COUNT(*)::int FROM entities e"+whereClause, dbArgs...).Scan(&totalCount)
 

@@ -78,6 +78,34 @@ All counts, versions, and tool definitions across Garuda's binaries and document
 | **Idempotent PostgreSQL Migrations** | **`95`** (`001`–`095_data_logic_audit_ledger_and_hygiene.sql`) | `migrations/` |
 | **Graph-Native YAML Policy Predicates** | **`9` predicates** | `internal/policy/` |
 
+
+### The Four-Tier Document-to-Code Governance Graph (`garuda.docs_graph` & Surface `04`)
+
+Garuda connects four layers of an engineering organization into one inspectable document-to-code governance graph:
+
+| Governance Tier | Layer | What It Connects |
+| :--- | :--- | :--- |
+| **Tier 1 — Organizational Intent** | ADRs, Specs, Invariants & YAML Policies | `docs/adr/*.md`, `docs/specs/*.md`, `policies/*.yaml`, `.garudarules` |
+| **Tier 2 — Extracted Normative Rules** | `MUST`, `MUST_NOT`, `BLOCK`, `REVIEW`, `DENY` | Collision-free SHA-256 component nodes extracted from documents |
+| **Tier 3 — Executable Governance** | Active YAML Policies & Talon Guardrails | Compiled `.garuda/TALON_CONTRACT.md` & deterministic policy verdicts |
+| **Tier 4 — Actual Software (AST)** | Indexed Functions, Methods & Packages | Go (`go/types`), Python AST, and TypeScript AST entities & call edges |
+
+> **Link Provenance Transparency**: Every document-to-code link returned by `garuda.docs_graph` and `/api/v1/dashboard/docs-graph` carries an explicit `match_method` (`"ast_exact"`, `"package_or_keyword_match"`, or `"fallback_unindexed_preview"`) and `graph_source_mode` (`"live_indexed_ast"` vs. `"fallback_preview_unindexed"`), distinguishing compiler-resolved AST links from keyword/package rules and unindexed workspace previews.
+
+### Multi-Agent Coordination & Operational Continuity Layer
+
+Garuda understands the work of agents, not just their code—preserving shared operational context as tasks move across concurrent AI coding agents:
+
+| Capability | Implementation Surface | What It Enables |
+| :--- | :--- | :--- |
+| **MCP Session Tracking** | `cmd/garuda-mcp/session_tracking.go` | Identifies connected MCP clients/agents, active activity, and session duration. |
+| **Tool Execution Telemetry** | `cmd/garuda-mcp/telemetry.go` | Records tool names, execution latency, success/error counts, and whitelist-filtered arguments (`filterArgs`). |
+| **Agent-Specific Briefings** | `garuda.briefing` / `garuda.preflight_bundle` | Tracks when an agent was last briefed and reports workspace deltas since that watermark. |
+| **Task Checkpoints** | `garuda.create_task` / `checkpoints` | Persists structured execution context and scope metadata for a task UUID. |
+| **Serializable Atomic Handoffs** | `garuda.handoff` (`internal/store/handoff_store.go`) | Locks and validates agents and task ownership inside a serializable transaction, saves a checkpoint, transfers ownership, and fails closed on unknown task UUIDs. |
+| **Checkpoint Resume** | `garuda.resume` | Restores saved checkpoint state for the receiving agent and marks the checkpoint consumed. |
+| **Decision Lineage** | `garuda.propose_decision` & Surface `§` | Makes MADR architectural and formula decisions and their supersession chain inspectable. |
+
 ### Strict Separation of Evaluation Tiers (Fixtures vs. Simulations vs. Live AST/LLM)
 
 Garuda strictly separates **compiler benchmark fixtures**, **synthetic fault-injection simulations**, and **live production repository / LLM agent results** so benchmark or demo data never pollutes live workspace queries:
@@ -105,35 +133,35 @@ Displays **1 Hero System Integrity Card** (`ALLOW` / `BLOCK`) + **3 clickable co
 Search repositories, packages, functions, methods, structs, and interfaces with instant signature preview and 1-hop neighborhood actions.
 
 <p align="center">
-  <img src="assets/screenshots/EXPLORE_INDEX.png" width="100%" alt="Surface 02 — Garuda Semantic Codebase Explorer">
+  <img src="assets/screenshots/global_search.png" width="100%" alt="Surface 02 — Garuda Semantic Codebase Explorer">
 </p>
 
 ### `03` — Architecture Map: Full-Viewport Neighborhood & AST Graph
 Explores 1-hop and 2-hop symbol neighborhoods (`Callers → Symbol → Dependencies`) on an interactive D3 canvas (`74vh+`) with a collapsible depth/edge filter bar and synchronized entity inspector.
 
 <p align="center">
-  <img src="assets/screenshots/ARCHITECTURE_MAP_GRAPH_VIEW.png" width="100%" alt="Surface 03 — Garuda Architecture Map & Neighborhood Graph">
+  <img src="assets/screenshots/top_level_repo_architecture.png" width="100%" alt="Surface 03 — Garuda Architecture Map & Neighborhood Graph">
 </p>
 
 ### `04` — Docs & Rules Graph: 4-Tab Progressive Lineage & Base Rulebook Studio
 Switches cleanly between **01 · Interactive 4-Tier Graph** (`Document → Rule → Policy → Code`), **02 · Base Rulebook Studio** (`.garuda/APPROVED_BASE_RULEBOOK.md`), **03 · Ingested Documents**, and **04 · Extracted Rules Matrix**.
 
 <p align="center">
-  <img src="assets/screenshots/DOCS_SPECS_AND_BASE_RULEBOOK_GRAPH.png" width="100%" alt="Surface 04 — Garuda Docs, Rules & Repository Topology">
+  <img src="assets/screenshots/repository-topology.png" width="100%" alt="Surface 04 — Garuda Docs, Rules & Repository Topology">
 </p>
 
 ### `05` — Talon & Risk Hub: Active AI Agent Guardrails (`3` Sub-Tabs)
 Organizes AI agent governance into **01 · Live Enforcement Gate & Hooks** (6 IDE/Git hooks + self-repair simulator), **02 · Risk Hub Leaderboard & Surface Criticality**, and **03 · Deterministic Build Matrix & Receipt**.
 
 <p align="center">
-  <img src="assets/screenshots/GARUDA_TALON_AND_RISKHUB_BLOCKSTIMULATION.png" width="100%" alt="Surface 05 — Garuda Talon & Workspace Clusters">
+  <img src="assets/screenshots/workspace-clusters-graph.png" width="100%" alt="Surface 05 — Garuda Talon & Workspace Clusters">
 </p>
 
 ### `06` — Change Review Workbench (`3`-Pane Pre-Merge Simulator)
 Inspect any symbol or git diff across three balanced cards: **01 · Change Context**, **02 · Blast-Radius Impact Map**, and **03 · 3-Plane Verification & Decision Record**.
 
 <p align="center">
-  <img src="assets/screenshots/CHANGE_REVIEW_WORKBENCH.png" width="100%" alt="Surface 06 — Garuda Cross-Repo & Change Review Impact Graph">
+  <img src="assets/screenshots/cross-repo-graph.png" width="100%" alt="Surface 06 — Garuda Cross-Repo & Change Review Impact Graph">
 </p>
 
 ### `07` — Evidence & Ledger, `08` — Agents, `09` — Data & Logic Audit, `§` — Decision Lineage
@@ -143,11 +171,11 @@ Inspect any symbol or git diff across three balanced cards: **01 · Change Conte
 - **`§ — Decision Lineage`**: MADR-compatible Architectural Decision Records and supersession chains.
 
 <p align="center">
-  <img src="assets/screenshots/AUDIT_LOG_AND_EPISEMENTIC_EVIDENCE.png" width="100%" alt="Surface 07 — Garuda Evidence & Cryptographic Trust Ledger">
+  <img src="assets/screenshots/evidence-cryptographic-trust.png" width="100%" alt="Surface 07 — Garuda Evidence & Cryptographic Trust Ledger">
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/ide-contradictions.png" width="100%" alt="Surface 09 — Garuda Multi-Repo Contradictions & Data/Logic Audit">
+  <img src="assets/screenshots/dashboard-14repo-contradictions.png" width="100%" alt="Surface 09 — Garuda Multi-Repo Contradictions & Data/Logic Audit">
 </p>
 
 ### VS Code & Cursor IDE Extension (`vscode-extension/`)
@@ -160,15 +188,7 @@ Inspect any symbol or git diff across three balanced cards: **01 · Change Conte
 
 | View & Asset Path | Preview |
 | :--- | :--- |
-| **Adr Graph** (`assets/screenshots/ADR_GRAPH.png`) | <img src="assets/screenshots/ADR_GRAPH.png" width="420" alt="Adr Graph"> |
-| **Agent Activity Andsession Timeline Graph** (`assets/screenshots/AGENT_ACTIVITY_ANDSESSION_TIMELINE_GRAPH.png`) | <img src="assets/screenshots/AGENT_ACTIVITY_ANDSESSION_TIMELINE_GRAPH.png" width="420" alt="Agent Activity Andsession Timeline Graph"> |
-| **Data And Logic** (`assets/screenshots/DATA_AND_LOGIC.png`) | <img src="assets/screenshots/DATA_AND_LOGIC.png" width="420" alt="Data And Logic"> |
-| **Dual Pillar Data And Logic** (`assets/screenshots/DUAL_PILLAR_DATA_AND_LOGIC.png`) | <img src="assets/screenshots/DUAL_PILLAR_DATA_AND_LOGIC.png" width="420" alt="Dual Pillar Data And Logic"> |
-| **Ingest Adr Specs Docs And Gaurdrails Graph** (`assets/screenshots/INGEST_ADR_SPECS_DOCS_AND_GAURDRAILS_GRAPH.png`) | <img src="assets/screenshots/INGEST_ADR_SPECS_DOCS_AND_GAURDRAILS_GRAPH.png" width="420" alt="Ingest Adr Specs Docs And Gaurdrails Graph"> |
-| **Ingest Repo** (`assets/screenshots/INGEST_REPO.png`) | <img src="assets/screenshots/INGEST_REPO.png" width="420" alt="Ingest Repo"> |
-| **Specs And Invarients Graph** (`assets/screenshots/SPECS_AND_INVARIENTS_GRAPH.png`) | <img src="assets/screenshots/SPECS_AND_INVARIENTS_GRAPH.png" width="420" alt="Specs And Invarients Graph"> |
-| **Yaml Poly Graph** (`assets/screenshots/YAML_POLY_GRAPH.png`) | <img src="assets/screenshots/YAML_POLY_GRAPH.png" width="420" alt="Yaml Poly Graph"> |
-| **Docs Adr Specs And Gaurdrails Graph** (`assets/screenshots/docs_ADR_SPECS_AND_GAURDRAILS_GRAPH.png`) | <img src="assets/screenshots/docs_ADR_SPECS_AND_GAURDRAILS_GRAPH.png" width="420" alt="Docs Adr Specs And Gaurdrails Graph"> |
+| **Top Level Repo Graph** (`assets/screenshots/top-level-repo-graph.png`) | <img src="assets/screenshots/top-level-repo-graph.png" width="420" alt="Top Level Repo Graph"> |
 
 ---
 

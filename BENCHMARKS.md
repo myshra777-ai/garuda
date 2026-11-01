@@ -1,80 +1,75 @@
-# Token Telemetry from a Single Paired Codex CLI Run: A Pilot Study
+# Garuda (`v1.9.9`) — Architecture, Agent Continuity, Distribution & Three-Tier Benchmark Report
 
-Status: pilot. One valid paired run. Not a benchmark result.
+Garuda (`v1.9.9`) has evolved from a local developer analyzer into a **distributable engineering governance and multi-agent continuity platform**. All counts, versions, and verification gates in this report are synchronized with [`capabilities.json`](capabilities.json), [`internal/version/manifest.go`](internal/version/manifest.go), and [`EVIDENCE.md`](EVIDENCE.md) via `python3 scripts/sync_docs_from_manifest.py --check`.
 
-## 1. Abstract
+---
 
-We ran one paired trial of Codex CLI answering a 3-hop question about the `SQLModel` class in a Python repository (sqlmodel), once without Garuda and once with Garuda's blast-radius tool available. Nine of ten planned trials per arm produced no data, most likely because of API rate limits. The single valid pair does not support a conclusion. The raw arm used one tool call and reported 170 function entities, which the Garuda output does not support. The Garuda arm used two tool calls and reported 27 function entities, with two call chains. Total tokens were 1,399,216 for the raw arm and 109,282 for the Garuda arm. The raw arm's cached-input count (1,304,320) and the Garuda arm's (83,968) reflect different cache states, so the difference cannot be attributed to the tool. We report this as a pilot to motivate a controlled study with a verified no-tool control, repeated trials, and blind scoring.
+## 1. The Four-Tier Document-to-Code Governance Graph (`garuda.docs_graph` & Surface `04`)
 
-## 2. Methodology
+Garuda connects four distinct layers of a software organization into a single inspectable document-to-code governance graph:
 
-**Task.** Answer: how many function entities are reachable from `SQLModel` within three hops, with call chains.
+| Tier | Layer | Artifacts & Entities Connected |
+| :--- | :--- | :--- |
+| **Tier 1** | **Organizational Intent** | ADRs (`docs/adr/*.md`), design specifications (`docs/specs/*.md`), invariants, declarative YAML policies (`policies/*.yaml`), and repository guardrails (`.garudarules`). |
+| **Tier 2** | **Extracted Rules** | Normative requirements (`MUST`, `MUST_NOT`, `BLOCK`, `REVIEW`, `DENY`) with collision-free SHA-256 component identifiers. |
+| **Tier 3** | **Executable Governance** | Active YAML policy predicates, compiled **Garuda Talon** contracts (`.garuda/TALON_CONTRACT.md`), and enforcement decisions (`ALLOW`, `WARN`, `REVIEW`, `BLOCK`). |
+| **Tier 4** | **Actual Software (AST)** | Indexed Go (`go/types`), Python AST, and TypeScript AST functions, methods, structs, packages, and call/import edges. |
 
-**Environment.** Codex CLI `exec`, ephemeral sessions, local checkout of the sqlmodel repository. Model identity was not recorded in the telemetry, so it is unverified across arms.
+### Explicit Link-Provenance Qualification
+Every document-to-code link returned by `/api/v1/dashboard/docs-graph` and MCP tool `garuda.docs_graph` includes explicit provenance metadata:
+- `graph_source_mode`: `"live_indexed_ast"` when the workspace has indexed AST entities in PostgreSQL, or `"fallback_preview_unindexed"` / `"policy_and_claims_unindexed"` when operating on an unindexed workspace.
+- `match_method`: Distinguishes `"ast_exact"` (exact symbol/package resolution) from `"package_or_keyword_match"` (heuristic keyword/package matching), `"document_claim_extracted"`, `"policy_enforced_entrypoint"`, and `"fallback_unindexed_preview"`.
 
-**Arms.**
-- *Raw:* the question only. Repository rules were not confirmed to be disabled in the run that produced the telemetry. The raw run's tool usage (1 call) shows tools were available.
-- *Garuda:* the question plus an instruction to call `garuda.blast_radius` at depth 3 before answering. This arm used 2 tool calls.
+---
 
-**Measurement.** Token counts come from the final usage record in each run's JSON event stream: uncached input, cached input, output, and reasoning output. Total is the sum reported by the harness. Tool and search calls were counted per run.
+## 2. Multi-Agent Coordination & Operational Continuity Layer
 
-**Trials.** A script ran 10 trials per arm. Trials 2–10 in the raw arm and trials 2–10 in the Garuda arm returned zero telemetry, consistent with API rate-limit failures. Only trial 1 of each arm produced data. Failed trials are reported as failures, not omitted from the count of attempts.
+Garuda understands the work of agents, not just their code—preserving shared operational context across concurrent AI coding agents working on the same evolving codebase:
 
-**Scoring.** Answers were compared with each other and with the Garuda output. Scoring was not blind, and the person who built the tool also judged the answers. This is a known limitation.
+| Capability | Implementation Surface | What It Enables |
+| :--- | :--- | :--- |
+| **MCP Session Tracking** | `cmd/garuda-mcp/session_tracking.go` | Identifies connected MCP clients and agents, their active status, and session duration. |
+| **Tool Execution Telemetry** | `cmd/garuda-mcp/telemetry.go` | Records tool names, execution duration, success/error counts, and whitelist-filtered arguments (`filterArgs`). |
+| **Agent-Specific Briefings** | `garuda.briefing` / `garuda.preflight_bundle` | Tracks when an agent was last briefed and reports workspace changes since that watermark. |
+| **Task Checkpoints** | `garuda.create_task` / `checkpoints` table | Persists structured context and scope metadata associated with a task UUID. |
+| **Atomic Handoffs** | `garuda.handoff` (`internal/store/handoff_store.go`) | Locks and validates agents and task ownership inside a serializable PostgreSQL transaction (`ExecuteHandoffTransaction`), saves a checkpoint, transfers ownership, updates agent states, and fails closed (`status: "failed"`) on unknown task UUIDs. |
+| **Resume** | `garuda.resume` | Allows a receiving agent to restore saved checkpoint data and marks the checkpoint consumed. |
+| **Decision Lineage** | `garuda.propose_decision` & Surface `§` | Makes recorded architectural and formula decisions and their supersession relationships inspectable. |
 
-## 3. Token Telemetry Results
+---
 
-Single paired run (trial 1 per arm). Nine other trials per arm produced no data.
+## 3. Engineering Governance Distribution Platform
 
-| Arm | Tool calls | Uncached input | Cached input | Output | Reasoning | Total | Answer |
-|---|---|---|---|---|---|---|---|
-| Raw (control) | 1 | 86,754 | 1,304,320 | 5,802 | 2,340 | 1,399,216 | 170 function entities, 2 chains |
-| Garuda | 2 | 24,747 | 83,968 | 443 | 124 | 109,282 | 27 function entities, 2 chains |
+Garuda (`v1.9.9`) provides an end-to-end adoption and enforcement path:
 
-**Observed difference.** Total tokens: 1,399,216 vs. 109,282, a difference of 1,289,934 tokens, or 92.2% lower in the Garuda arm (the earlier figure of 92.1% used a slightly different rounding). Cached input: 1,304,320 vs. 83,968.
+`Developer machine → coding agent → GitHub repository → CI/CD gate → auditable governance record.`
 
-**Why this is not yet a reduction claim.**
-- *Different tool use.* The arms did not differ only by the Garuda instruction. The raw arm also made a tool call.
-- *Different cache state.* The cached counts depend on what was already in the cache when each run started. One run may have benefited from prior warming. Cache state at start was not recorded.
-- *Different answers.* The two arms answered with different counts (170 vs. 27). Neither was verified against a reference, so it is unknown which, if either, is correct.
-- *One pair.* With n = 1 per arm, there is no variance estimate and no confidence interval.
+| Delivery Component | Path | Verified `v1.9.9` Behavior |
+| :--- | :--- | :--- |
+| **Composite GitHub Marketplace Action** | [`action.yml`](action.yml) | Builds zero-CGO binaries directly from `${GITHUB_ACTION_PATH}`, passes `--diff "${{ inputs.diff }}"` to `garuda talon guard`, captures exit codes without swallowing errors, and fails closed (`BLOCK`) if JSON output is unparsable or the gate exits non-zero. |
+| **GHCR Multi-Arch Container & Release Workflow** | [`.github/workflows/release-packages.yml`](.github/workflows/release-packages.yml) & [`Dockerfile`](Dockerfile) | Validates `capabilities.json` and `version.txt` (`v1.9.9`), runs the 54-tool behavioral & security test suite, builds all 4 static binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) into `ghcr.io/myshra777-ai/garuda:v1.9.9`, and uploads `dist/releases/*`. |
+| **Multi-OS Zero-CGO Release Matrix Builder** | [`scripts/build_release_matrix.sh`](scripts/build_release_matrix.sh) | Cross-compiles Windows (`amd64`, `arm64`), macOS (`arm64`, `amd64`), Linux (`amd64`, `arm64`, `.deb`), Android Termux, and FreeBSD packages directly into `dist/releases/` with `SHA256SUMS.txt`. |
 
-## 4. Analysis of the Context Tax
+---
 
-The hypothesis behind this pilot is that an agent without a structural index spends tokens re-reading large amounts of context to answer graph-shaped questions, and that this cost shows up mainly as cached input re-read across turns. The pilot is consistent with that hypothesis: the raw run's cached input is about 15 times the Garuda run's. It is also consistent with cache warmth alone, which would produce the same pattern without any difference in method.
+## 4. Three-Tier Inspectable Evidence Standard
 
-The pilot cannot separate the two explanations. To do that, the study needs:
+Garuda strictly separates deterministic compiler fixtures, synthetic fault-injection simulations, and live repository / MCP verification:
 
-1. Cache state recorded at the start of each run, or runs spaced so the cache is cold for each arm.
-2. Uncached input and output reported separately from cached input, since the billing rates differ.
-3. Tool and search call counts per run, so the number of re-reads is measured directly.
+| Evidence Tier | Reported Score | Scope & Methodology |
+| :--- | :--- | :--- |
+| **Tier 1 — Deterministic Compiler & AST Fixtures** | **`24/24`** | Controlled Go (`go/types`, `go.work`, `vendor/`), Python AST, and TypeScript AST ground-truth fixtures (`make benchmark-strict` / `include_fixtures=true`). Excluded by default from live workspace queries via `ExcludeFixturesSQL`. |
+| **Tier 2 — Synthetic Runtime Contradiction & Fault-Injection Simulations** | **`10/10`** | Controlled OTel span contradiction injections (`scripts/runtime_contradiction_test.py`) and opt-in reference simulations (`--demo-fixtures`, `simulate_violation`, `simulate_drift`). Never injected into live workspace queries unless explicitly requested. |
+| **Tier 3A — Live Repository & MCP Protocol Verification** | **`63/63`** | End-to-end JSON-RPC 2.0 stdio protocol checks (`scripts/mcp_verify.py`) running against a live PostgreSQL instance, verifying active Talon contract metadata injection, fail-closed unknown-UUID handoffs, and RFC 6962 Merkle proofs. |
+| **Tier 3B — 54-Tool Behavioral & Security Gate Regression Suite** | **`54/54` tools** (`108` subtests) | Positive and negative invocation cases for every registered MCP tool (`cmd/garuda-mcp/behavioral_tools_test.go`), verifying tool schema dispatch, argument whitelisting, `GARUDA_MCP_READ_ONLY=true` mutation blocking across all 13 mutating tools, `GARUDA_MCP_APPROVER` human co-sign enforcement, and tenant/workspace UUID isolation (runs store-free in unit CI and binds to live PostgreSQL when `DATABASE_URL` is set). |
 
-Until those are in place, "context tax" is a label for an observed cost, not a demonstrated mechanism.
+---
 
-## 5. Conclusion
+## 5. Release-Blocker Resolution Matrix (`v1.9.9`)
 
-This pilot does not show that graph grounding reduces tokens or hallucinations, and it does not show that graph grounding is required for agentic workflows.
-
-What it does show:
-- A paired run on this question produced very different token totals and different answers.
-- The raw arm's answer (170 entities) is not consistent with the structured tool output (27 functions), so at least one arm answered incorrectly or answered a different question.
-- The measurement pipeline works end to end and captures per-run usage.
-
-**Next steps for a valid study:**
-1. Make the control arm tool-free, and verify that from the logs.
-2. Run at least 20 valid trials per arm, with retries and backoff for rate limits, and report failures.
-3. Pin and record the model and the cache state at the start of each run.
-4. Score answers blind against a reference that a human verifies from the source code.
-5. Report uncached input, cached input, output, and reasoning tokens separately, with confidence intervals.
-
-## Appendix: Raw telemetry
-
-```
-Arm,Trial,Input_Uncached,Input_Cached,Output_Tokens,Reasoning_Tokens,Total_Tokens,Tool_Calls,Search_Calls
-raw,1,86754,1304320,5802,2340,1399216,1,0
-raw,2-10,0,0,0,0,0,0-1,0
-garuda,1,24747,83968,443,124,109282,2,0
-garuda,2-10,0,0,0,0,0,0,0
-```
-
-Trials 2–10 in both arms returned zero telemetry and are treated as failed attempts.
+| Audit Finding | Severity | Resolution Applied & Verified |
+| :--- | :--- | :--- |
+| **1. `action.yml` working directory, missing `--diff` flag, and fail-open `\|\| true` / `ALLOW` fallback** | **Critical** | Updated `action.yml` to compile from `${GITHUB_ACTION_PATH}`, pass `--diff "${{ inputs.diff }}"`, capture `GUARD_EXIT` without `\|\| true`, and default any unparsable or non-zero exit to `BLOCK` (`exit 2`). |
+| **2. Canonical manifest (`capabilities.json`), `version.txt`, and version drift (`v1.9.1` / `v1.9.2` vs `v1.9.9`)** | **Critical** | Bundled `capabilities.json` and `version.txt` (`v1.9.9`) in the repository root and release archives; synchronized `Dockerfile`, `Dockerfile.release`, `scripts/build_release_matrix.sh`, and `setup.sh` to `v1.9.9`; added automated version & file checks to `scripts/sync_docs_from_manifest.py --check`. |
+| **3. Release artifact path mismatch (`dist/` vs `dist/releases/*`) & single-binary `Dockerfile`** | **High** | Updated `scripts/build_release_matrix.sh` default `OUT_DIR` to `dist/releases` (matching `.github/workflows/release-packages.yml`) and updated `Dockerfile` + `Dockerfile.release` to compile and package all 4 static binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`). |
+| **4. Outdated `docs/POSITIONING.md` (16-tool claim & stale beta status)** | **Medium** | Rewrote `docs/POSITIONING.md` for `v1.9.9` (`54` MCP tools, `10` progressive-disclosure surfaces, 4-tier Docs & Rules Graph with provenance qualification, multi-agent continuity layer, and 3-tier evidence separation) and added automated drift validation in `scripts/sync_docs_from_manifest.py --check`. |

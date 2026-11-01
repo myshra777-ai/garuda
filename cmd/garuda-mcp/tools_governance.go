@@ -452,31 +452,6 @@ func (s *MCPServer) handleCheckDrift(args map[string]interface{}) (interface{}, 
 			"status":                              "success",
 		}, nil
 	}
-	if s.store == nil || s.safePool() == nil {
-		verdict := computeVerdict(&knowledge.HealthStats{})
-		return map[string]interface{}{
-			"tenant_id":                           tenantID.String(),
-			"workspace":                           wsName,
-			"workspace_id":                        workspaceID.String(),
-			"drift_definition_version":            "v2.0-bidirectional-ast-doc",
-			"entity_count":                        0,
-			"exported_entity_count":               0,
-			"documentation_health":                &knowledge.HealthStats{},
-			"doc_to_code":                         []interface{}{},
-			"code_to_doc":                         []interface{}{},
-			"doc_to_code_count":                   0,
-			"code_to_doc_count":                   0,
-			"undocumented_exported_entities":      0,
-			"undocumented_drift_findings":         0,
-			"undocumented_symbols":                []interface{}{},
-			"undocumented_symbols_returned_count": 0,
-			"undocumented_symbols_total_count":    0,
-			"undocumented_symbols_truncated":      false,
-			"truncated":                           false,
-			"gate_verdict":                        verdict,
-			"status":                              "success",
-		}, nil
-	}
 	evaluator := knowledge.NewEvaluator(s.safePool())
 	stats, codeToDoc, err := evaluator.EvaluateWorkspace(ctx, tenantID, workspaceID)
 	if err != nil {
@@ -720,23 +695,6 @@ func (s *MCPServer) handlePolicyEvaluate(args map[string]interface{}) (interface
 	}
 	includeFixtures := IncludeFixturesRequested(args)
 
-	if s.store == nil || s.safePool() == nil {
-		snapshot := ComputeSnapshotReceipt(ctx, nil, tenantID, workspaceID, workspaceName)
-		return map[string]interface{}{
-			"tenant_id":             tenantID.String(),
-			"workspace":             workspaceName,
-			"workspace_id":          workspaceID.String(),
-			"policy_dir":            "policies",
-			"policy_set_version":    snapshot["policy_set_version"],
-			"active_policies_count": 0,
-			"evaluations_count":     0,
-			"snapshot_receipt":      snapshot,
-			"dry_run":               true,
-			"final_decision":        "INCONCLUSIVE",
-			"evaluations":           []interface{}{},
-			"summary":               "0 active policies evaluated (no database connection)",
-		}, nil
-	}
 	if s.store == nil || s.safePool() == nil {
 		snapshot := ComputeSnapshotReceipt(ctx, nil, tenantID, workspaceID, workspaceName)
 		return map[string]interface{}{

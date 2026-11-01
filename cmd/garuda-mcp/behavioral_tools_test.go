@@ -11,6 +11,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"strings"
+
+	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/version"
 )
 
@@ -134,6 +137,12 @@ func TestAll54RegisteredTools_PositiveAndNegativeBehavior(t *testing.T) {
 	}
 
 	srv := &MCPServer{clientName: "behavioral-test-suite"}
+	if dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL")); dbURL != "" {
+		if pgStore, err := store.NewPostgresStore(dbURL); err == nil {
+			srv.store = pgStore
+			defer pgStore.Close()
+		}
+	}
 	covered := make(map[string]bool)
 
 	for _, tc := range cases {
@@ -309,4 +318,53 @@ func TestNewTools_TenantIsolation_ReadOnly_HumanApproval_ReceiptHandling(t *test
 		t.Errorf("expected matching GARUDA_MCP_APPROVER to succeed with human_cli_verified=true, got %v", attested)
 	}
 	_ = os.Unsetenv("GARUDA_MCP_APPROVER")
+}
+
+func TestEndToEndAgentContinuityWorkflow_TaskHandoffResumeAndBriefing(t *testing.T) {
+	_ = os.Unsetenv("GARUDA_MCP_READ_ONLY")
+	_ = os.Unsetenv("GARUDA_MCP_APPROVER")
+
+	srv := &MCPServer{clientName: "continuity-agent-alpha"}
+	if dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL")); dbURL != "" {
+		if pgStore, err := store.NewPostgresStore(dbURL); err == nil {
+			srv.store = pgStore
+			defer pgStore.Close()
+		}
+	}
+
+	// Step 1: Agent A provisions a task with structured context
+	_, taskPay := callToolJSON(t, srv, "garuda.create_task", map[string]interface{}{
+		"workspace":       "default",
+		"title":           "Refactor RefundHandler Store Boundary",
+		"description":     "Ensure RefundHandler routes through IdempotencyStore per ADR-0001",
+		"owner_agent_id":  "agent-alpha",
+		"target_agent_id": "agent-beta",
+	})
+	taskID, _ := taskPay["task_id"].(string)
+	if len(taskID) != 36 {
+		t.Fatalf("expected 36-char UUID task_id from create_task, got %q", taskID)
+	}
+
+	// Step 2: Unknown canonical task UUID handoff MUST fail closed (status="failed" with reason)
+	_, unknownHop := callToolJSON(t, srv, "garuda.handoff", map[string]interface{}{
+		"workspace":       "default",
+		"task_id":         "00000000-0000-0000-0000-000000000001",
+		"source_agent_id": "00000000-0000-0000-0000-000000000002",
+		"target_agent_id": "00000000-0000-0000-0000-000000000003",
+		"reason":          "Attempted handoff on nonexistent task UUID",
+	})
+	if unknownHop["status"] != "failed" {
+		t.Errorf("expected status='failed' for unknown canonical task UUID handoff, got %v", unknownHop["status"])
+	}
+	if _, hasReason := unknownHop["reason"].(string); !hasReason {
+		t.Errorf("expected failure reason in unknown handoff payload, got %v", unknownHop)
+	}
+
+	// Step 3: Docs & Rules Graph reports explicit graph_source_mode and 4 tiers
+	_, dgPay := callToolJSON(t, srv, "garuda.docs_graph", map[string]interface{}{
+		"workspace": "default",
+	})
+	if _, ok := dgPay["graph_source_mode"].(string); !ok {
+		t.Errorf("expected graph_source_mode in garuda.docs_graph payload, got %v", dgPay)
+	}
 }

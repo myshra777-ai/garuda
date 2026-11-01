@@ -212,6 +212,34 @@ All counts, versions, and tool definitions across Garuda's binaries and document
 | **Idempotent PostgreSQL Migrations** | **`{counts['sql_migrations']}`** (`001`–`095_data_logic_audit_ledger_and_hygiene.sql`) | `migrations/` |
 | **Graph-Native YAML Policy Predicates** | **`{counts['yaml_policy_predicates']}` predicates** | `internal/policy/` |
 
+
+### The Four-Tier Document-to-Code Governance Graph (`garuda.docs_graph` & Surface `04`)
+
+Garuda connects four layers of an engineering organization into one inspectable document-to-code governance graph:
+
+| Governance Tier | Layer | What It Connects |
+| :--- | :--- | :--- |
+| **Tier 1 — Organizational Intent** | ADRs, Specs, Invariants & YAML Policies | `docs/adr/*.md`, `docs/specs/*.md`, `policies/*.yaml`, `.garudarules` |
+| **Tier 2 — Extracted Normative Rules** | `MUST`, `MUST_NOT`, `BLOCK`, `REVIEW`, `DENY` | Collision-free SHA-256 component nodes extracted from documents |
+| **Tier 3 — Executable Governance** | Active YAML Policies & Talon Guardrails | Compiled `.garuda/TALON_CONTRACT.md` & deterministic policy verdicts |
+| **Tier 4 — Actual Software (AST)** | Indexed Functions, Methods & Packages | Go (`go/types`), Python AST, and TypeScript AST entities & call edges |
+
+> **Link Provenance Transparency**: Every document-to-code link returned by `garuda.docs_graph` and `/api/v1/dashboard/docs-graph` carries an explicit `match_method` (`"ast_exact"`, `"package_or_keyword_match"`, or `"fallback_unindexed_preview"`) and `graph_source_mode` (`"live_indexed_ast"` vs. `"fallback_preview_unindexed"`), distinguishing compiler-resolved AST links from keyword/package rules and unindexed workspace previews.
+
+### Multi-Agent Coordination & Operational Continuity Layer
+
+Garuda understands the work of agents, not just their code—preserving shared operational context as tasks move across concurrent AI coding agents:
+
+| Capability | Implementation Surface | What It Enables |
+| :--- | :--- | :--- |
+| **MCP Session Tracking** | `cmd/garuda-mcp/session_tracking.go` | Identifies connected MCP clients/agents, active activity, and session duration. |
+| **Tool Execution Telemetry** | `cmd/garuda-mcp/telemetry.go` | Records tool names, execution latency, success/error counts, and whitelist-filtered arguments (`filterArgs`). |
+| **Agent-Specific Briefings** | `garuda.briefing` / `garuda.preflight_bundle` | Tracks when an agent was last briefed and reports workspace deltas since that watermark. |
+| **Task Checkpoints** | `garuda.create_task` / `checkpoints` | Persists structured execution context and scope metadata for a task UUID. |
+| **Serializable Atomic Handoffs** | `garuda.handoff` (`internal/store/handoff_store.go`) | Locks and validates agents and task ownership inside a serializable transaction, saves a checkpoint, transfers ownership, and fails closed on unknown task UUIDs. |
+| **Checkpoint Resume** | `garuda.resume` | Restores saved checkpoint state for the receiving agent and marks the checkpoint consumed. |
+| **Decision Lineage** | `garuda.propose_decision` & Surface `§` | Makes MADR architectural and formula decisions and their supersession chain inspectable. |
+
 ### Strict Separation of Evaluation Tiers (Fixtures vs. Simulations vs. Live AST/LLM)
 
 Garuda strictly separates **compiler benchmark fixtures**, **synthetic fault-injection simulations**, and **live production repository / LLM agent results** so benchmark or demo data never pollutes live workspace queries:
@@ -375,7 +403,27 @@ def sync_all(repo_root: str, check_only: bool = False) -> int:
         if ver not in readme or f"{counts['mcp_tools']}" not in readme:
             print("❌ README.md is out of sync with capabilities.json")
             return 1
-        print(f"✅ Canonical manifest check passed: {ver} | {len(tools)} MCP tools | {counts['dashboard_surfaces']} surfaces | {counts['sql_migrations']} migrations")
+        vtxt_path = os.path.join(repo_root, "version.txt")
+        if not os.path.exists(vtxt_path) or open(vtxt_path).read().strip() != ver:
+            print(f"❌ version.txt missing or does not match {ver}")
+            return 1
+        dockerfile = open(os.path.join(repo_root, "Dockerfile")).read()
+        if f"ARG VERSION={ver}" not in dockerfile or "garuda-mcp" not in dockerfile or "garuda-talon" not in dockerfile:
+            print("❌ Dockerfile is out of sync (must default to canonical version and build all 4 binaries)")
+            return 1
+        matrix_sh = open(os.path.join(repo_root, "scripts/build_release_matrix.sh")).read()
+        if ver not in matrix_sh or 'OUT_DIR="${1:-dist/releases}"' not in matrix_sh:
+            print("❌ scripts/build_release_matrix.sh is out of sync (must default to canonical version and dist/releases)")
+            return 1
+        action_yml = open(os.path.join(repo_root, "action.yml")).read()
+        if "GITHUB_ACTION_PATH" not in action_yml or "--diff" not in action_yml or '|| echo "ALLOW"' in action_yml:
+            print("❌ action.yml failed fail-closed & GITHUB_ACTION_PATH audit")
+            return 1
+        pos_md = open(os.path.join(repo_root, "docs/POSITIONING.md")).read()
+        if ver not in pos_md or "sixteen tools" in pos_md.lower():
+            print("❌ docs/POSITIONING.md is out of sync with canonical manifest")
+            return 1
+        print(f"✅ Canonical manifest & release-blocker check passed: {ver} | {len(tools)} MCP tools | {counts['dashboard_surfaces']} surfaces | {counts['sql_migrations']} migrations | action.yml + Dockerfile + dist/releases verified")
         return 0
 
     # 1. Write version.txt

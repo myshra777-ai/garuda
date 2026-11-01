@@ -1,156 +1,96 @@
-# Garuda Positioning
+# Garuda Positioning (`v1.9.9`)
 
-**Internal reference.** This document is the canonical statement of what Garuda is, what it is not, and how it should be described. All public-facing material — README, pitch decks, website copy, investor emails — derives from this document. If a claim is not in this document, it is not a claim Garuda makes.
+**Internal & canonical reference.** This document is the canonical statement of what Garuda is, what it is not, and how its capabilities and evidence should be described. All public-facing material — `README.md`, `docs/CAPABILITIES.md`, `EVIDENCE.md`, release notes, and pitch materials — derives from this document and [`capabilities.json`](../capabilities.json). If a claim is not backed by [`capabilities.json`](../capabilities.json) and [`EVIDENCE.md`](../EVIDENCE.md), it is not a claim Garuda makes.
 
 ---
 
 ## The one-sentence pitch
 
-Garuda keeps AI agents aligned with what you're building.
+Garuda is the distributable engineering governance and operational continuity platform that keeps AI coding agents, software architecture, and business logic aligned as software evolves.
 
 ## The shorter pitch
 
-Garuda gives everyone working on your software — people and AI agents — one shared, verified understanding of what the software actually is.
+Garuda gives everyone working on a software system — developers, reviewers, CI/CD pipelines, and concurrent AI agents — one shared, verifiable model of what the software is, which rules govern it, and how work moves between agents.
 
 ## The problem
 
-AI can now write, change, test, and fix software faster than any team can review it. That speed is real. It is also creating a failure mode that no one has named yet.
+AI coding agents can now write, refactor, test, and ship code faster than any engineering organization can manually review it. That speed creates a structural failure mode we call **AI Development Drift**: the compounding gap between what an organization intended, what rules were written down, what code got built, and what the running system or cross-team pipelines actually do.
 
-A team writes down what they want to build. A month later, the software has moved somewhere else. Not dramatically. Not with a rewrite. A little at a time, change by change. Documentation says one thing, the code does another, and the running system does a third. Nobody notices until something breaks in production.
+Four failure modes appear together as multi-agent autonomy increases:
 
-We call this **AI Development Drift**. It is the growing gap between what an organization intended, what got built, and what the system actually does.
+1. **Agents operate without cross-session and cross-agent continuity.** When work moves from one coding agent or session to another, the receiving agent reconstructs context from scratch—missing prior checkpoints, active task boundaries, and changes made since the last briefing.
+2. **Agents ship syntactically valid code that breaks architectural boundaries.** A diff can compile cleanly and pass unit tests while making an API handler call `database/sql` directly or modifying a high-blast-radius hub with 140+ callers.
+3. **Teams and agents silently diverge on business formulas and unit scales.** Operations, Marketing, and Management often maintain competing undocumented formulas for the same metric (such as *Loss Ratio*) or mismatched unit scalings (`48.00 Crore` vs. `4.80 Crore` due to Lakh-to-Crore `/ 100` vs. `/ 1000` division).
+4. **Intent, rules, enforcement, and code live in disconnected silos.** ADRs sit in Markdown files, policies sit in YAML, agent instructions sit in `.cursor` or `CLAUDE.md`, and the actual call graph sits in source code—with no single graph showing how organizational intent governs concrete symbols.
 
-It is not a bug in any single AI model. It is the structural consequence of asking fast-moving agents to reason about a system they can only partially see, across sessions they cannot remember, against intentions that keep changing.
+## The four product pillars (`v1.9.9`)
 
-The three failure modes that appear together as autonomy increases:
+### 1. The Four-Tier Document-to-Code Governance Graph (`garuda.docs_graph` & Surface `04`)
 
-**Agents operate on incomplete and changing context.** Even with a perfect initial context, the system changes while the agent works. Another agent modifies something. A policy changes. Documentation moves. A dependency shifts. The problem is not memory. It is continuous alignment with a moving source of truth.
+Garuda connects four layers of a software organization into a single inspectable document-to-code governance graph:
 
-**Agents ship changes that break invariants.** A change can be syntactically valid, type-correct, tested, and reasonable in review, and still violate a constraint that defines the system. Compilation and tests are the wrong layer of correctness for this failure mode.
-
-**The organization loses the ability to re-align.** When documentation is deep and code has moved on, humans and AI both struggle to reconstruct what happened. Re-alignment takes weeks. Sometimes the accumulated changes redefine the vision entirely, and nobody notices until a customer does.
-
-## The solution
-
-Garuda builds a persistent semantic model of a software system. Every element in that model — an entity, a relationship, a decision, a policy outcome — is backed by evidence pointing to the exact source file and line that justifies it. Nothing is asserted without a pointer to why.
-
-Then Garuda verifies. A declarative policy states organizational intent. An evaluator checks it against the model. The result is a deterministic decision — allow, warn, review, or block — anchored to a cryptographic ledger alongside the evidence it cited. An auditor with no access to Garuda's infrastructure can independently confirm the decision happened at a specific point in the ledger's history.
-
-The same verified model is served to developers through a CLI and a dashboard, and to AI agents through a Model Context Protocol server. Neither side reconstructs the codebase from scratch. Both see the same verified state.
-
-## What Garuda is
-
-- **An alignment layer.** It keeps what an organization intended, what got built, and what actually runs connected as the system evolves.
-- **A verified semantic model.** It connects code structure, documentation, runtime observations, and organizational decisions into one inspectable graph, where every edge carries the source file and line that justifies it.
-- **A cryptographic audit trail.** Every governance decision is permanent and independently checkable without trusting Garuda.
-- **A shared workspace.** It serves developers and AI agents from the same model, so neither has to reconstruct the same reality independently.
-
-## What Garuda is not
-
-- **Not a code search engine.** Search returns results. Garuda returns verified facts.
-- **Not a knowledge graph product.** The graph is the substrate. The verification layer on top of it is the product.
-- **Not an observability platform.** Runtime telemetry is one evidence source. Garuda is interested in whether runtime behavior confirms or contradicts what the architecture intended.
-- **Not a documentation generator.** Documents are one source of intent. Garuda checks whether the code matches them, not the reverse.
-- **Not an AI coding agent.** Garuda does not write code. It tells agents and reviewers what is known, what is uncertain, and what changed.
-- **Not a compliance certification.** Garuda produces technical evidence. Whether that evidence satisfies a regulator depends on the deployment and process, not on us.
-- **Not a replacement for human judgment.** Garuda shows what is true about the system. What to do about it is still a decision for the team.
-
-## The moat
-
-Three capabilities, held together, that no current category of software delivers:
-
-**1. Evidence-backed claims.** Every relationship in the model carries the file, line, commit, and analyzer version that produced it. An engineer can click any edge and land on the exact source line that justifies it. Nothing in the model is asserted without proof.
-
-**2. Merkle-anchored governance.** Every policy decision is anchored to the same cryptographic ledger as the evidence it cited. Any party can independently re-derive the inclusion proof and verify that a specific decision was committed at a specific block height — without trusting Garuda, without access to Garuda's database, without reading Garuda's source.
-
-**3. Deterministic verification.** Wherever possible, extraction and evaluation are deterministic. The same source, analyzed twice, produces byte-identical output. Where determinism is not possible, the model labels the difference explicitly. Model-assisted reasoning is permitted. Model-assisted fabrication is not.
-
-## The refusal to fabricate
-
-Garuda treats `UNVERIFIED` as a first-class state, not a failure mode. Absence of evidence is never presented as certainty. Every metric on every dashboard either has real data or explicitly says "not measured" with a reason.
-
-This is a product principle and a technical discipline. Every number the system produces can be traced to a query, a golden vector, or a frozen test fixture. A claim that cannot be traced is not a claim Garuda makes.
-
-The same discipline applies to the marketing. The README describes capabilities that ship. The roadmap describes capabilities that do not yet ship. The two are never mixed. When a claim is Beta, it says Beta. When a number is measured on a specific corpus, the corpus is named.
-
-## The competitive landscape
-
-Garuda operates at the intersection of five categories that have historically been separate:
-
-| Category | What it delivers | What Garuda adds on top |
+| Governance Tier | Layer Name | What It Represents |
 | :--- | :--- | :--- |
-| Code search (Sourcegraph, GitHub search) | Find text fast across many repositories | A typed semantic model with stable identity — a rename does not orphan every reference |
-| Code knowledge graphs (Graphify and similar) | Parse many languages, show relationships | Verification state on every relationship, with source file and line as evidence |
-| Runtime observability (Datadog, Honeycomb) | Show what is happening in production | Correlate production spans with static entities to answer "is this declared path actually exercised?" |
-| Documentation and drift tools | Connect organizational knowledge or flag drift | Two-way check with a cryptographic record anyone can verify |
-| AI coding agents (Cursor, Copilot, Claude Code) | Write code fast with useful context | Give those agents a structured, evidence-backed map of the system they are changing |
+| **Tier 1** | **Organizational Intent** | Ingested ADRs (`docs/adr/*.md`), design specifications, system invariants, YAML policies (`policies/*.yaml`), and repository guardrails (`.garudarules`). |
+| **Tier 2** | **Extracted Normative Rules** | Structured normative claims (`MUST`, `MUST_NOT`, `BLOCK`, `REVIEW`, `DENY`) extracted from documents with collision-free SHA-256 component IDs. |
+| **Tier 3** | **Executable Governance** | Active declarative YAML policies, compiled **Garuda Talon** contracts (`.garuda/TALON_CONTRACT.md`), and pre-edit / post-edit gate verdicts. |
+| **Tier 4** | **Actual Software (AST)** | Indexed Go, Python, and TypeScript functions, methods, structs, packages, and call/import relationships. |
 
-These categories are complementary, not competing. Garuda is the layer that connects them, not a replacement for any one of them.
+**Honest qualification on link provenance:** Every document-to-code link in `garuda.docs_graph` and `/api/v1/dashboard/docs-graph` carries an explicit `match_method` (`"ast_exact"`, `"package_or_keyword_match"`, or `"fallback_unindexed_preview"`) and `graph_source_mode` (`"live_indexed_ast"` vs. `"fallback_preview_unindexed"`). We describe this as a **document-to-code governance graph** that combines indexed document claims, active policies, exact AST symbol matches, and keyword/curated rules—never claiming that heuristic or preview links are compiler-proven AST call edges.
 
-## The buyer
+### 2. Multi-Agent Coordination & Operational Continuity (`internal/store/handoff_store.go` & `cmd/garuda-mcp/`)
 
-The initial buyer is not "software teams." It is narrower and more urgent.
+Garuda understands the work of agents, not just their code. It provides shared operational context for teams running multiple AI coding agents across the same evolving repository:
 
-**Primary buyer:** AI-native engineering teams building toward increasingly autonomous software development. Teams using coding agents heavily, running multiple agents concurrently, shipping rapidly, and concerned about architectural consistency as more code is generated than reviewed.
+| Capability | Implementation Surface | What It Enables |
+| :--- | :--- | :--- |
+| **MCP Session Tracking** | `cmd/garuda-mcp/session_tracking.go` | Identifies connected MCP clients and agents, active session state, and session duration. |
+| **Tool Execution Telemetry** | `cmd/garuda-mcp/telemetry.go` | Records tool names, execution latency, success/error rates, and whitelist-filtered arguments (`filterArgs`). |
+| **Agent-Specific Briefings** | `garuda.briefing` / `garuda.preflight_bundle` | Tracks when an agent was last briefed and reports net-new workspace deltas since that watermark. |
+| **Task Checkpoints** | `garuda.create_task` / `checkpoints` table | Persists structured execution context and scope metadata associated with a task UUID. |
+| **Serializable Atomic Handoffs** | `garuda.handoff` (`ExecuteHandoffTransaction`) | Locks and validates source/target agents and task ownership inside a serializable PostgreSQL transaction, saves a checkpoint, transfers ownership, and fails closed on unknown task UUIDs. |
+| **Checkpoint Resume** | `garuda.resume` | Restores saved checkpoint state for the receiving agent and marks the checkpoint consumed. |
+| **Decision Lineage** | `garuda.propose_decision` & Surface `§` | Records MADR-compatible architectural and formula decisions with supersession chains and human co-sign status. |
 
-**Economic buyer:** VP Engineering, CTO, Head of Engineering, Head of AI Engineering.
+### 3. Distributable Engineering Governance Platform (`action.yml`, GHCR & Multi-OS Release Matrix)
 
-**Daily users:** Developers, platform engineers, and the AI agents themselves.
+Garuda is designed to operate across the full software delivery lifecycle:
 
-**Expansion path:** Once Garuda becomes trusted inside the engineering workflow, the same intelligence layer extends to organization-wide software understanding, governance workflows, and runtime integrity. Business-critical workflow integrity is a longer-term direction, not a current product.
+`Developer machine → AI coding agent (MCP / Talon hooks) → GitHub repository → CI/CD gate (GitHub Action) → Auditable RFC 6962 governance record.`
 
-## The one metric that matters
+- **Composite GitHub Marketplace Action (`action.yml`)**: Builds from `${GITHUB_ACTION_PATH}`, evaluates `--diff "${{ inputs.diff }}"`, posts the deterministic `receipt_hash` and `reproduce_command` to `$GITHUB_STEP_SUMMARY`, and fails closed (`BLOCK`) on non-zero exit codes or unparsable output.
+- **Multi-Arch GHCR Container (`Dockerfile` & `.github/workflows/release-packages.yml`)**: Packages all 4 static zero-CGO binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`), `capabilities.json`, `version.txt`, `migrations/`, and `policies/` into `ghcr.io/myshra777-ai/garuda:v1.9.9`.
+- **Cross-Platform Zero-CGO Release Matrix (`scripts/build_release_matrix.sh`)**: Outputs deterministic release bundles into `dist/releases/` for Windows (`amd64`, `arm64`), macOS (`arm64`, `amd64`), Linux (`amd64`, `arm64`, `.deb`), Android Termux, and FreeBSD.
 
-Time from a question to a source-backed answer.
+### 4. Three-Tier Inspectable Evidence Standard (`EVIDENCE.md`)
 
-Not tokens saved. Not nodes in the graph. Not languages supported. The measure that determines whether Garuda is useful is how quickly a developer, an architect, or an AI agent can reach a conclusion they are willing to defend, with evidence attached.
+Garuda strictly separates compiler fixtures, synthetic fault-injection simulations, and live repository / MCP verification so benchmark or demo data never pollutes production workspaces:
 
-## What Garuda publishes
+| Evidence Tier | Suite & Activation Flag | Default in Production | What It Proves & Honest Scope |
+| :--- | :--- | :--- | :--- |
+| **Tier 1 — Compiler & AST Fixtures** | `24/24` (`make benchmark-strict` / `include_fixtures=true`) | **Excluded by default** (`ExcludeFixturesSQL`) | Deterministic extraction precision/recall on controlled Go (`go/types`, `go.work`, `vendor/`), Python AST, and TypeScript AST fixtures, plus checkout-path-invariant cache fingerprints (`TestDoubleRunDeterminism`). |
+| **Tier 2 — Synthetic Contradiction & Fault Simulations** | `10/10` (`scripts/runtime_contradiction_test.py`, `--demo-fixtures`) | **Opt-in only** (`INSUFFICIENT_DATA` when `include_fixtures=false`) | Quarantine of injected unapproved OTel service edges (`10/10`), Talon self-repair prompt synthesis under simulated `BLOCK`/drift, and reference case studies (`Loss Ratio` `0.0–1.0` weights & `48.00 Cr vs 4.80 Cr`). |
+| **Tier 3A — Live PostgreSQL & MCP Protocol Verification** | `63/63` checks (`scripts/mcp_verify.py`) | **Active by default** | End-to-end JSON-RPC 2.0 stdio protocol execution against a live PostgreSQL instance, verifying active Talon contract metadata injection, fail-closed unknown-UUID handoffs, and RFC 6962 proofs. |
+| **Tier 3B — 54-Tool Behavioral & Security Gate Regression Suite** | `54/54` tools / `108` subtests (`cmd/garuda-mcp/behavioral_tools_test.go`) | **Active in CI (`go test`)** | Positive and negative contract, schema, tenant-isolation, `GARUDA_MCP_READ_ONLY`, and `GARUDA_MCP_APPROVER` regression tests across all 54 registered MCP tools (runs store-free in unit CI and binds to PostgreSQL when `DATABASE_URL` is set). |
 
-- Measured coverage numbers, published with methodology.
-- Per-language resolution rates, updated when the analyzers change.
-- Benchmark results from versioned, reproducible corpora.
-- The exact scope of every claim: what was checked, what was not, and why.
+---
 
-Garuda does not publish percent-precision figures without a named corpus. It does not publish "zero hallucinations" or "100% accuracy." It does not claim capabilities that its roadmap lists as planned.
+## Where Garuda is today (`v1.9.9`)
 
-## Where Garuda is today
+**Shipped and verified in repository (`v1.9.9`):**
+- **4 Zero-CGO Binaries**: `garuda` (CLI), `garuda-mcp` (54-tool MCP server), `garuda-api` (HTTP gateway & PWA server), and `garuda-talon` (active agent harness).
+- **54 Registered MCP Tools**: 41 read-only tools and 13 mutating tools protected by strict argument whitelisting (`tools_whitelist.go`), fail-closed `GARUDA_MCP_READ_ONLY=true` mode, and `GARUDA_MCP_APPROVER` human co-sign attestation.
+- **10-Surface Progressive-Disclosure Dashboard (`/dashboard`)**: Redesigned to display at most 4 primary cards on first view with collapsible `<details>` drawers, tabbed workbenches, and `cubic-bezier(0.16, 1, 0.3, 1)` motion in Light and Dark modes.
+- **Multi-Language AST & Graph Engine**: Compiler-backed Go analyzer (`go/types`) and structural Python and TypeScript AST analyzers backed by 95 idempotent PostgreSQL migrations and an RFC 6962 Merkle ledger.
+- **Human-in-the-Loop Data & Logic Audit Ledger (`095_data_logic_audit_ledger_and_hygiene.sql`)**: `0.0–1.0` team formula disambiguation, 3-tier surface criticality (`HIGH_SEVERE`, `MEDIUM`, `LOW`), and unit-scaling discrepancy detection (`data_logic_audit_ledger`).
+- **Distribution & Packaging Pipeline**: Fail-closed `action.yml`, multi-binary `Dockerfile`, `scripts/build_release_matrix.sh` (`dist/releases/*`), and `scripts/sync_docs_from_manifest.py` backed by `capabilities.json` and `version.txt`.
 
-Stated plainly, because this is the internal reference and the current state matters more here than anywhere else.
-
-**Stable today:**
-- Go analyzer (compiler-backed), Python and TypeScript analyzers (structural)
-- Merkle v1 trust layer with RFC 6962 compliance and independent verification
-- Policy engine with five predicates and four outcomes
-- Semantic graph explorer with repository, package, entity, and neighborhood views
-- MCP server with sixteen tools, verified against Cursor and a reference client
-- CLI and HTTP APIs for every capability
-- CI integration via `garuda ci` and `garuda judge`
-- Documentation ingestion for Markdown, ADR, and plain text
-
-**In beta:**
-- Documentation-to-code alignment at scale
-- Cross-repository intelligence beyond same-language workspaces
-- Runtime verification against live production telemetry
-
-**Launching soon:**
-- Additional language analyzers (the pipeline is language-agnostic; new languages plug in without schema changes)
-- Expanded MCP surface
-- Deeper dashboard exploration
-
-**Not yet started:**
-- Billing and subscription infrastructure
-- Enterprise identity (SSO, workspace membership, per-workspace access control)
-- Hosted Merkle trust layer (current trust layer runs locally)
-
-**Honest gap:** no paying customer yet. Design partner conversations are in progress. The first paid pilot is the goal for the next quarter. Charging before that would be guessing.
-
-## What the roadmap is not
-
-The roadmap is not a marketing document. It is not a promise. It is a record of intent, subject to change based on what design partners ask for. If a feature is on the roadmap and not in the README, it has not shipped. If a feature is on the roadmap and someone asks about it, the honest answer is "planned, not yet shipped." Never "coming soon."
+**Honest qualifications & ongoing priorities:**
+- **Go vs. Python/TypeScript depth**: Go analysis uses full `go/types` compiler type resolution; Python and TypeScript analyzers perform structural AST extraction (imports, calls, class hierarchies, and unit-scaling divisors) rather than full cross-package type inference.
+- **Docs & Rules Graph link provenance**: Combines exact AST matches (`ast_exact`) with package/keyword matching (`package_or_keyword_match`) and explicit preview fallbacks (`fallback_unindexed_preview`) when a workspace has not yet been indexed.
+- **Behavioral test scope**: `behavioral_tools_test.go` (`54/54` tools) validates tool contracts, input validation, tenant isolation, and security gates across all 54 handlers, complemented by `scripts/mcp_verify.py` (`63/63` checks) against live PostgreSQL.
+- **Commercial stage**: Open-source Apache-2.0 release (`v1.9.9`); enterprise SSO, hosted multi-tenant cloud billing, and remote Merkle notary services remain future roadmap items.
 
 ## The one line to remember
 
-> Garuda keeps AI agents aligned with what you're building.
-
-Everything else in this document is evidence for that line, or an honest limit on it.
+> Garuda keeps AI coding agents, software architecture, and organizational intent aligned as your system evolves.

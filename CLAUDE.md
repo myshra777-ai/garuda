@@ -2,8 +2,8 @@
 # GARUDA TALON — ACTIVE ARCHITECTURAL CONTRACT
 
 - **Workspace**: `default` (`48416063-0cb2-40ea-b89e-0c92ae6d4c13`)
-- **Graph Scale**: 3032 AST entities | 12394 verified edges
-- **Build Receipt**: `lang=go platform=linux/amd64 cgo=off tags=[none] commit=uncommitted graph_fp=f9cff0ce07f1`
+- **Graph Scale**: 3032 AST entities | 12395 verified edges
+- **Build Receipt**: `lang=go platform=linux/amd64 cgo=off tags=[none] commit=uncommitted graph_fp=6b14736a0239`
 - **Reproduce Command**: `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --workspace default`
 - **Enforcement Mode**: `ACTIVE (FAIL-CLOSED)`
 
@@ -45,6 +45,8 @@ You are operating inside a **Garuda Talon Enforced Workspace**. Every code chang
 - **`github.com/myshra777-ai/garuda/internal/store.Close`** (method, 22 inbound edges) — `internal/store/postgres.go`
 
 <!-- GARUDA-TALON:END -->
+
+
 
 
 

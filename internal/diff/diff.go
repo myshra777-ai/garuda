@@ -202,11 +202,21 @@ func CollectGitDeltas(repoDir string, staged bool, rev string, explicitFiles []s
 		return "diff", ParseUnifiedDiff(string(out)), nil
 	}
 
+	// Verify repoDir is inside a valid Git working tree (fails closed outside a repository,
+	// while succeeding in both committed and unborn `git init` repositories).
+	if revOut, revErr := exec.Command("git", "-C", repoDir, "rev-parse", "--is-inside-work-tree").CombinedOutput(); revErr != nil || strings.TrimSpace(string(revOut)) != "true" {
+		return "working_tree", nil, fmt.Errorf("git rev-parse --is-inside-work-tree in %s: %w (%s)", repoDir, revErr, strings.TrimSpace(string(revOut)))
+	}
+
 	// Default: working tree relative to HEAD (plus untracked source files)
 	out, err := exec.Command("git", "-C", repoDir, "diff", "HEAD", "--unified=0", "--no-color").Output()
 	if err != nil {
-		// Fallback when repo has no commits yet
-		out, _ = exec.Command("git", "-C", repoDir, "diff", "--unified=0", "--no-color").Output()
+		// Fallback when repo has no commits yet (unborn HEAD)
+		var fallbackErr error
+		out, fallbackErr = exec.Command("git", "-C", repoDir, "diff", "--unified=0", "--no-color").Output()
+		if fallbackErr != nil {
+			return "working_tree", nil, fmt.Errorf("git diff working tree: %w", fallbackErr)
+		}
 	}
 	deltas := ParseUnifiedDiff(string(out))
 	seen := make(map[string]bool, len(deltas))

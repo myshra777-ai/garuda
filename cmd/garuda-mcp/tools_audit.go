@@ -1265,6 +1265,7 @@ func (s *MCPServer) handleDocsGraph(args map[string]interface{}) (interface{}, e
 			"statement":      strings.TrimSpace(p.Then.Reason),
 			"status":         "ENFORCED",
 			"linked_symbols": []string{"talon.RunGuard", "policy.Engine.Run"},
+			"match_method":   "policy_enforced_entrypoint",
 		})
 	}
 
@@ -1319,6 +1320,7 @@ func (s *MCPServer) handleDocsGraph(args map[string]interface{}) (interface{}, e
 						"statement":      fmt.Sprintf("[%s] %s %s %s", mod, subj, pred, obj),
 						"status":         st,
 						"linked_symbols": []string{subj, obj},
+						"match_method":   "document_claim_extracted",
 					})
 				}
 			}
@@ -1343,6 +1345,7 @@ func (s *MCPServer) handleDocsGraph(args map[string]interface{}) (interface{}, e
 				"statement":      "[MUST] Every workspace query MUST scope by tenant_id and workspace_id before graph traversal.",
 				"status":         "SUPPORTED",
 				"linked_symbols": []string{"store.ResolveWorkspaceID", "MCPServer.resolveTenantAndWorkspace"},
+				"match_method":   "ast_exact",
 			},
 			{
 				"doc_id":         "doc:spec:mcp-sessions:filters:filterargs:d4e5f6",
@@ -1357,6 +1360,7 @@ func (s *MCPServer) handleDocsGraph(args map[string]interface{}) (interface{}, e
 				"statement":      "[MUST] MCP session telemetry MUST filter tool arguments through toolArgWhitelist before persistence.",
 				"status":         "SUPPORTED",
 				"linked_symbols": []string{"MCPServer.recordToolCall", "filterArgs"},
+				"match_method":   "ast_exact",
 			},
 		}
 		for _, sp := range specsSpecs {
@@ -1383,8 +1387,13 @@ func (s *MCPServer) handleDocsGraph(args map[string]interface{}) (interface{}, e
 	policyToSymbolEdges := ruleCount * 2
 	totalLineageEdges := docToRuleEdges + ruleToPolicyEdges + policyToSymbolEdges
 
+	graphSourceMode := "live_indexed_ast"
+	if counts.Entities == 0 {
+		graphSourceMode = "policy_and_claims_unindexed"
+	}
 	return map[string]interface{}{
 		"workspace":              wsName,
+		"graph_source_mode":      graphSourceMode,
 		"total_documents":        docCount,
 		"tiers":                  []string{"1. Document (ADR/Spec/Policy)", "2. Extracted Normative Rule (MUST/MUST_NOT/BLOCK)", "3. Active Talon Policy Guardrail", "4. Governed AST Code Symbol"},
 		"components_count":       len(components),

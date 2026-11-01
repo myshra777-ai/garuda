@@ -1,6 +1,6 @@
 name: "Garuda Talon Architecture & Data-Logic Gate"
 author: "Rohit Mishra (myshra777-ai)"
-description: "Diff-scoped multi-language AST change control, active AI agent guardrails (Talon), 0.0-1.0 formula disambiguation, and RFC 6962 Merkle receipts."
+description: "Fail-closed diff-scoped multi-language AST change control, active AI agent guardrails (Talon), 0.0-1.0 formula disambiguation, and RFC 6962 Merkle receipts."
 branding:
   icon: "shield"
   color: "green"
@@ -19,7 +19,7 @@ inputs:
     required: false
     default: "HEAD"
   fail-on-block:
-    description: "Exit with code 2 when net-new BLOCK violations or ADR contradictions are detected"
+    description: "Exit with code 2 when net-new BLOCK violations, ADR contradictions, or guard errors occur"
     required: false
     default: "true"
   matrix:
@@ -41,24 +41,46 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Build or Locate Garuda Binaries (Zero-CGO)
+    - name: Build or Locate Garuda Binaries from Action Source (Zero-CGO)
       shell: bash
       run: |
         set -euo pipefail
-        if [[ ! -x "./bin/garuda" ]]; then
-          CGO_ENABLED=0 go build -o bin/garuda ./cmd/garuda
-          CGO_ENABLED=0 go build -o bin/garuda-talon ./cmd/garuda-talon
-          CGO_ENABLED=0 go build -o bin/garuda-mcp ./cmd/garuda-mcp
-        fi
+        ACTION_SRC="${GITHUB_ACTION_PATH:-.}"
+        GARUDA_BIN_DIR="/tmp/garuda-action-bin"
+        mkdir -p "$GARUDA_BIN_DIR"
 
-    - name: Execute Garuda Talon Diff-Scoped Architecture & Logic Gate
+        if [[ -x "${ACTION_SRC}/bin/garuda" && -x "${ACTION_SRC}/bin/garuda-talon" ]]; then
+          cp -f "${ACTION_SRC}/bin/garuda" "${ACTION_SRC}/bin/garuda-talon" "$GARUDA_BIN_DIR/"
+          [[ -x "${ACTION_SRC}/bin/garuda-mcp" ]] && cp -f "${ACTION_SRC}/bin/garuda-mcp" "$GARUDA_BIN_DIR/" || true
+        else
+          (
+            cd "$ACTION_SRC"
+            CGO_ENABLED=0 go build -trimpath -o "${GARUDA_BIN_DIR}/garuda" ./cmd/garuda
+            CGO_ENABLED=0 go build -trimpath -o "${GARUDA_BIN_DIR}/garuda-talon" ./cmd/garuda-talon
+            CGO_ENABLED=0 go build -trimpath -o "${GARUDA_BIN_DIR}/garuda-mcp" ./cmd/garuda-mcp
+          )
+        fi
+        chmod +x "${GARUDA_BIN_DIR}/garuda" "${GARUDA_BIN_DIR}/garuda-talon"
+
+    - name: Execute Fail-Closed Garuda Talon Diff-Scoped Architecture & Logic Gate
       id: garuda_gate
       shell: bash
       run: |
         set -euo pipefail
+        ACTION_SRC="${GITHUB_ACTION_PATH:-.}"
+        GARUDA_BIN="/tmp/garuda-action-bin/garuda"
         WORKSPACE="${{ inputs.workspace }}"
         POLICY_DIR="${{ inputs.policy-dir }}"
+        DIFF_REV="${{ inputs.diff }}"
+
+        if [[ ! -d "$POLICY_DIR" && -d "${ACTION_SRC}/policies" ]]; then
+          POLICY_DIR="${ACTION_SRC}/policies"
+        fi
+
         EXTRA_FLAGS=()
+        if [[ -n "$DIFF_REV" ]]; then
+          EXTRA_FLAGS+=("--diff" "$DIFF_REV")
+        fi
         if [[ "${{ inputs.fail-on-block }}" == "true" ]]; then
           EXTRA_FLAGS+=("--fail-on-block")
         fi
@@ -66,23 +88,71 @@ runs:
           EXTRA_FLAGS+=("--matrix")
         fi
 
-        ./bin/garuda talon guard . --workspace "$WORKSPACE" --policies "$POLICY_DIR" "${EXTRA_FLAGS[@]}" --json > /tmp/garuda_verdict.json || true
-        VERDICT=$(python3 -c 'import json; d=json.load(open("/tmp/garuda_verdict.json")); print(d.get("outcome","ALLOW"))' 2>/dev/null || echo "ALLOW")
-        RECEIPT=$(python3 -c 'import json; d=json.load(open("/tmp/garuda_verdict.json")); print(d.get("build_context",{}).get("receipt_hash",""))' 2>/dev/null || echo "")
-        REPRO=$(python3 -c 'import json; d=json.load(open("/tmp/garuda_verdict.json")); print(d.get("reproduce_command",""))' 2>/dev/null || echo "")
+        set +e
+        "$GARUDA_BIN" talon guard . \
+          --workspace "$WORKSPACE" \
+          --policies "$POLICY_DIR" \
+          "${EXTRA_FLAGS[@]}" \
+          --json > /tmp/garuda_verdict.json 2>/tmp/garuda_verdict.err
+        GUARD_EXIT=$?
+        set -e
+
+        # Fail-closed parsing: any unparsable or missing JSON output defaults to BLOCK, never ALLOW
+        PARSE_OUT=$(python3 - << 'PYEOF'
+        import json, sys
+        try:
+            with open("/tmp/garuda_verdict.json", "r", encoding="utf-8") as f:
+                d = json.load(f)
+            if not isinstance(d, dict):
+                raise ValueError("verdict payload is not a JSON object")
+            outcome = str(d.get("outcome") or "BLOCK").strip().upper()
+            if outcome not in ("ALLOW", "WARN", "REVIEW", "BLOCK"):
+                outcome = "BLOCK"
+            receipt = str((d.get("build_context") or {}).get("receipt_hash") or "").strip()
+            repro = str(d.get("reproduce_command") or "").strip()
+            print(f"{outcome}\t{receipt}\t{repro}")
+        except Exception:
+            print("BLOCK\t\t")
+            sys.exit(1)
+        PYEOF
+        ) && PARSE_EXIT=0 || PARSE_EXIT=$?
+
+        IFS=$'\t' read -r VERDICT RECEIPT REPRO <<< "${PARSE_OUT:-BLOCK		}"
+        [[ -z "${VERDICT:-}" ]] && VERDICT="BLOCK"
+
+        # If the guard binary exited non-zero and did not explicitly emit WARN/REVIEW, enforce BLOCK
+        if [[ "$GUARD_EXIT" -ne 0 && "$VERDICT" == "ALLOW" ]]; then
+          VERDICT="BLOCK"
+        fi
 
         echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
         echo "receipt_hash=${RECEIPT}" >> "$GITHUB_OUTPUT"
         echo "reproduce_command=${REPRO}" >> "$GITHUB_OUTPUT"
 
         {
-          echo "### 🦅 Garuda Talon Architecture & Data-Logic Gate (`v1.9.9`)"
-          echo "- **Verdict**: \`${VERDICT}\`"
-          echo "- **Workspace**: \`${WORKSPACE}\`"
-          echo "- **Receipt Hash**: \`${RECEIPT:-genesis}\`"
-          echo "- **Reproduce Locally**: \`${REPRO:-garuda check --workspace default}\`"
+          echo "### 🦅 Garuda Talon Architecture & Data-Logic Gate (\`v1.9.9\`)"
+          echo "- **Verdict**: \`${VERDICT}\` (exit code: \`${GUARD_EXIT}\`)"
+          echo "- **Workspace**: \`${WORKSPACE}\` · **Diff Scope**: \`${DIFF_REV}\`"
+          echo "- **Receipt Hash**: \`${RECEIPT:-unanchored}\`"
+          echo "- **Reproduce Locally**: \`${REPRO:-garuda talon guard . --workspace ${WORKSPACE} --diff ${DIFF_REV}}\`"
+          if [[ "$GUARD_EXIT" -ne 0 && -s /tmp/garuda_verdict.err ]]; then
+            echo ""
+            echo "<details><summary>Diagnostic stderr</summary>"
+            echo ""
+            echo "\`\`\`text"
+            cat /tmp/garuda_verdict.err
+            echo "\`\`\`"
+            echo "</details>"
+          fi
         } >> "$GITHUB_STEP_SUMMARY"
 
-        if [[ "${{ inputs.fail-on-block }}" == "true" && "$VERDICT" == "BLOCK" ]]; then
+        if [[ "$PARSE_EXIT" -ne 0 ]]; then
+          echo "::error::Garuda Talon guard output could not be parsed as valid JSON; failing closed (BLOCK)." >&2
+          cat /tmp/garuda_verdict.err >&2 || true
           exit 2
+        fi
+
+        if [[ "${{ inputs.fail-on-block }}" == "true" && ( "$VERDICT" == "BLOCK" || "$GUARD_EXIT" -ne 0 ) ]]; then
+          echo "::error::Garuda Talon gate failed closed with verdict=${VERDICT} (exit=${GUARD_EXIT})." >&2
+          exit "${GUARD_EXIT:-2}"
         fi
