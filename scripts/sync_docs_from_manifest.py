@@ -386,6 +386,11 @@ docker pull ghcr.io/myshra777-ai/garuda:{ver}
 
 def sync_all(repo_root: str, check_only: bool = False) -> int:
     manifest_path = os.path.join(repo_root, "capabilities.json")
+    if not os.path.exists(manifest_path):
+        print(f"❌ Canonical manifest missing at {manifest_path}!")
+        print("   Root cause: capabilities.json is ignored by *.json in .gitignore or was not committed to git.")
+        print("   Fix: Add !capabilities.json to .gitignore, run git add -f capabilities.json .gitignore, and commit.")
+        return 1
     manifest = json.load(open(manifest_path))
     ver = manifest["version"]
     semver = manifest["semver"]

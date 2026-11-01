@@ -9,10 +9,12 @@
 
 # Output files
 *.json
+!capabilities.json
 *.html
 !internal/api/templates/*.html
 *.md.gz
 *.txt
+!version.txt
 !README.md
 !docs/*.md
 !LICENSE
@@ -80,19 +82,24 @@ garuda-sync/
 # Garuda specific generated files
 garuda_graph_*.html
 garuda_audit_*.txt
+!version.txt
 garuda_snapshot_*.txt
+!version.txt
 garuda_truth_index_*.md
 v*.json
+!capabilities.json
 *.bak
 *.sql.bak
 # Allow benchmark test fixtures
 !garuda-bench/**/*.json
+!capabilities.json
 
 # Track script requirements
 !scripts/requirements.txt
 
 # Allow benchmark test fixtures and golden manifests
 !test/benchmark/**/*.json
+!capabilities.json
 test/benchmark/results/
 test/benchmark/results/
 bin/

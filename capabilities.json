@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "product": "Garuda",
+  "tagline": "Epistemic Software Intelligence, Active AI Agent Harness & Human-in-the-Loop Data/Logic Governance",
+  "version": "v1.9.9",
+  "semver": "1.9.9",
+  "release_date": "2026-11-01",
+  "license": "Apache-2.0",
+  "mcp_protocol_version": "2025-06-18",
+  "counts": {
+    "binaries": 4,
+    "mcp_tools": 54,
+    "mcp_mutating_tools": 13,
+    "mcp_readonly_tools": 41,
+    "mcp_prompts": 1,
+    "mcp_resources": 2,
+    "dashboard_surfaces": 10,
+    "dashboard_api_endpoints": 19,
+    "sql_migrations": 95,
+    "yaml_policy_predicates": 9,
+    "talon_hooks": 6,
+    "supported_languages": 3,
+    "compiler_fixture_benchmarks": 24,
+    "synthetic_runtime_contradiction_simulations": 10,
+    "mcp_protocol_verification_checks": 63,
+    "mcp_behavioral_unit_tests": 54
+  },
+  "binaries": [
+    {
+      "name": "garuda",
+      "path": "cmd/garuda",
+      "description": "Primary CLI for multi-language AST indexing, diff-scoped change control, Talon harness management, Data & Logic audits, and system diagnostics."
+    },
+    {
+      "name": "garuda-mcp",
+      "path": "cmd/garuda-mcp",
+      "description": "JSON-RPC 2.0 stdio Model Context Protocol server exposing 54 deterministic tools (41 read-only, 13 mutating) with strict argument whitelisting, tenant isolation, and human approval gates."
+    },
+    {
+      "name": "garuda-api",
+      "path": "cmd/garuda-api",
+      "description": "Local-first HTTP REST API & 10-Surface Progressive-Disclosure Dashboard PWA gateway with Ed25519 JWT authentication."
+    },
+    {
+      "name": "garuda-talon",
+      "path": "cmd/garuda-talon",
+      "description": "Standalone active AI agent execution harness and pre-commit/PostToolUse enforcement gate."
+    }
+  ],
+  "evaluation_separation": {
+    "tier_1_compiler_fixtures": {
+      "label": "Compiler Fixture Benchmarks (Static Ground-Truth Corpus)",
+      "mode_flag": "include_fixtures=true / make benchmark-strict",
+      "default_in_production": "EXCLUDED (scope: production_only filters out benchmark/test fixture paths by default)",
+      "suite_size": "24/24 strict multi-module & AST cases",
+      "what_it_proves": "100% deterministic extraction precision and recall on Go (go/types, go.work, vendor), Python AST, and TypeScript AST fixtures, plus checkout-path-invariant package cache fingerprints (TestDoubleRunDeterminism)."
+    },
+    "tier_2_synthetic_grounding_simulations": {
+      "label": "Synthetic Grounding & Contradiction Simulations (Controlled Fault Injection)",
+      "mode_flag": "--demo-fixtures / simulate_violation / simulate_drift / runtime_contradiction_test.py",
+      "default_in_production": "OPT-IN ONLY (never injected into live workspace queries unless explicitly requested)",
+      "suite_size": "10/10 OTel runtime contradiction injections + 2 canonical multi-team formula & Crore unit-scaling simulations",
+      "what_it_proves": "Quarantine of unapproved runtime service edges, deterministic self-repair prompt generation under simulated BLOCK/drift conditions, and human-in-the-loop disambiguation of competing team formulas (0.0-1.0 weights) and 10x unit-scaling bugs (48.00 Cr vs 4.80 Cr)."
+    },
+    "tier_3_live_ast_and_llm_sessions": {
+      "label": "Live Repository AST, RFC 6962 Ledger & Live LLM/MCP Agent Sessions",
+      "mode_flag": "Default live mode (scope: production_only, GARUDA_TALON_ENFORCE=true)",
+      "default_in_production": "ACTIVE BY DEFAULT",
+      "suite_size": "63/63 live MCP protocol checks + 54/54 positive & negative behavioral tool tests",
+      "what_it_proves": "Real-time AST symbol & blast-radius resolution on live repositories, tenant/workspace isolation, fail-closed read-only mode (GARUDA_MCP_READ_ONLY=true), cryptographic human approval attestation (GARUDA_MCP_APPROVER), and tamper-evident RFC 6962 SHA-256 receipts."
+    }
+  },
+  "assets": {
+    "logo_primary": "assets/Garuda_minimal_logo.png",
+    "logo_secondary": "assets/garuda-logo.png",
+    "demo_video": "assets/garuda_dashboard_demo_video.mp4",
+    "screenshots": {
+      "overview": "assets/screenshots/workspace-overview.png",
+      "search": "assets/screenshots/global_search.png",
+      "architecture_top": "assets/screenshots/top_level_repo_architecture.png",
+      "architecture_ast": "assets/screenshots/low-level-ast-graph.png",
+      "cross_repo": "assets/screenshots/cross-repo-graph.png",
+      "workspace_14repo": "assets/screenshots/14-repo-workspace-graph.png",
+      "workspace_clusters": "assets/screenshots/workspace-clusters-graph.png",
+      "repository_topology": "assets/screenshots/repository-topology.png",
+      "contradictions_14repo": "assets/screenshots/dashboard-14repo-contradictions.png",
+      "cryptographic_trust": "assets/screenshots/evidence-cryptographic-trust.png",
+      "ide_graph": "assets/screenshots/ide-graph-view.png",
+      "ide_contradictions": "assets/screenshots/ide-contradictions.png"
+    }
+  }
+}
