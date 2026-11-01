@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -77,7 +78,11 @@ func LoadActivePolicies(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.U
 
 	byID := make(map[string]ParsedPolicy)
 	if policyDir != "" {
-		if parsed, err := ParseDirectory(policyDir); err == nil {
+		if _, statErr := os.Stat(policyDir); statErr == nil {
+			parsed, err := ParseDirectory(policyDir)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("fail-closed policy parse error in %s: %w", policyDir, err)
+			}
 			for _, pp := range parsed {
 				if pp.Policy == nil {
 					continue
@@ -100,6 +105,8 @@ func LoadActivePolicies(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.U
 				}
 				byID[pid] = pp
 			}
+		} else if !os.IsNotExist(statErr) {
+			return nil, nil, nil, fmt.Errorf("access policy path %s: %w", policyDir, statErr)
 		}
 	}
 

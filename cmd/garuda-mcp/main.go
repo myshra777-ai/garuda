@@ -27,6 +27,7 @@ import (
 	"github.com/myshra777-ai/garuda/internal/store"
 	"github.com/myshra777-ai/garuda/internal/tenant"
 	"github.com/myshra777-ai/garuda/internal/types"
+	"github.com/myshra777-ai/garuda/internal/version"
 )
 
 // MCPServer holds the process-scoped state of one MCP session.
@@ -50,11 +51,15 @@ func main() {
 	for _, arg := range os.Args[1:] {
 		switch arg {
 		case "--help", "-h", "help":
-			fmt.Println("Garuda MCP Server v1.9.6 (JSON-RPC 2.0 over stdio — 40 governance & AST tools)")
+			fmt.Println(version.MCPHelpBanner())
 			fmt.Println("Usage: garuda-mcp [--version | --help]")
+			fmt.Println("Environment Controls:")
+			fmt.Println("  GARUDA_MCP_READ_ONLY=true       Reject all 13 mutating tools (fail-closed read-only mode)")
+			fmt.Println("  GARUDA_MCP_APPROVER=<email>     Cryptographically attest human stakeholder identity for co-signed decisions")
+			fmt.Println("  GARUDA_TALON_ENFORCE=true       Attach active Talon contract metadata on initial unoriented tool call")
 			return
 		case "--version", "-v", "version":
-			fmt.Println("Garuda MCP Server v1.9.6")
+			fmt.Println(version.MCPVersionBanner())
 			return
 		}
 	}
@@ -1524,7 +1529,7 @@ func (s *MCPServer) handleInitialize(req MCPRequest) MCPResponse {
 			"instructions": "Garuda Talon Active Enforcement is enabled. Call garuda.talon_pre_edit before modifying code and garuda.talon_verify_edit immediately after editing to verify 0 net-new policy or ADR violations.",
 			"serverInfo": map[string]interface{}{
 				"name":    "garuda-mcp",
-				"version": "1.9.6",
+				"version": version.SemVer,
 			},
 		},
 	}
@@ -1541,6 +1546,9 @@ func (s *MCPServer) handleToolsList(req MCPRequest) MCPResponse {
 }
 
 func (s *MCPServer) checkAndConsumeBudget(ctx context.Context, tenantID uuid.UUID, agentID, toolName string, payload interface{}) (func(), error) {
+	if s == nil || s.store == nil || s.safePool() == nil {
+		return func() {}, nil
+	}
 	budgetState, err := s.store.GetTenantBudget(ctx, tenantID)
 	if err != nil {
 		return nil, err
@@ -1847,8 +1855,10 @@ func (s *MCPServer) processProposeDecisionLogic(args map[string]interface{}) (in
 		UpdatedAt:   now,
 	}
 
-	if err := s.store.SaveDecision(context.Background(), decision); err != nil {
-		return nil, err
+	if s.store != nil && s.safePool() != nil {
+		if err := s.store.SaveDecision(context.Background(), decision); err != nil {
+			return nil, err
+		}
 	}
 
 	return map[string]interface{}{
@@ -1896,24 +1906,25 @@ func (s *MCPServer) handleQuery(args map[string]interface{}) (interface{}, error
 	qLower := strings.ToLower(strings.TrimSpace(query))
 
 	// 1. Search decisions
-	if decisions, dErr := s.store.GetDecisionsByScope(ctx, tenantID, "", ""); dErr == nil {
-		for _, d := range decisions {
-			if strings.Contains(strings.ToLower(d.Title), qLower) || strings.Contains(strings.ToLower(d.Statement), qLower) {
-				results = append(results, map[string]interface{}{
-					"kind":       "decision",
-					"id":         d.ID.String(),
-					"title":      d.Title,
-					"statement":  d.Statement,
-					"status":     d.Status.String(),
-					"scope":      d.Scope,
-					"confidence": d.Confidence,
-				})
+	if s.store != nil && s.safePool() != nil {
+		if decisions, dErr := s.store.GetDecisionsByScope(ctx, tenantID, "", ""); dErr == nil {
+			for _, d := range decisions {
+				if strings.Contains(strings.ToLower(d.Title), qLower) || strings.Contains(strings.ToLower(d.Statement), qLower) {
+					results = append(results, map[string]interface{}{
+						"kind":       "decision",
+						"id":         d.ID.String(),
+						"title":      d.Title,
+						"statement":  d.Statement,
+						"status":     d.Status.String(),
+						"scope":      d.Scope,
+						"confidence": d.Confidence,
+					})
+				}
 			}
 		}
 	}
-
 	// 2. Search workspace entities and document_claims
-	if _, workspaceID, wErr := s.resolveTenantAndWorkspace(args); wErr == nil && workspaceID != uuid.Nil {
+	if _, workspaceID, wErr := s.resolveTenantAndWorkspace(args); wErr == nil && workspaceID != uuid.Nil && s.store != nil && s.safePool() != nil {
 		eRows, eErr := s.safePool().Query(ctx, `
 			SELECT id::text, name, kind, COALESCE(package, ''), COALESCE(file_path, ''), COALESCE(line_start, 0)
 			FROM entities
@@ -1998,6 +2009,10 @@ func (s *MCPServer) handleGetLineage(args map[string]interface{}) (interface{}, 
 		return nil, fmt.Errorf("one of decision_id, symbol, name, entity_id, or actor is required")
 	}
 
+	if s.store == nil || s.safePool() == nil {
+		commitBudget()
+		return map[string]interface{}{"tenant_id": tenantID.String(), "target": targetStr, "decisions_count": 0, "decisions": []interface{}{}, "evaluations_count": 0, "policy_evaluations": []interface{}{}, "entities_count": 0, "entities": []interface{}{}, "lineage_count": 0}, nil
+	}
 	if decisionID, pErr := uuid.Parse(targetStr); pErr == nil {
 		if decision, dErr := s.store.GetDecision(ctx, tenantID, decisionID); dErr == nil && decision != nil {
 			children, _ := s.store.ListDecisionsByParent(ctx, tenantID, decisionID)
@@ -2133,6 +2148,10 @@ func (s *MCPServer) handleDetectContradictions(args map[string]interface{}) (int
 	statusFilter = strings.ToLower(strings.TrimSpace(statusFilter))
 	resolvedFlag := statusFilter == "resolved"
 
+	if s.store == nil || s.safePool() == nil {
+		commitBudget()
+		return map[string]interface{}{"tenant_id": tenantID.String(), "status_filter": map[bool]string{true: statusFilter, false: "open"}[statusFilter != ""], "count": 0, "contradictions": []interface{}{}, "adr_contradictions": []interface{}{}}, nil
+	}
 	contradictions, err := s.store.ListContradictions(ctx, tenantID, resolvedFlag)
 	if err != nil {
 		commitBudget()
@@ -2200,7 +2219,7 @@ func (s *MCPServer) handleGetImpact(args map[string]interface{}) (interface{}, e
 	}
 
 	// 1. If targetStr is a valid UUID and matches a Decision row, return decision children impact
-	if decisionID, pErr := uuid.Parse(targetStr); pErr == nil {
+	if decisionID, pErr := uuid.Parse(targetStr); pErr == nil && s.store != nil && s.safePool() != nil {
 		if dec, dErr := s.store.GetDecision(ctx, tenantID, decisionID); dErr == nil && dec != nil {
 			children, _ := s.store.ListDecisionsByParent(ctx, tenantID, decisionID)
 			commitBudget()

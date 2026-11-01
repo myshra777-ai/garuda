@@ -51,3 +51,8 @@ UPDATE surface_criticality_tiers
 DELETE FROM decisions
  WHERE (title ILIKE '%smoke%' OR statement ILIKE '%smoke%' OR owner = 'mcp-agent' OR owner LIKE 'mcp-client:%')
    AND status = 'draft';
+
+-- Allow INCONCLUSIVE decision (B-04 vacuous ALLOW prevention over 0 scoped entities)
+ALTER TABLE policy_evaluations DROP CONSTRAINT IF EXISTS policy_evaluations_decision_check;
+ALTER TABLE policy_evaluations ADD CONSTRAINT policy_evaluations_decision_check
+    CHECK (decision IN ('ALLOW', 'WARN', 'REVIEW', 'BLOCK', 'INCONCLUSIVE'));

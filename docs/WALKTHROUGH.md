@@ -1,22 +1,6 @@
 # Garuda System Walkthrough (`v1.9.9` Universal)
 
-**A complete visual and technical tour of Garuda's 10-surface Software Intelligence Instrument (`/dashboard` PWA), the `Garuda Talon` active AI execution harness, deterministic `BuildContext` provenance receipts, cross-platform `--matrix` gates, 35 active MCP tools, and IDE integrations.**
-
----
-
-## 0. Watch the 20-Second Cinematic Product Introduction
-
-Before diving into the technical surfaces, watch the 20-second introduction video exploring Garuda's live control plane (`../assets/garuda_dashboard_demo_video.mp4`):
-
-&lt;div align=&quot;center&quot;&gt;
-  &lt;video src=&quot;../assets/garuda_dashboard_demo_video.mp4&quot; poster=&quot;../assets/Screenshot%20From%202026-10-25%2002-30-49.png&quot; controls autoplay loop muted playsinline width=&quot;100%&quot;&gt;
-    &lt;source src=&quot;../assets/garuda_dashboard_demo_video.mp4&quot; type=&quot;video/mp4&quot;&gt;
-    &lt;a href=&quot;../assets/garuda_dashboard_demo_video.mp4&quot;&gt;
-      &lt;img src=&quot;../assets/Screenshot%20From%202026-10-25%2002-30-49.png&quot; width=&quot;100%&quot; alt=&quot;Watch the 20-Second Garuda Introduction Video&quot;&gt;
-    &lt;/a&gt;
-  &lt;/video&gt;
-  &lt;p&gt;&lt;em&gt;🎬 &lt;a href=&quot;../assets/garuda_dashboard_demo_video.mp4&quot;&gt;&lt;strong&gt;Click here to play &lt;code&gt;assets/garuda_dashboard_demo_video.mp4&lt;/code&gt;&lt;/strong&gt;&lt;/a&gt;&lt;/em&gt;&lt;/p&gt;
-&lt;/div&gt;
+**A complete visual and technical tour of Garuda's 10-surface Software Intelligence Instrument (`/dashboard` PWA), the `Garuda Talon` active AI execution harness, deterministic `BuildContext` provenance receipts, cross-platform `--matrix` gates, 54 active MCP tools, and IDE integrations.**
 
 ---
 
@@ -57,23 +41,23 @@ Open `http://localhost:8080/dashboard` (or install it as a standalone desktop/Ch
 ### Surface 01 — Executive Workspace Briefing (`/dashboard#briefing`)
 Provides an immediate system health strip (Indexed Entities, Verified Edges, Active Policy Posture, Contradictions Count, and RFC 6962 Merkle Head), a prioritized **Needs Attention** queue, and recent governance verdicts.
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;../assets/Screenshot%20From%202026-10-25%2002-30-49.png&quot; width=&quot;100%&quot; alt=&quot;Surface 01: Executive Workspace Briefing&quot;&gt;
-&lt;/p&gt;
+<p align="center">
+  <img src="../assets/screenshots/workspace-overview.png" width="100%" alt="Surface 01: Executive Workspace Briefing">
+</p>
 
 ### Surface 02 — Explore Index & High-Impact Symbol Directory (`/dashboard#explore`)
 Automatically loads the workspace's top exported symbols ranked by inbound caller fan-in and blast radius on initial boot. Engineers can filter by language (`Go`, `Python`, `TypeScript`), entity kind (`struct`, `interface`, `func`, `method`, `class`, `package`), or press `⌘K` / `Ctrl+K` from anywhere to jump straight to a symbol.
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;../assets/Screenshot%20From%202026-10-25%2002-31-11.png&quot; width=&quot;100%&quot; alt=&quot;Surface 02: Explore Index&quot;&gt;
-&lt;/p&gt;
+<p align="center">
+  <img src="../assets/screenshots/global_search.png" width="100%" alt="Surface 02: Explore Index">
+</p>
 
 ### Surface 03 — Neighborhood-First Architecture Map (`/dashboard#map`)
 Replaces unreadable 10,000-node hairballs with a focused **1-hop or 2-hop ego-network explorer** (`[Upstream Callers] ──> [Focal Symbol] ──> [Downstream Dependencies & Policy Badges]`). Clicking any node opens the synchronized **4-Tab Inspector Drawer** (`Source`, `Relationships`, `Policy Results`, `Evidence`), and toggling **`✦ Docs & Rules Graph`** overlays normative ADR/spec links directly onto the map.
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;../assets/Screenshot%20From%202026-10-25%2002-31-24.png&quot; width=&quot;100%&quot; alt=&quot;Surface 03: Neighborhood Architecture Map&quot;&gt;
-&lt;/p&gt;
+<p align="center">
+  <img src="../assets/screenshots/top_level_repo_architecture.png" width="100%" alt="Surface 03: Neighborhood Architecture Map">
+</p>
 
 ### Surface 04 — Docs, Specs & Guardrails Lineage Graph (`/dashboard#docs-graph`)
 Introduced in `v1.7` and refined in `v1.8.1`, this surface visualizes how human-written engineering standards govern live code across a **4-tier DAG**:
@@ -82,9 +66,9 @@ Introduced in `v1.7` and refined in `v1.8.1`, this surface visualizes how human-
 - **Tier 3 — Active Policy Guardrails**: Executable SQL/CTE predicates enforcing those rules.
 - **Tier 4 — Code Symbols & Packages**: The exact Go, Python, and TypeScript symbols bound by each rule, complete with a **Document-to-Code Component Matrix** and an in-browser **Ingest Document / ADR Modal** (`POST /api/v1/dashboard/docs-ingest`).
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;../assets/Screenshot%20From%202026-10-25%2002-31-40.png&quot; width=&quot;100%&quot; alt=&quot;Surface 04: Docs, Specs &amp; Guardrails Lineage Graph&quot;&gt;
-&lt;/p&gt;
+<p align="center">
+  <img src="../assets/screenshots/repository-topology.png" width="100%" alt="Surface 04: Docs, Specs & Guardrails Lineage Graph">
+</p>
 
 ### Surface 05 — Garuda Talon & Architectural Risk Hub (`/dashboard#talon-hub`)
 The operational nerve center for AI agent governance and build-context determinism (`v1.9.9`):
@@ -94,24 +78,24 @@ The operational nerve center for AI agent governance and build-context determini
 - **Active IDE, MCP & Git Hook Status Panel**: Tracks all 6 enforcement hooks with 1-click installation/sync.
 - **Architectural Risk Hub Leaderboard**: Scores symbols from `0–100` (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) by caller fan-in, transitive blast radius, and ADR sensitivity, with 1-click **Pre-Edit Briefing** drawers.
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;../assets/Screenshot%20From%202026-10-25%2002-31-56.png&quot; width=&quot;100%&quot; alt=&quot;Surface 05: Garuda Talon &amp; Architectural Risk Hub&quot;&gt;
-&lt;/p&gt;
+<p align="center">
+  <img src="../assets/screenshots/workspace-clusters-graph.png" width="100%" alt="Surface 05: Garuda Talon & Architectural Risk Hub">
+</p>
 
 ### Surface 06 — Change Review Workbench & Interactive Policy Sandbox (`/dashboard#workbench` & `/dashboard#policies`)
 A 3-pane pre-merge simulator where engineers select a target symbol and policy bundle on the left, inspect impacted upstream callers and applicable predicates in the center, and generate a live `ALLOW` / `WARN` / `REVIEW` / `BLOCK` receipt on the right—paired with a live YAML Policy Sandbox for testing new rules across all 9 graph predicates.
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;../assets/Screenshot%20From%202026-10-25%2002-32-11.png&quot; width=&quot;100%&quot; alt=&quot;Surface 06: Change Review Workbench &amp; Policies&quot;&gt;
-&lt;/p&gt;
+<p align="center">
+  <img src="../assets/screenshots/cross-repo-graph.png" width="100%" alt="Surface 06: Change Review Workbench & Policies">
+</p>
 
 ### Surface 07 & 08 — Forensic Contradictions Queue & RFC 6962 Cryptographic Audit Ledger (`/dashboard#contradictions` & `/dashboard#ledger`)
 - **Contradictions & Evidence (`#contradictions`)**: Compares static AST source locations against live OpenTelemetry runtime trace spans (`trace_id`, `span_id`, caller/callee service pair) and includes an interactive **OTel Runtime Span Simulator** to test shadow-call quarantine.
 - **Governance & Audit Ledger (`#ledger`)**: Displays the append-only RFC 6962 SHA-256 Merkle ledger table with a bottom **Decision Record Inspector** (`What it did`, `What it looked at`, `BuildContext Receipt`, `Epistemic state`, `Merkle Inclusion Proof`) and 1-click cryptographic verification.
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;img src=&quot;../assets/Screenshot%20From%202026-10-25%2002-32-25.png&quot; width=&quot;100%&quot; alt=&quot;Surface 07 &amp; 08: Contradictions Queue &amp; Audit Ledger&quot;&gt;
-&lt;/p&gt;
+<p align="center">
+  <img src="../assets/screenshots/evidence-cryptographic-trust.png" width="100%" alt="Surface 07 & 08: Contradictions Queue & Audit Ledger">
+</p>
 
 ---
 
@@ -145,11 +129,11 @@ Example terminal output:
 
 ## 4. VS Code & Cursor IDE Extension (`vscode-extension/`)
 
-Alongside the 23-tool MCP server and `.cursor/rules/garuda-talon.mdc` harness, Garuda ships a native VS Code / Cursor extension providing inline neighborhood graph inspection and live contradiction diagnostics right next to your code editor:
+Alongside the 54-tool MCP server and `.cursor/rules/garuda-talon.mdc` harness, Garuda ships a native VS Code / Cursor extension providing inline neighborhood graph inspection and live contradiction diagnostics right next to your code editor:
 
 | IDE Graph View (`../assets/screenshots/ide-graph-view.png`) | IDE Contradictions Panel (`../assets/screenshots/ide-contradictions.png`) |
 | :---: | :---: |
-| &lt;img src=&quot;../assets/screenshots/ide-graph-view.png&quot; width=&quot;100%&quot; alt=&quot;IDE Graph View&quot;&gt; | &lt;img src=&quot;../assets/screenshots/ide-contradictions.png&quot; width=&quot;100%&quot; alt=&quot;IDE Contradictions Panel&quot;&gt; |
+| <img src="../assets/screenshots/ide-graph-view.png" width="100%" alt="IDE Graph View"> | <img src="../assets/screenshots/ide-contradictions.png" width="100%" alt="IDE Contradictions Panel"> |
 
 
 ### Surface 09 — Data & Logic Audit Workbench (`/dashboard?tab=audit`)

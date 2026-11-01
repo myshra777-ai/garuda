@@ -23,6 +23,7 @@ var WorkspaceScopedTables = map[string]bool{
 	"contradictions":                  true,
 	"cross_module_edges":              true,
 	"cross_repo_edges":                true,
+	"data_logic_audit_ledger":         true,
 	"document_claims":                 true,
 	"entities":                        true,
 	"financial_audit_reconciliations": true,
@@ -40,4 +41,3 @@ var WorkspaceScopedTables = map[string]bool{
 	"workspace_members":               true,
 	"workspace_modules":               true,
 }
-

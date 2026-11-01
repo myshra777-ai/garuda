@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS policy_evaluations (
     subject_id         TEXT DEFAULT '',
     actor              VARCHAR(128) DEFAULT '',
     CONSTRAINT policy_evaluations_decision_check
-        CHECK (decision IN ('ALLOW', 'WARN', 'REVIEW', 'BLOCK'))
+        CHECK (decision IN ('ALLOW', 'WARN', 'REVIEW', 'BLOCK', 'INCONCLUSIVE'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_policy_eval_workspace ON policy_evaluations (tenant_id, workspace_id, evaluated_at DESC);

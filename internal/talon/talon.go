@@ -214,6 +214,15 @@ func CompileContract(
 		}
 	}
 
+	if policyDir != "" {
+		if _, statErr := os.Stat(policyDir); statErr == nil {
+			if _, pErr := policy.ParseDirectory(policyDir); pErr != nil {
+				return nil, fmt.Errorf("compile contract: %w", pErr)
+			}
+		} else if !os.IsNotExist(statErr) {
+			return nil, fmt.Errorf("compile contract: access policy path %s: %w", policyDir, statErr)
+		}
+	}
 	activePolicies, _, _, err := policy.LoadActivePolicies(ctx, pool, tenantID, policyDir)
 	if err != nil {
 		return nil, fmt.Errorf("compile contract: %w", err)
@@ -490,6 +499,9 @@ func BuildPreEditBriefing(
 	tenantID, workspaceID uuid.UUID,
 	workspaceName, target, policyDir string,
 ) (*PreEditBriefing, error) {
+	if st == nil || st.Pool() == nil {
+		return nil, fmt.Errorf("missing workspace database")
+	}
 	return BuildPreEditBriefingWithOpts(ctx, st, tenantID, workspaceID, workspaceName, target, policyDir, false)
 }
 
@@ -502,6 +514,9 @@ func BuildPreEditBriefingWithOpts(
 	workspaceName, target, policyDir string,
 	includeFixtures bool,
 ) (*PreEditBriefing, error) {
+	if st == nil || st.Pool() == nil {
+		return nil, fmt.Errorf("missing workspace database")
+	}
 	var pool *pgxpool.Pool
 	if st != nil {
 		pool = st.Pool()
@@ -721,6 +736,9 @@ func RunGuard(
 	tenantID, workspaceID uuid.UUID,
 	opts GuardOptions,
 ) (*GuardVerdict, error) {
+	if st == nil || st.Pool() == nil {
+		return nil, fmt.Errorf("missing workspace database")
+	}
 	start := time.Now()
 	absRepo, err := filepath.Abs(opts.RepoDir)
 	if err != nil {

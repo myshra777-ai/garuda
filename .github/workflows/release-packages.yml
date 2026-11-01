@@ -1,0 +1,86 @@
+name: Publish GitHub Packages (GHCR) & Multi-OS Release Matrix
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+
+jobs:
+  verify-canonical-manifest-and-tests:
+    name: Verify Canonical Manifest, 54 MCP Tools & Docs Parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+      - name: Verify Documentation & Manifest Consistency
+        run: python3 scripts/sync_docs_from_manifest.py --check
+      - name: Run 54-Tool Behavioral & Security Unit Tests
+        run: CGO_ENABLED=0 go test -v ./cmd/garuda-mcp -run "TestAll54RegisteredTools|TestNewTools|TestToolArgWhitelist|TestFilterArgs|TestBug|TestClaudeAudit"
+
+  publish-ghcr-packages:
+    name: Publish Multi-Arch OCI Images to GitHub Packages (ghcr.io)
+    needs: verify-canonical-manifest-and-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract Version Metadata
+        id: meta
+        run: |
+          VER=$(tr -d '[:space:]' < version.txt)
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+      - name: Build and Push ghcr.io/${{ github.repository }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ github.repository }}:latest
+          labels: |
+            org.opencontainers.image.title=Garuda Software Intelligence & Active Governance
+            org.opencontainers.image.description=Local-first multi-language AST change-control gate, Garuda Talon harness, 54-tool MCP server, and 10-surface dashboard
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+  publish-release-binaries:
+    name: Build Cross-OS Zero-CGO Release Bundles
+    needs: verify-canonical-manifest-and-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+      - name: Build Multi-OS Release Matrix
+        run: bash scripts/build_release_matrix.sh
+      - name: Upload Release Assets on Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/releases/*
+          generate_release_notes: true

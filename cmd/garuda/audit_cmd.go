@@ -217,7 +217,7 @@ func queryWorkspaceSymbolHubs(ctx context.Context, pool *pgxpool.Pool, wsID uuid
 
 var auditCmd = &cobra.Command{
 	Use:   "audit",
-	Short: "Human-in-the-Loop Logic Weight Disambiguation, Surface Criticality Tiers & Financial Data Discrepancy Audits (v1.9.3)",
+	Short: "Human-in-the-Loop Logic Weight Disambiguation, Surface Criticality Tiers & Data & Logic Discrepancy Audits (v1.9.9)",
 }
 
 var auditLogicCmd = &cobra.Command{
@@ -436,7 +436,7 @@ var auditLogicCmd = &cobra.Command{
 		}
 
 		fmt.Println("╔══════════════════════════════════════════════════════════════════════════════╗")
-		fmt.Println("║     🦅 GARUDA v1.9.3 — HUMAN-IN-THE-LOOP WEIGHTED LOGIC DISAMBIGUATION      ║")
+		fmt.Println("║     🦅 GARUDA v1.9.9 — HUMAN-IN-THE-LOOP WEIGHTED LOGIC DISAMBIGUATION      ║")
 		fmt.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
 		fmt.Printf("  Workspace:        %s\n", wsName)
 		fmt.Printf("  Concept:          %s\n", concept)
@@ -546,7 +546,7 @@ var auditDataLogicCmd = &cobra.Command{
 			return enc.Encode(report)
 		}
 		fmt.Println("╔══════════════════════════════════════════════════════════════════════════════╗")
-		fmt.Println("║       🦅 GARUDA v1.9.3 — DATA & BUSINESS LOGIC DISCREPANCY AUDIT        ║")
+		fmt.Println("║       🦅 GARUDA v1.9.9 — DATA & BUSINESS LOGIC DISCREPANCY AUDIT        ║")
 		fmt.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
 		fmt.Printf("  Workspace:          %s\n", wsName)
 		fmt.Printf("  Metric Audited:     %s\n", auditMetricNameFlag)
@@ -651,7 +651,7 @@ var auditCriticalityCmd = &cobra.Command{
 			return enc.Encode(map[string]any{"workspace": wsName, "criticality_tiers": tiers})
 		}
 		fmt.Println("╔══════════════════════════════════════════════════════════════════════════════╗")
-		fmt.Println("║         🦅 GARUDA v1.9.3 — 3-TIER SURFACE CRITICALITY CLASSIFICATION        ║")
+		fmt.Println("║         🦅 GARUDA v1.9.9 — 3-TIER SURFACE CRITICALITY CLASSIFICATION        ║")
 		fmt.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
 		fmt.Printf("  Workspace: %s\n\n", wsName)
 		for _, t := range tiers {
@@ -668,7 +668,7 @@ var auditCriticalityCmd = &cobra.Command{
 
 var rulebookCmd = &cobra.Command{
 	Use:   "rulebook",
-	Short: "Auto-synthesize and approve a structured Base Rulebook from unorganized repo architecture (v1.9.3)",
+	Short: "Auto-synthesize and approve a structured Base Rulebook from unorganized repo architecture (v1.9.9)",
 }
 
 var rulebookGenerateCmd = &cobra.Command{
@@ -737,7 +737,7 @@ var rulebookGenerateCmd = &cobra.Command{
 				_, _ = st.Pool().Exec(ctx, `
 					INSERT INTO synthesized_rulebooks (
 						tenant_id, workspace_id, version_tag, status, title, markdown_content, merkle_hash
-					) VALUES ($1, $2, 'v1.9.3-draft', 'DRAFT_AWAITING_HUMAN_APPROVAL',
+					) VALUES ($1, $2, 'v1.9.9-draft', 'DRAFT_AWAITING_HUMAN_APPROVAL',
 						'Garuda Auto-Synthesized Base Architecture & Data Logic Audit Rulebook', $3, $4)
 				`, tenantID, wsID, content, hex.EncodeToString(sum[:]))
 			}
@@ -784,7 +784,7 @@ var rulebookApproveCmd = &cobra.Command{
 				_, _ = st.Pool().Exec(ctx, `
 					INSERT INTO synthesized_rulebooks (
 						tenant_id, workspace_id, version_tag, status, title, markdown_content, approved_by, approved_at, merkle_hash
-					) VALUES ($1, $2, 'v1.9.3-approved', 'APPROVED_BASE_RULEBOOK',
+					) VALUES ($1, $2, 'v1.9.9-approved', 'APPROVED_BASE_RULEBOOK',
 						'Garuda Approved Base Architecture & Data Logic Audit Rulebook', $3, $4, NOW(), $5)
 				`, tenantID, wsID, approvedContent, rulebookApproveBy, hashHex)
 			}

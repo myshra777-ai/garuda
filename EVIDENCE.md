@@ -19,6 +19,24 @@ Every number below is a measured result, a snapshot value, or an explicitly labe
 
 ---
 
+## Three-Tier Evaluation Separation (`P3` Canonical Standard)
+
+To prevent benchmark fixtures or synthetic demos from being conflated with live repository measurements, Garuda partitions all verification evidence into three strict tiers:
+
+1. **Tier 1 — Deterministic Compiler Fixture Results (`24/24` Strict Suite)**:
+   - **Activation**: `make benchmark-strict` or `include_fixtures=true`.
+   - **Default Production Behavior**: **Excluded by default** (`ExcludeFixturesSQL` filters out `test/fixtures/`, `testdata/`, `garuda-bench/`, and `conftest`).
+   - **What It Proves**: 100% extraction precision and recall on controlled Go (`go/types`, `go.work`, `vendor/`), Python AST, and TypeScript AST ground-truth fixtures, plus checkout-path-invariant cache fingerprints (`TestDoubleRunDeterminism`).
+2. **Tier 2 — Synthetic Grounding & Contradiction Simulations (`10/10` Fault Injections)**:
+   - **Activation**: `python3 scripts/runtime_contradiction_test.py`, `--demo-fixtures`, `simulate_violation`, `simulate_drift`.
+   - **Default Production Behavior**: **Opt-in only**. Calling `garuda.disambiguate_logic` or `garuda.audit_data_discrepancy` on an empty workspace with `include_fixtures=false` returns `status: "INSUFFICIENT_DATA"` with zero synthetic leakage.
+   - **What It Proves**: Quarantine of injected unapproved OTel service edges (`10/10`), deterministic self-repair prompt generation under simulated `BLOCK`/drift, and human-in-the-loop disambiguation of competing formulas (`0.0–1.0` weights) and 10x unit-scaling bugs (`48.00 Cr vs 4.80 Cr`).
+3. **Tier 3 — Live Repository AST, RFC 6962 Ledger & Live LLM/MCP Agent Sessions (`63/63` Protocol Checks + `54/54` Behavioral Tool Tests)**:
+   - **Activation**: Default production mode (`scope: "production_only"`, `GARUDA_TALON_ENFORCE=true`).
+   - **What It Proves**: Real-time AST symbol & blast-radius resolution on live repositories, cryptographic tenant/workspace isolation (`TestNewTools_TenantIsolation_ReadOnly_HumanApproval_ReceiptHandling`), fail-closed read-only enforcement (`GARUDA_MCP_READ_ONLY=true`), attested human co-signing (`GARUDA_MCP_APPROVER`), and tamper-evident SHA-256 `receipt_hash` verification.
+
+---
+
 ## Evidence at a Glance
 
 | Area | Current evidence (v1.9.9) |
@@ -32,7 +50,7 @@ Every number below is a measured result, a snapshot value, or an explicitly labe
 | Blended validation | 9 repositories across Go (`1.0`), Python (`0.95` alias/instance AST), and TypeScript (`0.95` alias/instance Tree-sitter) |
 | Blended workspace snapshot | 14,333 entities and 40,956 relationships |
 | Controlled runtime contradiction test | `10/10` injected contradictions detected (`scripts/runtime_contradiction_test.py` with Ed25519 JWT auth) |
-| Software Intelligence Instrument (`/dashboard`) | All 6 surfaces (`Briefing`, `Architecture Map`, `Change Review Workbench`, `Policies`, `Contradictions & Evidence`, `Governance & Audit Ledger`) + `⌘K` palette verified |
+| Software Intelligence Instrument (`/dashboard`) | All 10 progressive-disclosure surfaces (`Overview`, `Explore Index`, `Architecture Map`, `Docs & Rules Graph`, `Talon & Risk Hub`, `Change Review`, `Evidence & Ledger`, `Agents & Sessions`, `Data & Logic Audit`, `Decision Lineage`) + `⌘K` palette verified |
 | Universal Zero-Dependency Build & Runtime (`v1.9.9`) | `CGO_ENABLED=0` Pure-Go compilation + Portable Go `1.26.0` + pre-built Portable PostgreSQL `16.4` (`127.0.0.1:5433`), pure-ASCII Windows PowerShell 5.1 `install.ps1`/`setup.ps1`, fast `install.sh`/`setup.sh`, `garuda doctor --fix`, and PWA (`/manifest.json`, `/sw.js`) |
 | VS Code integration | Ledger, contradictions, diagnostics, graph, refresh, reanalysis, and Go hover workflows exercised |
 

@@ -171,10 +171,34 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 	if lookupTarget == "" {
 		lookupTarget = nameStr
 	}
+	if s.store == nil || s.safePool() == nil {
+		return map[string]interface{}{
+			"tenant_id":      tenantID.String(),
+			"workspace_id":   workspaceID.String(),
+			"workspace_name": workspaceName,
+			"status":         "not_found",
+			"not_found":      true,
+			"valid":          false,
+			"target":         lookupTarget,
+			"incoming_count": 0,
+			"outgoing_count": 0,
+			"incoming":       []interface{}{},
+			"outgoing":       []interface{}{},
+		}, nil
+	}
 	if _, parseErr := uuid.Parse(lookupTarget); parseErr != nil {
 		resolvedID, _, rErr := s.resolveSubjectEntityWithOpts(ctx, workspaceID, "", lookupTarget, includeFixtures)
 		if rErr != nil {
-			return nil, fmt.Errorf("invalid entity_id %q: %w", lookupTarget, rErr)
+			return map[string]interface{}{
+				"tenant_id":      tenantID.String(),
+				"workspace_id":   workspaceID.String(),
+				"workspace_name": workspaceName,
+				"status":         "not_found",
+				"not_found":      true,
+				"valid":          false,
+				"target":         lookupTarget,
+				"reason":         rErr.Error(),
+			}, nil
 		}
 		entityIDStr = resolvedID.String()
 	} else {
@@ -247,6 +271,7 @@ func (s *MCPServer) handleInspect(args map[string]interface{}) (interface{}, err
 	snippet := ExtractSourceSnippet(entity.File, entity.LineStart)
 
 	out := map[string]interface{}{
+		"status":          "ok",
 		"tenant_id":       tenantID.String(),
 		"workspace_id":    workspaceID.String(),
 		"workspace_name":  workspaceName,

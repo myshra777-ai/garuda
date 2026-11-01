@@ -85,6 +85,9 @@ func (s *MCPServer) resolveTopClaimTarget(
 	workspaceID uuid.UUID,
 	claimTypes []string,
 ) (uuid.UUID, string, error) {
+	if s == nil || s.store == nil || s.safePool() == nil {
+		return uuid.Nil, "", fmt.Errorf("database not connected")
+	}
 	var id uuid.UUID
 	var name string
 	err := s.safePool().QueryRow(ctx, `
@@ -311,6 +314,8 @@ func (s *MCPServer) handleImplementers(args map[string]interface{}) (interface{}
 			"tenant_id":      tenantID.String(),
 			"workspace_id":   workspaceID.String(),
 			"workspace_name": workspaceName,
+			"status":         "not_found",
+			"not_found":      true,
 			"subject":        map[string]string{"id": "", "name": nameStr},
 			"count":          0,
 			"total_count":    0,
@@ -460,6 +465,27 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		return nil, fmt.Errorf("entity_id is required")
 	}
 
+	if s.store == nil || s.safePool() == nil {
+		return map[string]interface{}{
+			"tenant_id":            tenantID.String(),
+			"workspace_id":         workspaceID.String(),
+			"workspace_name":       workspaceName,
+			"status":               "not_found",
+			"not_found":            true,
+			"subject":              map[string]string{"id": entityIDStr, "name": nameStr},
+			"total_incoming_count": 0,
+			"total_outgoing_count": 0,
+			"incoming_count":       0,
+			"outgoing_count":       0,
+			"incoming":             []interface{}{},
+			"outgoing":             []interface{}{},
+			"neighbors":            []interface{}{},
+			"results":              []interface{}{},
+			"count":                0,
+			"total_count":          0,
+			"truncated":            false,
+		}, nil
+	}
 	var subjectID uuid.UUID
 	var subjectName string
 	if parsed, pErr := uuid.Parse(entityIDStr); pErr == nil {
@@ -468,7 +494,16 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 			SELECT name FROM entities WHERE workspace_id = $1 AND id = $2
 		`, workspaceID, subjectID).Scan(&subjectName)
 		if err != nil {
-			return nil, fmt.Errorf("entity_id %q not found in this workspace", entityIDStr)
+			return map[string]interface{}{
+				"tenant_id":      tenantID.String(),
+				"workspace_id":   workspaceID.String(),
+				"workspace_name": workspaceName,
+				"status":         "not_found",
+				"not_found":      true,
+				"neighbors":      []interface{}{},
+				"results":        []interface{}{},
+				"reason":         fmt.Sprintf("entity_id %q not found in this workspace", entityIDStr),
+			}, nil
 		}
 	} else {
 		lookup := entityIDStr
@@ -477,7 +512,16 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		}
 		subjectID, subjectName, err = s.resolveSubjectEntityWithOpts(ctx, workspaceID, "", lookup, includeFixtures)
 		if err != nil {
-			return nil, fmt.Errorf("invalid entity_id %q: %w", lookup, err)
+			return map[string]interface{}{
+				"tenant_id":      tenantID.String(),
+				"workspace_id":   workspaceID.String(),
+				"workspace_name": workspaceName,
+				"status":         "not_found",
+				"not_found":      true,
+				"neighbors":      []interface{}{},
+				"results":        []interface{}{},
+				"reason":         err.Error(),
+			}, nil
 		}
 	}
 
@@ -674,7 +718,9 @@ func (s *MCPServer) handleNeighbors(args map[string]interface{}) (interface{}, e
 		"offset":               nbOffset,
 		"next_cursor":          nextCursor,
 		"has_more":             isTruncated,
+		"status":               "ok",
 		"truncated":            isTruncated,
+		"neighbors":            results,
 		"results":              results,
 		"limit_used":           limit,
 	}, nil
@@ -746,6 +792,34 @@ func (s *MCPServer) handleFindEntity(args map[string]interface{}) (interface{}, 
 		whereClause += " AND e.is_exported = true"
 	}
 
+	if s.store == nil || s.safePool() == nil {
+		return map[string]interface{}{
+			"tenant_id":      tenantID.String(),
+			"workspace_id":   workspaceID.String(),
+			"workspace_name": workspaceName,
+			"count":          0,
+			"returned_count": 0,
+			"total_count":    0,
+			"truncated":      false,
+			"results":        []interface{}{},
+			"entities":       []interface{}{},
+			"limit_used":     limit,
+		}, nil
+	}
+	if s.store == nil || s.safePool() == nil {
+		return map[string]interface{}{
+			"tenant_id":      tenantID.String(),
+			"workspace_id":   workspaceID.String(),
+			"workspace_name": workspaceName,
+			"count":          0,
+			"returned_count": 0,
+			"total_count":    0,
+			"truncated":      false,
+			"results":        []interface{}{},
+			"entities":       []interface{}{},
+			"limit_used":     limit,
+		}, nil
+	}
 	var totalCount int
 	_ = s.safePool().QueryRow(ctx, "SELECT COUNT(*)::int FROM entities e"+whereClause, dbArgs...).Scan(&totalCount)
 

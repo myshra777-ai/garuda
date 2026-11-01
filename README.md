@@ -1,222 +1,231 @@
 <p align="center">
-  <img src="assets/garuda_logo.png" width="140" alt="Garuda Logo">
+  <img src="assets/garuda-logo.png" width="140" alt="Garuda Logo">
 </p>
 
-<h1 align="center">Garuda</h1>
+<h1 align="center">Garuda (<code>v1.9.9</code>)</h1>
 
 <p align="center">
   <strong>AI writes code at 100 mph. Garuda makes sure your architecture, business formulas, and cross-team numbers survive the ride.</strong><br>
-  <em>The local-first change-control gate, active AI agent harness (<code>Garuda Talon</code>), human-in-the-loop Data &amp; Logic Audit engine, and 10-surface progressive-disclosure Software Intelligence Dashboard.</em>
+  <em>The local-first change-control gate, active AI agent harness (<code>Garuda Talon</code>), human-in-the-loop Data &amp; Logic Audit engine, <strong>54-tool MCP server</strong>, and <strong>10-surface progressive-disclosure Software Intelligence Dashboard</strong>.</em>
 </p>
 
 <p align="center">
   <a href="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-ci.yml/badge.svg" alt="Garuda CI & Governance"></a>
-  <a href="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml"><img src="https://github.com/myshra777-ai/garuda/actions/workflows/garuda-gate.yml/badge.svg" alt="Garuda Integrity Gate"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/version-v1.9.9-10b981.svg" alt="Version v1.9.9"></a>
+  <a href="https://github.com/myshra777-ai/garuda/actions/workflows/release-packages.yml"><img src="https://img.shields.io/badge/GHCR_&_Marketplace-Ready-10b981.svg" alt="GitHub Packages & Marketplace"></a>
+  <a href="capabilities.json"><img src="https://img.shields.io/badge/version-v1.9.9-10b981.svg" alt="Version v1.9.9"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 License"></a>
-  <a href="INSTALL.md"><img src="https://img.shields.io/badge/install-1_Command_%7C_Zero_Dependencies-10b981.svg" alt="1-Command Universal Install"></a>
-  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/verified-24%2F24_Benchmarks_%7C_63%2F63_MCP_Checks_(54_Tools)-f59e0b.svg" alt="Verification Evidence"></a>
+  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/verified-24%2F24_Fixtures_%7C_63%2F63_MCP_Checks_(54_Tools)-f59e0b.svg" alt="Verification Evidence"></a>
 </p>
 
 <p align="center">
   <a href="#what-is-garuda-in-plain-english">What Is Garuda?</a> ·
-  <a href="#watch-the-20-second-cinematic-intro">20s Video Demo</a> ·
   <a href="#install-in-one-command-zero-dependencies">1-Command Install</a> ·
-  <a href="#whats-new-in-v199">What's New in v1.9.9</a> ·
-  <a href="#tour-the-futuristic-10-surface-dashboard">Visual Dashboard Tour</a> ·
-  <a href="#everyday-cli--mcp-workflows">Everyday CLI &amp; MCP Guide</a> ·
-  <a href="#documentation-suite-by-role">Full Documentation Suite</a>
+  <a href="#canonical-capability--verification-manifest-p3">Canonical Manifest &amp; 3-Tier Evidence</a> ·
+  <a href="#tour-the-futuristic-10-surface-dashboard-dashboard-pwa">Visual Dashboard Tour</a> ·
+  <a href="#everyday-cli--mcp-workflows">CLI &amp; 54-Tool MCP Guide</a> ·
+  <a href="#github-packages--github-marketplace-integration">GitHub Marketplace &amp; Packages</a> ·
+  <a href="#documentation-suite-by-role">Documentation Suite</a>
 </p>
 
 ---
 
 ## What Is Garuda? (In Plain English)
 
-The current dashboard groups its ten working surfaces into **Explore**, **Enforce**, and **Verify**. It uses a graphite-first theme, restrained mint signal color, keyboard navigation, progressive disclosure, responsive navigation, and reduced-motion support. The Talon hub, pre-edit drawer, change-review checks and build matrix use returned workspace/API data; missing or failed checks are shown as unavailable rather than turned into an ALLOW verdict. The Data & Logic Audit API still includes illustrative formula/financial scenarios alongside workspace-enriched criticality context; treat those rows as examples until linked to imported source evidence. Risk-hub rankings are degree-based heuristics, not policy decisions.
-Today, AI coding tools like **Cursor**, **Claude Code**, **Codex**, and **Windsurf** can write a thousand lines of code in thirty seconds. The code compiles, unit tests pass, and the pull request looks green.
+AI coding agents (**Cursor**, **Claude Code**, **Codex**, **Windsurf**) can generate a thousand lines of code in thirty seconds. The code compiles and unit tests pass—yet four critical classes of drift silently slip into production:
 
-**But how do you know that fast AI-generated code didn't quietly break something important?**
+1. **Silent Layer & Boundary Shortcuts**: An AI agent makes an API handler query `database/sql` or an external payment client directly, bypassing retry, idempotency, or store layers.
+2. **Competing Undocumented Business Formulas Across Teams**: **Ops**, **Marketing**, and **Management** each implement their own formula for the same concept (such as *Loss Ratio* or *Retention*). Without a referee, an agent copies a campaign formula into a core settlement router with 142 callers.
+3. **10x Cross-Team Unit-Scaling Mismatches (`48.00 Crore` vs. `4.80 Crore`)**: One team's pipeline divides raw Rupees by `10,000,000` (`48.00 Crore`), while another divides Lakhs by `1,000` instead of `100` (`4.80 Crore`).
+4. **Undocumented Tribal Architecture**: Most repositories lack up-to-date ADRs, leaving engineers and AI agents blind to which surfaces are mission-critical (`HIGH_SEVERE`) and which are safe to refactor (`LOW`).
 
-In real teams, four silent failures happen every week when humans and AI agents ship fast:
-
-1. **Silent Architecture Shortcuts**: An AI agent makes an API handler talk straight to the database or an external payment API to "make the prompt work," bypassing your security, retry, or store layers.
-2. **Competing Business Formulas Across Teams**: Your **Ops**, **Marketing**, and **Management** teams each write their own formula for the same metric (like *Loss Ratio*, *Retention*, or *Net Margin*). Without a referee, an AI agent copies a marketing campaign formula into your core pricing router—breaking 142 downstream callers.
-3. **10x Cross-Team Number Mismatches (48 Crore vs. 4.8 Crore)**: One team's code divides raw Rupees by `10,000,000` and reports **48.00 Crore**, while another team's rollup query divides Lakhs by `1,000` instead of `100` and reports **4.80 Crore**. Nobody catches the 10x error until an executive review or audit.
-4. **Undocumented "Tribal Knowledge"**: Most growing codebases don't have up-to-date Architecture Decision Records (ADRs). Rules live only in senior engineers' heads, so new developers and AI agents don't know which files are safe to edit and which ones are mission-critical.
-
-**Garuda is your local-first architectural safety net and truth engine.**
-
-It sits quietly on your machine (and in CI), reads your real code (Go, Python, and TypeScript), connects it to your architecture rules and business formulas, guides your AI coding agents before and after every edit, and gives you a calm, futuristic **10-Surface Web Dashboard** where humans make the final call.
-
----
-
-## Watch the 20-Second Cinematic Intro
-
-See how Garuda turns invisible code dependencies, architecture rules, business formulas, and AI agent edits into a calm, interactive control room:
-
-<div align="center">
-  <video src="assets/garuda_dashboard_demo_video.mp4" poster="assets/Screenshot%20From%202026-10-25%2002-30-49.png" controls autoplay loop muted playsinline width="100%">
-    <source src="assets/garuda_dashboard_demo_video.mp4" type="video/mp4">
-    <source src="https://raw.githubusercontent.com/myshra777-ai/garuda/main/assets/garuda_dashboard_demo_video.mp4" type="video/mp4">
-    <a href="assets/garuda_dashboard_demo_video.mp4">
-      <img src="assets/Screenshot%20From%202026-10-25%2002-30-49.png" width="100%" alt="Watch the 20-Second Garuda Introduction Video">
-    </a>
-  </video>
-  <p><em>🎬 <strong>20-Second Product Introduction:</strong> If your browser blocks inline video playback on GitHub, <a href="assets/garuda_dashboard_demo_video.mp4"><strong>click here to play <code>assets/garuda_dashboard_demo_video.mp4</code></strong></a>.</em></p>
-</div>
+**Garuda (`v1.9.9`) is your local-first architectural safety net and truth engine.** It indexes Go, Python, and TypeScript ASTs into a single PostgreSQL + RFC 6962 Merkle graph, enforces pre-edit and post-edit guardrails via **Garuda Talon** and **`54` deterministic MCP tools**, and provides a calm, progressive-disclosure **`10`-Surface Web Dashboard**.
 
 ---
 
 ## Install in One Command (Zero Dependencies)
 
-You do **not** need Go, PostgreSQL, Docker, GCC, Homebrew, or Xcode pre-installed, and you do **not** need `sudo` or Administrator rights. Garuda automatically sets up a portable local database (`127.0.0.1:5433`), compiles all 4 binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`), wires your AI coding tools, and opens the dashboard:
-
-### Linux, macOS (Apple Silicon & Intel), Chromebook & Android (Termux)
+You do **not** need Go, PostgreSQL, Docker, GCC, Homebrew, or Xcode pre-installed, and you do **not** need `sudo` or Administrator rights:
 
 ```bash
-# Option A: 1-Command Remote Install & Launch
+# Linux, macOS (Apple Silicon & Intel), Chromebook (Crostini) & Android (Termux)
 curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash
 
-# Option B: Inside an existing cloned repository
-git clone --depth 1 https://github.com/myshra777-ai/garuda.git && cd garuda && ./setup.sh
+# Or inside an existing cloned repository
+./setup.sh
 ```
-
-### Windows 10 / 11 (PowerShell 5.1 & PowerShell 7 — No Admin Required)
 
 ```powershell
-# Option A: 1-Command Remote Install & Launch
+# Windows 10 / 11 (PowerShell 5.1 & PowerShell 7 — No Admin Required)
 Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 | iex
-
-# Option B: Inside an existing cloned repository
-cd $HOME\garuda
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
-```
-
-Once setup finishes, open **`http://localhost:8080/login`** in your browser. Any time your computer restarts or you want to check system health, run:
-
-```bash
-./bin/garuda doctor --fix
 ```
 
 ---
 
-## What's New in `v1.9.9`
+## Canonical Capability & Verification Manifest (`P3`)
 
-### 1. Futuristic Progressive-Disclosure Dashboard (`10 Surfaces`, Light & Graphite Dark Mode)
-- **Easy on the Eyes, Zero Clutter**: Inspired by Linear, Vercel, Stripe, and Apple Human Interface Guidelines, every dashboard surface shows **at most 4 primary cards on first view**. Secondary tables, drift breakdowns, and raw telemetry sit one click away inside smooth expandable `<details>` drawers and sub-tabs.
-- **Smooth `cubic-bezier(0.16, 1, 0.3, 1)` Motion**: GPU-accelerated staggered entrance transitions (`surfaceIn`), subtle card elevation on hover, a 3-step tabular-numeral type hierarchy, and a 1-click toggle between **Warm Alabaster Light Mode** and **Obsidian Graphite Dark Mode** (`☀ / ☾`).
+All counts, versions, and tool definitions across Garuda's binaries and documentation are synchronized from **[`capabilities.json`](capabilities.json)** and **[`internal/version/manifest.go`](internal/version/manifest.go)** (verified in CI via `python3 scripts/sync_docs_from_manifest.py --check`):
 
-### 2. Human-in-the-Loop Data & Logic Audit Ledger (`09 — Data & Logic Audit`)
-- **0.0–1.0 Multi-Team Formula Weighting**: When **Ops**, **Marketing**, and **Management** code different formulas for the same concept (such as *Loss Ratio* or *Retention*), Garuda never lets AI silently pick or overwrite one. It computes **`0.00–1.00` team weights** (`0.70` active team vs `0.10`/`0.10`), ranks each option by **Least Architectural Harm**, and requires human co-signing (`garuda audit logic`).
-- **Cross-Team Data & Unit-Scale Discrepancy Detector**: Traces AST and SQL data lineage across teams to catch **10x unit-scaling bugs** (such as **48.00 Crore vs. 4.80 Crore** from dividing Lakhs by `1000` instead of `100`) before numbers ever reach an external review (`garuda audit data-logic`, backed by `data_logic_audit_ledger` and `data_audit_reconciliations`).
+| Canonical Dimension | Count / Value | Source of Truth |
+| :--- | :--- | :--- |
+| **Canonical Release Version** | **`v1.9.9`** (`2026-11-01`) | `capabilities.json` · `internal/version/manifest.go` · `version.txt` |
+| **Core Zero-CGO Binaries** | **`4`** (`garuda`, `garuda-mcp`, `garuda-api`, `garuda-talon`) | `cmd/*` (`CGO_ENABLED=0`) |
+| **Registered MCP Tools (`bin/garuda-mcp`)** | **`54`** (`41` read-only · `13` mutating) | `cmd/garuda-mcp/main.go` · `tools_whitelist.go` |
+| **MCP Positive & Negative Behavioral Tests** | **`54/54` tools** (`108` positive + negative subtests) | `cmd/garuda-mcp/behavioral_tools_test.go` |
+| **Live MCP Protocol Verification Suite** | **`63/63` checks** | `scripts/mcp_verify.py` |
+| **Dashboard Working Surfaces (`/dashboard`)** | **`10` surfaces** (`≤ 4` primary cards on first view) | `internal/api/templates/dashboard.html` |
+| **Dashboard HTTP API Endpoints** | **`19` endpoints** | `internal/api/static/dashboard.js` |
+| **Idempotent PostgreSQL Migrations** | **`95`** (`001`–`095_data_logic_audit_ledger_and_hygiene.sql`) | `migrations/` |
+| **Graph-Native YAML Policy Predicates** | **`9` predicates** | `internal/policy/` |
 
-### 3. 3-Tier Surface Criticality Classification (`HIGH_SEVERE` · `MEDIUM` · `LOW`)
-- **`HIGH_SEVERE` (Core Surfaces — Frozen)**: Homepage, Search Redirect Router (142 callers), and Core Settlement Ledgers are locked against automated AI edits (`HUMAN_FREEZE_DO_NOT_TOUCH`).
-- **`MEDIUM` (Non-Blocking Features — Human Trade-Off)**: Secondary features like Wishlist Loaders (19 callers) allow informed human trade-offs.
-- **`LOW` (UI & Formatting — Safe)**: Isolated UI box alignment and formatting helpers (4–6 callers) proceed cleanly.
+### Strict Separation of Evaluation Tiers (Fixtures vs. Simulations vs. Live AST/LLM)
 
-### 4. Auto-Synthesized Base Rulebook Studio (`04 — Docs & Rules Graph`)
-- Don't have time to write ADRs from scratch? Garuda scans your repository, discovers implicit layer boundaries, criticality tiers, and formula weights, and drafts `.garuda/DRAFT_BASE_RULEBOOK.md`. Review and edit it right in the browser, then click **Approve & Seal Rulebook** (`garuda rulebook generate` / `garuda rulebook approve`).
+Garuda strictly separates **compiler benchmark fixtures**, **synthetic fault-injection simulations**, and **live production repository / LLM agent results** so benchmark or demo data never pollutes live workspace queries:
 
-### 5. Hardened 54-Tool MCP Server & Deterministic Dirty-Worktree Receipts (`63/63` Checks)
-- **54 Deterministic MCP Tools**: Includes `garuda.preflight_bundle` (1-call pre-edit context), `garuda.verify_receipt` (RFC 6962 cryptographic verification), `garuda.diff_snapshots` (revision-to-revision graph diff), `garuda.audit_export` (CSV/JSON/Markdown compliance export), and `garuda.create_workspace` (isolated sandbox workspaces).
-- **Exact Dirty-Worktree & Cross-OS Reproducibility (`--worktree-dirty`, `--dirty-tree-hash`, `--matrix`)**: Every `garuda check` and `garuda talon guard` verdict binds `GOOS/GOARCH`, `CGO_ENABLED`, build tags, git commit SHA, and dirty working-tree hash into a single copy-pasteable reproduce command.
+| Evaluation Tier | Scope & Activation Flag | Default in Production Workspaces | What It Measures & Verifies |
+| :--- | :--- | :--- | :--- |
+| **Tier 1 — Compiler Fixture Results** (`24/24`) | `make benchmark-strict` or `include_fixtures=true` | **EXCLUDED BY DEFAULT** (`ExcludeFixturesSQL` filters out `test/fixtures/`, `testdata/`, `garuda-bench/`, `conftest`) | Static `go/types`, `go.work`, Python AST, and TypeScript AST extraction precision/recall (`100%`) and checkout-path-invariant cache fingerprints (`TestDoubleRunDeterminism`). |
+| **Tier 2 — Synthetic Grounding & Contradiction Simulations** (`10/10`) | `scripts/runtime_contradiction_test.py`, `--demo-fixtures`, `simulate_violation`, `simulate_drift` | **OPT-IN ONLY** (Empty workspaces return `status: "INSUFFICIENT_DATA"` when `include_fixtures=false`) | Quarantine of injected unapproved OTel runtime spans (`10/10`), Talon self-repair prompt synthesis under simulated `BLOCK`/drift, and reference case studies (`Loss Ratio` `0.0–1.0` weights & `48.00 Cr vs 4.80 Cr`). |
+| **Tier 3 — Live AST, RFC 6962 Ledger & Live LLM/MCP Sessions** (`63/63` & `54/54`) | Default live mode (`scope: "production_only"`, `GARUDA_TALON_ENFORCE=true`) | **ACTIVE BY DEFAULT** | Live repository symbol & blast-radius resolution, cryptographic tenant/workspace isolation, `GARUDA_MCP_READ_ONLY=true` mutation blocking, `GARUDA_MCP_APPROVER` human co-sign verification, and SHA-256 `receipt_hash` validation. |
 
 ---
 
 ## Tour the Futuristic 10-Surface Dashboard (`/dashboard` PWA)
 
-Garuda's web interface runs 100% locally at `http://localhost:8080/dashboard` (and installs as a standalone desktop or mobile app):
+Garuda's web interface runs 100% locally at `http://localhost:8080/dashboard` with progressive disclosure (**at most 4 cards on first view**), smooth `cubic-bezier(0.16, 1, 0.3, 1)` animations, and a 1-click toggle between **Warm Alabaster Light Mode** and **Obsidian Graphite Dark Mode** (`☀ / ☾`):
 
-### `01` — Overview: Calm Command Center
-Shows **1 Hero System Integrity Card** (`ALLOW` / `BLOCK`) + **3 clickable core metric cards** (*Indexed Topology*, *Epistemic & Policy Gate*, *RFC 6962 Provenance Ledger*), with progressive-disclosure drawers for *Needs Attention & Documentation Drift* and *Architectural Hubs & Indexed Repositories*.
-
-<p align="center">
-  <img src="assets/Screenshot%20From%202026-10-25%2002-30-49.png" width="100%" alt="Garuda Workspace Briefing & System Health">
-</p>
-
-### `02` — Explore Index: Instant Symbol Search (`⌘K`)
-Search packages, functions, methods, structs, and interfaces with instant signature preview and 1-click neighborhood actions.
+### `01` — Overview: Calm Command Center (`4` Primary Cards + `2` Expandable Drawers)
+Displays **1 Hero System Integrity Card** (`ALLOW` / `BLOCK`) + **3 clickable core metric cards** (*Indexed Topology*, *Epistemic & Policy Gate*, *RFC 6962 Provenance Ledger*), with collapsible `<details>` drawers for *Needs Attention & Documentation Drift* and *Architectural Hubs & Indexed Repositories*.
 
 <p align="center">
-  <img src="assets/Screenshot%20From%202026-10-25%2002-31-11.png" width="100%" alt="Garuda Explore Index & High-Impact Symbol Directory">
+  <img src="assets/screenshots/workspace-overview.png" width="100%" alt="Surface 01 — Garuda Workspace Overview & System Command Center">
 </p>
 
-### `03` — Architecture Map: Full-Viewport Neighborhood Graph
-Explores 1-hop and 2-hop symbol neighborhoods (`Callers → Symbol → Dependencies`) on an interactive D3 canvas with collapsible depth/edge filters and a synchronized entity inspector.
+### `02` — Explore Index: Instant Semantic Symbol Search (`⌘K`)
+Search repositories, packages, functions, methods, structs, and interfaces with instant signature preview and 1-hop neighborhood actions.
 
 <p align="center">
-  <img src="assets/Screenshot%20From%202026-10-25%2002-31-24.png" width="100%" alt="Garuda Neighborhood Architecture Map & Inspector Drawer">
+  <img src="assets/screenshots/EXPLORE_INDEX.png" width="100%" alt="Surface 02 — Garuda Semantic Codebase Explorer">
 </p>
 
-### `04` — Docs & Rules Graph: 4-Tab Progressive Studio
-Switches cleanly between **01 · Interactive 4-Tier Graph** (`Document → Rule → Policy → Code`), **02 · Base Rulebook Studio**, **03 · Ingested Documents**, and **04 · Extracted Rules Matrix**.
+### `03` — Architecture Map: Full-Viewport Neighborhood & AST Graph
+Explores 1-hop and 2-hop symbol neighborhoods (`Callers → Symbol → Dependencies`) on an interactive D3 canvas (`74vh+`) with a collapsible depth/edge filter bar and synchronized entity inspector.
 
 <p align="center">
-  <img src="assets/Screenshot%20From%202026-10-25%2002-31-40.png" width="100%" alt="Garuda Docs, Specs & Guardrails 4-Tier Lineage Graph">
+  <img src="assets/screenshots/ARCHITECTURE_MAP_GRAPH_VIEW.png" width="100%" alt="Surface 03 — Garuda Architecture Map & Neighborhood Graph">
 </p>
 
-### `05` — Talon & Risk Hub: Active AI Agent Guardrails
-Organizes AI agent governance into 3 focused tabs: **01 · Live Enforcement Gate & Hooks** (6 IDE/Git hooks + self-repair simulator), **02 · Risk Hub Leaderboard & Surface Criticality**, and **03 · Deterministic Build Matrix & Receipt**.
+### `04` — Docs & Rules Graph: 4-Tab Progressive Lineage & Base Rulebook Studio
+Switches cleanly between **01 · Interactive 4-Tier Graph** (`Document → Rule → Policy → Code`), **02 · Base Rulebook Studio** (`.garuda/APPROVED_BASE_RULEBOOK.md`), **03 · Ingested Documents**, and **04 · Extracted Rules Matrix**.
 
 <p align="center">
-  <img src="assets/Screenshot%20From%202026-10-25%2002-31-56.png" width="100%" alt="Garuda Talon Active Agent Harness & Architectural Risk Hub">
+  <img src="assets/screenshots/DOCS_SPECS_AND_BASE_RULEBOOK_GRAPH.png" width="100%" alt="Surface 04 — Garuda Docs, Rules & Repository Topology">
 </p>
 
-### `06` — Change Review: 3-Pane Pre-Merge Workbench
+### `05` — Talon & Risk Hub: Active AI Agent Guardrails (`3` Sub-Tabs)
+Organizes AI agent governance into **01 · Live Enforcement Gate & Hooks** (6 IDE/Git hooks + self-repair simulator), **02 · Risk Hub Leaderboard & Surface Criticality**, and **03 · Deterministic Build Matrix & Receipt**.
+
+<p align="center">
+  <img src="assets/screenshots/GARUDA_TALON_AND_RISKHUB_BLOCKSTIMULATION.png" width="100%" alt="Surface 05 — Garuda Talon & Workspace Clusters">
+</p>
+
+### `06` — Change Review Workbench (`3`-Pane Pre-Merge Simulator)
 Inspect any symbol or git diff across three balanced cards: **01 · Change Context**, **02 · Blast-Radius Impact Map**, and **03 · 3-Plane Verification & Decision Record**.
 
 <p align="center">
-  <img src="assets/Screenshot%20From%202026-10-25%2002-32-11.png" width="100%" alt="Garuda Change Review Workbench & Policy Sandbox">
+  <img src="assets/screenshots/CHANGE_REVIEW_WORKBENCH.png" width="100%" alt="Surface 06 — Garuda Cross-Repo & Change Review Impact Graph">
 </p>
 
 ### `07` — Evidence & Ledger, `08` — Agents, `09` — Data & Logic Audit, `§` — Decision Lineage
-- **`07 — Evidence & Ledger`**: Consolidated RFC 6962 Merkle root header + append-only audit table with an expandable Decision Record & Raw Telemetry drawer.
-- **`08 — Agents & Sessions`**: Live MCP agent sessions and multi-agent task handoff timeline.
-- **`09 — Data & Logic Audit`**: Tabbed **Pillar 1 · Multi-Team Formula Weights (`0.0–1.0`)** and **Pillar 2 · Cross-Team Data & Logic Discrepancies (`48 Cr vs 4.8 Cr`)**.
+- **`07 — Evidence & Ledger`**: Consolidated RFC 6962 Merkle epoch header + append-only audit table with an expandable Decision Record & Raw Telemetry drawer.
+- **`08 — Agents & Sessions`**: Active MCP client sessions and multi-agent task handoff timeline.
+- **`09 — Data & Logic Audit`**: Tabbed **Pillar 1 · Multi-Team Formula Weights (`0.0–1.0`)** and **Pillar 2 · Cross-Team Data & Logic Discrepancies (`48.00 Cr vs 4.80 Cr`)** backed by `data_logic_audit_ledger`.
 - **`§ — Decision Lineage`**: MADR-compatible Architectural Decision Records and supersession chains.
 
 <p align="center">
-  <img src="assets/Screenshot%20From%202026-10-25%2002-32-25.png" width="100%" alt="Garuda Contradictions Forensic Queue & Cryptographic Audit Ledger">
+  <img src="assets/screenshots/AUDIT_LOG_AND_EPISEMENTIC_EVIDENCE.png" width="100%" alt="Surface 07 — Garuda Evidence & Cryptographic Trust Ledger">
 </p>
+
+<p align="center">
+  <img src="assets/screenshots/ide-contradictions.png" width="100%" alt="Surface 09 — Garuda Multi-Repo Contradictions & Data/Logic Audit">
+</p>
+
+### VS Code & Cursor IDE Extension (`vscode-extension/`)
+
+| IDE Graph View (`assets/screenshots/ide-graph-view.png`) | IDE Contradictions Panel (`assets/screenshots/ide-contradictions.png`) |
+| :---: | :---: |
+| <img src="assets/screenshots/ide-graph-view.png" width="100%" alt="IDE Graph View"> | <img src="assets/screenshots/ide-contradictions.png" width="100%" alt="IDE Contradictions Panel"> |
+
+### Additional Workspace, AST & Multi-Repository Views (`assets/`)
+
+| View & Asset Path | Preview |
+| :--- | :--- |
+| **Adr Graph** (`assets/screenshots/ADR_GRAPH.png`) | <img src="assets/screenshots/ADR_GRAPH.png" width="420" alt="Adr Graph"> |
+| **Agent Activity Andsession Timeline Graph** (`assets/screenshots/AGENT_ACTIVITY_ANDSESSION_TIMELINE_GRAPH.png`) | <img src="assets/screenshots/AGENT_ACTIVITY_ANDSESSION_TIMELINE_GRAPH.png" width="420" alt="Agent Activity Andsession Timeline Graph"> |
+| **Data And Logic** (`assets/screenshots/DATA_AND_LOGIC.png`) | <img src="assets/screenshots/DATA_AND_LOGIC.png" width="420" alt="Data And Logic"> |
+| **Dual Pillar Data And Logic** (`assets/screenshots/DUAL_PILLAR_DATA_AND_LOGIC.png`) | <img src="assets/screenshots/DUAL_PILLAR_DATA_AND_LOGIC.png" width="420" alt="Dual Pillar Data And Logic"> |
+| **Ingest Adr Specs Docs And Gaurdrails Graph** (`assets/screenshots/INGEST_ADR_SPECS_DOCS_AND_GAURDRAILS_GRAPH.png`) | <img src="assets/screenshots/INGEST_ADR_SPECS_DOCS_AND_GAURDRAILS_GRAPH.png" width="420" alt="Ingest Adr Specs Docs And Gaurdrails Graph"> |
+| **Ingest Repo** (`assets/screenshots/INGEST_REPO.png`) | <img src="assets/screenshots/INGEST_REPO.png" width="420" alt="Ingest Repo"> |
+| **Specs And Invarients Graph** (`assets/screenshots/SPECS_AND_INVARIENTS_GRAPH.png`) | <img src="assets/screenshots/SPECS_AND_INVARIENTS_GRAPH.png" width="420" alt="Specs And Invarients Graph"> |
+| **Yaml Poly Graph** (`assets/screenshots/YAML_POLY_GRAPH.png`) | <img src="assets/screenshots/YAML_POLY_GRAPH.png" width="420" alt="Yaml Poly Graph"> |
+| **Docs Adr Specs And Gaurdrails Graph** (`assets/screenshots/docs_ADR_SPECS_AND_GAURDRAILS_GRAPH.png`) | <img src="assets/screenshots/docs_ADR_SPECS_AND_GAURDRAILS_GRAPH.png" width="420" alt="Docs Adr Specs And Gaurdrails Graph"> |
 
 ---
 
-## Everyday CLI & MCP Workflows
+## Everyday CLI & MCP Workflows (`54` Registered Tools)
 
-For the full decision matrix across all CLI commands and **54 MCP tools**, see **[`docs/CLI_DECISION_GUIDE.md`](docs/CLI_DECISION_GUIDE.md)**:
-
-| What You Want to Do | CLI Command (`garuda ...`) | MCP Tool (`garuda-mcp`) |
+| Workflow | CLI Command (`garuda ...`) | MCP Tool (`garuda-mcp`) |
 | :--- | :--- | :--- |
 | **1-Call Pre-Edit Context & Blast Radius** | `garuda talon brief <Symbol>` | `garuda.preflight_bundle` / `garuda.talon_pre_edit` |
 | **Post-Edit Diff Check & Self-Repair Prompt** | `garuda talon guard --diff HEAD --fail-on-block` | `garuda.talon_verify_edit` |
-| **Reproduce an Exact Build & Dirty-Tree Verdict** | `garuda check --target linux/amd64 --cgo=false --commit <sha> --worktree-dirty --dirty-tree-hash <hash> --workspace <ws>` | `garuda.verify_receipt` |
-| **Verify Cross-OS Build Matrix (`linux`/`darwin`/`windows`/`cgo`)** | `garuda check --matrix --workspace default` | `garuda.build_matrix_check` |
-| **Compare Competing Team Formulas (`0.0–1.0` Weights)** | `garuda audit logic "Loss Ratio" --team ops` | `garuda.disambiguate_logic` / `garuda.decide_logic_variant` |
-| **Audit Cross-Team Data & Unit-Scaling (`48 Cr` vs `4.8 Cr`)** | `garuda audit data-logic --metric "Claims Paid" --team-a-cr 48.0 --team-b-cr 4.8` | `garuda.audit_data_discrepancy` / `garuda.reconcile_data_audit` |
+| **Verify Deterministic Build & Graph Receipt** | `garuda check --workspace default` | `garuda.verify_receipt` / `garuda.snapshot` |
+| **Diff Workspace Snapshots & Symbol Impact** | `garuda analyze --diff before.json after.json` | `garuda.diff_snapshots` / `garuda.diff_impact` |
+| **Verify Cross-OS Build Matrix (`4` Profiles)** | `garuda check --matrix --workspace default` | `garuda.build_matrix_check` |
+| **Compare Competing Team Formulas (`0.0–1.0`)** | `garuda audit logic "Loss Ratio" --team ops` | `garuda.disambiguate_logic` / `garuda.decide_logic_variant` |
+| **Audit Cross-Team Data & Unit-Scaling (`48 Cr` vs `4.8 Cr`)** | `garuda audit data-logic --metric "Claims Paid"` | `garuda.audit_data_discrepancy` / `garuda.reconcile_data_audit` |
 | **Inspect 3-Tier Surface Criticality** | `garuda audit criticality` | `garuda.criticality_tiers` |
-| **Auto-Generate & Seal Base Rulebook** | `garuda rulebook generate && garuda rulebook approve --by "Lead Architect"` | `garuda.synthesize_rulebook` / `garuda.approve_base_rulebook` |
-| **Export Signed Compliance Audit Trail** | `garuda policy list` | `garuda.audit_export` (`csv` / `json` / `md`) |
+| **Auto-Generate & Seal Base Rulebook** | `garuda rulebook generate && garuda rulebook approve` | `garuda.synthesize_rulebook` / `garuda.approve_base_rulebook` |
+| **Anti-Hallucination Claim & Coverage Check** | `garuda docs verify` | `garuda.verify_claim` / `garuda.explain_claim` / `garuda.symbol_test_coverage` |
+| **Provision Isolated Sandbox & Export Audit Trail** | `garuda init --workspace audit-sandbox` | `garuda.create_workspace` / `garuda.audit_export` |
+
+---
+
+## GitHub Packages & GitHub Marketplace Integration
+
+Garuda `v1.9.9` ships with first-class support for **GitHub Packages (`ghcr.io`)** and the **GitHub Marketplace (`action.yml`)**. See **[`docs/GITHUB_MARKETPLACE_STRATEGY.md`](docs/GITHUB_MARKETPLACE_STRATEGY.md)** for the full launch playbook:
+
+```yaml
+# Use Garuda Talon directly from GitHub Marketplace in any workflow:
+- name: Garuda Talon Architecture & Data-Logic Gate
+  uses: myshra777-ai/garuda@v1.9.9
+  with:
+    workspace: default
+    policy-dir: policies
+    fail-on-block: "true"
+    matrix: "true"
+```
+
+```bash
+# Pull the multi-arch OCI container from GitHub Packages (GHCR):
+docker pull ghcr.io/myshra777-ai/garuda:v1.9.9
+```
 
 ---
 
 ## Documentation Suite by Role
 
-| Document | Who It's For | What You'll Learn |
+| Document | Audience | Description |
 | :--- | :--- | :--- |
-| **[`docs/PERSONA_ONBOARDING_GUIDE.md`](docs/PERSONA_ONBOARDING_GUIDE.md)** | **All Users (Start Here!)** | 5-minute tailored onboarding paths for Software Engineers, Staff Architects, Data/Audit Leads, Founders/PMs, DevOps, and AI Agents. |
-| **[`INSTALL.md`](INSTALL.md)** | **Everyone** | 1-command zero-dependency setup across Linux, macOS, Windows PowerShell, Chromebook, and Android + 20-scenario troubleshooting table. |
-| **[`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md)** | **Product & Engineering Teams** | Screen-by-screen tour of the redesigned 10-surface progressive-disclosure `/dashboard` PWA, Talon harness, and IDE integrations. |
-| **[`docs/DATA_AND_LOGIC_AUDIT_GUIDE.md`](docs/DATA_AND_LOGIC_AUDIT_GUIDE.md)** | **Engineering, Data & Audit Leads** | How `0.0–1.0` formula weighting, active contradiction quarantine, and the `data_logic_audit_ledger` work without FinOps regulatory overhead. |
-| **[`docs/FINANCE_AND_AUDIT_GUIDE.md`](docs/FINANCE_AND_AUDIT_GUIDE.md)** | **RevOps, Actuaries & Controllers** | Deep dive into the 48 Crore vs. 4.8 Crore unit-scaling case study, surface criticality freezes, and RFC 6962 audit proofs. |
-| **[`docs/CLI_DECISION_GUIDE.md`](docs/CLI_DECISION_GUIDE.md)** | **Developers & AI Agent Builders** | Complete "When-to-Use-What" decision guide mapping every CLI command to all **54 MCP tools**. |
-| **[`PLAYBOOK.md`](PLAYBOOK.md)** | **DevOps & Platform Engineers** | End-to-end operational runbook covering CI gates, `--worktree-dirty` receipts, OTel runtime telemetry, and multi-agent handoffs. |
-| **[`docs/API.md`](docs/API.md)** | **Tooling & Integration Engineers** | Complete CLI flag reference, 54 MCP tool schemas, `GARUDA_MCP_READ_ONLY` / `GARUDA_MCP_APPROVER` controls, 9 YAML predicates, and HTTP REST API. |
-| **[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md)** | **Staff Architects & Technical Evaluators** | 8-plane capability and verification matrix (`24/24` compiler benchmarks, `63/63` MCP checks, `18/18` security unit tests). |
-| **[`docs/SPECS.md`](docs/SPECS.md)** | **Systems & Security Engineers** | Formal `v1.9.9` architecture specification, PostgreSQL migrations (`001`–`095`), `BuildContext` hashing, and RFC 6962 Merkle proofs. |
-| **[`EVIDENCE.md`](EVIDENCE.md)** | **Technical Due Diligence** | Reproducible verification suite outputs and benchmark evidence. |
-| **[`CHANGELOG.md`](CHANGELOG.md)** | **Everyone** | Full release history through **`v1.9.9`**. |
+| **[`capabilities.json`](capabilities.json)** | **All Tools & Evaluators** | Single canonical version & capability manifest (`v1.9.9`, `54` MCP tools, `10` surfaces, `95` migrations). |
+| **[`docs/PERSONA_ONBOARDING_GUIDE.md`](docs/PERSONA_ONBOARDING_GUIDE.md)** | **All Users (Start Here!)** | 5-minute onboarding paths for Engineers, Architects, Data/Audit Leads, PMs, DevOps, and AI Agents. |
+| **[`INSTALL.md`](INSTALL.md)** | **Everyone** | 1-command zero-dependency setup across Linux, macOS, Windows PowerShell, Chromebook, and Android. |
+| **[`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md)** | **Product & Engineering Teams** | Visual walkthrough of the redesigned `10`-surface progressive-disclosure `/dashboard` PWA. |
+| **[`docs/DATA_AND_LOGIC_AUDIT_GUIDE.md`](docs/DATA_AND_LOGIC_AUDIT_GUIDE.md)** | **Engineering & Data Leads** | `0.0–1.0` formula weighting, active contradiction quarantine, and `data_logic_audit_ledger`. |
+| **[`docs/API.md`](docs/API.md)** | **Tooling & Integration Engineers** | Complete CLI flag reference, all **`54` MCP tool schemas**, `GARUDA_MCP_READ_ONLY` / `GARUDA_MCP_APPROVER` controls, and HTTP REST API. |
+| **[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md)** | **Staff Architects & Evaluators** | 8-plane capability matrix + 3-tier separation of compiler fixtures, synthetic simulations, and live AST/LLM results. |
+| **[`docs/GITHUB_MARKETPLACE_STRATEGY.md`](docs/GITHUB_MARKETPLACE_STRATEGY.md)** | **Maintainers & DevOps** | Step-by-step launch guide for GitHub Packages (`ghcr.io`) and GitHub Marketplace (`action.yml`). |
+| **[`EVIDENCE.md`](EVIDENCE.md)** | **Technical Due Diligence** | Reproducible verification suite outputs (`24/24` fixtures, `10/10` OTel simulations, `63/63` MCP checks, `54/54` behavioral tests). |
+| **[`RELEASE_NOTES.md`](RELEASE_NOTES.md)** | **Everyone** | Official `v1.9.9` release notes and multi-OS download matrix. |
 
 ---
 

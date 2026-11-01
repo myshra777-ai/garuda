@@ -49,13 +49,6 @@ func (s *MCPServer) resolveMCPWorkspaceName(args map[string]interface{}, wsID uu
 	return wsName
 }
 
-func (s *MCPServer) safePool() *pgxpool.Pool {
-	if s == nil || s.store == nil {
-		return nil
-	}
-	return s.store.Pool()
-}
-
 func resolveMCPRepoRoot() string {
 	if envRoot := strings.TrimSpace(os.Getenv("GARUDA_REPO_ROOT")); envRoot != "" {
 		if st, err := os.Stat(envRoot); err == nil && st.IsDir() {
@@ -952,7 +945,7 @@ func (s *MCPServer) handleSynthesizeRulebook(args map[string]interface{}) (inter
 		_, _ = pool.Exec(ctx, `
 			INSERT INTO synthesized_rulebooks (
 				tenant_id, workspace_id, version_tag, status, title, markdown_content, merkle_hash
-			) VALUES ($1, $2, 'v1.9.6-draft', $3,
+			) VALUES ($1, $2, 'v1.9.9-draft', $3,
 				'Garuda Auto-Synthesized Base Architecture Rulebook', $4, $5)
 		`, tenantID, workspaceID, statusStr, md, hashHex)
 	}
@@ -1032,7 +1025,7 @@ func (s *MCPServer) handleApproveBaseRulebook(args map[string]interface{}) (inte
 		_, _ = s.safePool().Exec(ctx, `
 			INSERT INTO synthesized_rulebooks (
 				tenant_id, workspace_id, version_tag, status, title, markdown_content, approved_by, approved_at, merkle_hash
-			) VALUES ($1, $2, 'v1.9.6', $3,
+			) VALUES ($1, $2, 'v1.9.9', $3,
 				'Garuda Base Architecture & Data Logic Rulebook', $4, $5, CASE WHEN $5 != '' THEN NOW() ELSE NULL END, $6)
 		`, tenantID, workspaceID, rulebookStatus, renderedContent, approvedBy, hashHex)
 	}
@@ -1133,6 +1126,7 @@ func (s *MCPServer) handleCriticalityTiers(args map[string]interface{}) (interfa
 			"status":            "INSUFFICIENT_DATA",
 			"entity_count":      0,
 			"count":             0,
+			"surfaces":          []interface{}{},
 			"criticality_tiers": []interface{}{},
 			"reason":            fmt.Sprintf("workspace %q has 0 indexed production entities", wsName),
 		}, nil
@@ -1214,6 +1208,7 @@ func (s *MCPServer) handleCriticalityTiers(args map[string]interface{}) (interfa
 		"status":            "ok",
 		"source":            "live_workspace_ast",
 		"count":             len(tiers),
+		"surfaces":          tiers,
 		"criticality_tiers": tiers,
 	}, nil
 }
@@ -1591,9 +1586,18 @@ func (s *MCPServer) handleHygieneReport(args map[string]interface{}) (interface{
 
 	counts := LoadWorkspaceCounts(ctx, s.safePool(), tenantID, workspaceID)
 
-	allEntities, err := s.store.ListEntities(ctx, tenantID, workspaceID)
-	if err != nil {
-		return nil, err
+	var allEntities []analyzer.Entity
+	var edges []map[string]interface{}
+	if s.store != nil && s.safePool() != nil {
+		var err error
+		allEntities, err = s.store.ListEntities(ctx, tenantID, workspaceID)
+		if err != nil {
+			return nil, err
+		}
+		_, edges, err = s.store.GetGraphData(ctx, tenantID, workspaceID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	includeFixtures := IncludeFixturesRequested(args)
 	internalEntities := make([]analyzer.Entity, 0, len(allEntities))
@@ -1612,11 +1616,6 @@ func (s *MCPServer) handleHygieneReport(args map[string]interface{}) (interface{
 			exportedMap[e.Package+"."+e.Name] = true
 			exportedMap[e.Name] = true
 		}
-	}
-
-	_, edges, err := s.store.GetGraphData(ctx, tenantID, workspaceID)
-	if err != nil {
-		return nil, err
 	}
 
 	relationships := make([]analyzer.Relationship, 0, len(edges))
@@ -1908,6 +1907,8 @@ func (s *MCPServer) handleVerifyReceipt(args map[string]interface{}) (interface{
 
 	return map[string]interface{}{
 		"workspace":               wsName,
+		"tenant_id":               tenantID.String(),
+		"workspace_id":            workspaceID.String(),
 		"valid":                   valid,
 		"supplied_receipt_hash":   expectedReceipt,
 		"recomputed_receipt_hash": recomputedHash,
@@ -1947,6 +1948,7 @@ func (s *MCPServer) handleDiffSnapshots(args map[string]interface{}) (interface{
 
 	return map[string]interface{}{
 		"workspace":           wsName,
+		"tenant_id":           tenantID.String(),
 		"workspace_id":        workspaceID.String(),
 		"head_matches_index":  snapshot["head_matches_index"],
 		"policy_set_version":  snapshot["policy_set_version"],
@@ -2002,6 +2004,7 @@ func (s *MCPServer) handleDiffImpact(args map[string]interface{}) (interface{}, 
 				symName = symName[dot+1:]
 			}
 			if br, bErr := s.handleBlastRadius(map[string]interface{}{
+				"tenant_id": tenantID.String(),
 				"workspace": wsName,
 				"name":      symName,
 			}); bErr == nil {
@@ -2121,12 +2124,13 @@ func (s *MCPServer) handleSymbolTestCoverage(args map[string]interface{}) (inter
 	}
 
 	return map[string]interface{}{
-		"workspace": wsName,
-		"tenant_id": tenantID.String(),
-		"symbol":    target,
-		"package":   pkgFilter,
-		"count":     len(items),
-		"results":   items,
+		"workspace":    wsName,
+		"tenant_id":    tenantID.String(),
+		"workspace_id": workspaceID.String(),
+		"symbol":       target,
+		"package":      pkgFilter,
+		"count":        len(items),
+		"results":      items,
 	}, nil
 }
 
@@ -2197,6 +2201,7 @@ func (s *MCPServer) handleAuditExport(args map[string]interface{}) (interface{},
 	return map[string]interface{}{
 		"workspace":          wsName,
 		"tenant_id":          tenantID.String(),
+		"workspace_id":       workspaceID.String(),
 		"format":             format,
 		"exported_at":        time.Now().UTC().Format(time.RFC3339),
 		"snapshot_receipt":   snapshot,
@@ -2272,6 +2277,8 @@ func (s *MCPServer) handleExplainClaim(args map[string]interface{}) (interface{}
 	}
 	return map[string]interface{}{
 		"workspace":       wsName,
+		"tenant_id":       tenantID.String(),
+		"workspace_id":    workspaceID.String(),
 		"claim_id":        claimID,
 		"status":          "NOT_IN_GRAPH",
 		"derivation_path": "",
@@ -2312,6 +2319,8 @@ func (s *MCPServer) handleSnippet(args map[string]interface{}) (interface{}, err
 	snap := ComputeSnapshotReceipt(ctx, pool, tenantID, workspaceID, wsName)
 	return map[string]interface{}{
 		"workspace":       wsName,
+		"tenant_id":       tenantID.String(),
+		"workspace_id":    workspaceID.String(),
 		"entity":          target,
 		"file_path":       cleanF,
 		"line_start":      lineStart,
@@ -2334,6 +2343,8 @@ func (s *MCPServer) handleSummary(args map[string]interface{}) (interface{}, err
 	snap := ComputeSnapshotReceipt(ctx, pool, tenantID, workspaceID, wsName)
 	return map[string]interface{}{
 		"workspace":        wsName,
+		"tenant_id":        tenantID.String(),
+		"workspace_id":     workspaceID.String(),
 		"scope":            "production_only",
 		"snapshot_id":      snap["receipt_hash"],
 		"commit_short":     snap["commit_short"],
@@ -2347,7 +2358,7 @@ func (s *MCPServer) handleSummary(args map[string]interface{}) (interface{}, err
 // 24. handleOwners implements `garuda.owners` (D3: declared owner mapping from .garuda/OWNERS.json with UNASSIGNED default).
 func (s *MCPServer) handleOwners(args map[string]interface{}) (interface{}, error) {
 	ctx := context.Background()
-	_, workspaceID, _ := s.resolveTenantAndWorkspace(args)
+	tenantID, workspaceID, _ := s.resolveTenantAndWorkspace(args)
 	wsName := s.resolveMCPWorkspaceName(args, workspaceID)
 	target, _ := args["entity_id"].(string)
 	if target == "" {
@@ -2357,6 +2368,8 @@ func (s *MCPServer) handleOwners(args map[string]interface{}) (interface{}, erro
 	owner, team, src := s.lookupDeclaredOwner(ctx, workspaceID, wsName, target)
 	return map[string]interface{}{
 		"workspace":      wsName,
+		"tenant_id":      tenantID.String(),
+		"workspace_id":   workspaceID.String(),
 		"entity":         target,
 		"status":         map[bool]string{true: "DECLARED", false: "UNASSIGNED"}[team != "UNASSIGNED"],
 		"declared_owner": owner,
@@ -2400,11 +2413,13 @@ func (s *MCPServer) handleVerifyClaim(args map[string]interface{}) (interface{},
 			st = "SUPPORTED"
 		}
 		return map[string]interface{}{
-			"workspace":   wsName,
-			"from_symbol": fromSym,
-			"predicate":   predStr,
-			"to_symbol":   toSym,
-			"status":      st,
+			"workspace":    wsName,
+			"tenant_id":    tenantID.String(),
+			"workspace_id": workspaceID.String(),
+			"from_symbol":  fromSym,
+			"predicate":    predStr,
+			"to_symbol":    toSym,
+			"status":       st,
 		}, nil
 	}
 
@@ -2437,17 +2452,21 @@ func (s *MCPServer) handlePreflightBundle(args map[string]interface{}) (interfac
 	}
 	snap := ComputeSnapshotReceipt(ctx, pool, tenantID, workspaceID, wsName)
 	preEdit, _ := s.handleTalonPreEdit(map[string]interface{}{
+		"tenant_id":        tenantID.String(),
 		"workspace":        wsName,
 		"target":           target,
 		"include_fixtures": IncludeFixturesRequested(args),
 	})
 	ownerInfo, _ := s.handleOwners(map[string]interface{}{
+		"tenant_id": tenantID.String(),
 		"workspace": wsName,
 		"name":      target,
 	})
 
 	return map[string]interface{}{
 		"workspace":        wsName,
+		"tenant_id":        tenantID.String(),
+		"workspace_id":     workspaceID.String(),
 		"target":           target,
 		"snapshot_id":      snap["receipt_hash"],
 		"commit_short":     snap["commit_short"],

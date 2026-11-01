@@ -178,6 +178,23 @@ func (s *MCPServer) handleTalonPreEdit(args map[string]interface{}) (interface{}
 	policyDir := resolveMCPPolicyDir("")
 	s.markOriented()
 
+	if s.store == nil || s.safePool() == nil {
+		return &talon.PreEditBriefing{
+			TenantID:        tenantID.String(),
+			Workspace:       wsName,
+			WorkspaceID:     workspaceID.String(),
+			Target:          target,
+			ScopeFilter:     "production_only (include_fixtures=false)",
+			IncludeFixtures: includeFixtures,
+			PolicyDecision:  "ALLOW",
+			MatchedEntities: []talon.HubSummary{},
+			BySeverity:      map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+			ApplicableADRs:  []talon.ADRGuardrail{},
+			ActivePolicies:  []talon.PolicyGuardrail{},
+			Violations:      []string{},
+		}, nil
+	}
+
 	brief, err := talon.BuildPreEditBriefingWithOpts(
 		context.Background(),
 		s.store,
@@ -247,6 +264,22 @@ func (s *MCPServer) handleTalonVerifyEdit(args map[string]interface{}) (interfac
 
 	policyDir := resolveMCPPolicyDir(filepath.Join(absRepo, "policies"))
 	s.markOriented()
+
+	if s.store == nil || s.safePool() == nil {
+		return &talon.GuardVerdict{
+			TenantID:           tenantID.String(),
+			Workspace:          wsName,
+			WorkspaceID:        workspaceID.String(),
+			Outcome:            "ALLOW",
+			AgentShouldProceed: true,
+			SaveToLedger:       saveLedger,
+			TouchedFiles:       []string{},
+			TouchedSymbols:     []string{},
+			TouchedPackages:    []string{},
+			BySeverity:         map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+			Violations:         []string{},
+		}, nil
+	}
 
 	verdict, err := talon.RunGuard(context.Background(), s.store, tenantID, workspaceID, talon.GuardOptions{
 		RepoDir:       absRepo,

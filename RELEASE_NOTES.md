@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary: What's New in Garuda `v1.9.9`
 
-Garuda `v1.9.9` is our largest production milestone to date, evolving Garuda from an architectural change-control gate into a **complete Software & Financial Intelligence Instrument** with **35 deterministic MCP tools**, **Human-in-the-Loop multi-team formula disambiguation (`0.0–1.0` weights)**, **3-Tier Surface Criticality classification**, **continuous cross-team financial discrepancy auditing (48 Crore vs. 4.8 Crore)**, an **Auto-Synthesized Base Rulebook Studio**, and **pre-packaged standalone downloads for Windows, macOS, Linux, Chromebook, Android, and FreeBSD**.
+Garuda `v1.9.9` is our largest production milestone to date, evolving Garuda from an architectural change-control gate into a **complete Software & Financial Intelligence Instrument** with **54 deterministic MCP tools (41 read-only, 13 mutating)**, **Human-in-the-Loop multi-team formula disambiguation (`0.0–1.0` weights)**, **3-Tier Surface Criticality classification**, **continuous cross-team financial discrepancy auditing (48 Crore vs. 4.8 Crore)**, an **Auto-Synthesized Base Rulebook Studio**, and **pre-packaged standalone downloads for Windows, macOS, Linux, Chromebook, Android, and FreeBSD**.
 
 ### Five Headline Upgrades in `v1.9.9`
 
@@ -24,7 +24,7 @@ Garuda `v1.9.9` is our largest production milestone to date, evolving Garuda fro
 4. **Auto-Synthesized Base Rulebook Studio**:
    - Reverse-engineers unorganized repositories into `.garuda/DRAFT_BASE_RULEBOOK.md`. Engineers, architects, and finance leads can review, edit inline in `/dashboard` (`04 — Docs & Base Rulebook`), and lock the baseline in one click (`garuda rulebook generate` / `garuda rulebook approve`).
 5. **Extended 54-Tool Production MCP Server & Multi-OS Standalone Packages**:
-   - Expanded `bin/garuda-mcp` from 26 to **35 zero-stub tools** (`63/63` checks passing in `scripts/mcp_verify.py`), upgraded the offline web console to **9 interactive surfaces**, and added pre-built standalone archives + package-manager manifests for **Windows (`x64` & `ARM64`), macOS (`Apple Silicon` & `Intel`), Linux (`x86_64` & `ARM64`, `.tar.gz`, `.deb`, `.rpm`, `AUR`), Chromebook (`Crostini` + `PWA`), Android (`Termux` + `PWA`), and FreeBSD**.
+   - Expanded `bin/garuda-mcp` to **54 zero-stub tools** (`54/54` positive & negative behavioral tests + `63/63` protocol checks) (`63/63` checks passing in `scripts/mcp_verify.py`), upgraded the offline web console to **10 progressive-disclosure surfaces**, and added pre-built standalone archives + package-manager manifests for **Windows (`x64` & `ARM64`), macOS (`Apple Silicon` & `Intel`), Linux (`x86_64` & `ARM64`, `.tar.gz`, `.deb`, `.rpm`, `AUR`), Chromebook (`Crostini` + `PWA`), Android (`Termux` + `PWA`), and FreeBSD**.
 
 ---
 

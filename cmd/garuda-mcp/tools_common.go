@@ -224,6 +224,15 @@ func ComputePolicySetVersion(ctx context.Context, pool *pgxpool.Pool, tenantID u
 // For isolated empty workspaces (like audit-sandbox), it reports an isolated empty-workspace
 // snapshot identity instead of leaking the default repo's git commit and dirty hash (fixes B-05).
 func ComputeSnapshotReceipt(ctx context.Context, pool *pgxpool.Pool, tenantID, workspaceID uuid.UUID, wsName string) map[string]interface{} {
+	if tenantID == uuid.Nil {
+		tenantID = defaultTenantID
+	}
+	if wsName == "" {
+		wsName = "default"
+	}
+	if workspaceID == uuid.Nil {
+		workspaceID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(tenantID.String()+":workspace:"+wsName))
+	}
 	polVer, activeIDs, supersededIDs := ComputePolicySetVersion(ctx, pool, tenantID, "")
 
 	var repoCount, entCount int
@@ -233,10 +242,11 @@ func ComputeSnapshotReceipt(ctx context.Context, pool *pgxpool.Pool, tenantID, w
 	}
 
 	// B-05: If a non-default workspace has 0 indexed repositories/entities, return an isolated empty receipt!
-	if pool != nil && workspaceID != uuid.Nil && repoCount == 0 && entCount == 0 && !strings.EqualFold(wsName, "default") {
-		emptySum := sha256.Sum256([]byte("isolated-empty-workspace:" + wsName + ":" + workspaceID.String() + ":" + polVer))
+	if repoCount == 0 && entCount == 0 && !strings.EqualFold(wsName, "default") {
+		emptySum := sha256.Sum256([]byte("isolated-empty-workspace:" + tenantID.String() + ":" + wsName + ":" + workspaceID.String() + ":" + polVer))
 		emptyHash := hex.EncodeToString(emptySum[:])
 		return map[string]interface{}{
+			"tenant_id":                 tenantID.String(),
 			"workspace":                 wsName,
 			"workspace_id":              workspaceID.String(),
 			"workspace_isolated":        true,
@@ -278,7 +288,9 @@ func ComputeSnapshotReceipt(ctx context.Context, pool *pgxpool.Pool, tenantID, w
 	headMatchesIndex := recordedCommit == "" || (recordedCommit == activeCtx.CommitShort && recordedDirty == activeCtx.WorktreeDirty)
 
 	return map[string]interface{}{
+		"tenant_id":                 tenantID.String(),
 		"workspace":                 wsName,
+		"workspace_id":              workspaceID.String(),
 		"workspace_isolated":        true,
 		"indexed_repositories":      repoCount,
 		"indexed_entities":          entCount,
@@ -473,4 +485,11 @@ func SanitizeGlobalJSONString(raw string) string {
 		out = strings.ReplaceAll(out, prefix, "")
 	}
 	return out
+}
+
+func (s *MCPServer) safePool() *pgxpool.Pool {
+	if s == nil || s.store == nil {
+		return nil
+	}
+	return s.store.Pool()
 }

@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=none
-version: "1.6.0"
-last_updated: "2026-10-25"
+version: "1.9.9"
+last_updated: "2026-11-01"
 
 categories:
   - name: "Multi-Language AST, Incremental Sync & Call-Graph Extraction"
@@ -75,7 +75,7 @@ categories:
         supported_semantics: "VerifyDecisionCryptographic, VerifyEvaluation, dual-tier epoch snapshots"
         invariant: "Cryptographic Tamper-Evidence"
 
-  - name: "Garuda Talon Active Agent Harness, Universal Runtime & 23-Tool MCP Surface"
+  - name: "Garuda Talon Active Agent Harness, Universal Runtime & 54-Tool MCP Surface"
     description: "Active pre-edit and post-edit enforcement across Cursor, Claude Code, Codex, Windsurf, and Git hooks with 1-command cross-OS provisioning"
     capabilities:
       - name: "Universal Zero-Dependency Installer & Doctor (install.ps1, install.sh, garuda doctor)"
@@ -92,8 +92,8 @@ categories:
 
       - name: "Active MCP Server Enforcement (bin/garuda-mcp)"
         status: "production"
-        verification_tier: "30/30 Checks in scripts/mcp_verify.py"
-        supported_semantics: "23 MCP tools, prompts/list (garuda.architectural_contract), resources/list (garuda://workspace/contract), and automatic first-call guardrail injection"
+        verification_tier: "63/63 Checks in scripts/mcp_verify.py"
+        supported_semantics: "54 MCP tools, prompts/list (garuda.architectural_contract), resources/list (garuda://workspace/contract), and automatic first-call guardrail injection"
         invariant: "JSON-RPC 2.0 Spec Compliant"
 
       - name: "Deterministic Self-Repair Loop (garuda talon guard & run)"

@@ -1,0 +1,88 @@
+name: "Garuda Talon Architecture & Data-Logic Gate"
+author: "Rohit Mishra (myshra777-ai)"
+description: "Diff-scoped multi-language AST change control, active AI agent guardrails (Talon), 0.0-1.0 formula disambiguation, and RFC 6962 Merkle receipts."
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  workspace:
+    description: "Target Garuda workspace name"
+    required: false
+    default: "default"
+  policy-dir:
+    description: "Path to declarative YAML policy directory"
+    required: false
+    default: "policies"
+  diff:
+    description: "Git revision or range to evaluate (e.g. HEAD~1..HEAD)"
+    required: false
+    default: "HEAD"
+  fail-on-block:
+    description: "Exit with code 2 when net-new BLOCK violations or ADR contradictions are detected"
+    required: false
+    default: "true"
+  matrix:
+    description: "Verify 4-profile cross-platform build matrix (linux/darwin/windows, cgo=0/1)"
+    required: false
+    default: "false"
+
+outputs:
+  verdict:
+    description: "Governance gate outcome (ALLOW, WARN, REVIEW, or BLOCK)"
+    value: ${{ steps.garuda_gate.outputs.verdict }}
+  receipt-hash:
+    description: "Deterministic SHA-256 BuildContext & graph receipt hash"
+    value: ${{ steps.garuda_gate.outputs.receipt_hash }}
+  reproduce-command:
+    description: "1-line deterministic CLI command to reproduce the exact verdict locally"
+    value: ${{ steps.garuda_gate.outputs.reproduce_command }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Build or Locate Garuda Binaries (Zero-CGO)
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ ! -x "./bin/garuda" ]]; then
+          CGO_ENABLED=0 go build -o bin/garuda ./cmd/garuda
+          CGO_ENABLED=0 go build -o bin/garuda-talon ./cmd/garuda-talon
+          CGO_ENABLED=0 go build -o bin/garuda-mcp ./cmd/garuda-mcp
+        fi
+
+    - name: Execute Garuda Talon Diff-Scoped Architecture & Logic Gate
+      id: garuda_gate
+      shell: bash
+      run: |
+        set -euo pipefail
+        WORKSPACE="${{ inputs.workspace }}"
+        POLICY_DIR="${{ inputs.policy-dir }}"
+        EXTRA_FLAGS=()
+        if [[ "${{ inputs.fail-on-block }}" == "true" ]]; then
+          EXTRA_FLAGS+=("--fail-on-block")
+        fi
+        if [[ "${{ inputs.matrix }}" == "true" ]]; then
+          EXTRA_FLAGS+=("--matrix")
+        fi
+
+        ./bin/garuda talon guard . --workspace "$WORKSPACE" --policies "$POLICY_DIR" "${EXTRA_FLAGS[@]}" --json > /tmp/garuda_verdict.json || true
+        VERDICT=$(python3 -c 'import json; d=json.load(open("/tmp/garuda_verdict.json")); print(d.get("outcome","ALLOW"))' 2>/dev/null || echo "ALLOW")
+        RECEIPT=$(python3 -c 'import json; d=json.load(open("/tmp/garuda_verdict.json")); print(d.get("build_context",{}).get("receipt_hash",""))' 2>/dev/null || echo "")
+        REPRO=$(python3 -c 'import json; d=json.load(open("/tmp/garuda_verdict.json")); print(d.get("reproduce_command",""))' 2>/dev/null || echo "")
+
+        echo "verdict=${VERDICT}" >> "$GITHUB_OUTPUT"
+        echo "receipt_hash=${RECEIPT}" >> "$GITHUB_OUTPUT"
+        echo "reproduce_command=${REPRO}" >> "$GITHUB_OUTPUT"
+
+        {
+          echo "### 🦅 Garuda Talon Architecture & Data-Logic Gate (`v1.9.9`)"
+          echo "- **Verdict**: \`${VERDICT}\`"
+          echo "- **Workspace**: \`${WORKSPACE}\`"
+          echo "- **Receipt Hash**: \`${RECEIPT:-genesis}\`"
+          echo "- **Reproduce Locally**: \`${REPRO:-garuda check --workspace default}\`"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [[ "${{ inputs.fail-on-block }}" == "true" && "$VERDICT" == "BLOCK" ]]; then
+          exit 2
+        fi

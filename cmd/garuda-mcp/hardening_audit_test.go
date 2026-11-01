@@ -104,6 +104,7 @@ func TestBug02_ReadOnlyMode_BlocksAllMutations(t *testing.T) {
 		{"garuda.handoff", map[string]interface{}{"task_id": "t1", "source_agent_id": "a1", "target_agent_id": "a2"}},
 		{"garuda.resume", map[string]interface{}{"agent_id": "a2", "checkpoint_id": "c1"}},
 		{"garuda.reset_audit_state", map[string]interface{}{"workspace": "default"}},
+		{"garuda.create_workspace", map[string]interface{}{"workspace": "audit-sandbox"}},
 		{"garuda.talon_verify_edit", map[string]interface{}{"workspace": "default", "save_to_ledger": true}},
 	}
 
