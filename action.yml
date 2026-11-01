@@ -1,6 +1,6 @@
 name: "Garuda Talon Architecture & Data-Logic Gate"
 author: "Rohit Mishra (myshra777-ai)"
-description: "Fail-closed diff-scoped multi-language AST change control, active AI agent guardrails (Talon), 0.0-1.0 formula disambiguation, and RFC 6962 Merkle receipts."
+description: "Fail-closed AST change control, active AI guardrails (Talon), formula weights, and Merkle audit receipts."
 branding:
   icon: "shield"
   color: "green"
