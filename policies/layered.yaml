@@ -1,0 +1,24 @@
+# Garuda Starter Policy Template: Strict Layered Architecture
+id: tpl-layered-no-upward-deps
+version: v1
+title: "Layered Architecture: Lower layers must never import upper layers"
+description: |
+  Prevents upward dependency inversions (store/data importing service/api, or
+  service importing api/transport).
+priority: 190
+language: any
+authority: "architecture-board@company.com"
+scope:
+  domain: architecture
+  pattern: ".*store.*|.*repo.*|.*data.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*(store|repository|repo|dal).*"
+      to_name_pattern: ".*(api|handler|controller|transport|ui|payment).*"
+then:
+  decision: BLOCK
+  reason: |
+    Upward dependency violation: persistence/store layer imported service/transport symbols.
+    Move shared DTOs or interfaces into a domain/types package.

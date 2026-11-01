@@ -1,0 +1,39 @@
+id: importlinter-contract-01
+version: v1
+title: "Import-Linter Imported: app.domain -> app.adapters forbidden"
+description: "Auto-translated from Python .importlinter contract."
+priority: 200
+language: python
+authority: "python-architecture@company.com"
+scope:
+  domain: python
+  pattern: ".*app.domain.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*app.domain.*"
+      to_name_pattern: ".*app.adapters.*"
+then:
+  decision: BLOCK
+  reason: "Violates imported Python Import-Linter contract: app.domain must not import app.adapters."
+---
+id: importlinter-contract-02
+version: v1
+title: "Import-Linter Imported: app.payments -> sqlalchemy forbidden"
+description: "Auto-translated from Python .importlinter contract."
+priority: 200
+language: python
+authority: "python-architecture@company.com"
+scope:
+  domain: python
+  pattern: ".*app.payments.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*app.payments.*"
+      to_name_pattern: ".*sqlalchemy.*"
+then:
+  decision: BLOCK
+  reason: "Violates imported Python Import-Linter contract: app.payments must not import sqlalchemy."

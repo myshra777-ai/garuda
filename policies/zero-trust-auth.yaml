@@ -1,0 +1,24 @@
+# Garuda Starter Policy Template: Zero-Trust Auth & Tenant Scope
+id: tpl-zero-trust-tenant-scope
+version: v1
+title: "Zero-Trust API Guardrail: Exported handlers must enforce tenant & workspace scope"
+description: |
+  Every multi-tenant API handler must extract and validate tenant_id and workspace_id
+  before querying or mutating persistence state (Invariant I-11).
+priority: 240
+language: any
+authority: "security-architecture@company.com"
+scope:
+  domain: api
+  pattern: "^Handle.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: CALLS
+      from_name_pattern: "^Handle.*"
+      to_name_pattern: ".*DirectUnscopedQuery.*"
+then:
+  decision: BLOCK
+  reason: |
+    API handler bypassed tenant/workspace scope enforcement (Invariant I-11).
+    Call workspaceScopeFromRequest(r) before invoking store methods.

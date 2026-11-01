@@ -475,6 +475,8 @@ var checkCmd = &cobra.Command{
 			fmt.Println()
 		}
 
+		emitCheckIntegrations(decision)
+
 		if checkFailOnBlockFlag && decision.GovernanceOutcome == string(policy.DecisionBlock) {
 			os.Exit(2)
 		}
@@ -519,5 +521,9 @@ func init() {
 	checkCmd.Flags().BoolVarP(&checkSaveFlag, "save", "s", true, "Persist evaluations and seal RFC 6962 Merkle receipt")
 	checkCmd.Flags().BoolVar(&checkFailOnBlockFlag, "fail-on-block", false, "Exit with code 2 when outcome is BLOCK")
 	checkCmd.Flags().BoolVar(&checkJSONFlag, "json", false, "Emit structured JSON decision card")
+	checkCmd.Flags().StringVar(&checkNotifySlackFlag, "notify-slack", "", "Slack incoming webhook URL for violation alerts (or set GARUDA_SLACK_WEBHOOK)")
+	checkCmd.Flags().StringVar(&checkNotifyTeamsFlag, "notify-teams", "", "Microsoft Teams webhook URL for violation alerts (or set GARUDA_TEAMS_WEBHOOK)")
+	checkCmd.Flags().StringVar(&checkPRCommentFlag, "pr-comment", "", "Write GitHub PR Markdown review report to file")
+	checkCmd.Flags().StringVar(&checkSARIFFlag, "sarif", "", "Write GitHub Code Scanning SARIF v2.1.0 report to file")
 	rootCmd.AddCommand(checkCmd)
 }

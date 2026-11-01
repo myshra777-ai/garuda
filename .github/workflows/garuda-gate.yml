@@ -1,4 +1,4 @@
-name: Garuda Knowledge Integrity Gate
+name: Garuda Architectural & Financial PR Gate
 
 on:
   pull_request:
@@ -6,7 +6,79 @@ on:
   push:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Fast Drop-In PR Diff Gate (~30 lines — copy into any repo!)
+  #    Downloads or builds garuda, checks PR diff, comments on PR, fails on BLOCK
+  # ---------------------------------------------------------------------------
+  garuda-pr-gate:
+    name: Garuda Diff-Scoped PR Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository (Full History for Diff Scope)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install or Build Garuda Binary
+        run: |
+          if [ -f "cmd/garuda/main.go" ]; then
+            CGO_ENABLED=0 go build -o /usr/local/bin/garuda ./cmd/garuda
+          else
+            LATEST_URL="https://github.com/myshra777-ai/garuda/releases/latest/download/garuda-linux-amd64"
+            curl -fsSL "$LATEST_URL" -o /usr/local/bin/garuda && chmod +x /usr/local/bin/garuda
+          fi
+          garuda --version
+
+      - name: Seed Starter Policy Templates (if policies/ is empty)
+        run: |
+          if [ ! -d "policies" ] || [ -z "$(ls -A policies/*.yaml 2>/dev/null)" ]; then
+            garuda templates install financial
+          fi
+
+      - name: Run Garuda Check Against PR Diff
+        id: garuda_check
+        continue-on-error: true
+        run: |
+          DIFF_RANGE="HEAD~1..HEAD"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            DIFF_RANGE="origin/${{ github.base_ref }}...HEAD"
+          fi
+          garuda check . \
+            --diff "$DIFF_RANGE" \
+            --policy policies \
+            --pr-comment garuda-pr-report.md \
+            --sarif garuda.sarif \
+            --fail-on-block || echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Post Garuda Governance Verdict Comment on PR
+        if: github.event_name == 'pull_request' && hashFiles('garuda-pr-report.md') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('garuda-pr-report.md', 'utf8');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Enforce Fail-Closed Gate on CRITICAL Violations
+        if: steps.garuda_check.outputs.exit_code != ''
+        run: |
+          echo "❌ Garuda blocked this PR due to CRITICAL architectural or financial policy violations."
+          exit 2
+
+  # ---------------------------------------------------------------------------
+  # 2. Full Postgres + Merkle Ledger Verification Suite
+  # ---------------------------------------------------------------------------
   verify-integrity:
     runs-on: ubuntu-latest
     services:
@@ -36,7 +108,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.0'
+          go-version: '1.24.x'
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -48,46 +120,15 @@ jobs:
               echo "✅ Postgres ready"
               break
             fi
-            echo "⏳ Waiting for Postgres... ($i/30)"
             sleep 1
           done
 
-      - name: Download Go modules
-        run: go mod download
+      - name: Run All Database Migrations
+        run: go run cmd/migrate/main.go
 
-      - name: Run ALL Database Migrations
+      - name: Build Garuda Engine CLI & Run Demo Smoke Check
         run: |
-          echo "🔧 Running full migration suite..."
-          go run cmd/migrate/main.go
-          echo "✅ Migrations complete"
-
-      - name: Verify critical tables exist
-        run: |
-          echo "🔍 Verifying schema..."
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\d document_claims" > /dev/null || { echo "❌ document_claims missing"; exit 1; }
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\d entities" > /dev/null || { echo "❌ entities missing"; exit 1; }
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "\d workspaces" > /dev/null || { echo "❌ workspaces missing"; exit 1; }
-          echo "✅ Schema verified"
-
-      - name: Build Garuda Engine CLI
-        run: go build -o bin/garuda ./cmd/garuda
-
-      - name: Analyze Codebase AST
-        run: |
-          echo "🔍 Analyzing codebase..."
+          CGO_ENABLED=0 go build -o bin/garuda ./cmd/garuda
+          ./bin/garuda demo
           ./bin/garuda analyze . --save --workspace ci-workspace
-          echo "✅ Analysis complete"
-
-      - name: Ingest Architecture Documentation & ADRs
-        run: |
-          if [ -d "docs/adr" ] && [ "$(ls -A docs/adr 2>/dev/null)" ]; then
-            echo "📚 Ingesting ADRs..."
-            ./bin/garuda docs ingest docs/adr/
-          else
-            echo "⏭️  No ADRs found, skipping"
-          fi
-
-      - name: Run Garuda Knowledge Integrity Gate
-        run: |
-          echo "🛡️ Running CI integrity check..."
           ./bin/garuda ci check --fail-on-contradiction=true

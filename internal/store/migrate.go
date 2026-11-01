@@ -154,5 +154,11 @@ func Migrate(connString string, migrationsDir string) error {
 		fmt.Printf("Applied migration: %s\n", name)
 	}
 
+	_, _ = pool.Exec(ctx, `
+		ALTER TABLE policy_evaluations DROP CONSTRAINT IF EXISTS policy_evaluations_decision_check;
+		ALTER TABLE policy_evaluations ADD CONSTRAINT policy_evaluations_decision_check
+			CHECK (decision IN ('ALLOW', 'WARN', 'REVIEW', 'BLOCK', 'INCONCLUSIVE'));
+	`)
+
 	return nil
 }

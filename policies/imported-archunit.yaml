@@ -1,0 +1,39 @@
+id: archunit-imported-01
+version: v1
+title: "ArchUnit Imported: domain must not depend on infrastructure"
+description: "Auto-translated from Java ArchUnit rule into Garuda AST policy."
+priority: 200
+language: any
+authority: "archunit-migration@company.com"
+scope:
+  domain: architecture
+  pattern: ".*domain.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*domain.*"
+      to_name_pattern: ".*infrastructure.*"
+then:
+  decision: BLOCK
+  reason: "Violates imported ArchUnit package boundary: domain -> infrastructure is forbidden."
+---
+id: archunit-imported-02
+version: v1
+title: "ArchUnit Imported: service must not depend on controller"
+description: "Auto-translated from Java ArchUnit rule into Garuda AST policy."
+priority: 200
+language: any
+authority: "archunit-migration@company.com"
+scope:
+  domain: architecture
+  pattern: ".*service.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*service.*"
+      to_name_pattern: ".*controller.*"
+then:
+  decision: BLOCK
+  reason: "Violates imported ArchUnit package boundary: service -> controller is forbidden."

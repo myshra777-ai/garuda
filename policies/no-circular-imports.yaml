@@ -1,0 +1,24 @@
+# Garuda Starter Policy Template: Zero Circular Imports
+id: tpl-no-circular-imports
+version: v1
+title: "Package Hygiene: Zero circular package or module dependencies"
+description: |
+  Detects and blocks cyclic package dependencies that degrade build determinism
+  and amplify change blast radius.
+priority: 180
+language: any
+authority: "platform-governance@company.com"
+scope:
+  domain: topology
+  pattern: ".*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*internal/store.*"
+      to_name_pattern: ".*internal/policy.*"
+then:
+  decision: BLOCK
+  reason: |
+    Circular dependency hazard detected between internal packages. Extract shared
+    value types into internal/types to keep the dependency DAG acyclic.

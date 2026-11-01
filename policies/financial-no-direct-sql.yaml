@@ -1,0 +1,24 @@
+# Garuda Starter Policy Template: Financial SQL Isolation
+id: tpl-financial-no-direct-sql
+version: v1
+title: "Financial Guardrail: Payment & billing code must not import database/sql directly"
+description: |
+  All payment, refund, settlement, and ledger mutations must route through an
+  audited, idempotency-enforced Repository interface rather than raw SQL handles.
+priority: 250
+language: go
+authority: "finops-security@company.com"
+scope:
+  domain: payments
+  pattern: ".*Payment.*|.*Refund.*|.*Charge.*|.*Settlement.*|.*Payout.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*(Payment|Refund|Charge|Settlement|Payout|payment|refund|billing).*"
+      to_name_pattern: "^(database/sql|github.com/jackc/pgx.*)$"
+then:
+  decision: BLOCK
+  reason: |
+    Direct SQL driver import in financial/payment path violates ADR-0001. Route all
+    monetary mutations through the audited PaymentRepository / LedgerStore interface.

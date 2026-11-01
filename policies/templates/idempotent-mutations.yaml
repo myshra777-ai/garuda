@@ -1,0 +1,23 @@
+# Garuda Starter Policy Template: Idempotent State Mutations
+id: tpl-idempotent-state-mutations
+version: v1
+title: "Reliability Guardrail: External payment & state mutations must enforce idempotency keys"
+description: |
+  Prevents duplicate charges or double-ledger entries during network retries or
+  multi-agent handoff replays (ADR-0001).
+priority: 220
+language: any
+authority: "sre-platform@company.com"
+scope:
+  pattern: ".*(ExecuteCharge|ExecuteRefund|TransferFunds|ProcessInstantCheckout|RecordChargeTx|AppendLeafAndSealTx|SaveTask|ExecuteHandoff).*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: CALLS
+      from_name_pattern: ".*(ExecuteCharge|ExecuteRefund|TransferFunds).*"
+      to_name_pattern: ".*DirectBankAPI.*"
+then:
+  decision: REVIEW
+  reason: |
+    External state mutation must verify an idempotency key via IdempotencyStore
+    before invoking downstream banking/payment gateways.

@@ -1,0 +1,24 @@
+# Garuda Starter Policy Template: Microservices Database Boundary
+id: tpl-microservices-db-isolation
+version: v1
+title: "Microservices Boundary: No cross-service internal store or table access"
+description: |
+  Each microservice owns its state schema exclusively. Cross-service communication
+  must traverse versioned API/gRPC/event contracts, never another service's store package.
+priority: 210
+language: any
+authority: "platform-governance@company.com"
+scope:
+  domain: microservices
+  pattern: ".*service.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: CALLS
+      from_name_pattern: ".*(order|catalog|shipping|notification).*"
+      to_name_pattern: ".*(payment|ledger|billing).*Store.*"
+then:
+  decision: BLOCK
+  reason: |
+    Cross-service database boundary violation detected. Access foreign service state
+    via its public API/gRPC client rather than calling its internal Store directly.

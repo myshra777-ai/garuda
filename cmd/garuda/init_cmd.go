@@ -33,6 +33,9 @@ var (
 	initWorkspaceFlag string
 	initTargetFlag    string
 	initSkipScanFlag  bool
+	initTemplateFlag  string
+	initWizardFlag    bool
+	initDefaultsFlag  bool
 )
 
 func resolveGoBinary() string {
@@ -131,6 +134,19 @@ var initCmd = &cobra.Command{
 		targetPath := initTargetFlag
 		if len(args) > 0 && args[0] != "" {
 			targetPath = args[0]
+		}
+
+		if initWizardFlag {
+			if err := runInteractiveArchitectureWizard(targetPath, initDefaultsFlag); err != nil {
+				return err
+			}
+		}
+		if initTemplateFlag != "" {
+			installed, tErr := InstallStarterTemplates(targetPath, initTemplateFlag)
+			if tErr != nil {
+				return tErr
+			}
+			fmt.Printf("  ✓ Installed %d starter policy template(s) for %q into policies/\n", len(installed), initTemplateFlag)
 		}
 
 		// 1. Resolve & Ensure PostgreSQL is running (Docker or Portable User-Space Cluster)
@@ -516,5 +532,8 @@ func init() {
 	initCmd.Flags().StringVar(&initWorkspaceFlag, "workspace", "", "Workspace name to initialize (auto-detected if omitted)")
 	initCmd.Flags().StringVar(&initTargetFlag, "target", ".", "Repository path to index")
 	initCmd.Flags().BoolVar(&initSkipScanFlag, "skip-scan", false, "Skip initial repository AST scan")
+	initCmd.Flags().StringVar(&initTemplateFlag, "template", "", "Starter policy template to install (hexagonal, layered, microservices, no-circular-imports, financial, zero-trust-auth, ai-agent-safety, pii-gdpr-hipaa, idempotent-mutations, all)")
+	initCmd.Flags().BoolVarP(&initWizardFlag, "wizard", "i", false, "Run the interactive 5-question architecture & agent governance wizard")
+	initCmd.Flags().BoolVar(&initDefaultsFlag, "defaults", false, "Use auto-detected defaults when running --wizard non-interactively")
 	rootCmd.AddCommand(initCmd)
 }

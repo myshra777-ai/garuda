@@ -1,0 +1,24 @@
+# Garuda Starter Policy Template: Financial Decimal Precision
+id: tpl-financial-decimal-precision
+version: v1
+title: "Financial Guardrail: Monetary & fee calculations must use Decimal or integer minor units, never float64"
+description: |
+  IEEE-754 floating-point arithmetic introduces rounding drift in currency, fee,
+  tax, and loss-ratio calculations. Requires fixed-point decimal or int64 minor units (cents/paise).
+priority: 260
+language: any
+authority: "finops-security@company.com"
+scope:
+  domain: finance
+  pattern: ".*Amount.*|.*Price.*|.*Fee.*|.*Tax.*|.*Settlement.*|.*LossRatio.*|.*Claim.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: CALLS
+      from_name_pattern: ".*(Calculate|Compute|Settle|Charge|Refund).*"
+      to_name_pattern: ".*Float64.*"
+then:
+  decision: BLOCK
+  reason: |
+    Floating-point (float64) arithmetic detected in financial calculation path.
+    Use shopspring/decimal, Python decimal.Decimal, or int64 minor units (cents/paise).

@@ -1,0 +1,24 @@
+# Garuda Starter Policy Template: Autonomous AI Agent Safety Gate
+id: tpl-ai-agent-safety-gate
+version: v1
+title: "AI Agent Harness: Autonomous agents must not modify cryptographic ledger or auth signing keys"
+description: |
+  Freezes mission-critical cryptographic, Merkle sealing, and JWT verification
+  surfaces against autonomous agent modification without explicit human CLI co-sign.
+priority: 300
+language: any
+authority: "staff-security@company.com"
+scope:
+  domain: security
+  pattern: ".*AppendLeafAndSealTx.*|.*VerifyInclusionProof.*|.*JWTConfig.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: CALLS
+      from_name_pattern: ".*AgentAutoPatch.*"
+      to_name_pattern: ".*(AppendLeafAndSealTx|VerifyInclusionProof|JWTConfig).*"
+then:
+  decision: BLOCK
+  reason: |
+    Autonomous agent attempted to modify a frozen SEVERE criticality security/Merkle surface.
+    Human architect CLI co-sign (GARUDA_MCP_APPROVER) is required.

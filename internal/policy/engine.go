@@ -496,6 +496,26 @@ func (e *Engine) persistEvaluation(ctx context.Context, ev *Evaluation, proof []
 		ev.MerkleBlockHeight, proof,
 		ev.SubjectKind, ev.SubjectID, ev.Actor,
 	)
+	if err != nil && strings.Contains(err.Error(), "policy_evaluations_decision_check") {
+		_, _ = e.pool.Exec(ctx, `
+			ALTER TABLE policy_evaluations DROP CONSTRAINT IF EXISTS policy_evaluations_decision_check;
+			ALTER TABLE policy_evaluations ADD CONSTRAINT policy_evaluations_decision_check
+				CHECK (decision IN ('ALLOW', 'WARN', 'REVIEW', 'BLOCK', 'INCONCLUSIVE'));
+		`)
+		_, err = e.pool.Exec(ctx, `
+			INSERT INTO policy_evaluations (
+				id, tenant_id, workspace_id, policy_id, policy_version,
+				decision, reason, evidence, evaluated_at,
+				merkle_block_height, merkle_proof, verification_version,
+				subject_kind, subject_id, actor
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1,$12,$13,$14)
+		`,
+			ev.ID, ev.TenantID, ev.WorkspaceID, ev.PolicyID, ev.PolicyVersion,
+			string(ev.Decision), ev.Reason, evidenceJSON, ev.EvaluatedAt,
+			ev.MerkleBlockHeight, proof,
+			ev.SubjectKind, ev.SubjectID, ev.Actor,
+		)
+	}
 	if err != nil {
 		return fmt.Errorf("insert evaluation: %w", err)
 	}

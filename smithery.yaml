@@ -1,0 +1,36 @@
+# Smithery.ai MCP Directory Manifest (https://smithery.ai/new)
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      workspace:
+        type: string
+        default: "default"
+        description: "Active Garuda workspace name"
+      databaseUrl:
+        type: string
+        default: "postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable"
+        description: "PostgreSQL connection URL for AST & RFC 6962 Merkle ledger"
+      talonEnforce:
+        type: boolean
+        default: true
+        description: "Enable fail-closed Talon pre-edit and post-edit guardrails"
+      readOnly:
+        type: boolean
+        default: false
+        description: "Run garuda-mcp in strict read-only governance inspection mode"
+  commandFunction: |-
+    (config) => ({
+      command: 'garuda-mcp',
+      args: [],
+      env: {
+        GARUDA_WORKSPACE: config.workspace || 'default',
+        DATABASE_URL: config.databaseUrl || 'postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable',
+        GARUDA_TALON_ENFORCE: config.talonEnforce !== false ? 'true' : 'false',
+        GARUDA_MCP_READ_ONLY: config.readOnly ? 'true' : 'false'
+      }
+    })
+build:
+  dockerfile: Dockerfile
+  dockerBuildPath: .

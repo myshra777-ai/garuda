@@ -1,0 +1,39 @@
+id: depcruise-no-ui-in-services-01
+version: v1
+title: "Dependency-Cruiser Imported: no-ui-in-services"
+description: "Auto-translated from .dependency-cruiser configuration."
+priority: 195
+language: typescript
+authority: "frontend-architecture@company.com"
+scope:
+  domain: modules
+  pattern: "^src/services"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: "^src/services"
+      to_name_pattern: "^src/components"
+then:
+  decision: BLOCK
+  reason: "Violates imported Dependency-Cruiser rule 'no-ui-in-services': ^src/services must not import ^src/components."
+---
+id: depcruise-no-db-in-controllers-02
+version: v1
+title: "Dependency-Cruiser Imported: no-db-in-controllers"
+description: "Auto-translated from .dependency-cruiser configuration."
+priority: 195
+language: typescript
+authority: "frontend-architecture@company.com"
+scope:
+  domain: modules
+  pattern: "^src/controllers"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: "^src/controllers"
+      to_name_pattern: "^src/db"
+then:
+  decision: BLOCK
+  reason: "Violates imported Dependency-Cruiser rule 'no-db-in-controllers': ^src/controllers must not import ^src/db."

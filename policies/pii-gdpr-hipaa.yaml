@@ -1,0 +1,24 @@
+# Garuda Starter Policy Template: Regulated PII / PHI Data Lineage
+id: tpl-pii-gdpr-hipaa-sink-guard
+version: v1
+title: "Privacy Guardrail: Customer PII/PHI records must never flow into raw log sinks"
+description: |
+  Prevents accidental leakage of SSN, PAN, Aadhaar, card numbers, or patient health
+  fields into unredacted stdout/file loggers.
+priority: 230
+language: any
+authority: "privacy-compliance@company.com"
+scope:
+  domain: privacy
+  pattern: ".*Customer.*|.*Patient.*|.*Identity.*|.*KYC.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: CALLS
+      from_name_pattern: ".*(KYC|Customer|Patient|Identity).*"
+      to_name_pattern: "^(fmt\\.Print|log\\.Print).*RawPII.*"
+then:
+  decision: BLOCK
+  reason: |
+    Unredacted PII/PHI struct passed to raw logger. Route through internal/redact.SanitizePII
+    before emitting telemetry or logs.

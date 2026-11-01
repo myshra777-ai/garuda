@@ -1,0 +1,24 @@
+# Garuda Starter Policy Template: Hexagonal / Ports & Adapters
+id: tpl-hexagonal-ports-adapters
+version: v1
+title: "Hexagonal Architecture: Domain core must not import infrastructure adapters"
+description: |
+  Enforces strict Ports & Adapters isolation. Domain entities and use-case ports
+  must never depend directly on database drivers, HTTP routers, or external SDKs.
+priority: 200
+language: any
+authority: "architecture-board@company.com"
+scope:
+  domain: core
+  pattern: ".*domain.*|.*core.*|.*usecase.*"
+when:
+  - type: claim_exists
+    params:
+      claim_type: IMPORTS
+      from_name_pattern: ".*(domain|core|usecase).*"
+      to_name_pattern: ".*(infra|adapter|postgres|mysql|redis|http|grpc|database/sql).*"
+then:
+  decision: BLOCK
+  reason: |
+    Domain/Core layer imported an infrastructure adapter directly. Define an outbound Port
+    interface in the domain package and inject the adapter implementation from cmd/ or internal/wiring.
