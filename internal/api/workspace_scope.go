@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -166,4 +168,26 @@ func writeWorkspaceNotFound(w http.ResponseWriter, r *http.Request, requested st
 	}
 	writeJSONError(w, http.StatusNotFound, "workspace not found",
 		map[string]any{"requested": requested})
+}
+
+// durableTenantStorageDir returns a persistent, owner-restricted (0700) storage
+// directory scoped to (tenantID, workspaceID, category) under $GARUDA_DATA_DIR
+// or ~/.garuda/tenant_storage, avoiding ephemeral /tmp storage for persistent
+// source documents and approved rulebooks.
+func durableTenantStorageDir(tenantID, workspaceID uuid.UUID, category string) string {
+	base := strings.TrimSpace(os.Getenv("GARUDA_DATA_DIR"))
+	if base == "" {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			base = filepath.Join(home, ".garuda")
+		} else {
+			base = filepath.Join(os.TempDir(), "garuda-durable")
+		}
+	}
+	cleanCat := filepath.Base(strings.TrimSpace(category))
+	if cleanCat == "" || cleanCat == "." || cleanCat == ".." {
+		cleanCat = "storage"
+	}
+	dir := filepath.Join(base, "tenant_storage", tenantID.String(), workspaceID.String(), cleanCat)
+	_ = os.MkdirAll(dir, 0700)
+	return dir
 }

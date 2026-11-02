@@ -1,6 +1,8 @@
-module github.com/myshra777-ai/garuda // v1.9.1
+module github.com/myshra777-ai/garuda // v1.9.8
 
-go 1.24.0
+go 1.26.0
+
+toolchain go1.26.10
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7

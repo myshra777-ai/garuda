@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 // Per-IP rate limiting for the API.
@@ -28,17 +26,17 @@ const (
 )
 
 type ipLimiter struct {
-	limiter  *rate.Limiter
+	tokens   float64
 	lastSeen time.Time
 }
 
-// IPRateLimiter tracks one rate.Limiter per client IP. Idle limiters
+// IPRateLimiter tracks one token bucket rate limiter per client IP. Idle limiters
 // are garbage collected after ipLimiterTTL.
 type IPRateLimiter struct {
 	mu       sync.Mutex
 	limiters map[string]*ipLimiter
-	rate     rate.Limit
-	burst    int
+	rate     float64 // tokens per second
+	burst    float64
 }
 
 const ipLimiterTTL = 10 * time.Minute
@@ -47,8 +45,8 @@ const ipLimiterTTL = 10 * time.Minute
 func NewIPRateLimiter(perMinute, burst int) *IPRateLimiter {
 	l := &IPRateLimiter{
 		limiters: make(map[string]*ipLimiter),
-		rate:     rate.Limit(float64(perMinute) / 60.0),
-		burst:    burst,
+		rate:     float64(perMinute) / 60.0,
+		burst:    float64(burst),
 	}
 	go l.gcLoop()
 	return l
@@ -59,15 +57,29 @@ func (l *IPRateLimiter) Allow(clientIP string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	now := time.Now()
 	entry, ok := l.limiters[clientIP]
 	if !ok {
 		entry = &ipLimiter{
-			limiter: rate.NewLimiter(l.rate, l.burst),
+			tokens:   l.burst - 1.0,
+			lastSeen: now,
 		}
 		l.limiters[clientIP] = entry
+		return true
 	}
-	entry.lastSeen = time.Now()
-	return entry.limiter.Allow()
+
+	elapsed := now.Sub(entry.lastSeen).Seconds()
+	entry.lastSeen = now
+	entry.tokens += elapsed * l.rate
+	if entry.tokens > l.burst {
+		entry.tokens = l.burst
+	}
+
+	if entry.tokens >= 1.0 {
+		entry.tokens -= 1.0
+		return true
+	}
+	return false
 }
 
 func (l *IPRateLimiter) gcLoop() {

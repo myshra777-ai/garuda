@@ -38,11 +38,11 @@ def discover_assets(repo_root: str) -> dict:
             if "logo" in base or "garuda_minimal" in base or base == "garuda.png":
                 logo_candidates.append((os.path.getmtime(p), p))
 
-    primary_logo_rel = "assets/Garuda%20Final%20logo.png"
+    primary_logo_rel = "assets/garuda-logo.png"
     if logo_candidates:
         logo_candidates.sort(reverse=True)
         newest_logo = logo_candidates[0][1]
-        for alias in ("Garuda Final logo.png",):
+        for alias in ("garuda-logo.png", "Garuda_minimal_logo.png", "garuda_logo.png"):
             dst = os.path.join(assets_dir, alias)
             if os.path.abspath(newest_logo) != os.path.abspath(dst):
                 try:
@@ -338,6 +338,45 @@ Inspect any symbol or git diff across three balanced cards: **01 · Change Conte
 
 ---
 
+## Five Core Governance Capabilities & End-to-End Scenario
+
+> **AI can write the code. Who governs the change?**
+> An AI agent modifies a payment service. Garuda discovers that the change bypasses the service layer, violates an architectural decision (`ADR-0001`), and introduces a financial unit-scaling precision risk (`48.00 Cr` vs `4.80 Cr`). **Garuda Talon** evaluates the change, identifies the violations, provides an actionable self-repair direction, and prevents the unacceptable change from passing the configured gate. The resulting governance decision is anchored with verifiable RFC 6962 Merkle evidence.
+> **Understand the system. Govern the change. Preserve the proof.**
+
+| Pillar | What It Establishes |
+| :--- | :--- |
+| **1. Software Intelligence** | Understands code structure, dependencies, relationships, and blast-radius impact across Go (`go/types`), Python, and TypeScript. |
+| **2. Architecture Intelligence** | Discovers, synthesizes, and maintains architectural rules, auto-generated Base Rulebooks (`.garuda/APPROVED_BASE_RULEBOOK.md`), and ADRs. |
+| **3. Business Logic Governance** | Evaluates competing team formulas (`0.0–1.0` weights), data relationships, and unit-scaling discrepancies (`48.00 Cr` vs `4.80 Cr`). |
+| **4. Agent Change Control** | Guides agents (`garuda.talon_pre_edit`), evaluates modifications (`garuda.talon_verify_edit`), and enforces fail-closed policies. |
+| **5. Verifiable Governance** | Records human-in-the-loop decisions and provides cryptographic RFC 6962 SHA-256 Merkle inclusion proofs. |
+
+---
+
+## 🔌 MCP Server & AI Coding Agent Integrations
+
+Garuda ships a hardened `{counts['mcp_tools']}`-tool MCP server (`garuda-mcp`) and native plugin manifests:
+
+- **Claude Code & Claude Desktop**: Auto-configured by `garuda init` (`.claude/settings.json` + [`CLAUDE.md`](CLAUDE.md) + [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json)).
+- **Cursor IDE**: Auto-configured by `garuda init` (`.cursor/rules/garuda-talon.mdc` + `.cursor/mcp.json` + [`.cursor-plugin/plugin.json`](.cursor-plugin/plugin.json)).
+- **OpenAI Codex Plugin**: Native manifest at [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json) and [`AGENTS.md`](AGENTS.md).
+- **MCP Registries**: Ready-to-publish manifests for Official MCP Registry ([`mcp-registry.json`](mcp-registry.json)), Smithery ([`smithery.yaml`](smithery.yaml)), and Glama ([`glama.json`](glama.json)).
+
+## 📚 Architecture Decision Records (ADRs), Playbooks & Deep Dives
+
+- **Quickstart & Monorepo Guide**: [`QUICKSTART.md`](QUICKSTART.md)
+- **Technical Deep-Dive Blog Post**: [`docs/BLOG_AST_MERKLE_AGENT_GOVERNANCE.md`](docs/BLOG_AST_MERKLE_AGENT_GOVERNANCE.md)
+- **Architectural Decision Records ([`docs/adr/`](docs/adr/))**:
+  - [`ADR-0001: Payment Idempotency & Hexagonal Store Isolation`](docs/adr/0001-payment-idempotency.md)
+  - [`ADR-0002: RFC 6962 Canonical SHA-256 Merkle Provenance Layer`](docs/adr/0002-rfc6962-merkle-ledger.md)
+  - [`ADR-0003: Three-State Epistemic Honesty (SUPPORTED, UNVERIFIED, CONTRADICTED)`](docs/adr/0003-epistemic-honesty.md)
+- **Operational Playbooks ([`docs/playbooks/`](docs/playbooks/README.md))**: [`docs/playbooks/README.md`](docs/playbooks/README.md)
+- **Database Schema & Migrations ([`migrations/`](migrations/))**: [`migrations/`](migrations/) (including [`095_data_logic_audit_ledger_and_hygiene.sql`](migrations/095_data_logic_audit_ledger_and_hygiene.sql), [`096_policy_evaluations_decision_check.sql`](migrations/096_policy_evaluations_decision_check.sql), [`097_multi_tenant_rbac_isolation.sql`](migrations/097_multi_tenant_rbac_isolation.sql), and [`098_strict_workspace_and_tenant_isolation.sql`](migrations/098_strict_workspace_and_tenant_isolation.sql))
+- **10/10 Multi-Tenant Isolation & Evidence Regression Suite**: [`internal/api/tenant_isolation_test.go`](internal/api/tenant_isolation_test.go) (`go test -v ./internal/api -run "Test0|Test10"`)
+
+---
+
 ## GitHub Packages & GitHub Marketplace Integration
 
 Garuda `{ver}` ships with first-class support for **GitHub Packages (`ghcr.io`)** and the **GitHub Marketplace (`action.yml`)**. See **[`docs/GITHUB_MARKETPLACE_STRATEGY.md`](docs/GITHUB_MARKETPLACE_STRATEGY.md)** for the full launch playbook:
@@ -388,8 +427,8 @@ def sync_all(repo_root: str, check_only: bool = False) -> int:
     manifest_path = os.path.join(repo_root, "capabilities.json")
     if not os.path.exists(manifest_path):
         print(f"❌ Canonical manifest missing at {manifest_path}!")
-        print("   Root cause: capabilities.json is ignored by *.json in .gitignore or was not committed to git.")
-        print("   Fix: Add !capabilities.json to .gitignore, run git add -f capabilities.json .gitignore, and commit.")
+        print("   Root cause: capabilities.json is ignored by '*.json' in .gitignore or was not committed to git.")
+        print("   Fix: Add '!capabilities.json' to .gitignore, run 'git add -f capabilities.json .gitignore', and commit.")
         return 1
     manifest = json.load(open(manifest_path))
     ver = manifest["version"]
@@ -436,7 +475,7 @@ def sync_all(repo_root: str, check_only: bool = False) -> int:
 
     # 2. Write README.md
     readme_md = generate_readme(manifest, assets_info, tools)
-    # Preserving custom human-readable README.md
+    open(os.path.join(repo_root, "README.md"), "w").write(readme_md)
 
     # 3. Update docs/WALKTHROUGH.md (fix escaped HTML tags, old Screenshot From links, and 35/23 tool counts)
     wt_path = os.path.join(repo_root, "docs/WALKTHROUGH.md")

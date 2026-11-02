@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#090B10"> <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes"> <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/svg+xml" href="/icon.svg"> <title>Garuda — Epistemic Software Intelligence &amp; Active Governance</title>
-<link rel="stylesheet" href="/static/dashboard.css?v=1.9.6"> </head>
+<link rel="stylesheet" href="/static/dashboard.css?v=1.9.7"> </head>
 <body>
 <div class="app"> 
     <aside class="sidebar"> <div class="brand">
@@ -13,6 +13,17 @@
                 <div class="brand-text"> <div class="brand-name">GARUDA</div>
                     <div class="brand-subtitle">Software Intelligence v1.9.9</div></div> </div>
             <div style="display:flex; gap:5px; align-items:center;"><button class="footer-link-btn" onclick="toggleTheme()" id="theme-toggle-btn" title="Switch Light / Graphite Dark Mode">☀</button><button type="button" class="sidebar-toggle-btn" id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Collapse Sidebar (⌘B)">«</button></div> </div>
+        <div class="user-identity-box" id="sidebar-user-identity">
+            <div class="user-identity-top">
+                <span class="user-identity-name" id="sidebar-user-name">Authenticated User</span>
+                <span class="role-chip-owner" id="sidebar-user-role">OWNER</span>
+            </div>
+            <div class="user-identity-email" id="sidebar-user-email">Loading session…</div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; gap:4px;">
+                <span class="mono" style="font-size:10px; color:var(--about-muted);" id="sidebar-tenant-label">Tenant: —</span>
+                <button type="button" class="footer-link-btn" id="sidebar-team-btn" style="height:22px; font-size:10.5px; padding:0 7px;" onclick="openTeamInviteModal()">👥 Team &amp; Invite</button>
+            </div>
+        </div>
         <div class="workspace-switcher-box"> <div class="workspace-mini">
                 <div class="workspace-mini-header"> <div class="workspace-mini-name" id="sidebar-workspace">{{ .WorkspaceName }}</div>
                     <span class="badge-pill success">synced</span> </div>
@@ -28,7 +39,7 @@
             <button class="nav-btn" data-surface="graph" onclick="showView('graph')"> <span class="nav-btn-left"><span class="nav-num">03</span><span>Architecture Map</span></span>
                 <span class="nav-badge" id="nav-badge-packages">—</span> </button>
             <button class="nav-btn" data-surface="docsgraph" onclick="showView('docsgraph')"> <span class="nav-btn-left"><span class="nav-num">04</span><span>Docs &amp; Rules Graph</span></span>
-                <span class="nav-badge" id="nav-badge-docsgraph">New</span> </button>
+                <span class="nav-badge" id="nav-badge-docsgraph">0 Docs</span> </button>
             <button class="nav-btn" data-surface="talon" onclick="showView('talon')"> <span class="nav-btn-left"><span class="nav-num">05</span><span>Talon &amp; Risk Hub</span></span>
                 <span class="nav-badge" id="nav-badge-talon">Guard</span> </button>
             <button class="nav-btn" data-surface="review" onclick="showView('review')"> <span class="nav-btn-left"><span class="nav-num">06</span><span>Change Review</span></span>
@@ -36,11 +47,11 @@
             <button class="nav-btn" data-surface="governance" onclick="showView('governance')"> <span class="nav-btn-left"><span class="nav-num">07</span><span>Evidence &amp; Ledger</span></span>
                 <span class="nav-badge" id="nav-badge-ledger">#1</span> </button>
             <button class="nav-btn" data-surface="agents" onclick="showView('agents')"> <span class="nav-btn-left"><span class="nav-num">08</span><span>Agents &amp; Sessions</span></span>
-                <span class="nav-badge" id="nav-badge-agents">MCP</span> </button>
+                <span class="nav-badge" id="nav-badge-agents">0</span> </button>
             <button class="nav-btn" data-surface="audit" onclick="showView('audit')"> <span class="nav-btn-left"><span class="nav-num">09</span><span>Data &amp; Logic Audit</span></span>
-                <span class="nav-badge" id="nav-badge-audit">10x Drift</span> </button>
+                <span class="nav-badge" id="nav-badge-audit">Clean</span> </button>
             <button class="nav-btn" data-surface="decisions" onclick="showView('decisions')"> <span class="nav-btn-left"><span class="nav-num">§</span><span>Decision Lineage</span></span>
-                <span class="nav-badge" id="nav-badge-decisions">3</span> </button>
+                <span class="nav-badge" id="nav-badge-decisions">0</span> </button>
         </nav> <div class="sidebar-footer">
             <div class="trust-mini"> <span class="trust-dot"></span>
                 <span id="sidebar-trust-label">RFC 6962 Ledger Verified</span> </div>
@@ -59,7 +70,7 @@
                 <span class="search-shortcut" style="cursor:pointer;" onclick="openCommandPalette()">⌘K</span> </div>
             <div class="topbar-right"> <div class="live-pill" id="honest-system-pill" style="cursor:pointer;" onclick="showView('talon')" title="Click to inspect Talon &amp; Risk Hub">
                     <span class="live-dot" id="honest-system-dot"></span> <span id="honest-system-text">Static AST synced</span>
-                </div> <button class="btn-secondary" style="height:30px; font-size:11.5px;" onclick="openCreateWorkspaceModal()">✦ + New Workspace</button> <button class="btn-primary" style="height:30px; font-size:11.5px;" onclick="openIngestRepoModal()">🔗 + Index Repo URL</button> <button class="btn-secondary" onclick="openIngestDocModal()">+ Ingest Doc / Rule</button>
+                </div> <button class="btn-secondary" id="topbar-team-btn" style="height:30px; font-size:11.5px;" onclick="openTeamInviteModal()">👥 Team &amp; Invite Code</button> <button class="btn-secondary" style="height:30px; font-size:11.5px;" onclick="openCreateWorkspaceModal()">✦ + New Workspace</button> <button class="btn-primary" style="height:30px; font-size:11.5px;" onclick="openIngestRepoModal()">🔗 + Index Repo URL</button> <button class="btn-secondary" onclick="openIngestDocModal()">+ Ingest Doc / Rule</button>
                 <button class="refresh-button" onclick="refreshAllWithToast()">↻ Refresh</button> </div>
         </header> <nav class="tab-strip" role="tablist">
             <button class="tab active" data-tab="about" role="tab" aria-selected="true" onclick="showView('about')">00 About Garuda</button> <button class="tab" data-tab="workspace" role="tab" aria-selected="false" onclick="showView('workspace')">01 Overview</button> <button class="tab" data-tab="search" role="tab" aria-selected="false" onclick="showView('search')">02 Explore</button>
@@ -1008,16 +1019,16 @@
                 <div class="card" style="padding:16px 20px; margin-bottom:16px;">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:14px;"> <div>
                             <h1 class="hero-title" style="font-size:20px;">Docs, Specs &amp; Base Rulebook Graph</h1> <div style="font-size:12.5px; color:var(--text-secondary); margin-top:4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                                <span><strong class="mono" id="dg-stat-total-docs">9</strong> documents (<span id="dg-stat-docs-foot">3 ADRs · 2 Specs · 4 Policies</span>)</span> <span>·</span>
-                                <span><strong class="mono" id="dg-stat-total-comps">12</strong> extracted rules</span> <span>·</span>
-                                <span><strong class="mono" id="dg-stat-code-nodes">12</strong> code symbols (<span id="dg-stat-edges">32</span> edges)</span> <span>·</span>
-                                <span><strong class="mono" id="dg-stat-enforced">12</strong> enforced</span> <span class="badge-pill info" id="dg-stat-doc-breakdown" style="display:none;">ADRs · Specs · Policies</span>
+                                <span><strong class="mono" id="dg-stat-total-docs">0</strong> documents (<span id="dg-stat-docs-foot">0 ADRs · 0 Specs · 0 Policies</span>)</span> <span>·</span>
+                                <span><strong class="mono" id="dg-stat-total-comps">0</strong> extracted rules</span> <span>·</span>
+                                <span><strong class="mono" id="dg-stat-code-nodes">0</strong> code symbols (<span id="dg-stat-edges">0</span> edges)</span> <span>·</span>
+                                <span><strong class="mono" id="dg-stat-enforced">0</strong> enforced</span> <span class="badge-pill info" id="dg-stat-doc-breakdown" style="display:none;">ADRs · Specs · Policies</span>
                                 <span class="badge-pill success" id="dg-stat-verdict-badge">ENFORCED</span> </div></div>
                         <div style="display:flex; gap:8px; flex-wrap:wrap;"> <button class="btn-secondary" onclick="rescanWorkspaceDocs()">↻ Re-Scan Docs</button>
                             <button class="btn-primary" onclick="openIngestDocModal()">+ Ingest Document / ADR</button> </div></div>
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;"> <div class="surface-tabs" role="tablist">
                             <button class="surface-tab-btn active" onclick="switchSurfaceSubTab('view-docs-graph', 'dg-pane-graph', this)">01 · Interactive 4-Tier Graph</button> <button class="surface-tab-btn" onclick="switchSurfaceSubTab('view-docs-graph', 'dg-pane-rulebook', this)">02 · Base Rulebook Studio</button>
-                            <button class="surface-tab-btn" onclick="switchSurfaceSubTab('view-docs-graph', 'dg-pane-docs', this)">03 · Ingested Documents</button> <button class="surface-tab-btn" onclick="switchSurfaceSubTab('view-docs-graph', 'dg-pane-matrix', this)">04 · Extracted Rules Matrix (<span id="dg-table-count-chip">12</span>)</button>
+                            <button class="surface-tab-btn" onclick="switchSurfaceSubTab('view-docs-graph', 'dg-pane-docs', this)">03 · Ingested Documents</button> <button class="surface-tab-btn" onclick="switchSurfaceSubTab('view-docs-graph', 'dg-pane-matrix', this)">04 · Extracted Rules Matrix (<span id="dg-table-count-chip">0</span>)</button>
                         </div> <div style="display:flex; gap:8px; align-items:center;">
                             <input id="docs-filter-search" class="arch-search-input" style="height:28px; width:220px;" placeholder="Filter docs, rules, or symbols…" oninput="renderDocsGraphAndTables()"> <button class="btn-secondary" style="height:28px;" onclick="fitDocsGraph()">Fit Graph</button>
                         </div></div> </div>
@@ -1257,7 +1268,7 @@
                 <div class="hero"> <div>
                         <h1 class="hero-title">Agent Activity &amp; Session Timeline</h1> <div class="hero-subtitle">MCP client sessions, tool invocations, checkpoints, and multi-agent handoffs in workspace {{ .WorkspaceName }}.</div></div>
                     <div style="display:flex; gap:8px;"> <button class="btn-secondary" onclick="triggerAgentSwarmBurst()">⚡ Simulate Agent Swarm Burst</button> <button class="btn-primary" onclick="showView('talon')">Open Talon Harness →</button> </div> </div>
-<div class="agent-neural-stage" id="agent-neural-stage">
+<div class="agent-neural-stage" id="agent-neural-stage" style="display:none;">
     <div class="neural-overlay-bar">
         <div style="display:flex; align-items:center; gap:8px;">
             <span class="badge-pill success" style="background:rgba(16,185,129,0.18); color:#34D399; border-color:rgba(52,211,153,0.35);">● LIVE AGENT ↔ DOCS ↔ CODE NEURAL MESH</span>
@@ -1294,9 +1305,9 @@
                 <div class="card" style="padding:16px 20px; margin-bottom:16px;">
                     <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:14px;"> <div>
                             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;"> <h1 class="hero-title" style="font-size:20px;">Weighted Logic Disambiguation &amp; Data/Logic Audit Ledger</h1>
-                                <span class="badge-pill info" id="audit-active-team-pill">OPS TEAM (0.70)</span> <span class="badge-pill critical" id="fin-audit-status-pill">48 Cr vs 4.8 Cr (10x)</span>
+                                <span class="badge-pill info" id="audit-active-team-pill">OPS TEAM (0.70)</span> <span class="badge-pill success" id="fin-audit-status-pill">0 Discrepancies</span>
                             </div> <div style="font-size:12.5px; color:var(--text-secondary); margin-top:4px;">
-                                Active Team Weight: <strong class="mono" id="audit-primary-weight-val">0.70</strong> · <span id="audit-least-harm-foot">Least harm: ops.CalculateLossRatio (LOW)</span> · Discrepancies Flagged: <strong class="mono" id="fin-audit-count-val">2 Flagged</strong> </div></div>
+                                Active Team Weight: <strong class="mono" id="audit-primary-weight-val">0.70</strong> · <span id="audit-least-harm-foot">Least harm: ops.CalculateLossRatio (LOW)</span> · Discrepancies Flagged: <strong class="mono" id="fin-audit-count-val">0 Flagged</strong> </div></div>
                         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;"> <div class="pill-group" id="team-context-selector">
                                 <button class="filter-pill active" data-team="ops" onclick="switchActiveTeamContext('ops', this)">Ops (0.70)</button> <button class="filter-pill" data-team="marketing" onclick="switchActiveTeamContext('marketing', this)">Marketing (0.70)</button>
                                 <button class="filter-pill" data-team="management" onclick="switchActiveTeamContext('management', this)">Management (0.70)</button> </div></div>
@@ -1430,6 +1441,64 @@
         <div id="info-modal-body" style="font-size:12px; color:var(--text);"></div> <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
             <button type="button" class="btn-secondary" onclick="copyInfoModalContent()">📋 Copy Content</button> <button type="button" class="btn-primary" onclick="closeInfoModal()">Close</button>
         </div></div> </div>
+
+<!-- Modal: Organization Tenant & Team Member Invite Manager (Tenant Owner Only) -->
+<div id="team-invite-modal" class="modal-backdrop" onclick="if(event.target===this) closeTeamInviteModal()">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-label="Organization Tenant & Team Access">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div>
+                <div class="wb-pane-kicker">MULTI-TENANT RBAC &amp; TEAM ONBOARDING</div>
+                <h2 style="margin:2px 0 0; font-size:18px; font-weight:700;" id="team-modal-org-title">Organization Tenant &amp; Employee Access</h2>
+            </div>
+            <button class="drawer-close" onclick="closeTeamInviteModal()">×</button>
+        </div>
+        <p style="color:var(--text-2); font-size:12.5px; margin:0 0 14px;">
+            Share your <strong>Employee Invite Code</strong> or <strong>Direct Join Link</strong> with your engineers. Team members who register with this code join your workspace with scoped <strong>Developer Workbench</strong> access—while executive governance approvals remain restricted to <strong>Tenant Owners</strong>.
+        </p>
+
+        <div class="invite-code-banner">
+            <div>
+                <div style="font-size:10.5px; font-weight:700; text-transform:uppercase; color:var(--muted);">Employee Invite Code</div>
+                <div class="mono" style="font-size:18px; font-weight:800; color:var(--ink);" id="team-invite-code-val">GRD-GARUDA1</div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="btn-secondary" onclick="copyTenantInviteCode()">📋 Copy Invite Code</button>
+                <button type="button" class="btn-primary" onclick="copyTenantJoinLink()">🔗 Copy Employee Join Link</button>
+            </div>
+        </div>
+
+        <div class="invite-code-banner" style="padding:9px 14px; margin-bottom:16px;">
+            <div style="min-width:0;">
+                <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted);">Cryptographic Tenant UUID</div>
+                <div class="mono" style="font-size:11.5px; color:var(--text-2); overflow:hidden; text-overflow:ellipsis;" id="team-tenant-id-val">—</div>
+            </div>
+            <button type="button" class="btn-secondary" style="height:26px; font-size:11px;" onclick="copyTenantUUID()">Copy UUID</button>
+        </div>
+
+        <div class="detail-section-title">Registered Tenant Members &amp; Roles (<span id="team-members-count">1</span>)</div>
+        <div style="overflow-x:auto; border:1px solid var(--border); border-radius:8px; margin-bottom:16px;">
+            <table class="audit-table">
+                <thead>
+                    <tr>
+                        <th>Name &amp; @Handle</th>
+                        <th>Email</th>
+                        <th>Role &amp; Scope</th>
+                        <th>Joined</th>
+                    </tr>
+                </thead>
+                <tbody id="team-members-tbody">
+                    <tr><td colspan="4" style="color:var(--muted); padding:12px;">Loading tenant members…</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <a href="/signup?mode=team_member" class="btn-secondary" style="text-decoration:none;">+ Open Employee Join Page</a>
+            <button type="button" class="btn-primary" onclick="closeTeamInviteModal()">Done</button>
+        </div>
+    </div>
+</div>
+
 <div id="toast-container" class="garuda-toast-container"></div> <script>window.GARUDA_WORKSPACE = "{{ .WorkspaceName }}";
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(regs) {
@@ -1440,6 +1509,6 @@ if ("serviceWorker" in navigator) {
   }
 }
 </script>
-<script src="/static/dashboard.js?v=1.9.6"></script>
+<script src="/static/dashboard.js?v=1.9.7"></script>
 </body>
 </html>

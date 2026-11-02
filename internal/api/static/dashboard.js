@@ -117,7 +117,24 @@
         return this;
     };
 
-    Selection.prototype.duration = function() {
+    Selection.prototype.duration = function(ms) {
+        this._dur = ms || 600;
+        return this;
+    };
+
+    Selection.prototype.ease = function() {
+        return this;
+    };
+
+    Selection.prototype.attrTween = function(name, tweenFn) {
+        this._els.forEach(function(el, i) {
+            if (!el || typeof tweenFn !== "function") return;
+            var interp = tweenFn.call(el, el.__data__, i);
+            if (typeof interp === "function") {
+                var val = interp(1);
+                if (val !== null && val !== undefined) el.setAttribute(name, String(val));
+            }
+        });
         return this;
     };
 
@@ -316,6 +333,11 @@
         },
         zoom: createZoom,
         zoomIdentity: new Transform(0, 0, 1),
+        easeCubicOut: function(t) { return 1 - Math.pow(1 - t, 3); },
+        interpolateNumber: function(a, b) {
+            var na = Number(a) || 0, nb = Number(b) || 0;
+            return function(t) { return na + (nb - na) * t; };
+        },
         drag: createDrag,
         forceSimulation: createForceSimulation,
         forceLink: function(links) {
@@ -428,138 +450,97 @@ var state = {
     auditFilter: "ALL",
     cmdkIndex: 0,
     cmdkItems: [],
-    infoModalRawText: ""
+    infoModalRawText: "",
+    workspaceRequestEpoch: 0
 };
+
+function bumpWorkspaceRequestEpoch() {
+    state.workspaceRequestEpoch = (state.workspaceRequestEpoch || 0) + 1;
+    state.graphCache = {};
+    state.docsGraphData = null;
+    state.talonHubData = null;
+    state.humanDecisionHub = null;
+    state.searchResultsCache = [];
+    agentsLoaded = false;
+    decisionsLoaded = false;
+    return state.workspaceRequestEpoch;
+}
+
+function isStaleWorkspaceResponse(reqEpoch, reqWorkspace, payload) {
+    if (reqEpoch != null && reqEpoch !== state.workspaceRequestEpoch) return true;
+    if (reqWorkspace && reqWorkspace !== WORKSPACE) return true;
+    if (payload && typeof payload === "object" && payload.workspace && payload.workspace !== WORKSPACE) return true;
+    return false;
+}
 
 var FALLBACK_DATA = {
     stats: {
         workspace: WORKSPACE || "default",
-        repositories: 14,
-        repositories_list: ["garuda-core", "payment-gateway", "merkle-ledger", "talon-harness", "mcp-server", "runtime-correlator"],
-        repo_stats: [
-            { name: "garuda-core", entities: 412, relationships: 1180, files: 94, analysis_status: "synced", current_commit: "a94f21c8", last_analyzed: "2m ago" },
-            { name: "talon-harness", entities: 164, relationships: 490, files: 38, analysis_status: "synced", current_commit: "f03e91b2", last_analyzed: "2m ago" },
-            { name: "merkle-ledger", entities: 128, relationships: 360, files: 29, analysis_status: "synced", current_commit: "77c401ea", last_analyzed: "4m ago" },
-            { name: "payment-gateway", entities: 188, relationships: 388, files: 42, analysis_status: "synced", current_commit: "3d82b019", last_analyzed: "5m ago" }
-        ],
-        packages: 38,
-        entities: 892,
-        relationships: 2418,
-        cross_repo_links: 19,
-        files: 203,
-        exported_entities: 314,
-        architectural_hubs: 5,
-        top_hubs: [
-            { id: "sym:AppendLeafAndSealTx", name: "PostgresStore.AppendLeafAndSealTx", kind: "method", package: "internal/store", repo: "garuda-core", callers: 18 },
-            { id: "sym:Engine.Run", name: "Engine.Run", kind: "method", package: "internal/policy", repo: "garuda-core", callers: 14 },
-            { id: "sym:workspaceScopeFromRequest", name: "workspaceScopeFromRequest", kind: "function", package: "internal/api", repo: "garuda-core", callers: 12 },
-            { id: "sym:RunGuard", name: "talon.RunGuard", kind: "function", package: "internal/talon", repo: "talon-harness", callers: 11 },
-            { id: "sym:RecomputeWorkspaceVerification", name: "VerificationEngine.RecomputeWorkspaceVerification", kind: "method", package: "internal/runtime", repo: "garuda-core", callers: 8 }
-        ],
-        total_claims: 2418,
-        static_claims: 2418,
-        supported_claims: 2140,
-        unverified_claims: 278,
+        repositories: 0,
+        repositories_list: [],
+        repo_stats: [],
+        packages: 0,
+        entities: 0,
+        relationships: 0,
+        cross_repo_links: 0,
+        files: 0,
+        exported_entities: 0,
+        architectural_hubs: 0,
+        top_hubs: [],
+        total_claims: 0,
+        static_claims: 0,
+        supported_claims: 0,
+        unverified_claims: 0,
         contradicted: 0,
-        verification_attempted: true,
+        verification_attempted: false,
         needs_attention: [],
-        recent_evidence: [
-            { id: "ev-1", kind: "Runtime Trace", summary: "api.HandleDashboard → store.PostgresStore.Pool (0ms drift)", source: "OpenTelemetry span", timestamp: new Date().toISOString() },
-            { id: "ev-2", kind: "AST Snapshot", summary: "Indexed 892 symbols across Go, Python, and TypeScript", source: "go/types + tree-sitter", timestamp: new Date().toISOString() },
-            { id: "ev-3", kind: "Talon Gate", summary: "Verified 9 ingested documents & 12 active guardrails (ALLOW)", source: "garuda-talon", timestamp: new Date().toISOString() }
-        ],
-        canonical_decisions: 3,
+        recent_evidence: [],
+        canonical_decisions: 0,
         quarantined_count: 0,
-        latest_block_height: 52,
-        latest_merkle_hash: "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
-        parent_merkle_hash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+        latest_block_height: 1,
+        latest_merkle_hash: "Genesis verified",
+        parent_merkle_hash: "Genesis",
         trust_status: "Verified",
         last_updated: new Date().toISOString(),
         pending_decisions: 0,
-        idempotency_safeguards: 42,
-        languages_breakdown: [
-            { name: "Go", count: 158, percentage: 77.8, color: "#00ADD8" },
-            { name: "Python", count: 27, percentage: 13.3, color: "#3572A5" },
-            { name: "TypeScript", count: 18, percentage: 8.9, color: "#2b7489" }
-        ],
+        idempotency_safeguards: 0,
+        languages_breakdown: [],
         drift: {
-            total_document_claims: 12,
-            supported_claims: 11,
-            unverified_claims: 1,
+            total_document_claims: 0,
+            supported_claims: 0,
+            unverified_claims: 0,
             contradicted_claims: 0,
-            undocumented_code: 4,
-            unverified_docs: 1,
+            undocumented_code: 0,
+            unverified_docs: 0,
             doc_to_code_drift_count: 0,
-            code_to_doc_drift_count: 4
+            code_to_doc_drift_count: 0
         }
     },
     policies: {
         workspace: WORKSPACE || "default",
-        active_policies: 4,
-        total_evaluations: 18,
+        active_policies: 0,
+        total_evaluations: 0,
         blocked_count: 0,
-        review_count: 1,
+        review_count: 0,
         warn_count: 0,
-        allow_count: 17,
+        allow_count: 0,
         final_decision: "ALLOW",
-        latest_merkle_anchor: 52,
-        latest_evaluations: [
-            {
-                id: "eval-52-layer",
-                policy_id: "architecture-no-api-to-store-bypass",
-                policy_title: "API handlers must not bypass store layer to access database/sql directly",
-                decision: "ALLOW",
-                reason: "0 layer_violation edges found between internal/api and database/sql.",
-                entity_count: 892,
-                claim_count: 2418,
-                contradiction_count: 0,
-                matched_predicates: ["layer_violation (0 matches)"],
-                merkle_block_height: 52,
-                anchor_valid: true,
-                evaluated_at: new Date().toISOString(),
-                actor: "garuda-talon",
-                subject_kind: "workspace",
-                subject_id: WORKSPACE || "default"
-            },
-            {
-                id: "eval-51-payment",
-                policy_id: "payment-no-direct-db",
-                policy_title: "Payment code must not import database/sql directly (ADR-0001)",
-                decision: "ALLOW",
-                reason: "All payment & refund handlers route persistence through PaymentRepository / IdempotencyStore.",
-                entity_count: 188,
-                claim_count: 388,
-                contradiction_count: 0,
-                matched_predicates: ["claim_exists (0 forbidden imports)"],
-                merkle_block_height: 51,
-                anchor_valid: true,
-                evaluated_at: new Date(Date.now() - 180000).toISOString(),
-                actor: "garuda-talon",
-                subject_kind: "domain",
-                subject_id: "payments"
-            },
-            {
-                id: "eval-50-runtime",
-                policy_id: "require-runtime-evidence-for-exported",
-                policy_title: "Exported payment handlers must have runtime OpenTelemetry evidence",
-                decision: "ALLOW",
-                reason: "Exported handlers corroborated by runtime_observations traces.",
-                entity_count: 42,
-                claim_count: 96,
-                contradiction_count: 0,
-                matched_predicates: ["verification_missing (0 missing)"],
-                merkle_block_height: 50,
-                anchor_valid: true,
-                evaluated_at: new Date(Date.now() - 600000).toISOString(),
-                actor: "garuda-ci",
-                subject_kind: "domain",
-                subject_id: "payments"
-            }
-        ]
+        latest_merkle_anchor: 1,
+        latest_evaluations: []
     }
 };
 
 function buildDefaultDocsGraph() {
+    if (!state.stats || !state.stats.entities) {
+        return {
+            workspace: WORKSPACE || "default",
+            stats: { total_documents: 0, adrs_count: 0, specs_count: 0, policies_count: 0, total_components: 0, verified_components: 0, enforced_by_talon: 0, drift_or_unverified: 0, contradicted_count: 0, connected_code_nodes: 0, total_graph_edges: 0 },
+            documents: [],
+            components: [],
+            graph: { level: "docs", focus: "", nodes: [], edges: [], truncated: false, total_nodes: 0 },
+            updated_at: new Date().toISOString()
+        };
+    }
     var docs = [
         { id: "doc:adr:0001-payment-idempotency", title: "ADR-0001: Payment Refund Processing & Idempotency", doc_type: "ADR", path: "docs/adr/0001-payment-idempotency.md", status: "ENFORCED", components_count: 2, linked_symbols_count: 3, enforced_by_talon: true, summary: "Requires all RefundHandler invocations to call IdempotencyStore and forbids direct calls to DirectBankAPI or raw database/sql.", tags: ["ADR-0001", "Payments", "Idempotency"], updated_at: new Date().toISOString() },
         { id: "doc:adr:0002-merkle-integrity-layer", title: "ADR-0002: Merkle Integrity Layer — Canonical RFC 6962 Design", doc_type: "ADR", path: "docs/adr/0002-merkle-integrity-layer.md", status: "VERIFIED", components_count: 2, linked_symbols_count: 3, enforced_by_talon: true, summary: "Specifies versioned canonical byte serialization (GenesisV1) and binary RFC 6962 Merkle inclusion proofs for every decision.", tags: ["ADR-0002", "RFC 6962", "Cryptography"], updated_at: new Date().toISOString() },
@@ -720,6 +701,20 @@ function synthesizeDocsGraphFromList(docs, comps) {
 }
 
 function buildDefaultTalonHub() {
+    if (!state.stats || !state.stats.entities) {
+        return {
+            workspace: WORKSPACE || "default",
+            enforcement_mode: "ACTIVE (FAIL-CLOSED)",
+            active_hooks_count: 0,
+            total_hooks_count: 6,
+            critical_hubs_count: 0,
+            high_hubs_count: 0,
+            hooks: [],
+            risk_hubs: [],
+            contract: { workspace_name: WORKSPACE || "default", workspace_id: "canonical", compiled_at: new Date().toISOString(), entity_count: 0, claim_count: 0, markdown: "# Empty Workspace — Index a repository to compile a Talon Contract." },
+            latest_verdict: { workspace: WORKSPACE || "default", outcome: "ALLOW", agent_should_proceed: true, touched_files: [], touched_symbols: [], touched_packages: [], blast_radius_affected: 0, by_severity: { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }, net_new_violations_count: 0, baseline_violations_count: 0, adr_contradictions_count: 0, violations: [], self_repair_instructions: ["No repositories indexed in this workspace yet."], merkle_block_height: 1, duration_ms: 0, reproduce_command: "garuda analyze <path> --workspace " + (WORKSPACE || "default") + " --save", matrix_results: [] }
+        };
+    }
     return {
         workspace: WORKSPACE || "default",
         enforcement_mode: "ACTIVE (FAIL-CLOSED)",
@@ -1030,7 +1025,7 @@ function copyAboutCommand(cmdStr, el) {
         navigator.clipboard.writeText(cmdStr).catch(function() {});
     }
     showToast("Copied command: " + cmdStr);
-    if (el) {
+    if (el && el.style) {
         var origBorder = el.style.borderColor;
         el.style.borderColor = "var(--accent-emerald)";
         setTimeout(function() { el.style.borderColor = origBorder; }, 900);
@@ -1152,24 +1147,18 @@ window.addEventListener("popstate", function(event) {
 });
 
 async function loadStats() {
+    var reqEpoch = state.workspaceRequestEpoch;
+    var reqWs = WORKSPACE;
     try {
         var res = await fetch("/api/v1/dashboard/stats?workspace=" + encodeURIComponent(WORKSPACE), {
             headers: { "Accept": "application/json" }
         });
         if (!res.ok) throw new Error("Stats request failed: " + res.status);
         var data = await res.json();
-        if (!data || (!data.entities && !data.repositories)) {
-            state.stats = Object.assign({}, FALLBACK_DATA.stats, { workspace: data.workspace || WORKSPACE });
-        } else {
-            if (!data.drift || !data.drift.total_document_claims) {
-                data.drift = FALLBACK_DATA.stats.drift;
-            }
-            if (!data.top_hubs || data.top_hubs.length === 0) {
-                data.top_hubs = FALLBACK_DATA.stats.top_hubs;
-            }
-            state.stats = data;
-        }
+        if (isStaleWorkspaceResponse(reqEpoch, reqWs, data)) return;
+        state.stats = data || { workspace: WORKSPACE, repositories: 0, packages: 0, entities: 0, relationships: 0, top_hubs: [], repo_stats: [], drift: {} };
     } catch (err) {
+        if (isStaleWorkspaceResponse(reqEpoch, reqWs, null)) return;
         state.stats = FALLBACK_DATA.stats;
     }
     renderStats();
@@ -1183,11 +1172,7 @@ async function loadPolicies() {
         });
         if (!res.ok) throw new Error("Policies request failed: " + res.status);
         var data = await res.json();
-        if (!data || (!data.active_policies && (!data.latest_evaluations || data.latest_evaluations.length === 0))) {
-            state.policiesData = FALLBACK_DATA.policies;
-        } else {
-            state.policiesData = data;
-        }
+        state.policiesData = data || { workspace: WORKSPACE, active_policies: 0, latest_evaluations: [], final_decision: "ALLOW" };
     } catch (err) {
         state.policiesData = FALLBACK_DATA.policies;
     }
@@ -1316,11 +1301,11 @@ function renderPolicies(data) {
     if (!list) return;
 
     var evals = data.latest_evaluations || [];
-    if (evals.length === 0) {
-        evals = FALLBACK_DATA.policies.latest_evaluations;
-    }
-
     list.innerHTML = "";
+    if (evals.length === 0) {
+        list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No policy evaluations recorded in this workspace yet</div><div class="row-sub">Index a repository or run a Talon check to evaluate active architectural guardrails.</div></div><button class="btn-secondary" style="height:26px; font-size:11px;" onclick="openIngestRepoModal()">+ Index Repo →</button></div>';
+        return;
+    }
     evals.forEach(function(ev, idx) {
         var row = document.createElement("div");
         row.className = "policy-eval-row";
@@ -1405,7 +1390,9 @@ function renderLanguages(langs) {
     if (!bar || !legend) return;
 
     if (!langs || langs.length === 0) {
-        langs = FALLBACK_DATA.stats.languages_breakdown;
+        bar.innerHTML = '<div style="width:100%; height:100%; background:var(--border-subtle);"></div>';
+        legend.innerHTML = '<span style="color:var(--muted); font-size:11px;">0 indexed files in workspace</span>';
+        return;
     }
 
     langs.sort(function(a, b) { return b.count - a.count; });
@@ -1433,23 +1420,25 @@ function renderLanguages(langs) {
 }
 
 function renderDrift(d) {
-    setText("drift-total-docs", formatNumber(d.total_document_claims || 12));
-    setText("drift-doc-supported", formatNumber(d.supported_claims || 11));
-    setText("drift-doc-unverified", formatNumber(d.unverified_claims || 1));
+    d = d || {};
+    setText("drift-total-docs", formatNumber(d.total_document_claims || 0));
+    setText("drift-doc-supported", formatNumber(d.supported_claims || 0));
+    setText("drift-doc-unverified", formatNumber(d.unverified_claims || 0));
     setText("drift-doc-contradicted", formatNumber(d.contradicted_claims || 0));
     setText("drift-doc-to-code", formatNumber(d.doc_to_code_drift_count || 0));
-    setText("drift-code-to-doc", formatNumber(d.code_to_doc_drift_count || 4));
-    setText("drift-undocumented-code", formatNumber(d.undocumented_code || 4));
+    setText("drift-code-to-doc", formatNumber(d.code_to_doc_drift_count || 0));
+    setText("drift-undocumented-code", formatNumber(d.undocumented_code || 0));
     setText("drift-unimplemented-docs", formatNumber(d.unverified_docs || 0));
 }
 
 function renderHubs(hubs) {
     var list = document.getElementById("hub-list");
     if (!list) return;
-    if (!hubs || hubs.length === 0) {
-        hubs = FALLBACK_DATA.stats.top_hubs;
-    }
     list.innerHTML = "";
+    if (!hubs || hubs.length === 0) {
+        list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No architectural hubs indexed in this workspace yet</div><div class="row-sub">Click "+ Index Repo URL" to analyze a codebase and compute caller centrality.</div></div></div>';
+        return;
+    }
     hubs.forEach(function(h) {
         var row = document.createElement("div");
         row.className = "list-row";
@@ -1512,10 +1501,11 @@ function renderAttention(items) {
 function renderEvidence(items) {
     var list = document.getElementById("evidence-list");
     if (!list) return;
-    if (!items || items.length === 0) {
-        items = FALLBACK_DATA.stats.recent_evidence;
-    }
     list.innerHTML = "";
+    if (!items || items.length === 0) {
+        list.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No AST or runtime evidence recorded in this workspace yet</div></div></div>';
+        return;
+    }
     items.forEach(function(item) {
         var row = document.createElement("div");
         row.className = "list-row";
@@ -1544,11 +1534,11 @@ function renderScannedRepos(repoStats, fallbackList) {
     var list = document.getElementById("scanned-repos-list");
     if (!list) return;
 
-    if (!repoStats || repoStats.length === 0) {
-        repoStats = FALLBACK_DATA.stats.repo_stats;
-    }
-
     list.innerHTML = "";
+    if (!repoStats || repoStats.length === 0) {
+        list.innerHTML = '<div class="list-row" style="padding:18px;"><div class="row-main"><div class="row-title">0 Repositories Indexed in Workspace "' + escapeHTML(WORKSPACE || "default") + '"</div><div class="row-sub">This workspace is clean and isolated. Index a GitHub repository URL or local directory path to populate the AST graph.</div></div><button class="btn-primary" onclick="openIngestRepoModal()">🔗 + Index Repository Now</button></div>';
+        return;
+    }
     repoStats.forEach(function(repo) {
         var card = document.createElement("div");
         card.className = "repo-card";
@@ -1588,19 +1578,19 @@ function renderScannedRepos(repoStats, fallbackList) {
    ============================================================================ */
 async function loadDocsGraph() {
     if (!state.docsGraphData) {
+        var reqEpoch = state.workspaceRequestEpoch;
+        var reqWs = WORKSPACE;
         try {
             var res = await fetch("/api/v1/dashboard/docs-graph?workspace=" + encodeURIComponent(WORKSPACE), {
                 headers: { "Accept": "application/json" }
             });
             if (!res.ok) throw new Error("docs-graph HTTP " + res.status);
             var data = await res.json();
-            if (!data || !data.documents || data.documents.length === 0) {
-                state.docsGraphData = buildDefaultDocsGraph();
-            } else {
-                state.docsGraphData = data;
-            }
+            if (isStaleWorkspaceResponse(reqEpoch, reqWs, data)) return;
+            state.docsGraphData = data || { workspace: WORKSPACE, stats: {}, documents: [], components: [], graph: { nodes: [], edges: [] } };
         } catch (err) {
-            state.docsGraphData = buildDefaultDocsGraph();
+            if (isStaleWorkspaceResponse(reqEpoch, reqWs, null)) return;
+            state.docsGraphData = { workspace: WORKSPACE, stats: {}, documents: [], components: [], graph: { nodes: [], edges: [] } };
         }
     }
     renderDocsGraphAndTables();
@@ -1628,18 +1618,21 @@ function selectSpecificDocCard(docId) {
 
 function renderDocsGraphAndTables() {
     if (!state.docsGraphData) {
-        state.docsGraphData = buildDefaultDocsGraph();
+        state.docsGraphData = { workspace: WORKSPACE, stats: {}, documents: [], components: [], graph: { nodes: [], edges: [] } };
     }
     var dg = state.docsGraphData;
     var st = dg.stats || {};
+    var docsArr = dg.documents || [];
+    var compsArr = dg.components || [];
+    var edgesArr = (dg.graph && dg.graph.edges) || [];
 
-    setText("dg-stat-total-docs", formatNumber(st.total_documents || dg.documents.length));
-    setText("dg-stat-docs-foot", (st.adrs_count || 3) + " ADRs · " + (st.specs_count || 2) + " Specs · " + (st.policies_count || 4) + " Policies");
-    setText("dg-stat-total-comps", formatNumber(st.total_components || dg.components.length));
-    setText("dg-stat-code-nodes", formatNumber(st.connected_code_nodes || 12));
-    setText("dg-stat-edges", formatNumber(st.total_graph_edges || dg.graph.edges.length));
-    setText("dg-stat-enforced", formatNumber(st.verified_components || dg.components.length));
-    setText("nav-badge-docsgraph", String(dg.documents.length) + " Docs");
+    setText("dg-stat-total-docs", formatNumber(st.total_documents != null ? st.total_documents : docsArr.length));
+    setText("dg-stat-docs-foot", (st.adrs_count || 0) + " ADRs · " + (st.specs_count || 0) + " Specs · " + (st.policies_count || 0) + " Policies");
+    setText("dg-stat-total-comps", formatNumber(st.total_components != null ? st.total_components : compsArr.length));
+    setText("dg-stat-code-nodes", formatNumber(st.connected_code_nodes || 0));
+    setText("dg-stat-edges", formatNumber(st.total_graph_edges != null ? st.total_graph_edges : edgesArr.length));
+    setText("dg-stat-enforced", formatNumber(st.verified_components != null ? st.verified_components : compsArr.length));
+    setText("nav-badge-docsgraph", String(docsArr.length) + " Docs");
 
     var searchVal = ((document.getElementById("docs-filter-search") && document.getElementById("docs-filter-search").value) || "").toLowerCase().trim();
 
@@ -1658,6 +1651,9 @@ function renderDocsGraphAndTables() {
     var docsGrid = document.getElementById("ingested-docs-grid");
     if (docsGrid) {
         docsGrid.innerHTML = "";
+        if (filteredDocs.length === 0) {
+            docsGrid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">No documents or rules in this workspace yet</div><div class="empty-state-sub">Click <strong>+ Ingest Document / ADR</strong> to add an ADR, Design Spec, or Guardrail Rule to workspace <code>' + escapeHTML(WORKSPACE) + '</code>.</div></div>';
+        }
         filteredDocs.forEach(function(d) {
             var isSelected = state.docsSelectedDocId === d.id;
             var card = document.createElement("div");
@@ -1776,7 +1772,7 @@ function renderDocsD3Graph(filteredDocs, filteredComps) {
     if (svg.empty()) return;
     svg.selectAll("*").remove();
 
-    var dg = state.docsGraphData || buildDefaultDocsGraph();
+    var dg = state.docsGraphData || { documents: [], components: [], graph: { nodes: [], edges: [] } };
     var docs = filteredDocs || dg.documents || [];
     var comps = filteredComps || dg.components || [];
 
@@ -2203,6 +2199,9 @@ async function submitIngestDoc() {
         state.docsGraphData = synthesizeDocsGraphFromList(state.docsGraphData.documents, state.docsGraphData.components);
     }
 
+    decisionsLoaded = false;
+    loadDecisions();
+    loadStats();
     closeIngestDocModal();
     showView("docsgraph");
     renderDocsGraphAndTables();
@@ -2221,19 +2220,19 @@ async function rescanWorkspaceDocs() {
    ============================================================================ */
 async function loadTalonHub() {
     if (!state.talonHubData) {
+        var reqEpoch = state.workspaceRequestEpoch;
+        var reqWs = WORKSPACE;
         try {
             var res = await fetch("/api/v1/dashboard/talon-hub?workspace=" + encodeURIComponent(WORKSPACE), {
                 headers: { "Accept": "application/json" }
             });
             if (!res.ok) throw new Error("talon-hub HTTP " + res.status);
             var data = await res.json();
-            if (!data || !data.risk_hubs || data.risk_hubs.length === 0) {
-                state.talonHubData = buildDefaultTalonHub();
-            } else {
-                state.talonHubData = data;
-            }
+            if (isStaleWorkspaceResponse(reqEpoch, reqWs, data)) return;
+            state.talonHubData = data || { workspace: WORKSPACE, active_hooks_count: 0, total_hooks_count: 6, critical_hubs_count: 0, high_hubs_count: 0, hooks: [], risk_hubs: [], latest_verdict: { outcome: "ALLOW", net_new_violations_count: 0, baseline_violations_count: 0, adr_contradictions_count: 0, matrix_results: [] } };
         } catch (err) {
-            state.talonHubData = buildDefaultTalonHub();
+            if (isStaleWorkspaceResponse(reqEpoch, reqWs, null)) return;
+            state.talonHubData = { workspace: WORKSPACE, active_hooks_count: 0, total_hooks_count: 6, critical_hubs_count: 0, high_hubs_count: 0, hooks: [], risk_hubs: [], latest_verdict: { outcome: "ALLOW", net_new_violations_count: 0, baseline_violations_count: 0, adr_contradictions_count: 0, matrix_results: [] } };
         }
     }
     renderTalonHub();
@@ -2248,10 +2247,10 @@ function renderTalonHub() {
     var hubs = th.risk_hubs || [];
     var verdict = th.latest_verdict || {};
 
-    setText("talon-hooks-count", (th.active_hooks_count || hooks.length) + " / " + (th.total_hooks_count || 6));
-    setText("talon-crit-badge", (th.critical_hubs_count || 4) + " CRITICAL");
+    setText("talon-hooks-count", (th.active_hooks_count != null ? th.active_hooks_count : 0) + " / " + (th.total_hooks_count || 6));
+    setText("talon-crit-badge", (th.critical_hubs_count != null ? th.critical_hubs_count : 0) + " CRITICAL");
     setText("talon-total-hubs", String(hubs.length));
-    setText("talon-high-count", String(th.high_hubs_count || 2));
+    setText("talon-high-count", String(th.high_hubs_count != null ? th.high_hubs_count : 0));
 
     renderTalonVerdict(verdict);
 
@@ -2691,7 +2690,7 @@ function openPreEditBriefDrawer(symbolName) {
     var body = document.getElementById("drawer-body");
     if (!drawer || !overlay || !body) return;
 
-    var hubs = (state.talonHubData && state.talonHubData.risk_hubs) || buildDefaultTalonHub().risk_hubs;
+    var hubs = (state.talonHubData && state.talonHubData.risk_hubs) || [];
     var h = hubs.find(function(x) { return x.name === symbolName || x.name.indexOf(symbolName) !== -1; }) || hubs[0];
 
     setText("drawer-title", "Talon Pre-Edit Briefing: " + h.name);
@@ -2898,7 +2897,7 @@ async function loadArchitecture(level, focus) {
         if (!state.docsGraphData) {
             await loadDocsGraph();
         }
-        var dGraph = (state.docsGraphData && state.docsGraphData.graph) || buildDefaultDocsGraph().graph;
+        var dGraph = (state.docsGraphData && state.docsGraphData.graph) || { nodes: [], edges: [] };
         state.graphData = dGraph;
         buildCommunitiesList(dGraph);
         renderGraph(dGraph);
@@ -2929,18 +2928,18 @@ async function loadArchitecture(level, focus) {
                 data = await fallbackRes.json();
             }
         }
-        if (!data || !data.nodes || data.nodes.length === 0) {
-            data = buildDefaultDocsGraph().graph;
+        if (!data || !data.nodes) {
+            data = { level: state.currentLevel, focus: state.currentFocus, nodes: [], edges: [], total_nodes: 0 };
         }
         state.graphCache[cacheKey] = data;
         state.graphData = data;
         buildCommunitiesList(data);
         renderGraph(data);
     } catch (err) {
-        var fbGraph = buildDefaultDocsGraph().graph;
-        state.graphData = fbGraph;
-        buildCommunitiesList(fbGraph);
-        renderGraph(fbGraph);
+        var emptyGraph = { level: state.currentLevel, focus: state.currentFocus, nodes: [], edges: [], total_nodes: 0 };
+        state.graphData = emptyGraph;
+        buildCommunitiesList(emptyGraph);
+        renderGraph(emptyGraph);
     }
 }
 
@@ -3562,8 +3561,8 @@ function runLiveReviewCheck() {
 function renderChangeReviewWorkbench() {
     var picker = document.getElementById("review-target-picker");
     var evalListEl = document.getElementById("review-evaluations-list");
-    var evals = (state.policiesData && state.policiesData.latest_evaluations) || FALLBACK_DATA.policies.latest_evaluations;
-    var hubs = (state.stats && state.stats.top_hubs) || FALLBACK_DATA.stats.top_hubs;
+    var evals = (state.policiesData && state.policiesData.latest_evaluations) || [];
+    var hubs = (state.stats && state.stats.top_hubs) || [];
 
     if (picker) {
         picker.innerHTML = "";
@@ -3616,8 +3615,8 @@ function renderChangeReviewWorkbench() {
 }
 
 function selectReviewTarget(val) {
-    var evals = (state.policiesData && state.policiesData.latest_evaluations) || FALLBACK_DATA.policies.latest_evaluations;
-    var hubs = (state.stats && state.stats.top_hubs) || FALLBACK_DATA.stats.top_hubs;
+    var evals = (state.policiesData && state.policiesData.latest_evaluations) || [];
+    var hubs = (state.stats && state.stats.top_hubs) || [];
     var stage = document.getElementById("review-impact-stage");
 
     var targetName = WORKSPACE || "default";
@@ -3625,13 +3624,13 @@ function selectReviewTarget(val) {
     var filePath = "policies/architecture-layer-guardrails.yaml";
     var decision = (state.policiesData && state.policiesData.final_decision) || "ALLOW";
     var epistemic = (state.stats && state.stats.contradicted > 0) ? "CONTRADICTED" : "SUPPORTED";
-    var ledgerText = "ANCHORED #" + ((state.stats && state.stats.latest_block_height) || 52);
+    var ledgerText = "BLOCK #" + ((state.stats && state.stats.latest_block_height != null) ? state.stats.latest_block_height : 0);
     var ruleName = "architecture-layer-guardrails (layer_violation, cycle_exists, blast_radius_exceeds)";
     var reasonText = "Evaluated static AST dependencies, ADR claims, and runtime verification status against active GarudaPolicy rules.";
-    var evCounts = formatNumber((state.stats && state.stats.entities) || 892) + " entities · " +
-                   formatNumber((state.stats && state.stats.relationships) || 2418) + " relationships · 0 contradictions";
+    var evCounts = formatNumber((state.stats && state.stats.entities != null) ? state.stats.entities : 0) + " entities · " +
+                   formatNumber((state.stats && state.stats.relationships != null) ? state.stats.relationships : 0) + " relationships · 0 contradictions";
     var evalId = "eval-52-layer";
-    var callersCount = hubs.length > 0 ? hubs[0].callers : 18;
+    var callersCount = hubs.length > 0 ? hubs[0].callers : 0;
 
     if (val && val.indexOf("eval:") === 0) {
         var idx = parseInt(val.split(":")[1], 10);
@@ -3754,7 +3753,7 @@ function selectReviewTarget(val) {
    ============================================================================ */
 function buildAuditEntries() {
     var entries = [];
-    var evals = (state.policiesData && state.policiesData.latest_evaluations) || FALLBACK_DATA.policies.latest_evaluations;
+    var evals = (state.policiesData && state.policiesData.latest_evaluations) || [];
     evals.forEach(function(ev) {
         entries.push({
             id: ev.id,
@@ -3770,7 +3769,7 @@ function buildAuditEntries() {
         });
     });
 
-    var evList = (state.stats && state.stats.recent_evidence) || FALLBACK_DATA.stats.recent_evidence;
+    var evList = (state.stats && state.stats.recent_evidence) || [];
     evList.forEach(function(item, i) {
         entries.push({
             id: item.id || ("ev-" + i),
@@ -3862,22 +3861,7 @@ function populateAuditDecisionRecord(entry) {
 /* ============================================================================
    02 — EXPLORE: SEMANTIC SEARCH & SPLIT PREVIEW
    ============================================================================ */
-var DEFAULT_SEARCH_SYMBOLS = [
-    { id: "sym:AppendLeafAndSealTx", name: "PostgresStore.AppendLeafAndSealTx", kind: "method", package: "github.com/myshra777-ai/garuda/internal/store", file: "internal/store/merkle_v1.go", exported: true, repo: "garuda-core" },
-    { id: "sym:Engine.Run", name: "Engine.Run", kind: "method", package: "github.com/myshra777-ai/garuda/internal/policy", file: "internal/policy/engine.go", exported: true, repo: "garuda-core" },
-    { id: "sym:RunGuard", name: "talon.RunGuard", kind: "function", package: "github.com/myshra777-ai/garuda/internal/talon", file: "internal/talon/talon.go", exported: true, repo: "talon-harness" },
-    { id: "sym:CompileContract", name: "talon.CompileContract", kind: "function", package: "github.com/myshra777-ai/garuda/internal/talon", file: "internal/talon/talon.go", exported: true, repo: "talon-harness" },
-    { id: "sym:workspaceScopeFromRequest", name: "workspaceScopeFromRequest", kind: "function", package: "github.com/myshra777-ai/garuda/internal/api", file: "internal/api/workspace_scope.go", exported: false, repo: "garuda-core" },
-    { id: "sym:RecomputeWorkspaceVerification", name: "VerificationEngine.RecomputeWorkspaceVerification", kind: "method", package: "github.com/myshra777-ai/garuda/internal/runtime", file: "internal/runtime/verifier.go", exported: true, repo: "garuda-core" },
-    { id: "sym:AuthMiddleware", name: "Server.AuthMiddleware", kind: "method", package: "github.com/myshra777-ai/garuda/internal/api", file: "internal/api/auth_middleware.go", exported: true, repo: "garuda-core" },
-    { id: "sym:ParseDirectory", name: "policy.ParseDirectory", kind: "function", package: "github.com/myshra777-ai/garuda/internal/policy", file: "internal/policy/parser.go", exported: true, repo: "garuda-core" },
-    { id: "sym:AnalyzeWorkspace", name: "AnalyzeWorkspace", kind: "function", package: "github.com/myshra777-ai/garuda/internal/analyzer", file: "internal/analyzer/workspace_analyzer.go", exported: true, repo: "garuda-core" },
-    { id: "sym:Server", name: "Server", kind: "struct", package: "github.com/myshra777-ai/garuda/internal/api", file: "internal/api/handler.go", exported: true, repo: "garuda-core" },
-    { id: "sym:WorkspaceContract", name: "WorkspaceContract", kind: "struct", package: "github.com/myshra777-ai/garuda/internal/talon", file: "internal/talon/talon.go", exported: true, repo: "talon-harness" },
-    { id: "sym:DecisionStore", name: "DecisionStore", kind: "interface", package: "github.com/myshra777-ai/garuda/internal/types", file: "internal/types/types.go", exported: true, repo: "garuda-core" },
-    { id: "pkg:internal/talon", name: "internal/talon", kind: "package", package: "github.com/myshra777-ai/garuda/internal/talon", file: "internal/talon/talon.go", exported: true, repo: "talon-harness" },
-    { id: "pkg:internal/merkle", name: "internal/merkle", kind: "package", package: "github.com/myshra777-ai/garuda/internal/merkle", file: "internal/merkle/tree.go", exported: true, repo: "merkle-ledger" }
-];
+var DEFAULT_SEARCH_SYMBOLS = [];
 
 function setupSearch() {
     var global = document.getElementById("global-search");
@@ -3959,35 +3943,21 @@ async function performSearch(query) {
     var results = document.getElementById("search-results");
     if (!results) return;
     query = (query || "").trim();
+    var reqEpoch = state.workspaceRequestEpoch;
+    var reqWs = WORKSPACE;
 
     try {
         var res = await fetch("/api/v1/dashboard/search?q=" + encodeURIComponent(query) + "&workspace=" + encodeURIComponent(WORKSPACE) + "&limit=80");
         if (!res.ok) throw new Error("Search failed");
         var data = await res.json();
+        if (isStaleWorkspaceResponse(reqEpoch, reqWs, data)) return;
         var list = (data && data.results) || [];
-        if (list.length === 0) {
-            var qLow = query.toLowerCase();
-            list = DEFAULT_SEARCH_SYMBOLS.filter(function(item) {
-                if (!qLow) return true;
-                return item.name.toLowerCase().indexOf(qLow) !== -1 ||
-                       item.package.toLowerCase().indexOf(qLow) !== -1 ||
-                       item.file.toLowerCase().indexOf(qLow) !== -1 ||
-                       item.kind.toLowerCase().indexOf(qLow) !== -1;
-            });
-        }
         state.searchResultsCache = list;
         renderSearchResults({ query: query, results: list });
     } catch (err) {
-        var qLow2 = query.toLowerCase();
-        var fbList = DEFAULT_SEARCH_SYMBOLS.filter(function(item) {
-            if (!qLow2) return true;
-            return item.name.toLowerCase().indexOf(qLow2) !== -1 ||
-                   item.package.toLowerCase().indexOf(qLow2) !== -1 ||
-                   item.file.toLowerCase().indexOf(qLow2) !== -1 ||
-                   item.kind.toLowerCase().indexOf(qLow2) !== -1;
-        });
-        state.searchResultsCache = fbList;
-        renderSearchResults({ query: query, results: fbList });
+        if (isStaleWorkspaceResponse(reqEpoch, reqWs, null)) return;
+        state.searchResultsCache = [];
+        renderSearchResults({ query: query, results: [] });
     }
 }
 
@@ -4009,7 +3979,11 @@ function renderSearchResults(data) {
         title.textContent = formatNumber(filtered.length) + " indexed objects" + (data.query ? " matching “" + data.query + "”" : "");
     }
     if (filtered.length === 0) {
-        results.innerHTML = '<div class="list-row"><div class="row-main"><div class="row-title">No matching objects</div><div class="row-meta">Click "Show Top Symbols" or try another filter pill.</div></div></div>';
+        results.innerHTML = '<div class="empty-state"><div class="empty-state-title">0 indexed objects in workspace ' + escapeHTML(WORKSPACE) + '</div><div class="empty-state-sub">Click <strong>🔗 + Index Repo URL</strong> in the top bar or run <code>garuda analyze &lt;path&gt; --workspace ' + escapeHTML(WORKSPACE) + ' --save</code> to index your codebase.</div></div>';
+        var pane = document.getElementById("search-preview-pane");
+        if (pane) {
+            pane.innerHTML = '<div class="empty-state"><div class="empty-state-title">No symbol selected</div><div class="empty-state-sub">Index a repository in workspace <code>' + escapeHTML(WORKSPACE) + '</code> to inspect symbol signatures, source locations, and 1-hop neighborhoods.</div></div>';
+        }
         return;
     }
     results.innerHTML = "";
@@ -4091,7 +4065,7 @@ function renderCommandPaletteItems(query) {
     var q = (query || "").toLowerCase().trim();
 
     var items = [];
-    var hubs = (state.stats && state.stats.top_hubs) || FALLBACK_DATA.stats.top_hubs;
+    var hubs = (state.stats && state.stats.top_hubs) || [];
     hubs.slice(0, 5).forEach(function(h) {
         if (!q || h.name.toLowerCase().indexOf(q) !== -1 || (h.package || "").toLowerCase().indexOf(q) !== -1) {
             items.push({
@@ -4199,17 +4173,7 @@ function renderCommandPaletteItems(query) {
    ============================================================================ */
 var agentsLoaded = false;
 
-var DEFAULT_SESSIONS = {
-    active: [
-        { id: "sess-1", client_name: "cursor-ide", client_version: "0.48.2", agent_id: "talon-enforced-agent", duration_seconds: 185, tool_call_count: 14, last_activity_at: new Date().toISOString() },
-        { id: "sess-2", client_name: "claude-code", client_version: "1.2.0", agent_id: "claude-post-tool-hook", duration_seconds: 92, tool_call_count: 8, last_activity_at: new Date(Date.now() - 45000).toISOString() }
-    ],
-    recent: [
-        { id: "sess-1", client_name: "cursor-ide", client_version: "0.48.2", agent_id: "talon-enforced-agent", duration_seconds: 185, tool_call_count: 14, last_activity_at: new Date().toISOString() },
-        { id: "sess-2", client_name: "claude-code", client_version: "1.2.0", agent_id: "claude-post-tool-hook", duration_seconds: 92, tool_call_count: 8, last_activity_at: new Date(Date.now() - 45000).toISOString() },
-        { id: "sess-3", client_name: "windsurf-cascade", client_version: "1.6.0", agent_id: "mcp-verifier", duration_seconds: 410, tool_call_count: 23, last_activity_at: new Date(Date.now() - 3600000).toISOString(), close_reason: "ALLOW sealed #52" }
-    ]
-};
+var DEFAULT_SESSIONS = { active: [], recent: [] };
 
 async function loadAgents() {
     if (agentsLoaded) return;
@@ -4225,13 +4189,19 @@ async function loadAgents() {
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
         var data = await res.json();
-        var act = (data.active && data.active.length > 0) ? data.active : DEFAULT_SESSIONS.active;
-        var rec = (data.recent && data.recent.length > 0) ? data.recent : DEFAULT_SESSIONS.recent;
-        renderSessionList(activeEl, act, "No active MCP sessions in the last 5 minutes.", true);
-        renderSessionList(recentEl, rec, "No MCP sessions in the last 24 hours.", false);
+        var act = (data && data.active) ? data.active : [];
+        var rec = (data && data.recent) ? data.recent : [];
+        setText("nav-badge-agents", act.length > 0 ? (act.length + " Live") : "0");
+        var neuralStage = document.getElementById("agent-neural-stage");
+        if (neuralStage) {
+            neuralStage.style.display = (act.length > 0 || rec.length > 0) ? "" : "none";
+        }
+        renderSessionList(activeEl, act, "No active MCP sessions in this workspace in the last 5 minutes.", true);
+        renderSessionList(recentEl, rec, "No MCP sessions recorded in this workspace in the last 24 hours.", false);
     } catch (err) {
-        renderSessionList(activeEl, DEFAULT_SESSIONS.active, "No active MCP sessions.", true);
-        renderSessionList(recentEl, DEFAULT_SESSIONS.recent, "No recent MCP sessions.", false);
+        setText("nav-badge-agents", "0");
+        renderSessionList(activeEl, [], "No active MCP sessions in this workspace.", true);
+        renderSessionList(recentEl, [], "No recent MCP sessions in this workspace.", false);
     }
 }
 
@@ -4270,44 +4240,7 @@ function renderSessionList(container, sessions, emptyMessage, isActivePanel) {
 
 var decisionsLoaded = false;
 
-var DEFAULT_DECISIONS = [
-    {
-        id: "00000000-0000-4000-8000-000000000001",
-        title: "ADR-0001: Payment Refund Processing & Idempotency",
-        status: "CANONICAL",
-        scope_domain: "payments",
-        scope_system: "internal/refund",
-        owner: "Rohit Mishra",
-        revision_count: 2,
-        merkle_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        anchored: true,
-        created_at: new Date().toISOString()
-    },
-    {
-        id: "00000000-0000-4000-8000-000000000002",
-        title: "ADR-0002: Merkle Integrity Layer — Canonical RFC 6962 Design",
-        status: "ACCEPTED",
-        scope_domain: "cryptography",
-        scope_system: "internal/merkle",
-        owner: "Rohit Mishra",
-        revision_count: 3,
-        merkle_hash: "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
-        anchored: true,
-        created_at: new Date().toISOString()
-    },
-    {
-        id: "00000000-0000-4000-8000-000000000003",
-        title: "ADR-0003: Workspace State Snapshots & Dual-Tier Anchoring",
-        status: "ACCEPTED",
-        scope_domain: "platform",
-        scope_system: "internal/store",
-        owner: "Rohit Mishra",
-        revision_count: 1,
-        merkle_hash: "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
-        anchored: true,
-        created_at: new Date().toISOString()
-    }
-];
+var DEFAULT_DECISIONS = [];
 
 async function loadDecisions() {
     if (decisionsLoaded) return;
@@ -4323,21 +4256,25 @@ async function loadDecisions() {
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
         var data = await res.json();
-        var decisions = (data.decisions && data.decisions.length > 0) ? data.decisions : DEFAULT_DECISIONS;
+        var decisions = (data && data.decisions) ? data.decisions : [];
         setText("nav-badge-decisions", String(decisions.length));
         if (subtitleEl) {
-            subtitleEl.textContent = decisions.length + " canonical architectural decisions in this workspace.";
+            subtitleEl.textContent = decisions.length + " architectural decision(s) recorded in workspace " + WORKSPACE + ".";
         }
         renderDecisionList(listEl, decisions);
     } catch (err) {
-        setText("nav-badge-decisions", String(DEFAULT_DECISIONS.length));
-        if (subtitleEl) subtitleEl.textContent = DEFAULT_DECISIONS.length + " canonical architectural decisions in this workspace.";
-        renderDecisionList(listEl, DEFAULT_DECISIONS);
+        setText("nav-badge-decisions", "0");
+        if (subtitleEl) subtitleEl.textContent = "0 architectural decisions recorded in this workspace.";
+        renderDecisionList(listEl, []);
     }
 }
 
 function renderDecisionList(container, decisions) {
     container.innerHTML = "";
+    if (!decisions || decisions.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-title">No architectural decisions recorded in this workspace yet</div><div class="empty-state-sub">Click <strong>+ Ingest New ADR</strong> to create an isolated Architecture Decision Record for workspace <code>' + escapeHTML(WORKSPACE) + '</code>.</div></div>';
+        return;
+    }
     decisions.forEach(function(d) {
         var row = document.createElement("div");
         row.className = "list-row";
@@ -4522,10 +4459,14 @@ function escapeJS(value) {
 }
 
 async function loadAll() {
+    bumpWorkspaceRequestEpoch();
+    loadCurrentUserAndTenant();
     await loadStats();
     await loadDocsGraph();
     await loadTalonHub();
     await loadHumanDecisionHub();
+    await loadDecisions();
+    await loadAgents();
     if (state.currentView === "search") {
         await performSearch((document.getElementById("search-page-input") && document.getElementById("search-page-input").value) || "");
     }
@@ -4573,6 +4514,17 @@ state.activeTeamRole = "ops";
 state.humanDecisionHub = null;
 
 function buildDefaultHumanDecisionHub(teamRole) {
+    if (!state.stats || !state.stats.entities) {
+        return {
+            workspace: WORKSPACE || "default",
+            active_team_role: (teamRole || state.activeTeamRole || "ops").toLowerCase(),
+            criticality_tiers: [],
+            logic_groups: [],
+            financial_audits: [],
+            data_logic_audits: [],
+            synthesized_rulebook: { status: "AWAITING_REPO_INDEX", rules_count: 0, rules: [], markdown_content: "# Empty Workspace\n\nIndex a repository to synthesize a Base Rulebook." }
+        };
+    }
     var team = (teamRole || state.activeTeamRole || "ops").toLowerCase();
     var wOps = 0.70, wMkt = 0.10, wMgmt = 0.10;
     var recOps = 70, recMkt = 10, recMgmt = 10;
@@ -4831,13 +4783,9 @@ async function loadHumanDecisionHub(teamOverride) {
         });
         if (!res.ok) throw new Error("logic-weights HTTP " + res.status);
         var data = await res.json();
-        if (data && data.logic_groups && data.logic_groups.length > 0) {
-            state.humanDecisionHub = data;
-        } else {
-            state.humanDecisionHub = buildDefaultHumanDecisionHub(team);
-        }
+        state.humanDecisionHub = data || { workspace: WORKSPACE, active_team_role: team, criticality_tiers: [], logic_groups: [], financial_audits: [], synthesized_rulebook: { status: "AWAITING_REPO_INDEX", rules: [], markdown_content: "" } };
     } catch (err) {
-        state.humanDecisionHub = buildDefaultHumanDecisionHub(team);
+        state.humanDecisionHub = { workspace: WORKSPACE, active_team_role: team, criticality_tiers: [], financial_audits: [], logic_groups: [], synthesized_rulebook: { status: "AWAITING_REPO_INDEX", rules: [], markdown_content: "" } };
     }
     renderHumanDecisionHub();
     renderCriticalityTiersGrid();
@@ -4865,7 +4813,11 @@ function renderHumanDecisionHub() {
 
     var groups = hub.logic_groups || [];
     var container = document.getElementById("logic-variants-container");
-    if (container && groups.length > 0) {
+    if (container && groups.length === 0) {
+        setText("logic-group-advisory", "No repositories indexed in workspace '" + WORKSPACE + "' yet. Index a repository to detect competing multi-team formulas and calculate 0.0–1.0 team weights.");
+        setText("audit-least-harm-foot", "No formula conflicts detected");
+        container.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">No competing formulas detected in this workspace</div><div class="empty-state-sub">Click <strong>🔗 + Index Repo URL</strong> in the top bar to index a codebase and analyze multi-team formula weights.</div></div>';
+    } else if (container && groups.length > 0) {
         var grp = groups[0];
         setText("logic-group-advisory", grp.human_advisory_notice || "");
         container.innerHTML = "";
@@ -4926,7 +4878,15 @@ function renderHumanDecisionHub() {
         finContainer.innerHTML = "";
         var flaggedCount = audits.filter(function(a) { return a.audit_status !== "RECONCILED_BY_HUMAN"; }).length;
         setText("fin-audit-count-val", flaggedCount + " Flagged");
-        setText("nav-badge-audit", flaggedCount > 0 ? "10x Drift" : "Clean");
+        setText("nav-badge-audit", flaggedCount > 0 ? (flaggedCount + " Flagged") : "Clean");
+        var statusPillEl = document.getElementById("fin-audit-status-pill");
+        if (statusPillEl) {
+            statusPillEl.textContent = flaggedCount > 0 ? (flaggedCount + " Discrepancy Flagged") : "0 Discrepancies";
+            statusPillEl.className = "badge-pill " + (flaggedCount > 0 ? "critical" : "success");
+        }
+        if (audits.length === 0) {
+            finContainer.innerHTML = '<div class="empty-state"><div class="empty-state-title">No cross-team data or unit-scale discrepancies in this workspace</div><div class="empty-state-sub">Index a repository or click <strong>+ Simulate Custom Unit-Scale Check</strong> to test cross-team metric lineage.</div></div>';
+        }
 
         audits.forEach(function(a) {
             var isRec = a.audit_status === "RECONCILED_BY_HUMAN";
@@ -5063,8 +5023,12 @@ function renderCriticalityTiersGrid() {
     if (!state.humanDecisionHub) {
         state.humanDecisionHub = buildDefaultHumanDecisionHub(state.activeTeamRole);
     }
-    var tiers = state.humanDecisionHub.criticality_tiers || [];
+    var tiers = (state.humanDecisionHub && state.humanDecisionHub.criticality_tiers) || [];
     grid.innerHTML = "";
+    if (tiers.length === 0) {
+        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-title">No surface criticality tiers classified yet</div><div class="empty-state-sub">Index a repository in workspace <code>' + escapeHTML(WORKSPACE) + '</code> to classify High/Severe, Medium, and Low blast-radius surfaces.</div></div>';
+        return;
+    }
     tiers.forEach(function(t) {
         var isHigh = t.criticality_tier === "HIGH_SEVERE";
         var isMed = t.criticality_tier === "MEDIUM";
@@ -5372,9 +5336,9 @@ function submitIngestRepo() {
             state.stats.repo_stats.unshift({
                 name: slug || repoURL,
                 language: "go",
-                packages: (payload && payload.packages_indexed) || 24,
-                entities: (payload && payload.entities_indexed) || 340,
-                relationships: (payload && payload.relationships_indexed) || 910
+                packages: (payload && payload.packages_indexed) || 0,
+                entities: (payload && payload.entities_indexed) || 0,
+                relationships: (payload && payload.relationships_indexed) || 0
             });
             renderStats();
         }
@@ -5577,4 +5541,115 @@ function triggerAgentSwarmBurst() {
     var opsEl = document.getElementById("agents-neural-ops-rate");
     if (opsEl) opsEl.textContent = (42 + neuralBurstCount * 14) + " ops/min · 0 violations (Swarm Burst Active)";
     showToast("⚡ Triggered Multi-Agent Knowledge Graph Telemetry Burst!");
+}
+
+
+/* ============================================================================
+   MULTI-TENANT RBAC IDENTITY, ROLE SEPARATION & TEAM INVITE MANAGER
+   ============================================================================ */
+state.currentUserMe = null;
+
+async function loadCurrentUserAndTenant() {
+    try {
+        var res = await fetch("/api/v1/dashboard/me?workspace=" + encodeURIComponent(WORKSPACE || ""), {
+            headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) return;
+        var me = await res.json();
+        state.currentUserMe = me;
+
+        var displayName = me.full_name || me.username || me.email || "Authenticated User";
+        if (me.username && displayName.indexOf("@") === -1) {
+            displayName += " (@" + me.username + ")";
+        }
+        setText("sidebar-user-name", displayName);
+        setText("sidebar-user-email", me.email || "");
+        setText("sidebar-tenant-label", "Tenant: " + (me.tenant_name || "Isolated"));
+
+        var roleEl = document.getElementById("sidebar-user-role");
+        if (roleEl) {
+            if (me.is_tenant_owner) {
+                roleEl.textContent = "TENANT OWNER";
+                roleEl.className = "role-chip-owner";
+            } else if (me.account_type === "individual_dev") {
+                roleEl.textContent = "INDIVIDUAL DEV";
+                roleEl.className = "role-chip-owner";
+            } else {
+                roleEl.textContent = "TEAM MEMBER";
+                roleEl.className = "role-chip-member";
+            }
+        }
+
+        // Populate Team & Invite Modal
+        setText("team-modal-org-title", (me.tenant_name || "Organization") + " — Team & Invite Manager");
+        setText("team-invite-code-val", me.invite_code || "RESTRICTED (OWNER ONLY)");
+        setText("team-tenant-id-val", me.tenant_id || "—");
+        setText("team-members-count", String((me.team_members && me.team_members.length) || 1));
+
+        var tbody = document.getElementById("team-members-tbody");
+        if (tbody && me.team_members) {
+            tbody.innerHTML = "";
+            me.team_members.forEach(function(m) {
+                var tr = document.createElement("tr");
+                var roleBadge = (m.role === "owner" && m.account_type !== "team_member")
+                    ? '<span class="badge-pill success">TENANT OWNER</span>'
+                    : '<span class="badge-pill info">' + escapeHTML((m.role || "member").toUpperCase()) + '</span>';
+                tr.innerHTML =
+                    '<td><strong>' + escapeHTML(m.full_name || m.username || "Member") + '</strong> <span class="mono" style="color:var(--muted); font-size:11px;">@' + escapeHTML(m.username || "dev") + '</span></td>' +
+                    '<td class="mono">' + escapeHTML(m.email) + '</td>' +
+                    '<td>' + roleBadge + '</td>' +
+                    '<td class="mono" style="font-size:11px; color:var(--muted);">' + formatDate(m.joined_at) + '</td>';
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Enforce Role-Based Surface Separation:
+        // Team Members only see their Developer Workbench surfaces (not Tenant-Owner executive governance surfaces)
+        var isMemberOnly = (!me.is_tenant_owner && me.account_type === "team_member");
+        var ownerOnlySurfaces = { "about": true, "docsgraph": true, "governance": true, "audit": true, "decisions": true };
+        document.querySelectorAll(".nav-btn").forEach(function(btn) {
+            var surf = btn.getAttribute("data-surface");
+            if (isMemberOnly && ownerOnlySurfaces[surf]) {
+                btn.style.display = "none";
+            } else {
+                btn.style.display = "";
+            }
+        });
+
+        var teamBtn1 = document.getElementById("sidebar-team-btn");
+        var teamBtn2 = document.getElementById("topbar-team-btn");
+        if (teamBtn1) teamBtn1.style.display = me.is_tenant_owner ? "" : "none";
+        if (teamBtn2) teamBtn2.style.display = me.is_tenant_owner ? "" : "none";
+
+        if (isMemberOnly && ownerOnlySurfaces[state.currentView]) {
+            showView("workspace");
+        }
+    } catch (e) {}
+}
+
+function openTeamInviteModal() {
+    var modal = document.getElementById("team-invite-modal");
+    if (modal) modal.classList.add("open");
+    loadCurrentUserAndTenant();
+}
+
+function closeTeamInviteModal() {
+    var modal = document.getElementById("team-invite-modal");
+    if (modal) modal.classList.remove("open");
+}
+
+function copyTenantInviteCode() {
+    var code = (state.currentUserMe && state.currentUserMe.invite_code) || (document.getElementById("team-invite-code-val") && document.getElementById("team-invite-code-val").textContent) || "";
+    copyTextToClipboard(code, "📋 Copied Employee Invite Code (" + code + ") to clipboard!");
+}
+
+function copyTenantJoinLink() {
+    var code = (state.currentUserMe && state.currentUserMe.invite_code) || (document.getElementById("team-invite-code-val") && document.getElementById("team-invite-code-val").textContent) || "";
+    var url = window.location.origin + "/signup?mode=team_member&invite=" + encodeURIComponent(code);
+    copyTextToClipboard(url, "🔗 Copied Employee Join URL to clipboard!");
+}
+
+function copyTenantUUID() {
+    var tid = (state.currentUserMe && state.currentUserMe.tenant_id) || (document.getElementById("team-tenant-id-val") && document.getElementById("team-tenant-id-val").textContent) || "";
+    copyTextToClipboard(tid, "📋 Copied Tenant UUID to clipboard!");
 }

@@ -855,11 +855,15 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT COALESCE(COUNT(*)::int, 0)
 		FROM decisions
-		WHERE tenant_id = $1 AND status = 'PENDING'
-	`, tenantID).Scan(&pendingDecisions)
+		WHERE tenant_id = $1 AND (workspace_id = $2 OR (workspace_id IS NULL AND scope_system = $3)) AND status = 'PENDING'
+	`, tenantID, workspaceID, workspaceName).Scan(&pendingDecisions)
 
 	var canonicalDecisions int
-	_ = pgStore.Pool().QueryRow(ctx, `SELECT COALESCE(COUNT(*)::int, 0) FROM decisions WHERE tenant_id = $1 AND status = 'CANONICAL'`, tenantID).Scan(&canonicalDecisions)
+	_ = pgStore.Pool().QueryRow(ctx, `
+		SELECT COALESCE(COUNT(*)::int, 0)
+		FROM decisions
+		WHERE tenant_id = $1 AND (workspace_id = $2 OR (workspace_id IS NULL AND scope_system = $3)) AND status IN ('CANONICAL', 'ACCEPTED', 'APPROVED')
+	`, tenantID, workspaceID, workspaceName).Scan(&canonicalDecisions)
 
 	// Three orthogonal counts, kept separate on purpose:
 	//
@@ -939,7 +943,7 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		ORDER BY callers DESC
 		LIMIT 5
 	`, workspaceID)
-	var topHubs []HubDTO
+	topHubs := make([]HubDTO, 0)
 	if err == nil {
 		defer hubRows.Close()
 		for hubRows.Next() {
@@ -950,7 +954,7 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var needsAttention []AttentionItem
+	needsAttention := make([]AttentionItem, 0)
 	contraClaimRows, err := pgStore.Pool().Query(ctx, `
 		SELECT cv.id::text, 'Runtime deviation: unauthorized call to ' || COALESCE(cv.evidence_payload->>'raw_target', 'unapproved endpoint'), 'CRITICAL', COALESCE(e.file_path, 'runtime') || ':' || COALESCE(e.line_start::text, '0')
 		FROM claim_verifications cv
@@ -969,7 +973,7 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var recentEvidence []EvidenceItem
+	recentEvidence := make([]EvidenceItem, 0)
 	traceRows, err := pgStore.Pool().Query(ctx, `
 		SELECT trace_id, source_service || ' → (' || operation || ')', 'Runtime Trace', observed_at
 		FROM runtime_observations
@@ -1012,12 +1016,10 @@ func (s *Server) HandleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	drift := computeDrift(ctx, pgStore, workspaceID)
-	if drift.TotalDocumentClaims == 0 {
-		dg := s.buildWorkspaceDocsGraph(ctx, pgStore, tenantID, workspaceID, workspaceName)
-		drift.TotalDocumentClaims = dg.Stats.TotalComponents
-		drift.SupportedClaims = dg.Stats.VerifiedComponents
-		drift.UnverifiedClaims = dg.Stats.DriftOrUnverified
-		drift.ContradictedClaims = dg.Stats.ContradictedCount
+	if repositories == 0 && entities == 0 && canonicalDecisions == 0 {
+		latestBlock = 0
+		latestHash = "Genesis"
+		trustStatus = "Genesis"
 	}
 
 	resp := WorkspaceStatsResponse{
@@ -1537,7 +1539,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	// truncated so the UI can say "showing 200 of 1,567."
 	const maxNodesPerGraph = 200
 
-	var allNodes []GraphNodeDTO
+	allNodes := make([]GraphNodeDTO, 0)
 	for _, n := range nodesMap {
 		allNodes = append(allNodes, n)
 	}
@@ -1562,7 +1564,7 @@ func (s *Server) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	for _, n := range allNodes {
 		kept[n.ID] = true
 	}
-	var edges []GraphEdgeDTO
+	edges := make([]GraphEdgeDTO, 0)
 	for _, e := range edgesMap {
 		if kept[e.Source] && kept[e.Target] {
 			edges = append(edges, e)
@@ -1606,9 +1608,11 @@ func (s *Server) HandleDashboardPolicies(w http.ResponseWriter, r *http.Request)
 		FinalDecision:     "ALLOW",
 	}
 
-	_ = pgStore.Pool().QueryRow(ctx, `
-		SELECT COUNT(*)::int FROM policies WHERE tenant_id = $1 AND status = 'active'
-	`, tenantID).Scan(&resp.ActivePolicies)
+	if hasCode, _ := workspaceHasIndexedCode(ctx, pgStore, tenantID, workspaceID); hasCode {
+		_ = pgStore.Pool().QueryRow(ctx, `
+			SELECT COUNT(*)::int FROM policies WHERE tenant_id = $1 AND status = 'active'
+		`, tenantID).Scan(&resp.ActivePolicies)
+	}
 
 	_ = pgStore.Pool().QueryRow(ctx, `
 		SELECT
@@ -2025,12 +2029,13 @@ func (s *Server) HandleDashboardDecisions(w http.ResponseWriter, r *http.Request
 		       (SELECT COUNT(*)::int FROM decision_revisions r WHERE r.decision_id = d.id::text)
 		  FROM decisions d
 		 WHERE d.tenant_id = $1
+		   AND (d.workspace_id = $6 OR (d.workspace_id IS NULL AND d.scope_system = $7))
 		   AND ($2 = '' OR d.status = $2)
 		   AND ($3 = '' OR d.scope_domain = $3)
 		   AND ($4 = '' OR d.scope_system = $4)
 		 ORDER BY d.created_at DESC
 		 LIMIT $5
-	`, scope.TenantID, statusFilter, domainFilter, systemFilter, limit)
+	`, scope.TenantID, statusFilter, domainFilter, systemFilter, limit, scope.WorkspaceID, scope.WorkspaceName)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "query decisions failed", map[string]any{"detail": err.Error()})
 		return
@@ -2062,50 +2067,6 @@ func (s *Server) HandleDashboardDecisions(w http.ResponseWriter, r *http.Request
 		resp.Decisions = append(resp.Decisions, row)
 	}
 
-	if len(resp.Decisions) == 0 {
-		nowStr := time.Now().UTC().Format(time.RFC3339)
-		resp.Decisions = []DecisionListRow{
-			{
-				ID:            "00000000-0000-4000-8000-000000000001",
-				Title:         "ADR-0001: Payment Refund Processing & Idempotency",
-				Status:        "CANONICAL",
-				ScopeDomain:   "payments",
-				ScopeSystem:   "internal/refund",
-				Owner:         "Rohit Mishra",
-				RevisionCount: 2,
-				MerkleHash:    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-				Anchored:      true,
-				CreatedAt:     nowStr,
-				UpdatedAt:     nowStr,
-			},
-			{
-				ID:            "00000000-0000-4000-8000-000000000002",
-				Title:         "ADR-0002: Merkle Integrity Layer — Canonical RFC 6962 Design",
-				Status:        "ACCEPTED",
-				ScopeDomain:   "cryptography",
-				ScopeSystem:   "internal/merkle",
-				Owner:         "Rohit Mishra",
-				RevisionCount: 3,
-				MerkleHash:    "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
-				Anchored:      true,
-				CreatedAt:     nowStr,
-				UpdatedAt:     nowStr,
-			},
-			{
-				ID:            "00000000-0000-4000-8000-000000000003",
-				Title:         "ADR-0003: Workspace State Snapshots & Dual-Tier Anchoring",
-				Status:        "ACCEPTED",
-				ScopeDomain:   "platform",
-				ScopeSystem:   "internal/store",
-				Owner:         "Rohit Mishra",
-				RevisionCount: 1,
-				MerkleHash:    "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
-				Anchored:      true,
-				CreatedAt:     nowStr,
-				UpdatedAt:     nowStr,
-			},
-		}
-	}
 	resp.Total = len(resp.Decisions)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
@@ -2138,37 +2099,39 @@ func (s *Server) HandleDashboardDecisionDetail(w http.ResponseWriter, r *http.Re
 
 	ancestors, err := pgStore.GetDecisionAncestors(ctx, scope.TenantID, decisionID)
 	if err != nil || len(ancestors) == 0 {
-		nowStr := time.Now().UTC().Format(time.RFC3339)
-		fallbackMap := map[string]DecisionListRow{
-			"00000000-0000-4000-8000-000000000001": {
-				ID: "00000000-0000-4000-8000-000000000001", Title: "ADR-0001: Payment Refund Processing & Idempotency",
-				Status: "CANONICAL", ScopeDomain: "payments", ScopeSystem: "internal/refund", Owner: "Rohit Mishra",
-				RevisionCount: 2, MerkleHash: "e3b0c44298fc1c149afbf4c8996fb924", Anchored: true, CreatedAt: nowStr, UpdatedAt: nowStr,
-			},
-			"00000000-0000-4000-8000-000000000002": {
-				ID: "00000000-0000-4000-8000-000000000002", Title: "ADR-0002: Merkle Integrity Layer — Canonical RFC 6962 Design",
-				Status: "ACCEPTED", ScopeDomain: "cryptography", ScopeSystem: "internal/merkle", Owner: "Rohit Mishra",
-				RevisionCount: 3, MerkleHash: "8f434346648f6b96df89dda901c5176b", Anchored: true, CreatedAt: nowStr, UpdatedAt: nowStr,
-			},
-			"00000000-0000-4000-8000-000000000003": {
-				ID: "00000000-0000-4000-8000-000000000003", Title: "ADR-0003: Workspace State Snapshots & Dual-Tier Anchoring",
-				Status: "ACCEPTED", ScopeDomain: "platform", ScopeSystem: "internal/store", Owner: "Rohit Mishra",
-				RevisionCount: 1, MerkleHash: "2c26b46b68ffc68ff99b453c1d304134", Anchored: true, CreatedAt: nowStr, UpdatedAt: nowStr,
-			},
-		}
-		if fb, ok := fallbackMap[decisionID.String()]; ok {
+		var row DecisionListRow
+		var createdAt, updatedAt time.Time
+		qErr := pgStore.Pool().QueryRow(ctx, `
+			SELECT id::text, title, status,
+			       COALESCE(scope_domain, ''), COALESCE(scope_system, ''),
+			       COALESCE(owner, ''), COALESCE(merkle_hash, ''),
+			       created_at, updated_at
+			  FROM decisions
+			 WHERE id = $1 AND tenant_id = $2
+			   AND (workspace_id = $3 OR (workspace_id IS NULL AND scope_system = $4))
+		`, decisionID, scope.TenantID, scope.WorkspaceID, scope.WorkspaceName).Scan(
+			&row.ID, &row.Title, &row.Status,
+			&row.ScopeDomain, &row.ScopeSystem,
+			&row.Owner, &row.MerkleHash,
+			&createdAt, &updatedAt,
+		)
+		if qErr == nil {
+			row.Anchored = row.MerkleHash != ""
+			row.RevisionCount = 1
+			row.CreatedAt = createdAt.Format(time.RFC3339)
+			row.UpdatedAt = updatedAt.Format(time.RFC3339)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(DecisionDetail{
-				Decision:  fb,
-				Ancestors: []DecisionListRow{fb},
+				Decision:  row,
+				Ancestors: []DecisionListRow{row},
 				Children:  []DecisionListRow{},
 				Revisions: []RevisionRow{
-					{ID: fb.ID + "-r1", RevisionNumber: 1, DecisionHashHex: fb.MerkleHash, PreviousHashHex: "0000000000000000", CreatedAt: nowStr},
+					{ID: row.ID + "-r1", RevisionNumber: 1, DecisionHashHex: row.MerkleHash, PreviousHashHex: "0000000000000000", CreatedAt: row.CreatedAt},
 				},
 			})
 			return
 		}
-		writeJSONError(w, http.StatusNotFound, "decision not found", nil)
+		writeJSONError(w, http.StatusNotFound, "decision not found in this workspace", nil)
 		return
 	}
 

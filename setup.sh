@@ -16,6 +16,7 @@
 # ===========================================================================
 
 set -euo pipefail
+export GOTOOLCHAIN=auto
 
 cd "$(dirname "$0")"
 REPO_ROOT="$(pwd)"
@@ -334,7 +335,7 @@ echo "[3/8] Preparing Garuda binaries (bin/garuda, bin/garuda-api, bin/garuda-mc
 mkdir -p bin
 CURRENT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo "local")"
 BUILD_STAMP_FILE="bin/.build_stamp"
-if [[ internal/api/templates/dashboard.html -nt bin/garuda-api || internal/api/static/dashboard.css -nt bin/garuda-api || internal/api/static/dashboard.js -nt bin/garuda-api || cmd/garuda-mcp/main.go -nt bin/garuda-mcp || internal/policy/engine.go -nt bin/garuda-mcp ]]; then rm -f "$BUILD_STAMP_FILE"; fi
+if [[ internal/api/templates/dashboard.html -nt bin/garuda-api || internal/api/static/dashboard.css -nt bin/garuda-api || internal/api/static/dashboard.js -nt bin/garuda-api || internal/api/signup_handlers.go -nt bin/garuda-api || internal/api/workspace_scope.go -nt bin/garuda-api || internal/api/workspace_handlers.go -nt bin/garuda-api || internal/store/signup_store.go -nt bin/garuda-api || cmd/garuda-mcp/main.go -nt bin/garuda-mcp || internal/policy/engine.go -nt bin/garuda-mcp ]]; then rm -f "$BUILD_STAMP_FILE"; fi
 STAMP_VAL="$(cat "$BUILD_STAMP_FILE" 2>/dev/null || echo "")"
 
 if [[ -x bin/garuda && -x bin/garuda-api && -x bin/garuda-mcp && -x bin/garuda-talon ]] && { [[ "$STAMP_VAL" == "prebuilt" ]] || [[ ! -d "./cmd/garuda" ]] || { [[ "$STAMP_VAL" == "$CURRENT_COMMIT" ]] && [[ -z "$(git status --porcelain -- './cmd' './internal' 2>/dev/null || true)" ]]; }; }; then
@@ -362,8 +363,16 @@ else
         fi
     fi
 
-    echo "  * Compiling with $(go version) [CGO_ENABLED=${CGO_ENABLED}]..."
-    go build -o bin/ ./cmd/garuda ./cmd/garuda-api ./cmd/garuda-mcp ./cmd/garuda-talon
+    export GOTOOLCHAIN=auto
+    for tc_bin in "$HOME"/go/pkg/mod/golang.org/toolchain@*go1.26*/bin; do
+        if [[ -x "$tc_bin/go" ]]; then
+            export PATH="$tc_bin:$PATH"
+            break
+        fi
+    done
+    echo "  * Compiling with $(GOTOOLCHAIN=auto go version) [CGO_ENABLED=${CGO_ENABLED}]..."
+    GOTOOLCHAIN=auto go mod download >/dev/null 2>&1 || true
+    GOTOOLCHAIN=auto go build -o bin/ ./cmd/garuda ./cmd/garuda-api ./cmd/garuda-mcp ./cmd/garuda-talon
     echo "$CURRENT_COMMIT" > "$BUILD_STAMP_FILE"
     echo "  [OK] Built bin/garuda, bin/garuda-api, bin/garuda-mcp, bin/garuda-talon"
 fi
@@ -384,7 +393,7 @@ echo "[4/8] Running idempotent migrations, persisting .env, and provisioning own
 echo "[5/8] Starting Garuda API Gateway on :${API_PORT}..."
 pkill -f "garuda-api" 2>/dev/null || killall garuda-api 2>/dev/null || true
 sleep 0.3
-nohup ./bin/garuda-api > "${DATA_DIR}/garuda-api.log" 2>&1 &
+GARUDA_OWNER_EMAIL="${OWNER_EMAIL}" nohup ./bin/garuda-api > "${DATA_DIR}/garuda-api.log" 2>&1 &
 for _ in $(seq 1 25); do
     if curl -fsS "http://localhost:${API_PORT}/health" >/dev/null 2>&1; then
         break
@@ -397,7 +406,10 @@ SIGNUP_RESP=$(curl -s -X POST "http://localhost:${API_PORT}/signup"     -H "Cont
 echo "  [OK] Signup endpoint response: ${SIGNUP_RESP}"
 if command -v psql >/dev/null 2>&1; then
     echo "  [OK] Active Tenants & Users in PostgreSQL:"
-    psql "$DATABASE_URL" -c "SELECT id, name FROM tenants;" || true
+    if [[ -f "migrations/097_multi_tenant_rbac_isolation.sql" ]]; then
+        psql "$DATABASE_URL" -f migrations/097_multi_tenant_rbac_isolation.sql >/dev/null 2>&1 || true
+    fi
+    psql "$DATABASE_URL" -c "SELECT id, name, invite_code FROM tenants;" || true
     psql "$DATABASE_URL" -c "SELECT id, email, role FROM users;" || true
 fi
 

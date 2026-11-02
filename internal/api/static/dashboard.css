@@ -761,3 +761,87 @@ body.sidebar-collapsed .sidebar {
     border-color: var(--brand-accent-border);
     color: var(--brand-accent-ink);
 }
+
+/* === v1.9.9 COLLAPSIBLE SIDEBAR GRID FIX & MULTI-TENANT RBAC UI === */
+.app, .app-shell {
+    transition: grid-template-columns 260ms var(--ease-out-expo);
+}
+body.sidebar-collapsed .app,
+body.sidebar-collapsed .app-shell {
+    grid-template-columns: 0px minmax(0, 1fr) !important;
+}
+body.sidebar-collapsed .sidebar {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    border-right: none !important;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-16px);
+}
+.user-identity-box {
+    background: var(--about-surface-subtle);
+    border: 1px solid var(--about-border);
+    border-radius: 9px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.user-identity-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+.user-identity-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--about-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.user-identity-email {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--about-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.role-chip-owner {
+    background: rgba(16, 185, 129, 0.14);
+    color: var(--brand-accent-ink);
+    border: 1px solid rgba(16, 185, 129, 0.32);
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    text-transform: uppercase;
+}
+.role-chip-member {
+    background: rgba(59, 130, 246, 0.14);
+    color: #2563EB;
+    border: 1px solid rgba(59, 130, 246, 0.32);
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    text-transform: uppercase;
+}
+.invite-code-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--about-surface-subtle);
+    border: 1px solid var(--about-border-strong);
+    margin-bottom: 12px;
+}

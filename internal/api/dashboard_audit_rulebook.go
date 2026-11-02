@@ -437,6 +437,31 @@ func (s *Server) buildHumanDecisionHubPayload(ctx context.Context, pgStore *stor
 		activeTeam = "ops"
 	}
 
+	hasCode, _ := workspaceHasIndexedCode(ctx, pgStore, tenantID, workspaceID)
+	if !hasCode {
+		emptyMd := "# No Repositories Indexed Yet\n\nIndex a repository in workspace `" + workspaceName + "` (via `+ Index Repo URL` or `garuda analyze`) to synthesize architectural rules, surface criticality tiers, and multi-team formula weights.\n"
+		return HumanDecisionHubResponse{
+			Workspace:           workspaceName,
+			ActiveTeamRole:      strings.ToLower(activeTeam),
+			GovernancePrinciple: "HUMAN-IN-THE-LOOP BY DESIGN: Index a repository in this workspace to evaluate blast radius, criticality tiers, and formula weights.",
+			CriticalityTiers:    []SurfaceCriticalityTierDTO{},
+			LogicGroups:         []LogicDisambiguationGroupDTO{},
+			FinancialAudits:     []FinancialAuditDiscrepancyDTO{},
+			SynthesizedRulebook: SynthesizedRulebookDTO{
+				ID:              "rulebook-empty-" + workspaceName,
+				Workspace:       workspaceName,
+				VersionTag:      "unindexed",
+				Status:          "AWAITING_REPO_INDEX",
+				Title:           "Workspace Rulebook (No Repositories Indexed Yet)",
+				Summary:         "Index a repository in this workspace to auto-synthesize your Base Rulebook.",
+				MarkdownContent: emptyMd,
+				Rules:           []SynthesizedRuleItemDTO{},
+				UpdatedAt:       time.Now().UTC().Format(time.RFC3339),
+			},
+			UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
 	tiers := defaultCriticalityTiers()
 	logicGroups := computeLogicGroupsForTeam(activeTeam)
 	audits := defaultFinancialAudits()
@@ -521,10 +546,24 @@ func (s *Server) buildHumanDecisionHubPayload(ctx context.Context, pgStore *stor
 		}
 	}
 
-	// Check if a saved/approved rulebook exists on disk in .garuda/APPROVED_BASE_RULEBOOK.md
-	repoRoot := resolveRepoRoot()
-	approvedPath := filepath.Join(repoRoot, ".garuda", "APPROVED_BASE_RULEBOOK.md")
-	if data, err := os.ReadFile(approvedPath); err == nil && len(data) > 0 {
+	// Check if a saved/approved rulebook exists in PostgreSQL workspace_documents or durable tenant storage for (tenantID, workspaceID)
+	approvedPath := filepath.Join(durableTenantStorageDir(tenantID, workspaceID, "rulebooks"), "APPROVED_BASE_RULEBOOK.md")
+	var dbRulebookContent, dbRulebookHash string
+	if pgStore != nil && pgStore.Pool() != nil && workspaceID != uuid.Nil {
+		_ = pgStore.Pool().QueryRow(ctx, `
+			SELECT COALESCE(content, ''), COALESCE(sha256_hash, '')
+			FROM workspace_documents
+			WHERE tenant_id = $1 AND workspace_id = $2 AND path = '.garuda/APPROVED_BASE_RULEBOOK.md'
+			LIMIT 1
+		`, tenantID, workspaceID).Scan(&dbRulebookContent, &dbRulebookHash)
+	}
+	if dbRulebookContent != "" {
+		rulebook.Status = "APPROVED_BASE_RULEBOOK"
+		rulebook.VersionTag = "v1.9.0-approved"
+		rulebook.MarkdownContent = dbRulebookContent
+		rulebook.ApprovedBy = "Primary Stakeholder / Lead Architect"
+		rulebook.MerkleHash = dbRulebookHash
+	} else if data, err := os.ReadFile(approvedPath); err == nil && len(data) > 0 {
 		rulebook.Status = "APPROVED_BASE_RULEBOOK"
 		rulebook.VersionTag = "v1.9.0-approved"
 		rulebook.MarkdownContent = string(data)
@@ -556,12 +595,21 @@ func (s *Server) HandleDashboardLogicWeights(w http.ResponseWriter, r *http.Requ
 	wsName := strings.TrimSpace(r.URL.Query().Get("workspace"))
 	pgStore, _ := s.store.(*store.PostgresStore)
 	var tenantID, workspaceID uuid.UUID
+	approverLabel := ""
 	if pgStore != nil {
 		if scope, err := workspaceScopeFromRequest(ctx, r, pgStore); err == nil {
+			if !scope.IsTenantOwner && scope.AccountType == "team_member" {
+				writeJSONError(w, http.StatusForbidden, "Tenant Owner authority required to approve or freeze organization-wide formula weights", map[string]any{"role": scope.WorkspaceRole})
+				return
+			}
 			tenantID = scope.TenantID
 			workspaceID = scope.WorkspaceID
 			wsName = scope.WorkspaceName
+			approverLabel = fmt.Sprintf("%s <%s>", scope.UserFullName, scope.UserEmail)
 		}
+	}
+	if approverLabel == "" {
+		approverLabel = fmt.Sprintf("Verified Owner (%s team)", strings.ToUpper(team))
 	}
 	payload := s.buildHumanDecisionHubPayload(ctx, pgStore, tenantID, workspaceID, wsName, team)
 	w.Header().Set("Content-Type", "application/json")
@@ -595,12 +643,17 @@ func (s *Server) HandleDashboardLogicDecision(w http.ResponseWriter, r *http.Req
 	}
 	pgStore, _ := s.store.(*store.PostgresStore)
 	var tenantID, workspaceID uuid.UUID
+	approverLabel := ""
 	if pgStore != nil {
 		if scope, err := workspaceScopeFromRequest(ctx, r, pgStore); err == nil {
 			tenantID = scope.TenantID
 			workspaceID = scope.WorkspaceID
 			wsName = scope.WorkspaceName
+			approverLabel = fmt.Sprintf("%s <%s>", scope.UserFullName, scope.UserEmail)
 		}
+	}
+	if approverLabel == "" {
+		approverLabel = fmt.Sprintf("Verified Owner (%s team)", strings.ToUpper(team))
 	}
 
 	payload := s.buildHumanDecisionHubPayload(ctx, pgStore, tenantID, workspaceID, wsName, team)
@@ -617,7 +670,7 @@ func (s *Server) HandleDashboardLogicDecision(w http.ResponseWriter, r *http.Req
 					v.CalculatedWeight = req.CustomWeight
 					v.RecommendedChangePct = int(req.CustomWeight * 100)
 				}
-				v.ApprovedBy = fmt.Sprintf("Human Stakeholder (%s team)", strings.ToUpper(team))
+				v.ApprovedBy = approverLabel
 				v.ApprovedAt = time.Now().UTC().Format(time.RFC3339)
 			}
 		}
@@ -685,6 +738,14 @@ func (s *Server) HandleDashboardFinancialAudit(w http.ResponseWriter, r *http.Re
 	audits := defaultFinancialAudits()
 
 	if r.Method == http.MethodPost {
+		if pgStore, ok := s.store.(*store.PostgresStore); ok && pgStore != nil {
+			if scope, err := workspaceScopeFromRequest(r.Context(), r, pgStore); err == nil {
+				if !scope.IsTenantOwner && scope.AccountType == "team_member" {
+					writeJSONError(w, http.StatusForbidden, "Tenant Owner authority required to reconcile organization-wide data & logic audits", map[string]any{"role": scope.WorkspaceRole})
+					return
+				}
+			}
+		}
 		var req FinancialReconcileRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
 			if req.AuditID != "" {
@@ -753,11 +814,26 @@ func (s *Server) HandleDashboardRulebook(w http.ResponseWriter, r *http.Request)
 	if wsName == "" {
 		wsName = "default"
 	}
+	var tenantID, workspaceID uuid.UUID
+	if pgStore, ok := s.store.(*store.PostgresStore); ok && pgStore != nil {
+		if scope, err := workspaceScopeFromRequest(r.Context(), r, pgStore); err == nil {
+			tenantID = scope.TenantID
+			workspaceID = scope.WorkspaceID
+			wsName = scope.WorkspaceName
+		}
+	}
 	rb := defaultSynthesizedRulebook(wsName)
-	repoRoot := resolveRepoRoot()
-	approvedPath := filepath.Join(repoRoot, ".garuda", "APPROVED_BASE_RULEBOOK.md")
+	approvedPath := filepath.Join(durableTenantStorageDir(tenantID, workspaceID, "rulebooks"), "APPROVED_BASE_RULEBOOK.md")
 
 	if r.Method == http.MethodPost {
+		if pgStore, ok := s.store.(*store.PostgresStore); ok && pgStore != nil {
+			if scope, err := workspaceScopeFromRequest(r.Context(), r, pgStore); err == nil {
+				if !scope.IsTenantOwner && scope.AccountType == "team_member" {
+					writeJSONError(w, http.StatusForbidden, "Tenant Owner authority required to approve and seal the Base Rulebook", map[string]any{"role": scope.WorkspaceRole})
+					return
+				}
+			}
+		}
 		var req RulebookApprovalRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		if req.Workspace != "" {
@@ -786,8 +862,16 @@ func (s *Server) HandleDashboardRulebook(w http.ResponseWriter, r *http.Request)
 		sum := sha256.Sum256([]byte(rb.MarkdownContent))
 		rb.MerkleHash = hex.EncodeToString(sum[:])
 
-		_ = os.MkdirAll(filepath.Dir(approvedPath), 0755)
-		_ = os.WriteFile(approvedPath, []byte(rb.MarkdownContent), 0644)
+		_ = os.MkdirAll(filepath.Dir(approvedPath), 0700)
+		_ = os.WriteFile(approvedPath, []byte(rb.MarkdownContent), 0600)
+		if pgStore, ok := s.store.(*store.PostgresStore); ok && pgStore != nil && pgStore.Pool() != nil && workspaceID != uuid.Nil {
+			_, _ = pgStore.Pool().Exec(r.Context(), `
+				INSERT INTO workspace_documents (id, tenant_id, workspace_id, workspace_name, title, doc_type, path, content, sha256_hash, status)
+				VALUES ($1, $2, $3, $4, $5, 'RULEBOOK', '.garuda/APPROVED_BASE_RULEBOOK.md', $6, $7, 'APPROVED')
+				ON CONFLICT (tenant_id, workspace_id, path) DO UPDATE
+				SET title = EXCLUDED.title, content = EXCLUDED.content, sha256_hash = EXCLUDED.sha256_hash, status = 'APPROVED', updated_at = NOW()
+			`, uuid.New(), tenantID, workspaceID, wsName, rb.Title, rb.MarkdownContent, rb.MerkleHash)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -879,11 +963,16 @@ func (s *Server) HandleDashboardRepoIngest(w http.ResponseWriter, r *http.Reques
 				ON CONFLICT (user_id, workspace_id) DO NOTHING
 			`, sess.UserID, workspaceID)
 		}
+		// Only add members whose primary_tenant_id matches this tenant
 		_, _ = pgStore.Pool().Exec(ctx, `
 			INSERT INTO workspace_members (user_id, workspace_id, role, created_at)
-			SELECT u.id, $1, 'owner', NOW() FROM users u
+			SELECT tm.user_id, $1, CASE WHEN tm.role IN ('owner', 'admin') THEN 'owner' ELSE 'member' END, NOW()
+			  FROM tenant_members tm
+			  JOIN users u ON u.id = tm.user_id
+			 WHERE tm.tenant_id = $2
+			   AND (u.primary_tenant_id = $2 OR u.account_type = 'team_member')
 			ON CONFLICT (user_id, workspace_id) DO NOTHING
-		`, workspaceID)
+		`, workspaceID, tenantID)
 	}
 
 	if repoURL == "" || body.CreateOnly {
@@ -984,12 +1073,14 @@ func (s *Server) HandleDashboardRepoIngest(w http.ResponseWriter, r *http.Reques
 	analyzeOutput := ""
 	if targetPath != "" {
 		cmd := exec.CommandContext(ctx, garudaBin, "analyze", targetPath, "--workspace", wsName, "--save")
+		cmd.Env = append(os.Environ(), "GARUDA_TENANT_ID="+tenantID.String())
 		if outBytes, err := cmd.CombinedOutput(); err == nil {
 			analyzeOutput = string(outBytes)
 		} else {
 			analyzeOutput = string(outBytes)
 		}
 		talonCmd := exec.CommandContext(ctx, garudaBin, "talon", "init", targetPath, "--workspace", wsName)
+		talonCmd.Env = append(os.Environ(), "GARUDA_TENANT_ID="+tenantID.String())
 		_ = talonCmd.Run()
 	} else {
 		analyzeStatus = "simulated_offline"

@@ -135,6 +135,20 @@ func resolveRepoRoot() string {
 	return "."
 }
 
+// workspaceHasIndexedCode checks whether the given (tenantID, workspaceID) has at least
+// one indexed repository or non-external AST entity in PostgreSQL.
+// Newly created accounts and empty workspaces return (false, 0) so Garuda never
+// fabricates or leaks documents, policies, risk hubs, or audit records into empty workspaces.
+func workspaceHasIndexedCode(ctx context.Context, pgStore *store.PostgresStore, tenantID, workspaceID uuid.UUID) (bool, int) {
+	if pgStore == nil || pgStore.Pool() == nil || workspaceID == uuid.Nil {
+		return false, 0
+	}
+	var reposCount, entitiesCount int
+	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM repositories WHERE workspace_id = $1`, workspaceID).Scan(&reposCount)
+	_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1 AND kind != 'external'`, workspaceID).Scan(&entitiesCount)
+	return (reposCount > 0 || entitiesCount > 0), entitiesCount
+}
+
 // buildWorkspaceDocsGraph synthesizes the unified Document -> Component/Rule -> Policy Guardrail -> Code Symbol graph & tables.
 func (s *Server) buildWorkspaceDocsGraph(ctx context.Context, pgStore *store.PostgresStore, tenantID, workspaceID uuid.UUID, workspaceName string) DocsGraphResponse {
 	repoRoot := resolveRepoRoot()
@@ -162,24 +176,10 @@ func (s *Server) buildWorkspaceDocsGraph(ctx context.Context, pgStore *store.Pos
 		}
 	}
 
-	// Track whether workspace entities came from live indexed AST or unindexed preview fallback
+	hasIndexedCode, _ := workspaceHasIndexedCode(ctx, pgStore, tenantID, workspaceID)
 	graphSourceMode := "live_indexed_ast"
-	if len(entities) == 0 && tenantID.String() == "00000000-0000-0000-0000-000000000001" && workspaceName == "default" {
-		graphSourceMode = "fallback_preview_unindexed"
-		entities = []EntityRecord{
-			{ID: "sym:Server.RegisterRoutes", Name: "Server.RegisterRoutes", Kind: "method", Package: "github.com/myshra777-ai/garuda/internal/api", File: "internal/api/handler.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:Server.HandleDashboard", Name: "Server.HandleDashboard", Kind: "method", Package: "github.com/myshra777-ai/garuda/internal/api", File: "internal/api/dashboard_handlers.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:PostgresStore.AppendLeafAndSealTx", Name: "PostgresStore.AppendLeafAndSealTx", Kind: "method", Package: "github.com/myshra777-ai/garuda/internal/store", File: "internal/store/merkle_v1.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:VerifyV1Proof", Name: "VerifyV1Proof", Kind: "function", Package: "github.com/myshra777-ai/garuda/internal/store", File: "internal/store/merkle_v1.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:CreateUnifiedMerkleSnapshot", Name: "CreateUnifiedMerkleSnapshot", Kind: "method", Package: "github.com/myshra777-ai/garuda/internal/store", File: "internal/store/merkle_store.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:CompileContract", Name: "CompileContract", Kind: "function", Package: "github.com/myshra777-ai/garuda/internal/talon", File: "internal/talon/talon.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:RunGuard", Name: "RunGuard", Kind: "function", Package: "github.com/myshra777-ai/garuda/internal/talon", File: "internal/talon/talon.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:Engine.Run", Name: "Engine.Run", Kind: "method", Package: "github.com/myshra777-ai/garuda/internal/policy", File: "internal/policy/engine.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:VerificationEngine.RecomputeWorkspaceVerification", Name: "RecomputeWorkspaceVerification", Kind: "method", Package: "github.com/myshra777-ai/garuda/internal/runtime", File: "internal/runtime/verifier.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:RateLimiter.Allow", Name: "RateLimiter.Allow", Kind: "method", Package: "github.com/myshra777-ai/garuda/internal/refund", File: "internal/refund/rate_limiter.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:AuthMiddleware", Name: "AuthMiddleware", Kind: "method", Package: "github.com/myshra777-ai/garuda/internal/api", File: "internal/api/auth_middleware.go", Exported: true, Repo: workspaceName},
-			{ID: "sym:workspaceScopeFromRequest", Name: "workspaceScopeFromRequest", Kind: "function", Package: "github.com/myshra777-ai/garuda/internal/api", File: "internal/api/workspace_scope.go", Exported: false, Repo: workspaceName},
-		}
+	if !hasIndexedCode {
+		graphSourceMode = "empty_workspace"
 	}
 
 	// Helper to match AST symbols/packages by name, package substring, or keyword
@@ -241,27 +241,7 @@ func (s *Server) buildWorkspaceDocsGraph(ctx context.Context, pgStore *store.Pos
 		return matched
 	}
 
-	// 2. If document_claims in DB is empty, auto-ingest docs/adr/*.md so DB is always synced
-	if pgStore != nil && pgStore.Pool() != nil {
-		var existingClaims int
-		_ = pgStore.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM document_claims WHERE workspace_id = $1`, workspaceID).Scan(&existingClaims)
-		if existingClaims == 0 {
-			adrDir := filepath.Join(repoRoot, "docs", "adr")
-			if entries, err := os.ReadDir(adrDir); err == nil {
-				claimStore := store.NewClaimStore(pgStore.Pool())
-				for _, entry := range entries {
-					if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
-						fullPath := filepath.Join(adrDir, entry.Name())
-						if claims, pErr := markdown.ParseADR(fullPath, tenantID, workspaceName); pErr == nil && len(claims) > 0 {
-							_ = claimStore.SaveClaims(ctx, claims)
-						}
-					}
-				}
-				eval := knowledge.NewEvaluator(pgStore.Pool())
-				_, _, _ = eval.EvaluateWorkspace(ctx, tenantID, workspaceID)
-			}
-		}
-	}
+	// 2. Strict Tenant & Workspace Isolation: never auto-seed host docs/adr/*.md into workspaces.
 
 	docsMap := make(map[string]*DocSummaryDTO)
 	var docsOrder []string
@@ -287,126 +267,130 @@ func (s *Server) buildWorkspaceDocsGraph(ctx context.Context, pgStore *store.Pos
 		return d
 	}
 
-	// 3. Load Declarative YAML Policies from policies/*.yaml
+	// 3. Load Declarative YAML Policies ONLY if this workspace has indexed the local garuda repository
+	isCanonicalIndexedWorkspace := hasIndexedCode && tenantID.String() == "00000000-0000-0000-0000-000000000001" && workspaceName == "default"
 	policyDir := filepath.Join(repoRoot, "policies")
-	if parsedPolicies, err := policy.ParseDirectory(policyDir); err == nil {
-		for _, pp := range parsedPolicies {
-			p := pp.Policy
-			docID := "doc:policy:" + p.ID
-			relPath := "policies/" + filepath.Base(pp.SourcePath)
-			doc := ensureDoc(
-				docID,
-				"Policy: "+p.Title,
-				"POLICY",
-				relPath,
-				strings.TrimSpace(p.Description),
-				true,
-				[]string{"YAML Policy", string(p.Then.Decision), p.Scope.Domain},
-			)
-			doc.Status = "ENFORCED"
+	if isCanonicalIndexedWorkspace {
+		if parsedPolicies, err := policy.ParseDirectory(policyDir); err == nil {
+			for _, pp := range parsedPolicies {
+				p := pp.Policy
+				docID := "doc:policy:" + p.ID
+				relPath := "policies/" + filepath.Base(pp.SourcePath)
+				doc := ensureDoc(
+					docID,
+					"Policy: "+p.Title,
+					"POLICY",
+					relPath,
+					strings.TrimSpace(p.Description),
+					true,
+					[]string{"YAML Policy", string(p.Then.Decision), p.Scope.Domain},
+				)
+				doc.Status = "ENFORCED"
 
-			for idx, w := range p.When {
-				subj := p.Scope.Package
-				if subj == "" {
-					subj = p.Scope.Pattern
-				}
-				if subj == "" {
-					subj = p.Scope.Domain
-				}
-				obj := w.Type
-				searchPats := []string{p.Scope.Package, p.Scope.Domain}
-				if fromLayer, ok := w.Params["from_layer"].(string); ok && fromLayer != "" {
-					subj = fromLayer
-					searchPats = append(searchPats, fromLayer)
-				}
-				if toLayer, ok := w.Params["to_layer"].(string); ok && toLayer != "" {
-					obj = toLayer
-					searchPats = append(searchPats, toLayer)
-				}
-				if fromPat, ok := w.Params["from_name_pattern"].(string); ok && fromPat != "" {
-					subj = strings.ReplaceAll(fromPat, ".*", "")
-					searchPats = append(searchPats, "refund", "payment")
-				}
-				if toPat, ok := w.Params["to_name_pattern"].(string); ok && toPat != "" {
-					obj = strings.Trim(toPat, "^$")
-				}
-				if strings.Contains(p.ID, "runtime-evidence") {
-					searchPats = append(searchPats, "Handle", "runtime")
-				}
-				if strings.Contains(p.ID, "api-to-store") {
-					searchPats = append(searchPats, "internal/api", "internal/store")
-				}
+				for idx, w := range p.When {
+					subj := p.Scope.Package
+					if subj == "" {
+						subj = p.Scope.Pattern
+					}
+					if subj == "" {
+						subj = p.Scope.Domain
+					}
+					obj := w.Type
+					searchPats := []string{p.Scope.Package, p.Scope.Domain}
+					if fromLayer, ok := w.Params["from_layer"].(string); ok && fromLayer != "" {
+						subj = fromLayer
+						searchPats = append(searchPats, fromLayer)
+					}
+					if toLayer, ok := w.Params["to_layer"].(string); ok && toLayer != "" {
+						obj = toLayer
+						searchPats = append(searchPats, toLayer)
+					}
+					if fromPat, ok := w.Params["from_name_pattern"].(string); ok && fromPat != "" {
+						subj = strings.ReplaceAll(fromPat, ".*", "")
+						searchPats = append(searchPats, "refund", "payment")
+					}
+					if toPat, ok := w.Params["to_name_pattern"].(string); ok && toPat != "" {
+						obj = strings.Trim(toPat, "^$")
+					}
+					if strings.Contains(p.ID, "runtime-evidence") {
+						searchPats = append(searchPats, "Handle", "runtime")
+					}
+					if strings.Contains(p.ID, "api-to-store") {
+						searchPats = append(searchPats, "internal/api", "internal/store")
+					}
 
-				linked := matchCodeSymbols(searchPats...)
-				for i := range linked {
-					linked[i].Relation = "ENFORCED_ON"
-				}
+					linked := matchCodeSymbols(searchPats...)
+					for i := range linked {
+						linked[i].Relation = "ENFORCED_ON"
+					}
 
-				compID := fmt.Sprintf("comp:pol:%s:%d", p.ID, idx+1)
-				components = append(components, DocComponentDTO{
-					ID:         compID,
-					DocID:      docID,
-					DocTitle:   doc.Title,
-					DocType:    "POLICY",
-					DocPath:    relPath,
-					Section:    "when." + w.Type,
-					Line:       15 + idx*4,
-					Modality:   string(p.Then.Decision),
-					Subject:    subj,
-					Predicate:  strings.ToUpper(w.Type),
-					Object:     obj,
-					Statement:  fmt.Sprintf("[%s] %s — %s", p.Then.Decision, p.Title, strings.TrimSpace(p.Then.Reason)),
-					Status:     "ENFORCED",
-					Reason:     strings.TrimSpace(p.Then.Reason),
-					PolicyID:   p.ID,
-					LinkedCode: linked,
-				})
+					compID := fmt.Sprintf("comp:pol:%s:%d", p.ID, idx+1)
+					components = append(components, DocComponentDTO{
+						ID:         compID,
+						DocID:      docID,
+						DocTitle:   doc.Title,
+						DocType:    "POLICY",
+						DocPath:    relPath,
+						Section:    "when." + w.Type,
+						Line:       15 + idx*4,
+						Modality:   string(p.Then.Decision),
+						Subject:    subj,
+						Predicate:  strings.ToUpper(w.Type),
+						Object:     obj,
+						Statement:  fmt.Sprintf("[%s] %s — %s", p.Then.Decision, p.Title, strings.TrimSpace(p.Then.Reason)),
+						Status:     "ENFORCED",
+						Reason:     strings.TrimSpace(p.Then.Reason),
+						PolicyID:   p.ID,
+						LinkedCode: linked,
+					})
+				}
 			}
 		}
-	}
 
-	// 4. Load .garudarules Guardrail File
-	garudaRulesPath := filepath.Join(repoRoot, ".garudarules")
-	if st, err := os.Stat(garudaRulesPath); err == nil && !st.IsDir() {
-		docID := "doc:guardrail:garudarules"
-		doc := ensureDoc(
-			docID,
-			"Guardrail: .garudarules (Hard Security & Hygiene Rules)",
-			"GUARDRAIL",
-			".garudarules",
-			"Repository-root static security and secret-hygiene guardrails enforced before commit.",
-			true,
-			[]string{"Hard Enforcement", "Security", "POL-001"},
-		)
-		doc.Status = "ENFORCED"
-		linked := matchCodeSymbols("auth", "jwt", "token", "hygiene")
-		for i := range linked {
-			linked[i].Relation = "ENFORCED_ON"
+		// 4. Load .garudarules Guardrail File
+		garudaRulesPath := filepath.Join(repoRoot, ".garudarules")
+		if st, err := os.Stat(garudaRulesPath); err == nil && !st.IsDir() {
+			docID := "doc:guardrail:garudarules"
+			doc := ensureDoc(
+				docID,
+				"Guardrail: .garudarules (Hard Security & Hygiene Rules)",
+				"GUARDRAIL",
+				".garudarules",
+				"Repository-root static security and secret-hygiene guardrails enforced before commit.",
+				true,
+				[]string{"Hard Enforcement", "Security", "POL-001"},
+			)
+			doc.Status = "ENFORCED"
+			linked := matchCodeSymbols("auth", "jwt", "token", "hygiene")
+			for i := range linked {
+				linked[i].Relation = "ENFORCED_ON"
+			}
+			components = append(components, DocComponentDTO{
+				ID:         "comp:rule:POL-001",
+				DocID:      docID,
+				DocTitle:   doc.Title,
+				DocType:    "GUARDRAIL",
+				DocPath:    ".garudarules",
+				Section:    "rules.POL-001",
+				Line:       3,
+				Modality:   "DENY",
+				Subject:    "security.credentials",
+				Predicate:  "FORBIDS_PATTERN",
+				Object:     "regex:(key|token|secret)",
+				Statement:  "[DENY] No hardcoded secrets, API keys, or private tokens permitted in source tree.",
+				Status:     "ENFORCED",
+				Reason:     "Enforced by Garuda hygiene scanner and Talon pre-commit gate.",
+				PolicyID:   "POL-001",
+				LinkedCode: linked,
+			})
 		}
-		components = append(components, DocComponentDTO{
-			ID:         "comp:rule:POL-001",
-			DocID:      docID,
-			DocTitle:   doc.Title,
-			DocType:    "GUARDRAIL",
-			DocPath:    ".garudarules",
-			Section:    "rules.POL-001",
-			Line:       3,
-			Modality:   "DENY",
-			Subject:    "security.credentials",
-			Predicate:  "FORBIDS_PATTERN",
-			Object:     "regex:(key|token|secret)",
-			Statement:  "[DENY] No hardcoded secrets, API keys, or private tokens permitted in source tree.",
-			Status:     "ENFORCED",
-			Reason:     "Enforced by Garuda hygiene scanner and Talon pre-commit gate.",
-			PolicyID:   "POL-001",
-			LinkedCode: linked,
-		})
 	}
 
 	// 5. Load ADR Claims from PostgreSQL `document_claims`
 	if pgStore != nil && pgStore.Pool() != nil {
 		rows, err := pgStore.Pool().Query(ctx, `
 			SELECT id::text, COALESCE(document_path, 'docs/adr'), COALESCE(document_title, 'ADR'),
+			       COALESCE(NULLIF(document_type, ''), 'ADR'),
 			       COALESCE(section_title, 'Decision'), COALESCE(line_start, 1),
 			       subject, modality, predicate, object,
 			       COALESCE(raw_statement, ''), COALESCE(status, 'SUPPORTED'),
@@ -418,11 +402,15 @@ func (s *Server) buildWorkspaceDocsGraph(ctx context.Context, pgStore *store.Pos
 		`, tenantID, workspaceID)
 		if err == nil {
 			for rows.Next() {
-				var id, docPath, docTitle, section, subj, mod, pred, obj, rawStmt, status, reason string
+				var id, docPath, docTitle, docType, section, subj, mod, pred, obj, rawStmt, status, reason string
 				var lineStart int
-				if rows.Scan(&id, &docPath, &docTitle, &section, &lineStart, &subj, &mod, &pred, &obj, &rawStmt, &status, &reason) == nil {
+				if rows.Scan(&id, &docPath, &docTitle, &docType, &section, &lineStart, &subj, &mod, &pred, &obj, &rawStmt, &status, &reason) == nil {
+					docType = strings.ToUpper(strings.TrimSpace(docType))
+					if docType == "" {
+						docType = "ADR"
+					}
 					baseName := filepath.Base(docPath)
-					docID := "doc:adr:" + strings.TrimSuffix(baseName, filepath.Ext(baseName))
+					docID := "doc:" + strings.ToLower(docType) + ":" + strings.TrimSuffix(baseName, filepath.Ext(baseName))
 					relPath := docPath
 					if idx := strings.Index(relPath, "docs/"); idx >= 0 {
 						relPath = relPath[idx:]
@@ -430,11 +418,11 @@ func (s *Server) buildWorkspaceDocsGraph(ctx context.Context, pgStore *store.Pos
 					doc := ensureDoc(
 						docID,
 						docTitle,
-						"ADR",
+						docType,
 						relPath,
-						"Architecture Decision Record governing "+subj+" and "+obj+".",
+						docType+" governing "+subj+" and "+obj+".",
 						true,
-						[]string{"ADR", mod, pred},
+						[]string{docType, mod, pred},
 					)
 
 					linked := matchCodeSymbols(subj, obj, "refund", "payment", "merkle", "store")
@@ -459,7 +447,7 @@ func (s *Server) buildWorkspaceDocsGraph(ctx context.Context, pgStore *store.Pos
 						ID:         "comp:claim:" + id,
 						DocID:      docID,
 						DocTitle:   doc.Title,
-						DocType:    "ADR",
+						DocType:    docType,
 						DocPath:    relPath,
 						Section:    section,
 						Line:       lineStart,
@@ -663,18 +651,20 @@ func (s *Server) buildWorkspaceDocsGraph(ctx context.Context, pgStore *store.Pos
 		existingCompIDs[c.ID] = true
 	}
 
-	for _, cd := range curatedDocs {
-		doc := ensureDoc(cd.id, cd.title, cd.docType, cd.path, cd.summary, cd.enforced, cd.tags)
-		for _, comp := range cd.comps {
-			if existingCompIDs[comp.ID] {
-				continue
+	if isCanonicalIndexedWorkspace {
+		for _, cd := range curatedDocs {
+			doc := ensureDoc(cd.id, cd.title, cd.docType, cd.path, cd.summary, cd.enforced, cd.tags)
+			for _, comp := range cd.comps {
+				if existingCompIDs[comp.ID] {
+					continue
+				}
+				comp.DocID = doc.ID
+				comp.DocTitle = doc.Title
+				comp.DocType = doc.DocType
+				comp.DocPath = doc.Path
+				comp.LinkedCode = matchCodeSymbols(comp.Subject, comp.Object, "merkle", "store", "api", "talon")
+				components = append(components, comp)
 			}
-			comp.DocID = doc.ID
-			comp.DocTitle = doc.Title
-			comp.DocType = doc.DocType
-			comp.DocPath = doc.Path
-			comp.LinkedCode = matchCodeSymbols(comp.Subject, comp.Object, "merkle", "store", "api", "talon")
-			components = append(components, comp)
 		}
 	}
 
@@ -877,17 +867,13 @@ func (s *Server) HandleDashboardDocsGraph(w http.ResponseWriter, r *http.Request
 
 	pgStore, ok := s.store.(*store.PostgresStore)
 	if !ok || pgStore == nil {
-		resp := s.buildWorkspaceDocsGraph(ctx, nil, uuid.Nil, uuid.Nil, "default")
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		writeJSONError(w, http.StatusServiceUnavailable, "store unavailable", nil)
 		return
 	}
 
 	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
 	if err != nil {
-		resp := s.buildWorkspaceDocsGraph(ctx, pgStore, uuid.Nil, uuid.Nil, strings.TrimSpace(r.URL.Query().Get("workspace")))
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		writeWorkspaceNotFound(w, r, strings.TrimSpace(r.URL.Query().Get("workspace")))
 		return
 	}
 
@@ -897,6 +883,8 @@ func (s *Server) HandleDashboardDocsGraph(w http.ResponseWriter, r *http.Request
 }
 
 // HandleDashboardDocsIngest serves POST /api/v1/dashboard/docs-ingest.
+// Strictly isolates ingested documents and ADRs to the authenticated user's (tenant_id, workspace_id)
+// without writing to the shared server repository filesystem.
 func (s *Server) HandleDashboardDocsIngest(w http.ResponseWriter, r *http.Request) {
 	applySecurityHeaders(w)
 	ctx := r.Context()
@@ -907,30 +895,31 @@ func (s *Server) HandleDashboardDocsIngest(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	pgStore, _ := s.store.(*store.PostgresStore)
-	var tenantID, workspaceID uuid.UUID
-	workspaceName := strings.TrimSpace(req.Workspace)
-	if workspaceName == "" {
-		workspaceName = strings.TrimSpace(r.URL.Query().Get("workspace"))
-	}
-	if pgStore != nil {
-		if scope, err := workspaceScopeFromRequest(ctx, r, pgStore); err == nil {
-			tenantID = scope.TenantID
-			workspaceID = scope.WorkspaceID
-			workspaceName = scope.WorkspaceName
-		}
-	}
-	if workspaceName == "" {
-		workspaceName = "default"
+	pgStore, ok := s.store.(*store.PostgresStore)
+	if !ok || pgStore == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "store unavailable", nil)
+		return
 	}
 
-	repoRoot := resolveRepoRoot()
+	scope, err := workspaceScopeFromRequest(ctx, r, pgStore)
+	if err != nil {
+		writeWorkspaceNotFound(w, r, strings.TrimSpace(req.Workspace))
+		return
+	}
+	tenantID := scope.TenantID
+	workspaceID := scope.WorkspaceID
+	workspaceName := scope.WorkspaceName
+
 	extractedCount := 0
+	docType := strings.ToUpper(strings.TrimSpace(req.DocType))
+	if docType == "" {
+		docType = "ADR"
+	}
 
 	if strings.TrimSpace(req.Content) != "" {
 		title := strings.TrimSpace(req.Title)
 		if title == "" {
-			title = "ADR-Custom: Architectural Guardrail"
+			title = docType + ": Architectural Rule"
 		}
 		slug := strings.ToLower(strings.ReplaceAll(title, " ", "-"))
 		slug = strings.Map(func(r rune) rune {
@@ -940,52 +929,98 @@ func (s *Server) HandleDashboardDocsIngest(w http.ResponseWriter, r *http.Reques
 			return -1
 		}, slug)
 		if slug == "" {
-			slug = "custom-adr"
+			slug = "custom-doc"
 		}
-		targetRelPath := req.Path
+		targetRelPath := strings.TrimSpace(req.Path)
 		if targetRelPath == "" {
-			targetRelPath = filepath.Join("docs", "adr", slug+".md")
+			targetRelPath = filepath.Join("docs", strings.ToLower(docType), slug+".md")
 		}
-		absPath := filepath.Join(repoRoot, targetRelPath)
-		_ = os.MkdirAll(filepath.Dir(absPath), 0755)
+
+		// Write to a durable, tenant+workspace-isolated directory (0700/0600, NEVER to global repoRoot/docs/adr)
+		isolatedDir := durableTenantStorageDir(tenantID, workspaceID, "docs")
+		absPath := filepath.Join(isolatedDir, filepath.Base(slug)+".md")
+
 		content := req.Content
 		if !strings.HasPrefix(strings.TrimSpace(content), "#") {
 			content = "# " + title + "\n\n## Decision\n" + content + "\n"
 		}
-		_ = os.WriteFile(absPath, []byte(content), 0644)
+		_ = os.WriteFile(absPath, []byte(content), 0600)
 
-		if claims, err := markdown.ParseADR(absPath, tenantID, workspaceName); err == nil && len(claims) > 0 {
-			extractedCount = len(claims)
-			if pgStore != nil && pgStore.Pool() != nil {
-				claimStore := store.NewClaimStore(pgStore.Pool())
-				_ = claimStore.SaveClaims(ctx, claims)
-				eval := knowledge.NewEvaluator(pgStore.Pool())
-				_, _, _ = eval.EvaluateWorkspace(ctx, tenantID, workspaceID)
+		claims, _ := markdown.ParseADR(absPath, tenantID, workspaceName)
+		for i := range claims {
+			claims[i].TenantID = tenantID
+			claims[i].Workspace = workspaceName
+			claims[i].DocumentTitle = title
+			claims[i].DocumentType = docType
+			claims[i].DocumentPath = targetRelPath
+		}
+		if len(claims) == 0 {
+			stmt := strings.TrimSpace(req.Content)
+			if len(stmt) > 220 {
+				stmt = stmt[:220] + "…"
+			}
+			claims = []knowledge.ClaimIR{
+				{
+					ID:            uuid.New(),
+					Workspace:     workspaceName,
+					TenantID:      tenantID,
+					DocumentPath:  targetRelPath,
+					DocumentTitle: title,
+					DocumentType:  docType,
+					SectionTitle:  "Decision",
+					LineStart:     1,
+					LineEnd:       1,
+					RawStatement:  stmt,
+					Subject:       workspaceName,
+					Modality:      knowledge.ModalityMust,
+					Predicate:     knowledge.PredicateCalls,
+					Object:        title,
+					Provenance:    knowledge.ProvenanceDeclared,
+					Confidence:    1.0,
+					Status:        knowledge.StatusSupported,
+				},
+			}
+		}
+		extractedCount = len(claims)
+		if pgStore.Pool() != nil {
+			claimStore := store.NewClaimStore(pgStore.Pool())
+			_ = claimStore.SaveClaims(ctx, claims)
+			eval := knowledge.NewEvaluator(pgStore.Pool())
+			_, _, _ = eval.EvaluateWorkspace(ctx, tenantID, workspaceID)
+
+			// If this is an ADR, also record it in the tenant+workspace-isolated decisions table
+			if docType == "ADR" {
+				ownerLabel := strings.TrimSpace(scope.UserFullName)
+				if ownerLabel == "" {
+					ownerLabel = scope.UserEmail
+				} else if scope.UserEmail != "" {
+					ownerLabel = ownerLabel + " <" + scope.UserEmail + ">"
+				}
+				decID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(tenantID.String()+":"+workspaceID.String()+":adr:"+title))
+				_, _ = pgStore.Pool().Exec(ctx, `
+					INSERT INTO decisions (id, tenant_id, workspace_id, created_by_user_id, title, status, scope_domain, scope_system, owner, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, $5, 'ACCEPTED', 'architecture', $6, $7, NOW(), NOW())
+					ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, updated_at = NOW()
+				`, decID, tenantID, workspaceID, scope.UserID, title, workspaceName, ownerLabel)
 			}
 		}
 	} else {
-		scanPath := strings.TrimSpace(req.Path)
-		if scanPath == "" {
-			scanPath = filepath.Join(repoRoot, "docs", "adr")
-		} else if !filepath.IsAbs(scanPath) {
-			scanPath = filepath.Join(repoRoot, scanPath)
-		}
-		if entries, err := os.ReadDir(scanPath); err == nil {
-			for _, entry := range entries {
-				if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
-					fullPath := filepath.Join(scanPath, entry.Name())
-					if claims, pErr := markdown.ParseADR(fullPath, tenantID, workspaceName); pErr == nil && len(claims) > 0 {
-						extractedCount += len(claims)
-						if pgStore != nil && pgStore.Pool() != nil {
+		// Re-scan only if this workspace has an indexed repository in PostgreSQL
+		hasCode, _ := workspaceHasIndexedCode(ctx, pgStore, tenantID, workspaceID)
+		if hasCode && tenantID.String() == "00000000-0000-0000-0000-000000000001" && workspaceName == "default" {
+			repoRoot := resolveRepoRoot()
+			scanPath := filepath.Join(repoRoot, "docs", "adr")
+			if entries, err := os.ReadDir(scanPath); err == nil {
+				for _, entry := range entries {
+					if !entry.IsDir() && strings.HasSuffix(strings.ToLower(entry.Name()), ".md") {
+						fullPath := filepath.Join(scanPath, entry.Name())
+						if claims, pErr := markdown.ParseADR(fullPath, tenantID, workspaceName); pErr == nil && len(claims) > 0 {
+							extractedCount += len(claims)
 							claimStore := store.NewClaimStore(pgStore.Pool())
 							_ = claimStore.SaveClaims(ctx, claims)
 						}
 					}
 				}
-			}
-			if pgStore != nil && pgStore.Pool() != nil {
-				eval := knowledge.NewEvaluator(pgStore.Pool())
-				_, _, _ = eval.EvaluateWorkspace(ctx, tenantID, workspaceID)
 			}
 		}
 	}
@@ -1127,14 +1162,17 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 		},
 	}
 
+	hasIndexedCode, _ := workspaceHasIndexedCode(ctx, pgStore, tenantID, workspaceID)
 	var hooks []HookStatusDTO
 	activeHooks := 0
 	for _, hd := range hookDefs {
 		full := filepath.Join(repoRoot, hd.relPath)
 		installed := false
-		if st, err := os.Stat(full); err == nil && !st.IsDir() {
-			installed = true
-			activeHooks++
+		if hasIndexedCode && tenantID.String() == "00000000-0000-0000-0000-000000000001" && workspaceName == "default" {
+			if st, err := os.Stat(full); err == nil && !st.IsDir() {
+				installed = true
+				activeHooks++
+			}
 		}
 		hooks = append(hooks, HookStatusDTO{
 			ID:          hd.id,
@@ -1197,7 +1235,7 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 		}
 	}
 
-	if len(riskHubs) == 0 && tenantID.String() == "00000000-0000-0000-0000-000000000001" && workspaceName == "default" {
+	if len(riskHubs) == 0 && hasIndexedCode && tenantID.String() == "00000000-0000-0000-0000-000000000001" && workspaceName == "default" {
 		riskHubs = []RiskHubDTO{
 			{
 				ID: "hub:AppendLeafAndSealTx", Name: "PostgresStore.AppendLeafAndSealTx", Kind: "method",
@@ -1259,7 +1297,15 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 		buildCtx.ReceiptHash = buildCtx.ComputeReceiptHash()
 	}
 	driftReport := analyzer.DetectEnvironmentDrift(buildCtx, buildCtx, workspaceName)
-	matrixRows, _ := talon.RunMatrixVerification(ctx, repoRoot, workspaceName, nil)
+	var matrixRows []talon.MatrixTargetVerdict
+	if hasIndexedCode {
+		matrixRows, _ = talon.RunMatrixVerification(ctx, repoRoot, workspaceName, nil)
+	} else {
+		buildCtx.ActiveFilesCount = 0
+		buildCtx.SkippedByBuildTagsCount = 0
+		buildCtx.GraphFingerprint = "unindexed-workspace"
+		buildCtx.ReceiptHash = "unindexed-workspace"
+	}
 
 	latestVerdict := &talon.GuardVerdict{
 		Workspace:               workspaceName,
