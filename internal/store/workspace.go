@@ -149,7 +149,9 @@ func (s *PostgresStore) ListUserWorkspaces(ctx context.Context, userID uuid.UUID
 		SELECT w.id, w.name, wm.role
 		  FROM workspaces w
 		  JOIN workspace_members wm ON wm.workspace_id = w.id
+		  LEFT JOIN users u ON u.id = wm.user_id
 		 WHERE wm.user_id = $1
+		   AND (u.primary_tenant_id IS NULL OR w.tenant_id = u.primary_tenant_id)
 		 ORDER BY w.name ASC
 	`, userID)
 	if err != nil {

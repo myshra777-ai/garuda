@@ -54,8 +54,7 @@ func ResolveMigrationsDir(preferred string) string {
 }
 
 // isAlreadyAppliedPgError returns true when a migration error indicates
-// the schema object already exists (for example, when migrations were
-// previously applied manually via psql -f outside the migrations table).
+// the schema object already exists.
 func isAlreadyAppliedPgError(err error) bool {
 	if err == nil {
 		return false
@@ -63,11 +62,11 @@ func isAlreadyAppliedPgError(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
-		case "42710", // duplicate_object (type, constraint, policy already exists)
-			"42P07", // duplicate_table (relation already exists)
-			"42701", // duplicate_column (column already exists)
-			"42P16", // invalid_table_definition (e.g. multiple primary keys on re-run)
-			"23505": // unique_violation on idempotent seed insert
+		case "42710", // duplicate_object
+			"42P07", // duplicate_table
+			"42701", // duplicate_column
+			"42P16", // invalid_table_definition
+			"23505": // unique_violation
 			return true
 		}
 	}
@@ -78,8 +77,6 @@ func isAlreadyAppliedPgError(err error) bool {
 }
 
 // Migrate runs all SQL migration files in the migrations directory in sorted order.
-// Each migration file is executed inside an atomic transaction, and handles
-// pre-populated schemas idempotently.
 func Migrate(connString string, migrationsDir string) error {
 	ctx := context.Background()
 	migrationsDir = ResolveMigrationsDir(migrationsDir)
@@ -90,7 +87,6 @@ func Migrate(connString string, migrationsDir string) error {
 	}
 	defer pool.Close()
 
-	// 1. Create tracking table
 	_, err = pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS migrations (
 			id SERIAL PRIMARY KEY,
@@ -102,14 +98,12 @@ func Migrate(connString string, migrationsDir string) error {
 		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
-	// 2. Discover and sort migration files
 	files, err := filepath.Glob(filepath.Join(migrationsDir, "*.sql"))
 	if err != nil {
 		return fmt.Errorf("failed to list migration files: %w", err)
 	}
 	sort.Strings(files)
 
-	// 3. Apply migrations in order
 	for _, file := range files {
 		name := filepath.Base(file)
 
@@ -135,7 +129,6 @@ func Migrate(connString string, migrationsDir string) error {
 		if _, execErr := tx.Exec(ctx, string(splitGooseUp(content))); execErr != nil {
 			_ = tx.Rollback(ctx)
 			if isAlreadyAppliedPgError(execErr) {
-				// Object already exists from a manual psql run; record migration and continue.
 				_, _ = pool.Exec(ctx, "INSERT INTO migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", name)
 				continue
 			}
@@ -154,10 +147,56 @@ func Migrate(connString string, migrationsDir string) error {
 		fmt.Printf("Applied migration: %s\n", name)
 	}
 
+	// Always enforce post-migration invariants (B-04 INCONCLUSIVE check + v1.9.9 Multi-Tenant RBAC columns & leak cleanup)
 	_, _ = pool.Exec(ctx, `
 		ALTER TABLE policy_evaluations DROP CONSTRAINT IF EXISTS policy_evaluations_decision_check;
 		ALTER TABLE policy_evaluations ADD CONSTRAINT policy_evaluations_decision_check
 			CHECK (decision IN ('ALLOW', 'WARN', 'REVIEW', 'BLOCK', 'INCONCLUSIVE'));
+
+		ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT NOT NULL DEFAULT '';
+		ALTER TABLE users ADD COLUMN IF NOT EXISTS account_type TEXT NOT NULL DEFAULT 'tenant_owner';
+		ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_tenant_id UUID;
+		ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title TEXT NOT NULL DEFAULT '';
+
+		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug TEXT NOT NULL DEFAULT '';
+		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS org_domain TEXT NOT NULL DEFAULT '';
+		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS invite_code TEXT NOT NULL DEFAULT '';
+		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS owner_user_id UUID;
+		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_tier TEXT NOT NULL DEFAULT 'enterprise';
+
+		UPDATE tenants
+		   SET invite_code = CASE
+		           WHEN id = '00000000-0000-0000-0000-000000000001' THEN 'GRD-GARUDA1'
+		           ELSE 'GRD-' || UPPER(SUBSTRING(REPLACE(id::text, '-', ''), 1, 6))
+		       END
+		 WHERE COALESCE(invite_code, '') = '';
+
+		UPDATE users
+		   SET username = LOWER(REGEXP_REPLACE(SPLIT_PART(email, '@', 1), '[^a-zA-Z0-9_]+', '_', 'g'))
+		 WHERE COALESCE(username, '') = '';
+
+		DELETE FROM workspace_members wm
+		 USING workspaces w, users u
+		 WHERE wm.workspace_id = w.id
+		   AND wm.user_id = u.id
+		   AND w.tenant_id = '00000000-0000-0000-0000-000000000001'
+		   AND u.email NOT IN ('admin@local', 'myshra777@gmail.com')
+		   AND EXISTS (
+		       SELECT 1 FROM tenant_members tm2
+		        WHERE tm2.user_id = u.id
+		          AND tm2.tenant_id != '00000000-0000-0000-0000-000000000001'
+		   );
+
+		DELETE FROM tenant_members tm
+		 USING users u
+		 WHERE tm.user_id = u.id
+		   AND tm.tenant_id = '00000000-0000-0000-0000-000000000001'
+		   AND u.email NOT IN ('admin@local', 'myshra777@gmail.com')
+		   AND EXISTS (
+		       SELECT 1 FROM tenant_members tm2
+		        WHERE tm2.user_id = u.id
+		          AND tm2.tenant_id != '00000000-0000-0000-0000-000000000001'
+		   );
 	`)
 
 	return nil

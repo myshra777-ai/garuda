@@ -127,12 +127,32 @@ var checkCmd = &cobra.Command{
 		if wsName == "" {
 			wsName = os.Getenv("GARUDA_WORKSPACE")
 		}
-		wsID, err := store.ResolveWorkspaceID(ctx, st.Pool(), tenantID, wsName)
+		wsID, resolvedWsName, err := store.EnsureWorkspaceID(ctx, st.Pool(), tenantID, wsName)
 		if err != nil {
 			return fmt.Errorf("resolve workspace %q: %w", wsName, err)
 		}
-		if wsName == "" {
-			wsName = wsID.String()
+		wsName = resolvedWsName
+
+		// If workspace has 0 indexed entities (e.g. cold CI runner), auto-index the repo first
+		if checkAutoIndexFlag {
+			var entCount int
+			_ = st.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1 AND kind != 'external'`, wsID).Scan(&entCount)
+			if entCount == 0 {
+				workspaceFlag = wsName
+				incrementalFlag = false
+				saveFlag = true
+				analyzeTargetFlag = platformStr
+				analyzeTagsFlag = checkTagsFlag
+				analyzeCGOFlag = cgoVal
+				if checkJSONFlag {
+					origStdout := os.Stdout
+					os.Stdout = os.Stderr
+					handleAnalyze(absDir)
+					os.Stdout = origStdout
+				} else {
+					handleAnalyze(absDir)
+				}
+			}
 		}
 
 		// Optional git-diff / staged / explicit files targeting

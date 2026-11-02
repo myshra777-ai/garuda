@@ -164,7 +164,7 @@ func (s *Server) buildWorkspaceDocsGraph(ctx context.Context, pgStore *store.Pos
 
 	// Track whether workspace entities came from live indexed AST or unindexed preview fallback
 	graphSourceMode := "live_indexed_ast"
-	if len(entities) == 0 {
+	if len(entities) == 0 && tenantID.String() == "00000000-0000-0000-0000-000000000001" && workspaceName == "default" {
 		graphSourceMode = "fallback_preview_unindexed"
 		entities = []EntityRecord{
 			{ID: "sym:Server.RegisterRoutes", Name: "Server.RegisterRoutes", Kind: "method", Package: "github.com/myshra777-ai/garuda/internal/api", File: "internal/api/handler.go", Exported: true, Repo: workspaceName},
@@ -1197,7 +1197,7 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 		}
 	}
 
-	if len(riskHubs) == 0 {
+	if len(riskHubs) == 0 && tenantID.String() == "00000000-0000-0000-0000-000000000001" && workspaceName == "default" {
 		riskHubs = []RiskHubDTO{
 			{
 				ID: "hub:AppendLeafAndSealTx", Name: "PostgresStore.AppendLeafAndSealTx", Kind: "method",

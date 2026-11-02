@@ -162,13 +162,11 @@ var talonContractCmd = &cobra.Command{
 		if wsName == "" {
 			wsName = getWorkspaceName()
 		}
-		wsID, err := store.ResolveWorkspaceID(ctx, st.Pool(), tenantID, wsName)
+		wsID, resolvedWsName, err := store.EnsureWorkspaceID(ctx, st.Pool(), tenantID, wsName)
 		if err != nil {
 			return err
 		}
-		if wsName == "" {
-			wsName = wsID.String()
-		}
+		wsName = resolvedWsName
 
 		policyDir := talonPoliciesDirFlag
 		if policyDir == "" {
@@ -212,13 +210,11 @@ var talonBriefCmd = &cobra.Command{
 		if wsName == "" {
 			wsName = getWorkspaceName()
 		}
-		wsID, err := store.ResolveWorkspaceID(ctx, st.Pool(), tenantID, wsName)
+		wsID, resolvedWsName, err := store.EnsureWorkspaceID(ctx, st.Pool(), tenantID, wsName)
 		if err != nil {
 			return err
 		}
-		if wsName == "" {
-			wsName = wsID.String()
-		}
+		wsName = resolvedWsName
 
 		brief, err := talon.BuildPreEditBriefing(ctx, st, tenantID, wsID, wsName, target, talonPoliciesDirFlag)
 		if err != nil {
@@ -288,13 +284,11 @@ var talonGuardCmd = &cobra.Command{
 		if wsName == "" {
 			wsName = getWorkspaceName()
 		}
-		wsID, err := store.ResolveWorkspaceID(ctx, st.Pool(), tenantID, wsName)
+		wsID, resolvedWsName, err := store.EnsureWorkspaceID(ctx, st.Pool(), tenantID, wsName)
 		if err != nil {
 			return err
 		}
-		if wsName == "" {
-			wsName = wsID.String()
-		}
+		wsName = resolvedWsName
 
 		var explicit []string
 		if talonFilesFlag != "" {
@@ -305,10 +299,25 @@ var talonGuardCmd = &cobra.Command{
 			}
 		}
 
-		// Incrementally sync working tree if dirty files exist
+		// Auto-index full repo if workspace has 0 entities, or incrementally sync dirty files
 		if talonAutoIndexFlag {
+			var entCount int
+			_ = st.Pool().QueryRow(ctx, `SELECT COUNT(*)::int FROM entities WHERE workspace_id = $1 AND kind != 'external'`, wsID).Scan(&entCount)
 			_, deltas, dErr := diff.CollectGitDeltas(absRepo, talonStagedFlag, talonDiffFlag, explicit)
-			if dErr == nil && diff.HasSourceFileDeltas(deltas) {
+			if entCount == 0 {
+				workspaceFlag = wsName
+				incrementalFlag = false
+				saveFlag = true
+				analyzeTargetFlag = talonPlatformFlag
+				analyzeTagsFlag = talonTagsFlag
+				analyzeCGOFlag = cgoVal
+				origStdout := os.Stdout
+				if talonJSONFlag || talonHookFlag {
+					os.Stdout = os.Stderr
+				}
+				handleAnalyze(absRepo)
+				os.Stdout = origStdout
+			} else if dErr == nil && diff.HasSourceFileDeltas(deltas) {
 				workspaceFlag = wsName
 				incrementalFlag = true
 				saveFlag = true
@@ -415,13 +424,11 @@ var talonRunCmd = &cobra.Command{
 		if wsName == "" {
 			wsName = getWorkspaceName()
 		}
-		wsID, err := store.ResolveWorkspaceID(ctx, st.Pool(), tenantID, wsName)
+		wsID, resolvedWsName, err := store.EnsureWorkspaceID(ctx, st.Pool(), tenantID, wsName)
 		if err != nil {
 			return err
 		}
-		if wsName == "" {
-			wsName = wsID.String()
-		}
+		wsName = resolvedWsName
 
 		reIndex := func(dir string) {
 			workspaceFlag = wsName

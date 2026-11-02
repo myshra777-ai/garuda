@@ -1,4 +1,10 @@
+-- ==========================================================================
 -- 096_policy_evaluations_decision_check.sql
+-- Widens policy_evaluations_decision_check to permit INCONCLUSIVE (B-04
+-- vacuous ALLOW prevention when a policy scope matches 0 entities) as well
+-- as ALLOW, WARN, REVIEW, and BLOCK.
+-- ==========================================================================
+
 ALTER TABLE policy_evaluations DROP CONSTRAINT IF EXISTS policy_evaluations_decision_check;
 ALTER TABLE policy_evaluations ADD CONSTRAINT policy_evaluations_decision_check
     CHECK (decision IN ('ALLOW', 'WARN', 'REVIEW', 'BLOCK', 'INCONCLUSIVE'));

@@ -34,6 +34,91 @@ import (
 	"github.com/myshra777-ai/garuda/internal/talon"
 )
 
+// computeRFC6962LeafAndContentHash computes both the raw SHA-256 content digest
+// and the genuine RFC 6962 domain-separated leaf commitment SHA256(0x00 || data).
+func computeRFC6962LeafAndContentHash(data []byte) (contentSHA256 string, rfc6962LeafHash string) {
+	cSum := sha256.Sum256(data)
+	leafInput := make([]byte, 1+len(data))
+	leafInput[0] = 0x00
+	copy(leafInput[1:], data)
+	lSum := sha256.Sum256(leafInput)
+	return hex.EncodeToString(cSum[:]), hex.EncodeToString(lSum[:])
+}
+
+// extractFunctionBodyFormula reads the source file around startLine and extracts
+// return/calculation expressions and unit-scaling factors (1e7, 1e5, 100, /, *).
+func extractFunctionBodyFormula(repoRoot, relFilePath string, startLine int, fallbackSig string) (formulaExpr string, scaleFactors []string, extracted bool) {
+	if relFilePath == "" {
+		return fallbackSig, nil, false
+	}
+	cleanRel := strings.TrimSpace(relFilePath)
+	if idx := strings.Index(cleanRel, ":"); idx > 0 {
+		cleanRel = cleanRel[:idx]
+	}
+	candidates := []string{cleanRel}
+	if repoRoot != "" {
+		candidates = append([]string{filepath.Join(repoRoot, cleanRel)}, candidates...)
+	}
+	var content []byte
+	for _, cand := range candidates {
+		if b, err := os.ReadFile(cand); err == nil && len(b) > 0 {
+			content = b
+			break
+		}
+	}
+	if len(content) == 0 {
+		return fallbackSig, nil, false
+	}
+	lines := strings.Split(string(content), "\n")
+	startIdx := 0
+	if startLine > 1 && startLine <= len(lines) {
+		startIdx = startLine - 1
+	}
+	endIdx := startIdx + 40
+	if endIdx > len(lines) {
+		endIdx = len(lines)
+	}
+	var exprParts []string
+	scaleSet := make(map[string]bool)
+	depth := 0
+	started := false
+	for i := startIdx; i < endIdx; i++ {
+		ln := strings.TrimSpace(lines[i])
+		if strings.Contains(ln, "{") {
+			depth += strings.Count(ln, "{")
+			started = true
+		}
+		if strings.Contains(ln, "}") {
+			depth -= strings.Count(ln, "}")
+		}
+		if i > startIdx && (strings.HasPrefix(ln, "return ") || strings.Contains(ln, " := ") || strings.Contains(ln, " = ")) {
+			if strings.ContainsAny(ln, "*/+-") || strings.HasPrefix(ln, "return ") {
+				exprParts = append(exprParts, ln)
+			}
+		}
+		for _, tok := range []string{"1e7", "10000000", "1e5", "100000", "100.0", "* 100", "/ 100", "1000", "float64("} {
+			if strings.Contains(ln, tok) {
+				scaleSet[tok] = true
+			}
+		}
+		if started && depth <= 0 && i > startIdx {
+			break
+		}
+	}
+	for k := range scaleSet {
+		scaleFactors = append(scaleFactors, k)
+	}
+	sort.Strings(scaleFactors)
+	if len(exprParts) > 0 {
+		joined := strings.Join(exprParts, " ; ")
+		if len(joined) > 180 {
+			joined = joined[:180] + "..."
+		}
+		return joined, scaleFactors, true
+	}
+	return fallbackSig, scaleFactors, false
+}
+
 func (s *MCPServer) resolveMCPWorkspaceName(args map[string]interface{}, wsID uuid.UUID) string {
 	wsName, _ := args["workspace"].(string)
 	wsName = strings.TrimSpace(wsName)
@@ -385,6 +470,11 @@ func (s *MCPServer) handleDisambiguateLogic(args map[string]interface{}) (interf
 		if sig == "" {
 			sig = fmt.Sprintf("func %s.%s()", p.pkg, p.name)
 		}
+		formulaExpr, scaleFactors, bodyExtracted := extractFunctionBodyFormula(resolveMCPRepoRoot(), p.file, p.line, sig)
+		formulaSource := "signature_only"
+		if bodyExtracted {
+			formulaSource = "ast_body_extracted"
+		}
 		fileLine := p.file
 		if p.line > 0 && fileLine != "" {
 			fileLine = fmt.Sprintf("%s:%d", fileLine, p.line)
@@ -398,7 +488,10 @@ func (s *MCPServer) handleDisambiguateLogic(args map[string]interface{}) (interf
 			"ownership_source":      ownerSrc,
 			"symbol":                fmt.Sprintf("%s.%s", p.pkg, p.name),
 			"file":                  fileLine,
-			"formula":               sig,
+			"signature":             sig,
+			"formula":               formulaExpr,
+			"formula_source":        formulaSource,
+			"scale_factors":         scaleFactors,
 			"weight":                w,
 			"recommended_pct":       int(math.Round(w * 100)),
 			"severity_tier":         sev,
@@ -662,7 +755,12 @@ func (s *MCPServer) handleAuditDataDiscrepancy(args map[string]interface{}) (int
 			FROM entities
 			WHERE workspace_id = $1 AND kind IN ('function', 'method')
 		`+ExcludeFixturesSQL("file_path", includeFixtures)+`
-			ORDER BY is_exported DESC, name ASC
+			ORDER BY
+			  CASE
+			    WHEN name ILIKE '%Calculate%' OR name ILIKE '%Compute%' OR name ILIKE '%Ratio%' OR name ILIKE '%Claim%' OR name ILIKE '%Audit%' OR name ILIKE '%Discrepancy%' OR name ILIKE '%Count%' THEN 0
+			    ELSE 1
+			  END ASC,
+			  is_exported DESC, name ASC
 			LIMIT 2
 		`, workspaceID)
 		if qErr == nil {
@@ -933,8 +1031,8 @@ func (s *MCPServer) handleSynthesizeRulebook(args map[string]interface{}) (inter
 	if err := os.WriteFile(draftAbsPath, []byte(md), 0644); err != nil {
 		return nil, fmt.Errorf("write draft rulebook to %s: %w", draftDisplayPath, err)
 	}
-	sum := sha256.Sum256([]byte(md))
-	hashHex := hex.EncodeToString(sum[:])
+	contentHashHex, hashHex := computeRFC6962LeafAndContentHash([]byte(md))
+	_ = contentHashHex
 
 	statusStr := "DRAFT_AWAITING_HUMAN_APPROVAL"
 	if counts.Entities == 0 {
@@ -1014,9 +1112,9 @@ func (s *MCPServer) handleApproveBaseRulebook(args map[string]interface{}) (inte
 	} else {
 		renderedContent += fmt.Sprintf("\n- **Proposed By MCP Agent**: `%s` at `%s` (Awaiting Human CLI Co-Sign)\n", callerAgent, time.Now().UTC().Format(time.RFC3339))
 	}
-	sum := sha256.Sum256([]byte(renderedContent))
-	hashHex := hex.EncodeToString(sum[:])
-	renderedContent += fmt.Sprintf("- **RFC 6962 Merkle Leaf Hash**: `%s`\n", hashHex)
+	contentHashHex, hashHex := computeRFC6962LeafAndContentHash([]byte(renderedContent))
+	renderedContent += fmt.Sprintf("- **Content SHA-256 Digest**: `%s`\n", contentHashHex)
+	renderedContent += fmt.Sprintf("- **RFC 6962 Domain-Separated Merkle Leaf Hash (0x00 || content)**: `%s`\n", hashHex)
 	if err := os.WriteFile(targetAbsPath, []byte(renderedContent), 0644); err != nil {
 		return nil, fmt.Errorf("write rulebook to %s: %w", targetDisplayPath, err)
 	}
@@ -1041,6 +1139,8 @@ func (s *MCPServer) handleApproveBaseRulebook(args map[string]interface{}) (inte
 		"actor_channel":         "MCP_AGENT",
 		"human_cli_verified":    humanVerified,
 		"recorded_at":           time.Now().UTC().Format(time.RFC3339),
+		"content_sha256":        contentHashHex,
+		"rfc6962_leaf_hash":     hashHex,
 		"merkle_hash":           hashHex,
 		"human_action_required": fmt.Sprintf("garuda rulebook approve --workspace %s --by <human-name>", wsName),
 	}

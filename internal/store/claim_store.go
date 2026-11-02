@@ -64,6 +64,47 @@ func ResolveWorkspaceID(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.U
 	return id, nil
 }
 
+// EnsureWorkspaceID resolves the named workspace (or the most recently updated
+// workspace if name is empty), and automatically provisions the tenant and
+// a "default" workspace if none exist yet (preventing cold-CI PR gate failures).
+func EnsureWorkspaceID(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, name string) (uuid.UUID, string, error) {
+	wsName := strings.TrimSpace(name)
+	if id, err := ResolveWorkspaceID(ctx, pool, tenantID, wsName); err == nil && id != uuid.Nil {
+		if wsName == "" {
+			_ = pool.QueryRow(ctx, `SELECT name FROM workspaces WHERE id = $1`, id).Scan(&wsName)
+		}
+		if wsName == "" {
+			wsName = "default"
+		}
+		return id, wsName, nil
+	}
+
+	if wsName == "" {
+		wsName = "default"
+	}
+	if pool == nil {
+		return uuid.Nil, wsName, fmt.Errorf("database pool is nil")
+	}
+
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO tenants (id, name) VALUES ($1, $2)
+		ON CONFLICT (id) DO NOTHING
+	`, tenantID, "default-tenant")
+
+	newID := uuid.New()
+	var resolvedID uuid.UUID
+	err := pool.QueryRow(ctx, `
+		INSERT INTO workspaces (id, tenant_id, name, description)
+		VALUES ($1, $2, $3, 'Auto-provisioned workspace')
+		ON CONFLICT (tenant_id, name) DO UPDATE SET updated_at = NOW()
+		RETURNING id
+	`, newID, tenantID, wsName).Scan(&resolvedID)
+	if err != nil {
+		return uuid.Nil, wsName, fmt.Errorf("auto-provision workspace %q for tenant %s: %w", wsName, tenantID, err)
+	}
+	return resolvedID, wsName, nil
+}
+
 // SaveClaims clears existing claims for the target document path (both relative and absolute forms)
 // and persists the fresh deduplicated batch atomically.
 func (s *ClaimStore) SaveClaims(ctx context.Context, claims []knowledge.ClaimIR) error {

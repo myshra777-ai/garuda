@@ -183,6 +183,7 @@ func (s *Server) RegisterRoutes(r *mux.Router) {
 	})
 
 	sess.HandleFunc("/dashboard", s.HandleDashboard).Methods(http.MethodGet)
+	sess.HandleFunc("/api/v1/dashboard/me", s.HandleDashboardMe).Methods(http.MethodGet)
 	sess.HandleFunc("/api/v1/dashboard/stats", s.HandleDashboardStats).Methods(http.MethodGet)
 	sess.HandleFunc("/api/v1/dashboard/search", s.HandleDashboardSearch).Methods(http.MethodGet)
 	sess.HandleFunc("/api/v1/dashboard/sessions", s.HandleDashboardSessions).Methods(http.MethodGet)
