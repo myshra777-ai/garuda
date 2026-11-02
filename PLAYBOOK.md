@@ -1,8 +1,8 @@
-# Garuda Operational Playbook (`v1.9.9` Universal)
+# Garuda Operational Playbook
 
-**Zero-Dependency Setup · Active Agent Harness (`Garuda Talon`) · Diff-Scoped Change Control · 10-Surface Dashboard PWA · Reference**
+**One-Command Setup · Active Agent Harness (`Garuda Talon`) · Diff-Scoped Change Control · 10-Surface Dashboard PWA · Reference**
 
-This playbook is the complete operational guide for installing, configuring, and running Garuda `v1.9.9` against real-world Go, Python, and TypeScript codebases across **Windows 10/11 (PowerShell)**, **macOS**, **Linux**, **Chromebook (ChromiumOS)**, and **Android (Termux & Chrome PWA)**.
+This playbook is the complete operational guide for installing, configuring, and running Garuda against real-world Go, Python, and TypeScript codebases across **Windows 10/11 (PowerShell)**, **macOS**, **Linux**, **Chromebook (ChromiumOS)**, and **Android (Termux & Chrome PWA)**.
 
 ---
 
@@ -10,7 +10,7 @@ This playbook is the complete operational guide for installing, configuring, and
 
 1. [What Garuda Is & Why It Exists](#1-what-garuda-is--why-it-exists)
 2. [How Garuda Helps Every Persona](#2-how-garuda-helps-every-persona)
-3. [1-Command Universal Setup (Zero Dependencies)](#3-1-command-universal-setup-zero-dependencies)
+3. [One-Command Setup](#3-one-command-setup)
 4. [Instant Self-Diagnostics & Repair (`garuda doctor`)](#4-instant-self-diagnostics--repair-garuda-doctor)
 5. [Garuda Talon: Active Agent Execution Harness](#5-garuda-talon-active-agent-execution-harness)
 6. [Diff-Scoped Change-Control Gate (`garuda check`)](#6-diff-scoped-change-control-gate-garuda-check)
@@ -19,10 +19,13 @@ This playbook is the complete operational guide for installing, configuring, and
 9. [Ingesting & Verifying Markdown ADRs (`garuda docs`)](#9-ingesting--verifying-markdown-adrs-garuda-docs)
 10. [Runtime OpenTelemetry Verification & Contradiction Quarantine](#10-runtime-opentelemetry-verification--contradiction-quarantine)
 11. [10-Surface Software Intelligence Instrument (`/dashboard` PWA)](#11-10-surface-software-intelligence-instrument-dashboard-pwa)
-12. [35 Active MCP Tools, Prompts & Resources](#12-23-active-mcp-tools-prompts--resources)
+12. [54 MCP Tools, Prompts & Resources](#12-54-mcp-tools-prompts--resources)
 13. [Multi-Agent Checkpoints, Handoff & Resume](#13-multi-agent-checkpoints-handoff--resume)
 14. [Enforcing Gates in CI/CD & Pre-Commit](#14-enforcing-gates-in-cicd--pre-commit)
 15. [Troubleshooting & Common Error Reference](#15-troubleshooting--common-error-reference)
+16. [Docs-to-Code Lineage Graph, Talon Risk Hub & BuildContext Matrix](#16-docs-to-code-lineage-graph-talon-risk-hub--buildcontext-matrix)
+17. [Formula Disambiguation, Criticality Tiers, Data Audits & Base Rulebook](#17-formula-disambiguation-criticality-tiers-data-audits--base-rulebook)
+18. [Provenance Flags, MCP Security Controls & Additional MCP Tools](#18-provenance-flags-mcp-security-controls--additional-mcp-tools)
 
 ---
 
@@ -34,7 +37,7 @@ AI coding agents (**Cursor**, **Claude Code**, **Codex**, **Devin**, **Windsurf*
 - Modifying a core shared struct or class with 170+ downstream callers without checking blast radius.
 - Violating documented Architecture Decision Records (ADRs) or making undeclared runtime service calls observed in OpenTelemetry spans.
 
-**Garuda `v1.9.9` is the deterministic change-control gate, active AI execution harness (`Garuda Talon`), and software intelligence instrument for AI-written code.**
+**Garuda is the deterministic change-control gate, active AI execution harness (`Garuda Talon`), and software intelligence instrument for AI-written code.**
 
 ### The 5-Plane Architecture
 
@@ -53,50 +56,51 @@ AI coding agents (**Cursor**, **Claude Code**, **Codex**, **Devin**, **Windsurf*
 - **Product Managers & Non-Technical Founders:** Run one command in Windows PowerShell (`install.ps1`) or macOS Terminal (`install.sh`) with **zero pre-installed dependencies**. Open `http://localhost:8080/dashboard` (or install it as a desktop/mobile PWA) to inspect workspace health, high-risk coupling hubs, whether AI-generated features obey documented architecture rules, and an auditable decision log.
 - **Software Engineers:** Run `garuda talon brief <Symbol>` before refactoring to see every caller and active rule, and run `garuda check --diff HEAD` to check only your uncommitted changes without getting blocked by pre-existing baseline debt.
 - **Staff / Principal Architects:** Commit declarative rules in `policies/*.yaml` and Markdown ADRs in `docs/adr/*.md`. Garuda compiles them into `.garuda/TALON_CONTRACT.md` and enforces them automatically across every developer's editor, pre-commit hook, and CI pipeline.
-- **AI Coding Agents (Cursor, Claude Code, Codex, Windsurf):** Receive active architectural guardrails on the very first MCP call (`GARUDA_TALON_ENFORCE=true`), query 35 deterministic MCP tools, and receive structured **Self-Repair Prompts** whenever an edit triggers a `BLOCK`.
+- **AI Coding Agents (Cursor, Claude Code, Codex, Windsurf):** Receive active architectural guardrails on the very first MCP call (`GARUDA_TALON_ENFORCE=true`), query 54 deterministic MCP tools, and receive structured **Self-Repair Prompts** whenever an edit triggers a `BLOCK`.
 - **Security & Governance Leads:** Verify cryptographic RFC 6962 Merkle inclusion proofs for every saved architecture decision and inspect quarantined runtime OpenTelemetry contradictions.
 
 ---
 
-## 3. 1-Command Universal Setup (Zero Dependencies — `v1.9.9`)
+## 3. One-Command Setup
 
-You do **not** need Go, PostgreSQL, GCC/Xcode/MinGW, Homebrew, or Docker pre-installed, and you do **not** need Administrator or `sudo` privileges. Garuda `v1.9.9` provisions a portable user-space Go `1.26.0` toolchain (`~/.garuda/toolchain/go`), pre-built Portable PostgreSQL `16.4` (`~/.garuda/runtime/postgres`), and a local database cluster (`~/.garuda/data/pg` bound to explicit IPv4 `127.0.0.1:5433`) automatically:
+Full per-OS instructions, prerequisites, environment variables and troubleshooting live in [INSTALL.md](INSTALL.md). The short version:
 
-### Windows 10 / 11 (PowerShell 5.1, PowerShell 7, or Git Bash)
-
-```powershell
-# Option A: 1-Command Remote Install & Launch (pure 7-bit ASCII for Windows PowerShell 5.1 & 7)
-Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 | iex
-
-# Option B: From inside a cloned/extracted repository
-cd $HOME\garuda
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
-```
-
-### macOS (Apple Silicon & Intel), Linux, Chromebook (Crostini) & Android (Termux)
+**macOS, Linux, ChromeOS (Linux/Crostini) and Android (Termux):**
 
 ```bash
-# Option A: 1-Command Remote Install & Launch (uses fast shallow clone + 3-second Portable Postgres 16)
 curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash
-
-# Option B: From inside a cloned/extracted repository
+# or, from a clone:
 git clone --depth 1 https://github.com/myshra777-ai/garuda.git && cd garuda && ./setup.sh
 ```
 
-### Key `v1.9.9` Cross-OS Provisioning Guarantees
-- **No 45-Minute Homebrew Source Compiles on macOS**: Automatically downloads pre-built Portable PostgreSQL `16.4.0` (`~18 MB`) into `~/.garuda/runtime/postgres/bin` when PostgreSQL is missing.
-- **No Double Go Toolchain Download**: Inspects `go.mod` and downloads Portable Go `1.26.0` directly into `~/.garuda/toolchain/go`, compiling all 4 binaries in a single `CGO_ENABLED=0` pass with commit build-stamp caching (`bin/.build_stamp`).
-- **Explicit IPv4 `127.0.0.1:5433` & Socket Isolation**: Normalizes `@localhost:` to `@127.0.0.1:` in `DATABASE_URL` (avoiding macOS IPv6 `[::1]:5433` connection refusals) and isolates Unix sockets in `~/.garuda/data/run` (`chmod 700`).
+**Windows 10 / 11 (PowerShell 5.1 or 7):**
+
+```powershell
+irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 | iex
+# or, from a clone:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+What the setup scripts do, in order, without needing Administrator or `sudo`:
+
+1. Use a PostgreSQL that is already running, otherwise download a portable PostgreSQL 16 into `~/.garuda/runtime/postgres` and start a private cluster on `127.0.0.1:5433` (Docker is the fallback; Termux installs PostgreSQL with `pkg`).
+2. Use the Go on your `PATH` if it satisfies `go.mod`, otherwise download a matching portable Go into `~/.garuda/toolchain/go`.
+3. Build `garuda`, `garuda-api`, `garuda-mcp` and `garuda-talon` into `./bin`.
+4. Run `garuda init`: apply the SQL migrations, write `.env` (database URL, JWT keys, a random `GARUDA_CONTROL_TOKEN`), create the owner account, index the repository and run `garuda talon init`.
+5. Start the API on `127.0.0.1:8080` and print the dashboard URL and the owner login.
+
+The installer needs `git`, `curl` and `tar` (plus `unzip` on Linux/macOS when it downloads PostgreSQL). It does **not** need Go, PostgreSQL, a C compiler or Homebrew.
 
 ### Direct CLI Repository Initialization (`garuda init`)
 
-Once compiled, you can initialize any repository on your machine in one command:
+Once the binaries are built, point Garuda at any repository:
 
 ```bash
-./bin/garuda init /path/to/repo --workspace my-system --email myshra777@gmail.com --password garuda2026
+export GARUDA_PASSWORD='choose-a-long-passphrase'   # at least 8 characters
+./bin/garuda init /path/to/repo --workspace my-system --email you@example.com
 ```
 
-All Garuda binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) automatically load `.env` from your working directory—you never need to manually export `DATABASE_URL`, `GARUDA_WORKSPACE`, `PORT`, or `JWT_PRIVATE_KEY_HEX` across terminal tabs.
+All Garuda binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) load `.env` from the working directory, so you do not need to export `DATABASE_URL`, `GARUDA_WORKSPACE`, `PORT` or `JWT_PRIVATE_KEY_HEX` in every terminal.
 
 ---
 
@@ -268,20 +272,24 @@ Press `⌘K` (macOS) or `Ctrl+K` (Windows/Linux/Chromebook) from any surface to 
 
 ---
 
-## 12. 35 Active MCP Tools, Prompts & Resources
+## 12. 54 MCP Tools, Prompts & Resources
 
 `bin/garuda-mcp` implements JSON-RPC 2.0 over stdio and exposes:
 - **MCP Prompts (`prompts/list`, `prompts/get`):** `garuda.architectural_contract`
 - **MCP Resources (`resources/list`, `resources/read`):** `garuda://workspace/contract`, `garuda://workspace/adr-guardrails`
-- **35 MCP Tools (`tools/list`, `tools/call`):**
+- **54 MCP Tools (`tools/list`, `tools/call`)**, grouped below by purpose. The complete, generated table with read-only/mutating mode is in [docs/API.md](docs/API.md#the-54-mcp-tools):
   - *Active Talon Enforcement:* `garuda.talon_pre_edit`, `garuda.talon_verify_edit`
   - *Orientation & Discovery:* `garuda.briefing`, `garuda.entities`, `garuda.find_entity`, `garuda.inspect`, `garuda.query`
   - *Topology & Impact:* `garuda.neighbors`, `garuda.blast_radius`, `garuda.implementers`, `garuda.subclasses`, `garuda.get_impact`, `garuda.get_lineage`
   - *Policy & Governance:* `garuda.policy.list`, `garuda.policy.evaluate`, `garuda.verify_policy_evaluation`, `garuda.governance.status`, `garuda.propose_decision`
   - *Epistemic Evidence & Drift:* `garuda.detect_contradictions`, `garuda.check_drift`, `garuda.query_claims`
-  - *Multi-Agent Continuity:* `garuda.handoff`, `garuda.resume`
+  - *Multi-Agent Continuity:* `garuda.create_task`, `garuda.handoff`, `garuda.resume`
+  - *Snapshots, receipts & evidence:* `garuda.snapshot`, `garuda.summary`, `garuda.snippet`, `garuda.explain_claim`, `garuda.verify_claim`, `garuda.verify_evidence`, `garuda.verify_receipt`, `garuda.diff_snapshots`, `garuda.diff_impact`, `garuda.audit_export`
+  - *Data & logic audit, rulebook and docs:* `garuda.disambiguate_logic`, `garuda.decide_logic_variant`, `garuda.audit_data_discrepancy`, `garuda.reconcile_data_audit`, `garuda.synthesize_rulebook`, `garuda.approve_base_rulebook`, `garuda.criticality_tiers`, `garuda.docs_graph`, `garuda.docs_ingest`
+  - *Operations & hygiene:* `garuda.doctor_diagnose`, `garuda.build_matrix_check`, `garuda.hygiene_report`, `garuda.preflight_bundle`, `garuda.owners`, `garuda.symbol_test_coverage`, `garuda.create_workspace`, `garuda.reset_audit_state`
+  - *Legacy aliases:* `garuda.audit_financial_discrepancy`, `garuda.reconcile_financial_audit`, `garuda.test_coverage`
 
-Verify all 43 MCP & Talon protocol checks at any time with:
+Run the MCP & Talon protocol checks at any time with (needs a built `./bin/garuda-mcp` and an initialized workspace):
 
 ```bash
 python3 scripts/mcp_verify.py
@@ -322,7 +330,7 @@ For any installation, database, build, MCP, or Git hook issue across Windows Pow
    .\bin\garuda.exe doctor --fix
    ```
 2. **Quick Remedies for Common Situations**:
-   - **Windows PowerShell 5.1 `UnexpectedToken` or `PSSecurityException`**: Pull latest `v1.9.9` (`git pull --rebase origin main`) and run `powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1`.
+   - **Windows PowerShell 5.1 `UnexpectedToken` or `PSSecurityException`**: Pull the latest release (`git pull --rebase origin main`) and run `powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1`.
    - **macOS/Linux `dial tcp [::1]:5433: connect: connection refused`**: Run `./setup.sh` or `./bin/garuda doctor --fix` (which normalizes `DATABASE_URL` to `127.0.0.1:5433` and starts the portable cluster in `~/.garuda/data/pg`).
    - **Environment Drift Warning (`⚠️ Environment drift detected`)**: Run `./bin/garuda analyze . --workspace default --save` to refresh the workspace `BuildContext` receipt for your current machine.
    - **Git Push Rejected (`! [rejected] main -> main (non-fast-forward)`)**: Run `git checkout -- go.mod go.sum 2>/dev/null; git pull --rebase origin main && git push origin main`.
@@ -330,7 +338,7 @@ For any installation, database, build, MCP, or Git hook issue across Windows Pow
 
 ---
 
-## 16. v1.9.9 Operational Workflows: Docs-to-Code Lineage Graph, Talon Risk Hub & Deterministic BuildContext Matrix
+## 16. Docs-to-Code Lineage Graph, Talon Risk Hub & BuildContext Matrix
 
 ### 16.1 Exploring & Ingesting into the 4-Tier Docs, Specs & Guardrails Graph
 Every Markdown ADR (`docs/adr/*.md`), design spec (`docs/specs/*.md`), system invariant (`docs/invariants.md`), and YAML policy (`policies/*.yaml`) is automatically parsed into a 4-tier lineage graph (`Document -> Normative Rule -> Active Guardrail -> Code Symbol`):
@@ -360,7 +368,7 @@ If environment drift is detected between the indexed workspace graph and the act
 
 ---
 
-## 17. v1.9.9 Extended Workflows: Human-in-the-Loop Formula Disambiguation, Surface Criticality Tiers, Financial Data Audits & Auto-Synthesized Base Rulebook
+## 17. Formula Disambiguation, Criticality Tiers, Data Audits & Base Rulebook
 
 ### 17.1 Multi-Team Formula Disambiguation (`0.0–1.0` Weights & Least Architectural Harm)
 When multiple teams implement different undocumented formulas for the same business concept (e.g., `Loss Ratio` across **Ops**, **Marketing**, and **Management**), Garuda never allows AI to silently pick or overwrite a formula:
@@ -405,9 +413,9 @@ Automatically structure unorganized repo architecture, inferred layer boundaries
 
 ---
 
-## 5. `v1.9.9` Additions: Dirty-Worktree Provenance Flags, Security Controls & Extended MCP Tools
+## 18. Provenance Flags, MCP Security Controls & Additional MCP Tools
 
-### 5.1 Dirty-Worktree Provenance Flags on `garuda check` & `garuda talon guard`
+### 18.1 Dirty-Worktree Provenance Flags on `garuda check` & `garuda talon guard`
 When a working tree has uncommitted edits, `BuildContext.ReproduceCommand` emits `--worktree-dirty` and `--dirty-tree-hash <12-char-sha256>` so CI or another developer can verify the exact dirty-tree state:
 
 ```bash
@@ -423,11 +431,11 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check \
 - `--worktree-dirty` (`bool`) — Assert that the working tree is expected to be dirty when verifying the `BuildContext` receipt.
 - `--dirty-tree-hash string` — Assert the exact 12-character SHA-256 digest of modified/untracked source files (`BuildContext.DirtyFilesHash`).
 
-### 5.2 MCP Security & Attestation Environment Variables (`v1.9.9`)
+### 18.2 MCP Security & Attestation Environment Variables
 - `GARUDA_MCP_READ_ONLY=true` — Blocks all 13 mutating MCP tools (`propose_decision`, `decide_logic_variant`, `reconcile_data_audit`, `reconcile_financial_audit`, `approve_base_rulebook`, `synthesize_rulebook`, `docs_ingest`, `create_task`, `handoff`, `resume`, `reset_audit_state`, `create_workspace`, and `talon_verify_edit` when `save_to_ledger=true`), returning a structured `{"status": "rejected", "read_only": true}` response.
 - `GARUDA_MCP_APPROVER=<email-or-handle>` — Required for an MCP call to record `APPROVED_BY_HUMAN` or `RECONCILED_BY_HUMAN`. When unset, `decide_logic_variant`, `reconcile_data_audit`, and `approve_base_rulebook` record `PROPOSED_BY_AGENT_AWAITING_HUMAN_CLI_COSIGN` (`human_cli_verified: false`) until co-signed via the CLI or Web Dashboard.
 
-### 5.3 New `v1.9.9` MCP Tools (Completing the 54-Tool Surface)
+### 18.3 Additional MCP Tools (arguments)
 | Tool Name | Whitelisted Arguments | Purpose |
 | :--- | :--- | :--- |
 | `garuda.preflight_bundle` | `workspace`, `target`, `symbol`, `file`, `tenant_id` | Single-call pre-edit bundle combining `talon_pre_edit`, `blast_radius`, `neighbors`, `criticality_tiers`, `query_claims`, and `snapshot_receipt`. |

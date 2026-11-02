@@ -1,6 +1,6 @@
-# 🧠 Garuda Capabilities & Verification Matrix (`v1.9.9` Universal)
+# 🧠 Garuda Capabilities & Verification Matrix
 
-> Grounded in the Garuda `v1.9.9` multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and zero-dependency cross-OS installer matrix.
+> Grounded in the Garuda multi-language compiler/AST engine (`go/types`, Python AST, and dual Tree-sitter / Pure-Go `CGO_ENABLED=0` TypeScript AST), Garuda Talon active agent execution harness, diff-scoped graph policy evaluator, 3-state runtime verifier, RFC 6962 Merkle ledger, and one-command cross-OS installer.
 
 ---
 
@@ -73,20 +73,20 @@
 
 ---
 
-## 6. Plane 06 — Universal Zero-Dependency Runtime & Cross-OS Diagnostics (`v1.9.9`)
+## 6. Plane 06 — One-Command Runtime & Cross-OS Diagnostics
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
-| **Windows PowerShell 5.1 & 7 Zero-Dependency Installer (`install.ps1` / `setup.ps1`)** | 🟢 **Production (GA)** | `Windows 10/11 PS 5.1 & PS 7 + Git Bash` | Pure 7-bit ASCII scripts (`CP1252`-safe), native `curl.exe`/`tar.exe` acceleration, stderr-safe `Invoke-QuietCmd`, Portable PostgreSQL 16.4 (`$HOME\.garuda\runtime\postgres`), and Portable Go `1.26.0` (`$HOME\.garuda\toolchain\go`) without Admin or GCC | `1-Command Windows Onboarding` |
-| **macOS / Linux / Chromebook / Android Fast Installer (`install.sh` / `setup.sh`)** | 🟢 **Production (GA)** | `Darwin (ARM64/Intel) / Linux / Crostini / Termux` | Shallow clone (`--depth 1`), 3-second pre-built Portable PostgreSQL `16.4.0` (`~18 MB`, avoiding slow Homebrew source builds), single-download Portable Go `1.26.0` matching `go.mod`, and 1-pass `CGO_ENABLED=0` build with `bin/.build_stamp` caching | `1-Command Universal Onboarding` |
+| **Windows PowerShell 5.1 & 7 Installer (`install.ps1` / `setup.ps1`)** | 🟡 **Beta** | PowerShell 7 parse check + `windows-installer-smoke` contract checks; full Windows run via the `installer-e2e` workflow | Pure 7-bit ASCII scripts (`CP1252`-safe), native `curl.exe`/`tar.exe` acceleration, stderr-safe `Invoke-QuietCmd`, Portable PostgreSQL 16.4 (`$HOME\.garuda\runtime\postgres`), and a portable Go matching `go.mod` (`$HOME\.garuda\toolchain\go`) without Admin or GCC | `1-Command Windows Onboarding` |
+| **macOS / Linux / ChromeOS / Android (Termux) Installer (`install.sh` / `setup.sh`)** | 🟡 **Beta** | Linux exercised end to end; macOS, ChromeOS and Termux pending an `installer-e2e` / device run (see INSTALL.md) | Shallow clone (`--depth 1`), pre-built portable PostgreSQL `16.4` (`~18 MB`, avoiding slow Homebrew source builds), portable Go downloaded only when the installed Go is missing or too old (version taken from `go.mod`), and 1-pass `CGO_ENABLED=0` build with `bin/.build_stamp` caching | `1-Command Universal Onboarding` |
 | **Explicit IPv4 `127.0.0.1:5433` & Socket Isolation (`env.go` & `init_cmd.go`)** | 🟢 **Production (GA)** | `macOS IPv6 [::1] Bypass + ~/.garuda/data/run` | Normalizes `@localhost:` to `@127.0.0.1:`, initializes clusters with `LC_ALL=C --no-locale -E UTF8`, and isolates Unix sockets in `~/.garuda/data/run` (`chmod 700`) | `Zero Connection-Refused Boot` |
-| **Canonical Schema Hardening (`migrations/095_data_logic_audit_ledger_and_hygiene.sql`)** | 🟢 **Production (GA)** | `Idempotent PostgreSQL Migration` | Aligns `workspaces`, `repositories`, `entities` (`canonical_name`, `file_path`), `relationships`, and `cross_repo_edges` across fresh and upgraded databases | `100% Schema Parity` |
+| **Canonical Schema Hardening (`migrations/095_data_logic_audit_ledger_and_hygiene*.sql`)** | 🟢 **Production (GA)** | `Idempotent PostgreSQL Migration` | Aligns `workspaces`, `repositories`, `entities` (`canonical_name`, `file_path`), `relationships`, and `cross_repo_edges` across fresh and upgraded databases | `100% Schema Parity` |
 | **Self-Diagnosis & Auto-Repair CLI (`garuda doctor`)** | 🟢 **Production (GA)** | `cmd/garuda/doctor_cmd.go` (`--fix`, `--json`) | Auto-starts stopped user-space PostgreSQL clusters (`~/.garuda/data/pg`) or Docker, applies migrations, rebuilds missing binaries, and repairs `.env` & Talon hooks | `Self-Healing Local Runtime` |
 
 
 ---
 
-## 7. Plane 07 — Deterministic `BuildContext` Provenance, Conditional Build-Tag AST & Docs-to-Code Lineage (`v1.7`–`v1.9.9`)
+## 7. Plane 07 — Deterministic `BuildContext` Provenance, Conditional Build-Tag AST & Docs-to-Code Lineage 
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |
@@ -94,14 +94,14 @@
 | **`go/build.Context` Conditional Build-Tag & OS Filtering** | 🟢 **Production (GA)** | `TestTwoBuildsExposeDifferentEdges` | Evaluates `//go:build`, `// +build`, `_linux.go`, `_darwin.go`, `_windows.go`, and `cgo` constraints via `go/build.Context.MatchFile` | `Platform-Accurate Edge Graph` |
 | **CI-vs-Editor Environment Drift Detector** | 🟢 **Production (GA)** | `TestDetectEnvironmentDrift` | Detects `TARGET_PLATFORM_MISMATCH`, `CGO_MISMATCH`, `BUILD_TAGS_MISMATCH`, `COMMIT_DRIFT`, `WORKTREE_DIRTY_DRIFT`, and `LANG_CONFIG_DRIFT` | `Zero Silent False-ALLOW` |
 | **4-Profile Cross-Platform Build Matrix Gate (`--matrix`)** | 🟢 **Production (GA)** | `TestEvaluateBuildMatrix` | Evaluates `linux/amd64 (cgo=0)`, `linux/amd64 (cgo=1, tags=cgo)`, `darwin/arm64 (cgo=1)`, and `windows/amd64 (cgo=0)` in one pass | `Pre-Push Cross-OS Parity` |
-| **Relative-Path Package Cache Determinism (`v1.8.1`)** | 🟢 **Production (GA)** | `TestDoubleRunDeterminism (24/24)` | Hashes repository-relative paths (`filepath.Rel`) + file sizes + SHA-256 digests so cache fingerprints are checkout-path invariant | `100% Deterministic Fingerprints` |
+| **Relative-Path Package Cache Determinism** | 🟢 **Production (GA)** | `TestDoubleRunDeterminism (24/24)` | Hashes repository-relative paths (`filepath.Rel`) + file sizes + SHA-256 digests so cache fingerprints are checkout-path invariant | `100% Deterministic Fingerprints` |
 | **4-Tier Docs, Specs & Guardrails Lineage Graph** | 🟢 **Production (GA)** | `GET /api/v1/dashboard/docs-graph` & `garuda docs graph` | Connects Documents (ADRs/Specs/Policies) → Extracted Rules (`MUST`/`MUST_NOT`) → Active Guardrails → Governed AST Symbols | `Traceable Normative Lineage` |
 | **Architectural Risk Hub & Blast-Radius Leaderboard** | 🟢 **Production (GA)** | `GET /api/v1/dashboard/talon-hub` | Ranks symbols `0–100` (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`) by caller fan-in, transitive blast radius, and ADR sensitivity | `Pre-Edit Risk Visibility` |
 
 
 ---
 
-## 8. Plane 08 — Human-in-the-Loop Formula Disambiguation, Surface Criticality Tiers, Financial Data Audit & Auto-Rulebook (`v1.9.9`)
+## 8. Plane 08 — Human-in-the-Loop Formula Disambiguation, Surface Criticality Tiers, Financial Data Audit & Auto-Rulebook
 
 | Capability | Status | Verification Tier | Supported Semantics | Enforced Invariant |
 | :--- | :--- | :--- | :--- | :--- |

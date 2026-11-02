@@ -1,4 +1,4 @@
-# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference (`v1.9.9` Universal)
+# Garuda CLI, Talon Harness, Policy, MCP & HTTP API Reference
 
 This reference documents the complete command-line interface (`bin/garuda` and `bin/garuda-talon`), the **Garuda Talon** active agent harness, declarative policy specification (`policies/*.yaml`), Model Context Protocol surface (`bin/garuda-mcp` with 54 active tools), and HTTP REST / PWA gateway (`bin/garuda-api`).
 
@@ -19,7 +19,7 @@ All Garuda binaries (`garuda`, `garuda-talon`, `garuda-api`, `garuda-mcp`) autom
 | `JWT_PRIVATE_KEY_HEX` | Auto-generated & persisted to `.env` | Ed25519 64-byte private key (hex) for JWT signing |
 | `JWT_PUBLIC_KEY_HEX` | Auto-generated & persisted to `.env` | Ed25519 32-byte public key (hex) for JWT verification |
 | `CONTROL_DATABASE_URL` | Defaults to `DATABASE_URL` when token set | Read-only connection pool for the `/admin` Control Plane |
-| `GARUDA_CONTROL_TOKEN` | `devtoken-changeme-please` | Operator bearer token for `/admin` Control Plane routes |
+| `GARUDA_CONTROL_TOKEN` | Random value written to `.env` by `garuda init` / `setup.sh` / `setup.ps1` | Operator bearer token for `/admin` Control Plane routes. There is no built-in default: when it is unset the Control Plane stays disabled. |
 
 ---
 
@@ -29,13 +29,14 @@ All Garuda binaries (`garuda`, `garuda-talon`, `garuda-api`, `garuda-mcp`) autom
 Initializes Garuda in a single command: verifies or starts PostgreSQL (local user-space cluster or Docker container), runs all database migrations idempotently, persists `.env` and Ed25519 JWT keys, provisions the default workspace and owner account, indexes the target repository, and runs `garuda talon init` to wire Cursor, Claude Code, Codex, Windsurf, and Git hooks across Windows, macOS, Linux, Chromebook, and Android.
 
 ```bash
-./bin/garuda init . --workspace go-validation-10 --email myshra777@gmail.com --password garuda2026
+export GARUDA_PASSWORD='choose-a-long-passphrase'   # at least 8 characters
+./bin/garuda init . --workspace my-system --email you@example.com
 ```
 
 **Flags:**
 - `--workspace string` — Workspace name to initialize (defaults to `GARUDA_WORKSPACE` or target folder name).
 - `--email string` — Owner email to provision (auto-discovered from `GARUDA_EMAIL`, `git config user.email`, or OS username if omitted).
-- `--password string` — Owner password to provision (defaults to `GARUDA_PASSWORD`; if unset, a random password is generated and printed once).
+- `--password string` — Owner password to provision (defaults to `GARUDA_PASSWORD`; if unset, a random password is generated and **not** shown, so set one to be able to log in).
 - `--target string` — Repository path to index (default `.`).
 - `--skip-scan` — Skip initial repository AST scan during setup.
 
@@ -263,7 +264,7 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 
 ---
 
-## 6. v1.7–v1.9.9 New CLI Flags, Dashboard Lineage Endpoints & BuildContext Schema
+## 6. Build Matrix Flags, Dashboard Lineage Endpoints & BuildContext Schema
 
 ### 6.1 Cross-Platform Build Matrix & Build-Tag Flags (`garuda analyze`, `garuda check`, `garuda talon guard`)
 - `--tags string` — Comma-separated Go build tags (e.g., `--tags cgo,enterprise`) applied via `go/build.Context` during conditional AST file matching.
@@ -308,7 +309,7 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 
 ---
 
-## 7. v1.9.9 Extended CLI Commands, 12 New MCP Tools & Financial/Rulebook HTTP Endpoints
+## 7. Audit & Rulebook CLI Commands, MCP Tool Arguments & HTTP Endpoints
 
 ### 7.1 `garuda audit` & `garuda rulebook` CLI Commands (`cmd/garuda/audit_cmd.go`)
 - `garuda audit logic [concept] --team <ops|marketing|management> [--decide <variant_id> --action APPROVED_BY_HUMAN] [--json]`
@@ -317,7 +318,7 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 - `garuda rulebook generate [--output .garuda/DRAFT_BASE_RULEBOOK.md]`
 - `garuda rulebook approve [--by "Stakeholder Name"]`
 
-### 7.2 12 New MCP Tools in `bin/garuda-mcp` (Total: 54 Tools)
+### 7.2 Audit, Rulebook & Docs MCP Tools (arguments)
 
 | Tool Name | Whitelisted Arguments | Purpose |
 | :--- | :--- | :--- |
@@ -334,7 +335,7 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 | `garuda.build_matrix_check` | `workspace`, `repo_dir`, `diff`, `tenant_id` | Evaluates the 4-target Cross-Platform Build Matrix and returns the `BuildContext` receipt. |
 | `garuda.hygiene_report` | `workspace`, `limit`, `tenant_id` | Runs the static code hygiene analyzer over MCP. |
 
-### 7.3 v1.9.9 HTTP Endpoints (`internal/api/dashboard_audit_rulebook.go`)
+### 7.3 Audit & Rulebook HTTP Endpoints (`internal/api/dashboard_audit_rulebook.go`)
 - `GET  /api/v1/dashboard/logic-weights?workspace=<ws>&team=<ops|marketing|management>`
 - `POST /api/v1/dashboard/logic-weights/decide`
 - `GET  /api/v1/dashboard/criticality-tiers?workspace=<ws>`
@@ -347,9 +348,9 @@ All `/api/v1/*` routes enforce cryptographic Ed25519 JWT validation (`AuthMiddle
 
 ---
 
-## 5. `v1.9.9` Additions: Dirty-Worktree Provenance Flags, Security Controls & Extended MCP Tools
+## 8. Dirty-Worktree Provenance Flags, MCP Security Controls & Additional MCP Tools
 
-### 5.1 Dirty-Worktree Provenance Flags on `garuda check` & `garuda talon guard`
+### 8.1 Dirty-Worktree Provenance Flags on `garuda check` & `garuda talon guard`
 When a working tree has uncommitted edits, `BuildContext.ReproduceCommand` emits `--worktree-dirty` and `--dirty-tree-hash <12-char-sha256>` so CI or another developer can verify the exact dirty-tree state:
 
 ```bash
@@ -365,11 +366,11 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check \
 - `--worktree-dirty` (`bool`) — Assert that the working tree is expected to be dirty when verifying the `BuildContext` receipt.
 - `--dirty-tree-hash string` — Assert the exact 12-character SHA-256 digest of modified/untracked source files (`BuildContext.DirtyFilesHash`).
 
-### 5.2 MCP Security & Attestation Environment Variables (`v1.9.9`)
+### 8.2 MCP Security & Attestation Environment Variables
 - `GARUDA_MCP_READ_ONLY=true` — Blocks all 13 mutating MCP tools (`propose_decision`, `decide_logic_variant`, `reconcile_data_audit`, `reconcile_financial_audit`, `approve_base_rulebook`, `synthesize_rulebook`, `docs_ingest`, `create_task`, `handoff`, `resume`, `reset_audit_state`, `create_workspace`, and `talon_verify_edit` when `save_to_ledger=true`), returning a structured `{"status": "rejected", "read_only": true}` response.
 - `GARUDA_MCP_APPROVER=<email-or-handle>` — Required for an MCP call to record `APPROVED_BY_HUMAN` or `RECONCILED_BY_HUMAN`. When unset, `decide_logic_variant`, `reconcile_data_audit`, and `approve_base_rulebook` record `PROPOSED_BY_AGENT_AWAITING_HUMAN_CLI_COSIGN` (`human_cli_verified: false`) until co-signed via the CLI or Web Dashboard.
 
-### 5.3 New `v1.9.9` MCP Tools (Completing the 54-Tool Surface)
+### 8.3 Additional MCP Tools (arguments)
 | Tool Name | Whitelisted Arguments | Purpose |
 | :--- | :--- | :--- |
 | `garuda.preflight_bundle` | `workspace`, `target`, `symbol`, `file`, `tenant_id` | Single-call pre-edit bundle combining `talon_pre_edit`, `blast_radius`, `neighbors`, `criticality_tiers`, `query_claims`, and `snapshot_receipt`. |
@@ -383,61 +384,65 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check \
 
 ---
 
-## Canonical 54-Tool MCP Registry (Auto-Synced from `capabilities.json` & `cmd/garuda-mcp/main.go`)
+<!-- MCP-TOOLS:BEGIN (generated by scripts/sync_docs_from_manifest.py; do not edit) -->
+## The 54 MCP tools
 
-| # | Tool Name | Mode & Safety Gate | Description |
+41 are read-only and 13 can change state (disabled when `GARUDA_MCP_READ_ONLY=true`).
+
+| # | Tool | Mode | What it does |
 | :--- | :--- | :--- | :--- |
-| `01` | `garuda.briefing` | Read-Only | Session-start briefing: workspace state, policy verdict, epistemic counts, trust anchor, scale, top hubs, active policies, open contradictions, and what changed since this agent's last briefing. Read-only. Call this first. |
-| `02` | `garuda.query` | Read-Only | Query the Garuda knowledge graph (entities, document claims, and decisions) with natural language keywords. Rejects raw SQL statements. |
-| `03` | `garuda.get_lineage` | Read-Only | Get the full governance and AST lineage of a decision UUID, actor name (e.g. 'cli-operator'), or symbol name. |
-| `04` | `garuda.detect_contradictions` | Read-Only | Detect unresolved contradictions across decisions and ADR document claims in the tenant knowledge graph. |
-| `05` | `garuda.get_impact` | Read-Only | Find what breaks if a decision UUID or code symbol (e.g. 'AppendLeafAndSealTx') is changed. Computes transitive blast radius and child decision impact. |
-| `06` | `garuda.blast_radius` | Read-Only | Compute the blast radius of a symbol change: which entities consume the target entity, directly or transitively, up to a depth. Read-only. Returns a critical-first list and per-severity counts. |
-| `07` | `garuda.propose_decision` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Propose a new architectural decision (creates a draft). |
-| `08` | `garuda.policy.list` | Read-Only | List policies registered for a tenant. Read-only. |
-| `09` | `garuda.governance.status` | Read-Only | Aggregate governance state: top-level decision, active policies, documentation health, blocked_by list, and unified entity/claim counts. Read-only. |
-| `10` | `garuda.check_drift` | Read-Only | Bidirectional documentation-to-code (doc_to_code) and code-to-documentation (code_to_doc) drift report. Read-only. |
-| `11` | `garuda.query_claims` | Read-Only | Query document claims matching a subject and/or epistemic status (SUPPORTED, UNVERIFIED, CONTRADICTED). Read-only. |
-| `12` | `garuda.policy.evaluate` | Read-Only | Dry-run the policy engine against a workspace and return deterministic policy decisions. Does NOT persist or Merkle-anchor. Use 'garuda policy evaluate' from the CLI to anchor a real governance decision. |
-| `13` | `garuda.verify_policy_evaluation` | Read-Only | Verify the Merkle inclusion proof for a persisted policy evaluation. Returns valid=true if the proof recomputes to the anchored root. Read-only; no side effects. |
-| `14` | `garuda.verify_evidence` | Read-Only | Verify the RFC 6962 Merkle inclusion proof or SHA-256 evidence digest for a policy evaluation, evidence block, or decision UUID. Read-only; no side effects. |
-| `15` | `garuda.entities` | Read-Only | List semantic entities in a workspace. Filterable by package and kind. Read-only. |
-| `16` | `garuda.inspect` | Read-Only | Inspect one entity with its signature and incoming and outgoing relationships. Read-only. |
-| `17` | `garuda.subclasses` | Read-Only | List entities that inherit from or embed the subject. Uses INHERITS and EMBEDS claims. Read-only. |
-| `18` | `garuda.implementers` | Read-Only | List entities that implement the subject interface. Uses IMPLEMENTS claims. Read-only. |
-| `19` | `garuda.neighbors` | Read-Only | List every entity connected to the subject in one hop, both incoming and outgoing directions. External stubs excluded by default. Read-only. |
-| `20` | `garuda.create_task` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Create a new task and provision source/target agent UUIDs in the workspace so garuda.handoff and garuda.resume can operate on persisted UUIDs. |
-| `21` | `garuda.handoff` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Initiate an atomic task handoff between two agents. Creates a checkpoint of the source agent's state, transfers task ownership, and transitions both agents' statuses. Call garuda.create_task first to provision UUIDs. |
-| `22` | `garuda.resume` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Restore the state from an active checkpoint created by garuda.handoff, and mark the checkpoint as consumed. A second resume of the same checkpoint returns {status: 'not_found'}. |
-| `23` | `garuda.find_entity` | Read-Only | Find entities by exact name, regex name_pattern, kind, package, or file path. Returns status='not_found' with empty results when a filter matches 0 entities. Read-only. |
-| `24` | `garuda.talon_pre_edit` | Read-Only | MANDATORY pre-edit check: call before modifying any file or symbol. Returns transitive blast radius, callers, applicable ADR MUST/MUST_NOT claims, and active policy guardrails. |
-| `25` | `garuda.talon_verify_edit` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | MANDATORY post-edit verification gate: call immediately after modifying code. Runs in dry-run mode (side_effects=[]) by default; set save_to_ledger=true to append a Merkle ledger block (side_effects=['merkle_ledger_append']). |
-| `26` | `garuda.disambiguate_logic` | Read-Only | Compare competing undocumented formulas across teams with 0.0-1.0 team weights summing to 1.00, surface criticality tiers (HIGH_SEVERE, MEDIUM, LOW), and explicit mode ('live_ast' vs 'fixture'). |
-| `27` | `garuda.audit_data_discrepancy` | Read-Only | Audit cross-team business logic and metric number discrepancies in the Data & Logic Audit Ledger by tracing AST and SQL lineage before production deployment. |
-| `28` | `garuda.reconcile_data_audit` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Record a reconciliation proposal for a flagged cross-team data discrepancy in the Data & Logic Audit Ledger. Requires GARUDA_MCP_APPROVER or CLI co-signing for human approval. |
-| `29` | `garuda.audit_financial_discrepancy` | Read-Only | Legacy alias for garuda.audit_data_discrepancy: audit cross-team business metric number discrepancies in the Data & Logic Audit Ledger. |
-| `30` | `garuda.synthesize_rulebook` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Synthesize unorganized repository architecture, surface criticality tiers, and multi-team formula weights into a structured draft Base Rulebook for human stakeholder review and approval. |
-| `31` | `garuda.decide_logic_variant` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Propose or record a decision on a competing multi-team formula variant in PostgreSQL. Requires GARUDA_MCP_APPROVER or CLI co-signing for APPROVED_BY_HUMAN. |
-| `32` | `garuda.reconcile_financial_audit` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Legacy alias for garuda.reconcile_data_audit: record reconciliation for a flagged cross-team metric discrepancy in the Data & Logic Audit Ledger. |
-| `33` | `garuda.approve_base_rulebook` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Propose or approve the synthesized Base Rulebook with an RFC 6962 SHA-256 digest. Requires GARUDA_MCP_APPROVER or CLI co-signing for human approval. |
-| `34` | `garuda.criticality_tiers` | Read-Only | List or register 3-Tier Surface Criticality classifications (HIGH_SEVERE freeze, MEDIUM trade-off, LOW UI box alignment). |
-| `35` | `garuda.docs_graph` | Read-Only | Retrieve the 4-Tier Document-to-Code & Guardrails Lineage Matrix (Documents -> Normative Rules -> Active Policies -> AST Symbols). |
-| `36` | `garuda.docs_ingest` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Ingest Markdown ADRs or design specifications into document_claims and correlate them against workspace AST symbols. |
-| `37` | `garuda.doctor_diagnose` | Read-Only | Run the Garuda System Doctor diagnostic suite across platform, PostgreSQL, Talon contract, and API gateway health. |
-| `38` | `garuda.build_matrix_check` | Read-Only | Verify the codebase across the 4-target Cross-Platform Build Matrix (linux/amd64, darwin/arm64, windows/amd64, cgo/purego) and return the deterministic BuildContext receipt. |
-| `39` | `garuda.hygiene_report` | Read-Only | Run the static code hygiene analyzer on the workspace graph to report advisory unreferenced candidates, duplicate symbol names, and stdlib alternatives with structured file:line locations. |
-| `40` | `garuda.reset_audit_state` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Reset smoke-test or agent-proposed audit state in the workspace back to clean baseline. |
-| `41` | `garuda.create_workspace` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Provision an isolated sandbox workspace (e.g. 'audit-sandbox') so mutating governance or audit checks can run safely without affecting the default workspace. |
-| `42` | `garuda.verify_receipt` | Read-Only | Recompute receipt_hash, graph_fingerprint, and policy_set_version from the current AST and git commit to cryptographically verify a pre-edit or guard receipt. |
-| `43` | `garuda.diff_snapshots` | Read-Only | Compare the indexed graph snapshot receipt against current HEAD and list active vs superseded policies, commit sync state, and drift deltas. |
-| `44` | `garuda.diff_impact` | Read-Only | Compute diff-level blast radius in one call: returns per-symbol impact with file, line_start, and source snippets for every symbol touched in the git diff. |
-| `45` | `garuda.symbol_test_coverage` | Read-Only | Show which unit tests (*_test.go) and runtime traces exercise a symbol or package, explaining exported handler verification status. |
-| `46` | `garuda.snapshot` | Read-Only | Return the current workspace snapshot ID, commit SHA, dirty-tree status, policy-set version, and freshness verdict (fresh, stale, dirty) in one lightweight call. |
-| `47` | `garuda.explain_claim` | Read-Only | Return the compiler AST or policy derivation path and source snippet for a claim_id or symbol name. |
-| `48` | `garuda.snippet` | Read-Only | Return hash-verified source lines around a symbol or file_path:line_start against the active snapshot. |
-| `49` | `garuda.summary` | Read-Only | Return a compact token-saving workspace summary (counts, active policies, and snapshot ID). |
-| `50` | `garuda.owners` | Read-Only | Return the declared owner and team for an entity from the ownership mapping, or UNASSIGNED if undeclared. |
-| `51` | `garuda.verify_claim` | Read-Only | Verify a structured edge (from_symbol, predicate, to_symbol) or prose claim against the indexed graph and return SUPPORTED, CONTRADICTED, or NOT_IN_GRAPH with a cryptographic receipt. |
-| `52` | `garuda.test_coverage` | Read-Only | Alias for garuda.symbol_test_coverage: inspect which unit tests and runtime traces exercise a symbol. |
-| `53` | `garuda.audit_export` | Read-Only | Export workspace decisions, policy evaluations, and Merkle block anchors as structured JSON or CSV for compliance filing. |
-| `54` | `garuda.preflight_bundle` | Read-Only | Single-call token-saving pre-edit bundle combining snapshot freshness, talon_pre_edit briefing, test coverage, and declared ownership for a symbol or file. |
+| 01 | `garuda.briefing` | Read-only | Session-start briefing: workspace state, policy verdict, epistemic counts, trust anchor, scale, top hubs, active policies, open contradictions, and what changed since this agent's last briefing. Read-only. Call this first. |
+| 02 | `garuda.query` | Read-only | Query the Garuda knowledge graph (entities, document claims, and decisions) with natural language keywords. Rejects raw SQL statements. |
+| 03 | `garuda.get_lineage` | Read-only | Get the full governance and AST lineage of a decision UUID, actor name (e.g. 'cli-operator'), or symbol name. |
+| 04 | `garuda.detect_contradictions` | Read-only | Detect unresolved contradictions across decisions and ADR document claims in the tenant knowledge graph. |
+| 05 | `garuda.get_impact` | Read-only | Find what breaks if a decision UUID or code symbol (e.g. 'AppendLeafAndSealTx') is changed. Computes transitive blast radius and child decision impact. |
+| 06 | `garuda.blast_radius` | Read-only | Compute the blast radius of a symbol change: which entities consume the target entity, directly or transitively, up to a depth. Read-only. Returns a critical-first list and per-severity counts. |
+| 07 | `garuda.propose_decision` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Propose a new architectural decision (creates a draft). |
+| 08 | `garuda.policy.list` | Read-only | List policies registered for a tenant. Read-only. |
+| 09 | `garuda.governance.status` | Read-only | Aggregate governance state: top-level decision, active policies, documentation health, blocked_by list, and unified entity/claim counts. Read-only. |
+| 10 | `garuda.check_drift` | Read-only | Bidirectional documentation-to-code (doc_to_code) and code-to-documentation (code_to_doc) drift report. Read-only. |
+| 11 | `garuda.query_claims` | Read-only | Query document claims matching a subject and/or epistemic status (SUPPORTED, UNVERIFIED, CONTRADICTED). Read-only. |
+| 12 | `garuda.policy.evaluate` | Read-only | Dry-run the policy engine against a workspace and return deterministic policy decisions. Does NOT persist or Merkle-anchor. Use 'garuda policy evaluate' from the CLI to anchor a real governance decision. |
+| 13 | `garuda.verify_policy_evaluation` | Read-only | Verify the Merkle inclusion proof for a persisted policy evaluation. Returns valid=true if the proof recomputes to the anchored root. Read-only; no side effects. |
+| 14 | `garuda.verify_evidence` | Read-only | Verify the RFC 6962 Merkle inclusion proof or SHA-256 evidence digest for a policy evaluation, evidence block, or decision UUID. Read-only; no side effects. |
+| 15 | `garuda.entities` | Read-only | List semantic entities in a workspace. Filterable by package and kind. Read-only. |
+| 16 | `garuda.inspect` | Read-only | Inspect one entity with its signature and incoming and outgoing relationships. Read-only. |
+| 17 | `garuda.subclasses` | Read-only | List entities that inherit from or embed the subject. Uses INHERITS and EMBEDS claims. Read-only. |
+| 18 | `garuda.implementers` | Read-only | List entities that implement the subject interface. Uses IMPLEMENTS claims. Read-only. |
+| 19 | `garuda.neighbors` | Read-only | List every entity connected to the subject in one hop, both incoming and outgoing directions. External stubs excluded by default. Read-only. |
+| 20 | `garuda.create_task` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Create a new task and provision source/target agent UUIDs in the workspace so garuda.handoff and garuda.resume can operate on persisted UUIDs. |
+| 21 | `garuda.handoff` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Initiate an atomic task handoff between two agents. Creates a checkpoint of the source agent's state, transfers task ownership, and transitions both agents' statuses. Call garuda.create_task first to provision UUIDs. |
+| 22 | `garuda.resume` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Restore the state from an active checkpoint created by garuda.handoff, and mark the checkpoint as consumed. A second resume of the same checkpoint returns {status: 'not_found'}. |
+| 23 | `garuda.find_entity` | Read-only | Find entities by exact name, regex name_pattern, kind, package, or file path. Returns status='not_found' with empty results when a filter matches 0 entities. Read-only. |
+| 24 | `garuda.talon_pre_edit` | Read-only | MANDATORY pre-edit check: call before modifying any file or symbol. Returns transitive blast radius, callers, applicable ADR MUST/MUST_NOT claims, and active policy guardrails. |
+| 25 | `garuda.talon_verify_edit` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | MANDATORY post-edit verification gate: call immediately after modifying code. Runs in dry-run mode (side_effects=[]) by default; set save_to_ledger=true to append a Merkle ledger block (side_effects=['merkle_ledger_append']). |
+| 26 | `garuda.disambiguate_logic` | Read-only | Compare competing undocumented formulas across teams with 0.0-1.0 team weights summing to 1.00, surface criticality tiers (HIGH_SEVERE, MEDIUM, LOW), and explicit mode ('live_ast' vs 'fixture'). |
+| 27 | `garuda.audit_data_discrepancy` | Read-only | Audit cross-team business logic and metric number discrepancies in the Data & Logic Audit Ledger by tracing AST and SQL lineage before production deployment. |
+| 28 | `garuda.reconcile_data_audit` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Record a reconciliation proposal for a flagged cross-team data discrepancy in the Data & Logic Audit Ledger. Requires GARUDA_MCP_APPROVER or CLI co-signing for human approval. |
+| 29 | `garuda.audit_financial_discrepancy` | Read-only | Legacy alias for garuda.audit_data_discrepancy: audit cross-team business metric number discrepancies in the Data & Logic Audit Ledger. |
+| 30 | `garuda.synthesize_rulebook` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Synthesize unorganized repository architecture, surface criticality tiers, and multi-team formula weights into a structured draft Base Rulebook for human stakeholder review and approval. |
+| 31 | `garuda.decide_logic_variant` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Propose or record a decision on a competing multi-team formula variant in PostgreSQL. Requires GARUDA_MCP_APPROVER or CLI co-signing for APPROVED_BY_HUMAN. |
+| 32 | `garuda.reconcile_financial_audit` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Legacy alias for garuda.reconcile_data_audit: record reconciliation for a flagged cross-team metric discrepancy in the Data & Logic Audit Ledger. |
+| 33 | `garuda.approve_base_rulebook` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Propose or approve the synthesized Base Rulebook with an RFC 6962 SHA-256 digest. Requires GARUDA_MCP_APPROVER or CLI co-signing for human approval. |
+| 34 | `garuda.criticality_tiers` | Read-only | List or register 3-Tier Surface Criticality classifications (HIGH_SEVERE freeze, MEDIUM trade-off, LOW UI box alignment). |
+| 35 | `garuda.docs_graph` | Read-only | Retrieve the 4-Tier Document-to-Code & Guardrails Lineage Matrix (Documents -> Normative Rules -> Active Policies -> AST Symbols). |
+| 36 | `garuda.docs_ingest` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Ingest Markdown ADRs or design specifications into document_claims and correlate them against workspace AST symbols. |
+| 37 | `garuda.doctor_diagnose` | Read-only | Run the Garuda System Doctor diagnostic suite across platform, PostgreSQL, Talon contract, and API gateway health. |
+| 38 | `garuda.build_matrix_check` | Read-only | Verify the codebase across the 4-target Cross-Platform Build Matrix (linux/amd64, darwin/arm64, windows/amd64, cgo/purego) and return the deterministic BuildContext receipt. |
+| 39 | `garuda.hygiene_report` | Read-only | Run the static code hygiene analyzer on the workspace graph to report advisory unreferenced candidates, duplicate symbol names, and stdlib alternatives with structured file:line locations. |
+| 40 | `garuda.reset_audit_state` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Reset smoke-test or agent-proposed audit state in the workspace back to clean baseline. |
+| 41 | `garuda.create_workspace` | Mutating (`GARUDA_MCP_READ_ONLY` gated) | Provision an isolated sandbox workspace (e.g. 'audit-sandbox') so mutating governance or audit checks can run safely without affecting the default workspace. |
+| 42 | `garuda.verify_receipt` | Read-only | Recompute receipt_hash, graph_fingerprint, and policy_set_version from the current AST and git commit to cryptographically verify a pre-edit or guard receipt. |
+| 43 | `garuda.diff_snapshots` | Read-only | Compare the indexed graph snapshot receipt against current HEAD and list active vs superseded policies, commit sync state, and drift deltas. |
+| 44 | `garuda.diff_impact` | Read-only | Compute diff-level blast radius in one call: returns per-symbol impact with file, line_start, and source snippets for every symbol touched in the git diff. |
+| 45 | `garuda.symbol_test_coverage` | Read-only | Show which unit tests (*_test.go) and runtime traces exercise a symbol or package, explaining exported handler verification status. |
+| 46 | `garuda.snapshot` | Read-only | Return the current workspace snapshot ID, commit SHA, dirty-tree status, policy-set version, and freshness verdict (fresh, stale, dirty) in one lightweight call. |
+| 47 | `garuda.explain_claim` | Read-only | Return the compiler AST or policy derivation path and source snippet for a claim_id or symbol name. |
+| 48 | `garuda.snippet` | Read-only | Return hash-verified source lines around a symbol or file_path:line_start against the active snapshot. |
+| 49 | `garuda.summary` | Read-only | Return a compact token-saving workspace summary (counts, active policies, and snapshot ID). |
+| 50 | `garuda.owners` | Read-only | Return the declared owner and team for an entity from the ownership mapping, or UNASSIGNED if undeclared. |
+| 51 | `garuda.verify_claim` | Read-only | Verify a structured edge (from_symbol, predicate, to_symbol) or prose claim against the indexed graph and return SUPPORTED, CONTRADICTED, or NOT_IN_GRAPH with a cryptographic receipt. |
+| 52 | `garuda.test_coverage` | Read-only | Alias for garuda.symbol_test_coverage: inspect which unit tests and runtime traces exercise a symbol. |
+| 53 | `garuda.audit_export` | Read-only | Export workspace decisions, policy evaluations, and Merkle block anchors as structured JSON or CSV for compliance filing. |
+| 54 | `garuda.preflight_bundle` | Read-only | Single-call token-saving pre-edit bundle combining snapshot freshness, talon_pre_edit briefing, test coverage, and declared ownership for a symbol or file. |
+<!-- MCP-TOOLS:END -->

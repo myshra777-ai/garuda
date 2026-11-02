@@ -1,7 +1,7 @@
 ---
-name: garuda-change-impact
+name: change-impact
 description: Calculates direct callers, transitive blast radius, criticality tier, and governing ADRs/policies before modifying any symbol or package.
-version: "1.9.9"
+version: "1.9.10"
 license: "Apache-2.0"
 read_only_default: true
 ---

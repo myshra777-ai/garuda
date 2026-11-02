@@ -1,76 +1,64 @@
-# Garuda Launch Strategy: GitHub Packages (`ghcr.io`) & GitHub Marketplace (`v1.9.9`)
+# Garuda launch channels: GitHub Packages, Releases and the Marketplace Action
 
-This document outlines the technical packaging, CI/CD automation, verification gates, and listing workflow to launch **Garuda `v1.9.9`** across **GitHub Packages** and the **GitHub Marketplace**.
+How Garuda is published on GitHub, what each workflow does, and what you still do by hand. The step-by-step release commands live in [LISTING_GUIDE.md](LISTING_GUIDE.md#cutting-a-release); this page explains the channels.
+
+Everything here works on a **free GitHub account**. No organization or LLC is needed.
 
 ---
 
-## 1. Two-Track Distribution Architecture
+## 1. Channels
 
-Garuda reaches engineering teams and AI agent workflows through two complementary GitHub channels:
-
-| Channel | Artifact Type | Target Identifier | Primary Use Case |
+| Channel | What users get | Identifier | Built by |
 | :--- | :--- | :--- | :--- |
-| **Track A — GitHub Packages (`ghcr.io`)** | Multi-Arch OCI Container (`linux/amd64`, `linux/arm64`) + `.deb`/`.tar.gz`/`.zip` Release Assets | `ghcr.io/myshra777-ai/garuda:v1.9.9` | Zero-install Docker/Kubernetes deployment, devcontainers, air-gapped enterprise runners, and hosted MCP server containers. |
-| **Track B — GitHub Marketplace (GitHub Action)** | Composite GitHub Action (`action.yml`) | `myshra777-ai/garuda@v1.9.9` | 3-line PR & push gate that runs diff-scoped AST blast-radius checks, Talon policy verification, and posts deterministic `receipt_hash` summaries to `$GITHUB_STEP_SUMMARY`. |
+| **GitHub Releases** | Static binaries (Linux, macOS, Windows, FreeBSD, Android/Termux), `.deb`, `SHA256SUMS.txt`, build-provenance attestations | `https://github.com/myshra777-ai/garuda/releases` | [`release.yml`](../.github/workflows/release.yml) |
+| **GitHub Packages (`ghcr.io`), API** | Multi-arch container (`linux/amd64`, `linux/arm64`) with all four binaries | `ghcr.io/myshra777-ai/garuda:<version>` | [`release-packages.yml`](../.github/workflows/release-packages.yml) |
+| **GitHub Packages (`ghcr.io`), MCP server** | The `garuda-mcp` image the MCP Registry points at | `ghcr.io/myshra777-ai/garuda-mcp:<version>` | [`publish-mcp-image.yml`](../.github/workflows/publish-mcp-image.yml) |
+| **GitHub Marketplace (Action)** | A pull-request and push gate: diff-scoped blast-radius checks, Talon policy verification, a deterministic `receipt_hash` in `$GITHUB_STEP_SUMMARY` | `myshra777-ai/garuda@v1.9.10` | [`action.yml`](../action.yml) |
+| **Official MCP Registry** | Listing for `io.github.myshra777-ai/garuda` | [`server.json`](../server.json) | [`publish-mcp-registry.yml`](../.github/workflows/publish-mcp-registry.yml) |
+
+The three tag-triggered workflows start when you push a `vX.Y.Z` tag. The registry workflow starts when you publish the draft release.
 
 ---
 
-## 2. Track A — Publishing to GitHub Packages (`ghcr.io`)
+## 2. GitHub Packages (`ghcr.io`)
 
-### 2.1 What Is Already Wired in This Repository
-- **Workflow**: `.github/workflows/release-packages.yml`
-- **Authentication**: Uses the built-in `${{ secrets.GITHUB_TOKEN }}` with `packages: write`, `contents: write`, and `attestations: write` permissions—zero external registry secrets required.
-- **OCI Metadata Labels**: Automatically binds `org.opencontainers.image.source` to `https://github.com/myshra777-ai/garuda` so the package card appears directly on the main repository sidebar under **Packages**.
+- **Authentication.** The workflows use the built-in `GITHUB_TOKEN` with `packages: write`; no registry secret is needed.
+- **Repository link.** The images carry the `org.opencontainers.image.source` label, so the package appears in the repository sidebar under **Packages**.
+- **Provenance.** `release-packages.yml` attests the image with `actions/attest-build-provenance`.
+- **Visibility.** A package created by a workflow starts **private**. Make it public once: GitHub → your profile → **Packages** → the package → **Package settings** → **Change visibility** → **Public**. Do this for `garuda-mcp` before the registry workflow runs, because the registry must be able to pull the image without signing in.
+- **Repository settings.** If a workflow cannot push, check **Settings → Actions → General → Workflow permissions**. The workflows ask for the permissions they need, so *Read repository contents* is enough as the default.
 
-### 2.2 Step-by-Step Commands to Publish `v1.9.9` to GitHub Packages
+Pull the API image:
 
-1. **Enable Workflow Read/Write & Package Permissions**:
-   - In your GitHub repository, navigate to **Settings → Actions → General → Workflow permissions**.
-   - Select **Read and write permissions** and check **Allow GitHub Actions to create and approve pull requests**.
-2. **Tag and Push `v1.9.9`**:
-   ```bash
-   git add -A
-   git commit -m "release: Garuda v1.9.9 — 54-tool behavioral suite, canonical manifest, progressive dashboard & Marketplace action"
-   git tag -a v1.9.9 -m "Garuda v1.9.9 Universal Release"
-   git push origin main --tags
-   ```
-3. **Set Package Visibility to Public**:
-   - Once `.github/workflows/release-packages.yml` completes (~2 minutes), click **Packages** on your repository homepage (`ghcr.io/myshra777-ai/garuda`).
-   - Open **Package settings → Danger Zone → Change visibility → Public** so any user or CI runner can run:
-     ```bash
-     docker pull ghcr.io/myshra777-ai/garuda:v1.9.9
-     ```
+```bash
+docker pull ghcr.io/myshra777-ai/garuda:1.9.10
+```
+
+Image tags use the bare version (`1.9.10`) and `latest`. Release archives use the `v` prefix (`garuda-v1.9.10-linux-amd64.tar.gz`).
 
 ---
 
-## 3. Track B — Launching on the GitHub Marketplace
+## 3. GitHub Marketplace (the Action)
 
-### 3.1 Repository Readiness Checklist (100% Complete in `v1.9.9`)
-GitHub Marketplace enforces strict validation on repositories publishing an Action:
-- [x] **Root `action.yml` Present**: Located at `/action.yml` with unique `name` (`"Garuda Talon Architecture & Data-Logic Gate"`), `description`, `author`, `inputs`, `outputs`, and `branding` (`icon: "shield"`, `color: "green"`).
-- [x] **Public Repository with Open-Source License**: `LICENSE` (`Apache-2.0`).
-- [x] **Canonical Version & Capability Parity**: Verified by `python3 scripts/sync_docs_from_manifest.py --check`.
-- [x] **54/54 Behavioral & Security Tests Passing**: Verified by `go test ./cmd/garuda-mcp/...`.
+### 3.1 What GitHub requires
 
-### 3.2 Step-by-Step GitHub Marketplace Publishing Flow
+- [x] `action.yml` at the repository root, the only action metadata file there.
+- [x] A unique action `name` ("Garuda Talon Architecture & Data-Logic Gate"), a `description`, and `branding` (icon `shield`, colour `green`).
+- [x] A public repository with an open-source licence (Apache-2.0).
+- [ ] Two-factor authentication on the publishing account and acceptance of the *GitHub Marketplace Developer Agreement* (done in the browser, once).
 
-1. **Accept the GitHub Marketplace Developer Agreement**:
-   - Navigate to your repository on GitHub (`https://github.com/myshra777-ai/garuda`).
-   - Notice the banner at the top of the repo when `action.yml` is committed: *"You can publish this Action to the GitHub Marketplace"* — click **Draft a release**.
-2. **Configure the Marketplace Listing inside the Release Editor**:
-   - Check **[x] Publish this Action to the GitHub Marketplace**.
-   - **Primary Category**: Select **`Code quality`**.
-   - **Secondary Category**: Select **`Continuous integration`** (or **`Security`**).
-3. **Select the Tag & Release Title**:
-   - **Tag**: `v1.9.9` (create new tag on publish or select existing `v1.9.9` tag).
-   - **Release Title**: `Garuda v1.9.9 — Epistemic Architecture Gate, Talon AI Harness & Data/Logic Audit Engine`
-   - **Release Body**: Copy the contents of `RELEASE_NOTES.md`.
-4. **Click "Publish release"**:
-   - Your Action is immediately live on `https://github.com/marketplace/actions/garuda-talon-architecture-data-logic-gate`!
+`python3 scripts/sync_docs_from_manifest.py --check` verifies that `action.yml` still fails closed and carries the current version.
 
-### 3.3 Customer Copy-Paste Snippet for GitHub Marketplace Users
+### 3.2 Publishing
 
-Once published, any repository can add Garuda to `.github/workflows/garuda.yml` in 12 lines:
+1. Open the draft release that `release.yml` created (**Releases**), or draft one by hand for a tag.
+2. Tick **Publish this Action to the GitHub Marketplace** and accept the agreement if GitHub asks.
+3. Choose a primary category (**Code quality**) and, optionally, a secondary one (**Continuous integration** or **Security**).
+4. Click **Publish release**.
+
+GitHub then lists the Action under `https://github.com/marketplace/actions/` with a name derived from `name:` in `action.yml`.
+
+### 3.3 Copy-paste snippet for users
 
 ```yaml
 name: Garuda Architecture & Logic Gate
@@ -84,7 +72,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run Garuda Talon Gate
-        uses: myshra777-ai/garuda@v1.9.9
+        uses: myshra777-ai/garuda@v1.9.10
         with:
           workspace: default
           policy-dir: policies
@@ -92,11 +80,11 @@ jobs:
           matrix: "true"
 ```
 
+Pin to a release tag (or a commit SHA) in your own workflows. The sync script keeps the tag in this snippet equal to the current release.
+
 ---
 
-## 4. Post-Launch Ecosystem Expansion (MCP Registry & VS Code Marketplace)
+## 4. Other listings
 
-1. **Official Model Context Protocol (MCP) Registry & Smithery / Glama Listing**:
-   - Submit `cmd/garuda-mcp` (`54` tools: `41` read-only, `13` mutating, `GARUDA_MCP_READ_ONLY` + `GARUDA_MCP_APPROVER` controls) with the canonical metadata from `capabilities.json`.
-2. **VS Code Marketplace & OpenVSX (`vscode-extension/`)**:
-   - Package `vscode-extension/` via `npx @vscode/vsce package` and publish to both the Visual Studio Marketplace (for VS Code) and **OpenVSX** (which powers **Cursor** and **Windsurf** extension marketplaces natively).
+- **MCP Registry, Smithery, Glama and plugin marketplaces:** see [LISTING_GUIDE.md](LISTING_GUIDE.md). The MCP server exposes `54` tools (`41` read-only, `13` mutating); `GARUDA_MCP_READ_ONLY` and `GARUDA_MCP_APPROVER` control what an agent may change.
+- **VS Code Marketplace and Open VSX:** [`vscode-extension/`](../vscode-extension/) holds the TypeScript sources and the compiled `out/` folder, but the repository does not track an extension `package.json` or `tsconfig.json`, so it cannot be packaged from a fresh clone yet. Add them (they were hidden by an old `*.json` ignore rule; check `git status` on your machine), then `npx @vscode/vsce package` and publish to both marketplaces. Open VSX is what Cursor and Windsurf read.

@@ -1,67 +1,145 @@
-name: Release Multi-OS Standalone Binaries & Packages (v1.9.1)
+name: Release (draft GitHub release with binaries, checksums and notes)
+
+# Push a version tag to build every platform archive and create a DRAFT release.
+# Review the draft on the Releases page, then press "Publish release".
+#
+#   git tag v1.9.10 && git push origin v1.9.10
+#
+# Publishing the release also triggers publish-mcp-registry.yml. The container images
+# are built by release-packages.yml and publish-mcp-image.yml from the same tag.
 
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag to publish (e.g. v1.9.1)"
+        description: "Existing tag to build and draft a release for (for example v1.9.10)"
+        required: true
+        type: string
+      draft:
+        description: "Create the release as a draft"
         required: false
-        default: "v1.9.1"
+        default: true
+        type: boolean
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag_name || github.ref_name }}
 
 jobs:
-  release-matrix:
-    name: Build & Publish All-OS Standalone Packages
+  verify:
+    name: Verify docs, manifests and tests for the tag
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-
-      - name: Setup Go 1.26.0
-        uses: actions/setup-go@v5
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.0"
+          go-version-file: go.mod
           cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tag must match version.txt and capabilities.json
+        run: |
+          want="$(tr -d '[:space:]' < version.txt)"
+          if [ "$want" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match version.txt ($want). Run: python3 scripts/sync_docs_from_manifest.py --set $TAG --date YYYY-MM-DD, commit, then re-tag."
+            exit 1
+          fi
+      - name: Release facts and documentation are consistent
+        run: |
+          python3 scripts/sync_docs_from_manifest.py --check
+          python3 scripts/check_doc_links.py
+      - name: Release notes exist
+        run: grep -q "${TAG#v}" RELEASE_NOTES.md || { echo "::error::RELEASE_NOTES.md does not mention ${TAG#v}"; exit 1; }
+      - name: Build, vet and test
+        run: |
+          go build ./...
+          go vet ./...
+          go test -count=1 ./cmd/garuda ./cmd/garuda-api ./internal/api ./internal/policy ./internal/store
 
-      - name: Build Windows, macOS, Linux (.tar.gz + .deb), Chromebook, Android & FreeBSD Matrix (CGO_ENABLED=0)
+  build:
+    name: Build all platform archives
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the release matrix (static, CGO_ENABLED=0)
         env:
-          GARUDA_VERSION: ${{ github.ref_name != 'main' && github.ref_name || inputs.tag_name || 'v1.9.1' }}
+          GARUDA_VERSION: ${{ env.TAG }}
         run: |
           chmod +x scripts/build_release_matrix.sh
-          ./scripts/build_release_matrix.sh dist
-          ls -lh dist/
-
-      - name: Upload Multi-OS Release Artifacts
-        uses: actions/upload-artifact@v4
+          ./scripts/build_release_matrix.sh dist/releases
+          ls -lh dist/releases
+      - name: Fill checksums into the package-manager manifests
+        run: python3 scripts/render_packaging.py --sums dist/releases/SHA256SUMS.txt --out dist/releases/packaging
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
         with:
-          name: garuda-v1.9.1-universal-packages
-          path: |
-            dist/*
-            packaging/**/*
+          subject-path: |
+            dist/releases/*.tar.gz
+            dist/releases/*.zip
+            dist/releases/*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garuda-release-${{ env.TAG }}
+          path: dist/releases
+          if-no-files-found: error
 
-      - name: Publish GitHub Release with RELEASE_NOTES.md & All OS Packages
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+  release:
+    name: Create the GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: garuda-release-${{ env.TAG }}
+          path: dist/releases
+      - name: Create or update the release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.tag_name || 'v1.9.1' }}
-          name: "Garuda ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.tag_name || 'v1.9.1' }} — 35-Tool MCP, Financial & Logic Audit, Base Rulebook & All-OS Packages"
+          tag_name: ${{ env.TAG }}
+          name: "Garuda ${{ env.TAG }}"
           body_path: RELEASE_NOTES.md
-          draft: false
-          prerelease: false
+          draft: ${{ github.event_name == 'push' || inputs.draft }}
+          prerelease: ${{ contains(env.TAG, '-') }}
+          fail_on_unmatched_files: false
           files: |
-            dist/*.zip
-            dist/*.tar.gz
-            dist/*.deb
-            dist/SHA256SUMS.txt
-            dist/install.sh
-            dist/install.ps1
-            dist/setup.sh
-            dist/setup.ps1
-            RELEASE_NOTES.md
+            dist/releases/*.zip
+            dist/releases/*.tar.gz
+            dist/releases/*.deb
+            dist/releases/SHA256SUMS.txt
+            dist/releases/install.sh
+            dist/releases/install.ps1
+            dist/releases/setup.sh
+            dist/releases/setup.ps1
+            dist/releases/packaging/**

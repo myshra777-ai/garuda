@@ -1,7 +1,7 @@
 ---
-name: garuda-violation-repair
+name: violation-repair
 description: Guides an agent through remediating a `BLOCK` or `REVIEW` governance finding without introducing secondary boundary violations.
-version: "1.9.9"
+version: "1.9.10"
 license: "Apache-2.0"
 read_only_default: true
 ---

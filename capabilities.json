@@ -2,9 +2,9 @@
   "schema_version": "1.0",
   "product": "Garuda",
   "tagline": "Epistemic Software Intelligence, Active AI Agent Harness & Human-in-the-Loop Data/Logic Governance",
-  "version": "v1.9.9",
-  "semver": "1.9.9",
-  "release_date": "2026-11-01",
+  "version": "v1.9.10",
+  "semver": "1.9.10",
+  "release_date": "2026-11-03",
   "license": "Apache-2.0",
   "mcp_protocol_version": "2025-06-18",
   "counts": {
@@ -16,14 +16,15 @@
     "mcp_resources": 2,
     "dashboard_surfaces": 10,
     "dashboard_api_endpoints": 19,
-    "sql_migrations": 95,
+    "sql_migrations": 91,
     "yaml_policy_predicates": 9,
     "talon_hooks": 6,
     "supported_languages": 3,
     "compiler_fixture_benchmarks": 24,
     "synthetic_runtime_contradiction_simulations": 10,
     "mcp_protocol_verification_checks": 63,
-    "mcp_behavioral_unit_tests": 54
+    "mcp_behavioral_unit_tests": 54,
+    "skills": 6
   },
   "binaries": [
     {
@@ -71,8 +72,7 @@
     }
   },
   "assets": {
-    "logo_primary": "assets/Garuda_minimal_logo.png",
-    "logo_secondary": "assets/garuda-logo.png",
+    "logo_primary": "assets/garuda-logo.png",
     "demo_video": "assets/garuda_dashboard_demo_video.mp4",
     "screenshots": {
       "about": "assets/screenshots/about-garuda.png",

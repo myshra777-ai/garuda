@@ -1126,7 +1126,7 @@ func (s *Server) buildTalonHubResponse(ctx context.Context, pgStore *store.Postg
 			agent:   "Cursor MCP",
 			relPath: ".cursor/mcp.json",
 			mode:    "MCP_GATE",
-			desc:    "Configures garuda-mcp with GARUDA_TALON_ENFORCE=true and 23 deterministic tools.",
+			desc:    "Configures garuda-mcp with GARUDA_TALON_ENFORCE=true and 54 deterministic tools.",
 		},
 		{
 			id:      "hook-claude-settings",

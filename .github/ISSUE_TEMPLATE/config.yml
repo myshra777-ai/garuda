@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/myshra777-ai/garuda/security/advisories/new
+    about: Please do not open a public issue for a vulnerability. See SECURITY.md.
+  - name: Installation help
+    url: https://github.com/myshra777-ai/garuda/blob/main/INSTALL.md#troubleshooting
+    about: Check the troubleshooting section first; it covers busy ports, missing tools and PostgreSQL start-up problems.

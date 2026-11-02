@@ -1,4 +1,4 @@
-# Garuda Positioning (`v1.9.9`)
+# Garuda Positioning
 
 **Internal & canonical reference.** This document is the canonical statement of what Garuda is, what it is not, and how its capabilities and evidence should be described. All public-facing material — `README.md`, `docs/CAPABILITIES.md`, `EVIDENCE.md`, release notes, and pitch materials — derives from this document and [`capabilities.json`](../capabilities.json). If a claim is not backed by [`capabilities.json`](../capabilities.json) and [`EVIDENCE.md`](../EVIDENCE.md), it is not a claim Garuda makes.
 
@@ -23,7 +23,7 @@ Four failure modes appear together as multi-agent autonomy increases:
 3. **Teams and agents silently diverge on business formulas and unit scales.** Operations, Marketing, and Management often maintain competing undocumented formulas for the same metric (such as *Loss Ratio*) or mismatched unit scalings (`48.00 Crore` vs. `4.80 Crore` due to Lakh-to-Crore `/ 100` vs. `/ 1000` division).
 4. **Intent, rules, enforcement, and code live in disconnected silos.** ADRs sit in Markdown files, policies sit in YAML, agent instructions sit in `.cursor` or `CLAUDE.md`, and the actual call graph sits in source code—with no single graph showing how organizational intent governs concrete symbols.
 
-## The four product pillars (`v1.9.9`)
+## The four product pillars
 
 ### 1. The Four-Tier Document-to-Code Governance Graph (`garuda.docs_graph` & Surface `04`)
 
@@ -59,8 +59,8 @@ Garuda is designed to operate across the full software delivery lifecycle:
 `Developer machine → AI coding agent (MCP / Talon hooks) → GitHub repository → CI/CD gate (GitHub Action) → Auditable RFC 6962 governance record.`
 
 - **Composite GitHub Marketplace Action (`action.yml`)**: Builds from `${GITHUB_ACTION_PATH}`, evaluates `--diff "${{ inputs.diff }}"`, posts the deterministic `receipt_hash` and `reproduce_command` to `$GITHUB_STEP_SUMMARY`, and fails closed (`BLOCK`) on non-zero exit codes or unparsable output.
-- **Multi-Arch GHCR Container (`Dockerfile` & `.github/workflows/release-packages.yml`)**: Packages all 4 static zero-CGO binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`), `capabilities.json`, `version.txt`, `migrations/`, and `policies/` into `ghcr.io/myshra777-ai/garuda:v1.9.9`.
-- **Cross-Platform Zero-CGO Release Matrix (`scripts/build_release_matrix.sh`)**: Outputs deterministic release bundles into `dist/releases/` for Windows (`amd64`, `arm64`), macOS (`arm64`, `amd64`), Linux (`amd64`, `arm64`, `.deb`), Android Termux, and FreeBSD.
+- **Multi-Arch GHCR Container (`Dockerfile` & `.github/workflows/release-packages.yml`)**: Packages all 4 static zero-CGO binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`), `capabilities.json`, `version.txt`, `migrations/`, and `policies/` into `ghcr.io/myshra777-ai/garuda:latest` (and a tag per release).
+- **Cross-Platform Zero-CGO Release Matrix (`scripts/build_release_matrix.sh`)**: Outputs release bundles into `dist/` for Windows (`amd64`, `arm64`), macOS (`arm64`, `amd64`), Linux (`amd64`, `arm64`, `.deb`), Android Termux, and FreeBSD.
 
 ### 4. Three-Tier Inspectable Evidence Standard (`EVIDENCE.md`)
 
@@ -75,21 +75,21 @@ Garuda strictly separates compiler fixtures, synthetic fault-injection simulatio
 
 ---
 
-## Where Garuda is today (`v1.9.9`)
+## Where Garuda is today
 
-**Shipped and verified in repository (`v1.9.9`):**
+**Shipped in the repository:**
 - **4 Zero-CGO Binaries**: `garuda` (CLI), `garuda-mcp` (54-tool MCP server), `garuda-api` (HTTP gateway & PWA server), and `garuda-talon` (active agent harness).
 - **54 Registered MCP Tools**: 41 read-only tools and 13 mutating tools protected by strict argument whitelisting (`tools_whitelist.go`), fail-closed `GARUDA_MCP_READ_ONLY=true` mode, and `GARUDA_MCP_APPROVER` human co-sign attestation.
 - **10-Surface Progressive-Disclosure Dashboard (`/dashboard`)**: Redesigned to display at most 4 primary cards on first view with collapsible `<details>` drawers, tabbed workbenches, and `cubic-bezier(0.16, 1, 0.3, 1)` motion in Light and Dark modes.
-- **Multi-Language AST & Graph Engine**: Compiler-backed Go analyzer (`go/types`) and structural Python and TypeScript AST analyzers backed by 95 idempotent PostgreSQL migrations and an RFC 6962 Merkle ledger.
+- **Multi-Language AST & Graph Engine**: Compiler-backed Go analyzer (`go/types`) and structural Python and TypeScript AST analyzers backed by 91 idempotent PostgreSQL migrations and an RFC 6962 Merkle ledger.
 - **Human-in-the-Loop Data & Logic Audit Ledger (`095_data_logic_audit_ledger_and_hygiene.sql`)**: `0.0–1.0` team formula disambiguation, 3-tier surface criticality (`HIGH_SEVERE`, `MEDIUM`, `LOW`), and unit-scaling discrepancy detection (`data_logic_audit_ledger`).
-- **Distribution & Packaging Pipeline**: Fail-closed `action.yml`, multi-binary `Dockerfile`, `scripts/build_release_matrix.sh` (`dist/releases/*`), and `scripts/sync_docs_from_manifest.py` backed by `capabilities.json` and `version.txt`.
+- **Distribution & Packaging Pipeline**: Fail-closed `action.yml`, multi-binary `Dockerfile`, `scripts/build_release_matrix.sh` (`dist/*`), and `scripts/sync_docs_from_manifest.py` backed by `capabilities.json` and `version.txt`.
 
 **Honest qualifications & ongoing priorities:**
 - **Go vs. Python/TypeScript depth**: Go analysis uses full `go/types` compiler type resolution; Python and TypeScript analyzers perform structural AST extraction (imports, calls, class hierarchies, and unit-scaling divisors) rather than full cross-package type inference.
 - **Docs & Rules Graph link provenance**: Combines exact AST matches (`ast_exact`) with package/keyword matching (`package_or_keyword_match`) and explicit preview fallbacks (`fallback_unindexed_preview`) when a workspace has not yet been indexed.
 - **Behavioral test scope**: `behavioral_tools_test.go` (`54/54` tools) validates tool contracts, input validation, tenant isolation, and security gates across all 54 handlers, complemented by `scripts/mcp_verify.py` (`63/63` checks) against live PostgreSQL.
-- **Commercial stage**: Open-source Apache-2.0 release (`v1.9.9`); enterprise SSO, hosted multi-tenant cloud billing, and remote Merkle notary services remain future roadmap items.
+- **Commercial stage**: Open-source Apache-2.0 release; enterprise SSO, hosted multi-tenant cloud billing, and remote Merkle notary services remain future roadmap items.
 
 ## The one line to remember
 

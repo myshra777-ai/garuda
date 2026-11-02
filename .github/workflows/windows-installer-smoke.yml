@@ -1,4 +1,6 @@
-name: Windows installer smoke checks
+name: Installer smoke checks (parse + contracts)
+
+# Fast static checks on every installer change. The full end-to-end runs live in installer-e2e.yml.
 
 permissions:
   contents: read
@@ -16,10 +18,9 @@ on:
     paths:
       - "setup.ps1"
       - "install.ps1"
+      - "install.sh"
+      - "setup.sh"
       - ".github/workflows/windows-installer-smoke.yml"
-
-permissions:
-  contents: read
 
 jobs:
   powershell-parse-and-contract:

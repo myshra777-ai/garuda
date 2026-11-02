@@ -9,13 +9,14 @@ import "fmt"
 
 const (
 	// Version is the single canonical release version across all Garuda binaries and docs.
-	Version = "v1.9.9"
+	// Do not edit by hand: run `python3 scripts/sync_docs_from_manifest.py --set vX.Y.Z` (capabilities.json is the source).
+	Version = "v1.9.10"
 
 	// SemVer is the bare semantic version string used in MCP serverInfo and OpenAPI specs.
-	SemVer = "1.9.9"
+	SemVer = "1.9.10"
 
-	// ReleaseDate is the canonical release date for v1.9.9.
-	ReleaseDate = "2026-11-01"
+	// ReleaseDate is the canonical release date of Version.
+	ReleaseDate = "2026-11-03"
 
 	// MCPProtocolVersion is the JSON-RPC 2.0 MCP protocol version negotiated on initialize.
 	MCPProtocolVersion = "2025-06-18"
@@ -35,8 +36,8 @@ const (
 	// DashboardEndpointCount is the canonical count of /api/v1/dashboard/* endpoints.
 	DashboardEndpointCount = 19
 
-	// MigrationCount is the canonical count of idempotent PostgreSQL migrations (001..095).
-	MigrationCount = 95
+	// MigrationCount is the canonical count of PostgreSQL migration files in migrations/*.sql.
+	MigrationCount = 91
 
 	// PolicyPredicateCount is the canonical count of graph-native YAML policy predicates.
 	PolicyPredicateCount = 9

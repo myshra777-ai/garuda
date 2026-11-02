@@ -1,0 +1,86 @@
+name: Installer end-to-end (Linux, macOS, Windows)
+
+# Runs the real installers on clean GitHub runners. Manual and weekly on purpose: it downloads
+# PostgreSQL and Go and takes several minutes. Run it from the Actions tab before a release and
+# read the result; it is the evidence behind the "tested on" table in INSTALL.md.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  unix:
+    name: ${{ matrix.os }} setup.sh
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run setup.sh from a fresh checkout
+        env:
+          GARUDA_PASSWORD: e2e-Test-Passphrase-1
+          GARUDA_EMAIL: e2e@example.com
+          GARUDA_WORKSPACE: e2e
+        run: ./setup.sh
+      - name: API answers, doctor passes, login works
+        run: |
+          curl -fsS http://127.0.0.1:8080/health
+          ./bin/garuda doctor
+          ./bin/garuda --version
+      - name: Second run is idempotent (restarts cleanly)
+        env:
+          GARUDA_PASSWORD: e2e-Test-Passphrase-1
+          GARUDA_EMAIL: e2e@example.com
+          GARUDA_WORKSPACE: e2e
+        run: |
+          ./setup.sh
+          curl -fsS http://127.0.0.1:8080/health
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p e2e-logs
+          cp -f "$HOME"/.garuda/data/*.log e2e-logs/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-logs-${{ matrix.os }}
+          path: e2e-logs
+          if-no-files-found: ignore
+
+  windows:
+    name: windows-latest setup.ps1
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run setup.ps1 (Windows PowerShell 5.1)
+        shell: powershell
+        env:
+          GARUDA_PASSWORD: e2e-Test-Passphrase-1
+          GARUDA_EMAIL: e2e@example.com
+          GARUDA_WORKSPACE: e2e
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
+      - name: API answers and doctor passes
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing | Select-Object StatusCode
+          .\bin\garuda.exe doctor
+      - name: Collect logs
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force e2e-logs | Out-Null
+          Get-ChildItem "$HOME\.garuda\data" -Filter *.log -ErrorAction SilentlyContinue | Copy-Item -Destination e2e-logs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-logs-windows
+          path: e2e-logs
+          if-no-files-found: ignore

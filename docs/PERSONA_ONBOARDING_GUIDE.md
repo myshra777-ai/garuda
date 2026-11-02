@@ -90,7 +90,7 @@ Garuda `v1.9.9` serves both technical and non-technical stakeholders across the 
 ## 4. Non-Technical Founder, Product Manager & Engineering Lead
 
 ### Why You'll Love Garuda
-- **True 1-Command Zero-Dependency Install**: Works out of the box on macOS, Windows PowerShell, Linux, Chromebook, and Android without needing Docker, Go, Postgres, or Xcode pre-installed.
+- **One-Command Install**: One command on macOS, Windows PowerShell, Linux, ChromeOS (Linux) and Android (Termux) that does not require Docker, Go or PostgreSQL to be installed first (it downloads portable copies; see [INSTALL.md](../INSTALL.md) for the small list of prerequisites).
 - **Plain-English Business Impact (Amazon Search vs. Wishlist Model)**: Translates technical call graphs into clear business criticality tiers:
   - **`HIGH_SEVERE` (Core Homepage, Search Redirect, Settlement Ledger — 142 callers)**: Frozen against automated AI breakage so customers are never blocked from searching or paying.
   - **`MEDIUM` (Wishlist Loader, Promo Badges — 19 callers)**: Non-blocking features where product/engineering trade-offs can be weighed.
@@ -142,7 +142,7 @@ Then open **`http://localhost:8080/login`** (or install as a desktop/mobile Chro
 
 ### Reproducible Proof Points in 3 Commands
 ```bash
-# 1. Zero-dependency 1-command provisioning, migration, AST scan, and 63/63 MCP verification
+# 1. One-command provisioning, migration, AST scan and MCP verification
 ./setup.sh
 
 # 2. Run the 24/24 ground-truth compiler & determinism benchmark suite (100% precision/recall, 0.0% FP)

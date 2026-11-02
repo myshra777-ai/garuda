@@ -1,0 +1,62 @@
+name: Bug report
+description: Something does not work as documented
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Garuda version and commit
+      description: Output of `garuda --version`, or the commit SHA if you built from source.
+      placeholder: v1.9.10
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 10/11
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Linux
+        - ChromeOS (Linux container)
+        - Android (Termux)
+        - Docker
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where did it happen?
+      options:
+        - Installer (install / setup script)
+        - CLI
+        - MCP server
+        - Talon (agent hooks)
+        - API or dashboard
+        - Documentation
+        - GitHub Action
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands you ran, in order.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Output of `garuda doctor`, plus the last lines of the setup output or `~/.garuda/data/postgres.log` for install problems. Remove passwords, tokens, personal paths and customer code first.
+      render: text

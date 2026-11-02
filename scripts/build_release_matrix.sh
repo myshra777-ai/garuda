@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # ===========================================================================
-# GARUDA v1.9.9 MULTI-OS RELEASE & PACKAGE MATRIX BUILDER
+# GARUDA MULTI-OS RELEASE & PACKAGE MATRIX BUILDER
 # ===========================================================================
 # Cross-compiles 100% standalone zero-CGO (CGO_ENABLED=0) release archives
 # and OS-native package manifests into dist/releases/ for:
-#   1. Windows 10/11 (x64 / amd64)             -> garuda-v1.9.9-windows-amd64.zip
-#   2. Windows 11 ARM64 (Snapdragon)           -> garuda-v1.9.9-windows-arm64.zip
-#   3. macOS Apple Silicon (M1/M2/M3/M4 arm64) -> garuda-v1.9.9-darwin-arm64.tar.gz
-#   4. macOS Intel (x86_64 / amd64)            -> garuda-v1.9.9-darwin-amd64.tar.gz
-#   5. Linux x86_64 (Ubuntu/Debian/RHEL/WSL2)  -> garuda-v1.9.9-linux-amd64.tar.gz + .deb
-#   6. Linux ARM64 & Chromebook (Crostini)     -> garuda-v1.9.9-linux-arm64.tar.gz + .deb
-#   7. Android Termux (ARM64)                  -> garuda-v1.9.9-android-arm64-termux.tar.gz
-#   8. FreeBSD x86_64                          -> garuda-v1.9.9-freebsd-amd64.tar.gz
-#   9. Source & Universal Installer Bundle     -> garuda-v1.9.9-universal-source.tar.gz
+#   1. Windows 10/11 (x64 / amd64)             -> garuda-<tag>-windows-amd64.zip
+#   2. Windows 11 ARM64 (Snapdragon)           -> garuda-<tag>-windows-arm64.zip
+#   3. macOS Apple Silicon (M1/M2/M3/M4 arm64) -> garuda-<tag>-darwin-arm64.tar.gz
+#   4. macOS Intel (x86_64 / amd64)            -> garuda-<tag>-darwin-amd64.tar.gz
+#   5. Linux x86_64 (Ubuntu/Debian/RHEL/WSL2)  -> garuda-<tag>-linux-amd64.tar.gz + .deb
+#   6. Linux ARM64 & Chromebook (Crostini)     -> garuda-<tag>-linux-arm64.tar.gz + .deb
+#   7. Android Termux (ARM64)                  -> garuda-<tag>-android-arm64-termux.tar.gz
+#   8. FreeBSD x86_64                          -> garuda-<tag>-freebsd-amd64.tar.gz
+#   9. Source & Universal Installer Bundle     -> garuda-<tag>-universal-source.tar.gz
 #
 # NOTE: dist/ is git-ignored and NEVER committed into Git so the repository
 # and universal source tarball stay lean (~5-8 MB instead of 255 MB).
@@ -21,8 +21,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-DEFAULT_VER="$(tr -d '[:space:]' < version.txt 2>/dev/null || echo 'v1.9.9')"
-[[ -z "$DEFAULT_VER" ]] && DEFAULT_VER="v1.9.9"
+DEFAULT_VER="$(tr -d '[:space:]' < version.txt 2>/dev/null || true)"
+[[ -z "$DEFAULT_VER" ]] && DEFAULT_VER="dev"
 VERSION="${GARUDA_VERSION:-$DEFAULT_VER}"
 VERSION_NO_V="${VERSION#v}"
 OUT_DIR="${1:-dist/releases}"

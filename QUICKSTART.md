@@ -15,7 +15,7 @@ Want to see Garuda catch 3 real-world architectural & financial bugs on a 200-li
 This spins up `acme-pay` (4 Go files, ~200 lines) with 3 intentional violations:
 1. **`[CRITICAL]` Direct `database/sql` bypass in Payment Handler** (`internal/payment/checkout.go:5`)
 2. **`[CRITICAL]` `float64` currency rounding + 10x Crore/Lakh unit scale drift (`48 Cr` vs `4.8 Cr`)** (`internal/payment/settlement.go:7`)
-3. **`[HIGH]` Upward layer dependency (`internal/store` → `internal/payment`)** (`internal/store/ledger_repo.go:8`)
+3. **`[HIGH]` Upward layer dependency (`internal/store` → `internal/payment`, created by `garuda demo`)** (`internal/store/ledger_repo.go:8`)
 
 Garuda extracts the AST, reverse-engineers a draft rulebook, blocks the commit, generates deterministic self-repair instructions for your AI coding agent, and seals an RFC 6962 Merkle receipt.
 

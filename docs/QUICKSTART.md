@@ -1,4 +1,6 @@
-# Quick start
+# Quick start (CLI path)
+
+The step-by-step 10-minute tour with a demo project is in the root [QUICKSTART.md](../QUICKSTART.md); install details are in [INSTALL.md](../INSTALL.md).
 
 Go from source code to an architecture-aware agent check. Garuda uses PostgreSQL for persistent workspace state, and Garuda Talon connects that state to supported AI-agent and Git workflows.
 
@@ -9,7 +11,7 @@ git clone https://github.com/myshra777-ai/garuda.git
 cd garuda
 ```
 
-The repository includes a convenience setup script. **Review it before running**: it may start Docker services and stop conflicting local processes or containers.
+The repository includes a convenience setup script. **Review it before running**. It may download a portable PostgreSQL and Go into `~/.garuda`, start a private PostgreSQL on `127.0.0.1:5433`, fall back to a `garuda-postgres` Docker container, and restart a `garuda-api` process that a previous run of the script started. It does not touch other processes or containers.
 
 ```bash
 less setup.sh
@@ -84,7 +86,7 @@ With the database and workspace configured:
 WORKSPACE=my-app python3 scripts/mcp_verify.py
 ```
 
-The current evidence record reports 30/30 reference verifier checks. This verifies the covered protocol, tool-discovery, and integration checks; it is not a proof that all semantic outputs are correct.
+The current evidence record reports 25/25 self-hosted dynamic verifier checks and 63/63 multi-repository reference checks (see [EVIDENCE.md](../EVIDENCE.md)). This verifies the covered protocol, tool-discovery, and integration checks; it is not a proof that all semantic outputs are correct.
 
 ## Next steps
 

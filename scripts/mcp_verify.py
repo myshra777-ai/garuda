@@ -122,7 +122,7 @@ def main():
         tl = read_response(proc)
         results.append(expect(tl.get("id") == 2, "tools/list id == 2 (no notification response)"))
         tools = tl.get("result", {}).get("tools", [])
-        results.append(expect(len(tools) >= 35, f"tools/list >= 35 tools (got {len(tools)})"))
+        results.append(expect(len(tools) >= 54, f"tools/list >= 54 tools (got {len(tools)})"))
 
         names = {t["name"] for t in tools}
         for expected in (

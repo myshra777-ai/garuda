@@ -25,7 +25,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "v1.9.9"
+var version = "v1.9.10"
 
 var (
 	summaryFlag    bool

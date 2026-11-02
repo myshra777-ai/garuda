@@ -1,4 +1,4 @@
-# Garuda Data & Business Logic Audits Guide (`v1.9.9`)
+# Garuda Data & Business Logic Audits Guide
 
 **Resolving Cross-Team Metric Discrepancies, Active Architectural Contradictions, and Undocumented Formula Drift with 0.0–1.0 Team Weights—Without Fintech Regulatory Overhead**
 

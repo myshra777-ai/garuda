@@ -1,7 +1,7 @@
-# Garuda Evidence & Verification Summary (`v1.9.9`)
+# Garuda Evidence & Verification Summary
 
-> **Latest Release Verification (`v1.9.9` — 2026-10-27):**
-> - **All-OS Zero-Dependency Setup & Self-Healing Doctor (`install.sh`/`setup.sh`, `install.ps1`/`setup.ps1`, `garuda doctor --fix`)**: `PASS` across Windows PowerShell 5.1/7 (pure 7-bit ASCII, `curl.exe`/`tar.exe` fast path), macOS Apple Silicon & Intel (`~18 MB` pre-built Portable PostgreSQL 16.4, explicit IPv4 `127.0.0.1:5433`, `~/.garuda/data/run` socket isolation), Linux, Chromebook (Crostini), and Android (Termux).
+> **Recorded verification results.** The benchmark, determinism and MCP-verifier results below were recorded on 2026-10-27 for the v1.9.9 line. Later releases changed installers, documentation, packaging and CI, not the analyzers. Re-run `make benchmark-strict`, `go test ./...` and `python3 scripts/mcp_verify.py` to confirm them on your checkout.
+> - **One-command setup & self-healing doctor (`install.sh`/`setup.sh`, `install.ps1`/`setup.ps1`, `garuda doctor --fix`)**: Linux user-space PostgreSQL path exercised end to end (fresh install, re-run, port and pid handling). The PowerShell scripts are parsed with PowerShell 7 and contract-checked by `windows-installer-smoke`. macOS, ChromeOS and Android (Termux) paths are **not yet covered by a recorded run**; the manual `installer-e2e` workflow produces that evidence on Ubuntu, macOS and Windows runners. See [INSTALL.md](INSTALL.md#what-has-been-tested).
 > - **24/24 Compiler & Multi-Module Ground-Truth Benchmarks (`make benchmark-strict`)**: `PASS` (`100%` precision/recall gate, `TestDoubleRunDeterminism` verified across all 24 cases with checkout-path-invariant package cache fingerprints).
 > - **Build-Tag & Platform Conditional AST Proof (`TestTwoBuildsExposeDifferentEdges`)**: `PASS` (proves two builds of the same commit—`cgo=0` vs `cgo=1 -tags cgo,enterprise`—expose distinct AST edge sets and deterministic `graph_fingerprint` values).
 > - **CI-vs-Editor Drift & 4-Target Cross-Platform Matrix (`TestDetectEnvironmentDrift`, `TestEvaluateBuildMatrix`)**: `PASS` (`linux/amd64 cgo=0`, `linux/amd64 cgo=1`, `darwin/arm64 cgo=1`, `windows/amd64 cgo=0`).
@@ -51,7 +51,7 @@ To prevent benchmark fixtures or synthetic demos from being conflated with live 
 | Blended workspace snapshot | 14,333 entities and 40,956 relationships |
 | Controlled runtime contradiction test | `10/10` injected contradictions detected (`scripts/runtime_contradiction_test.py` with Ed25519 JWT auth) |
 | Software Intelligence Instrument (`/dashboard`) | All 10 progressive-disclosure surfaces (`Overview`, `Explore Index`, `Architecture Map`, `Docs & Rules Graph`, `Talon & Risk Hub`, `Change Review`, `Evidence & Ledger`, `Agents & Sessions`, `Data & Logic Audit`, `Decision Lineage`) + `⌘K` palette verified |
-| Universal Zero-Dependency Build & Runtime (`v1.9.9`) | `CGO_ENABLED=0` Pure-Go compilation + Portable Go `1.26.0` + pre-built Portable PostgreSQL `16.4` (`127.0.0.1:5433`), pure-ASCII Windows PowerShell 5.1 `install.ps1`/`setup.ps1`, fast `install.sh`/`setup.sh`, `garuda doctor --fix`, and PWA (`/manifest.json`, `/sw.js`) |
+| One-command build & runtime | `CGO_ENABLED=0` Pure-Go compilation + portable Go (version from `go.mod`) + pre-built portable PostgreSQL `16.4` (`127.0.0.1:5433`), pure-ASCII Windows PowerShell 5.1 `install.ps1`/`setup.ps1`, fast `install.sh`/`setup.sh`, `garuda doctor --fix`, and PWA (`/manifest.json`, `/sw.js`) |
 | VS Code integration | Ledger, contradictions, diagnostics, graph, refresh, reanalysis, and Go hover workflows exercised |
 
 ---
@@ -288,7 +288,7 @@ The verifier checks:
 
 - Initialization and request identifiers.
 - MCP protocol version `2025-06-18`.
-- Tool discovery and 23-tool availability (including `garuda.talon_pre_edit` and `garuda.talon_verify_edit`), plus MCP `prompts/list`, `resources/list`, and automatic first-call Talon contract injection.
+- Tool discovery and 54-tool availability (including `garuda.talon_pre_edit` and `garuda.talon_verify_edit`), plus MCP `prompts/list`, `resources/list`, and automatic first-call Talon contract injection.
 - Entity lookup and graph relationships.
 - Subclass and implementer semantics.
 - Policy-proof failure behavior for unknown evaluations.
@@ -374,7 +374,7 @@ The extension is tested for editor-integrated diagnostics and exploration. Its u
 
 Garuda's current MCP and coordination surface includes:
 
-- 23 MCP tools + MCP Prompts & Resources + Garuda Talon active pre/post-edit enforcement.
+- 54 MCP tools + MCP Prompts & Resources + Garuda Talon active pre/post-edit enforcement.
 - Transactional handoff.
 - Checkpoint creation.
 - Resume and single-consumption behavior.
@@ -473,15 +473,15 @@ psql "$DATABASE_URL" -c "
 ## Evidence Sources
 
 - [`README.md`](README.md) — Product claims and public positioning.
-- [PLAYBOOK.md](https://www.google.com/search?q=PLAYBOOK.md) — Operational workflows and command reference.
-- [docs/SPECS.md](https://www.google.com/search?q=docs/SPECS.md) — Detailed product and system specification.
-- [docs/CAPABILITIES.md](https://www.google.com/search?q=docs/CAPABILITIES.md) — Capability maturity and analyzer matrix.
-- [docs/WALKTHROUGH.md](https://www.google.com/search?q=docs/WALKTHROUGH.md) — Visual interface and screenshot tour.
-- [docs/adr/](https://www.google.com/search?q=docs/adr/) — Architecture decision records.
-- [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md) — Invariant contract.
-- [scripts/mcp\_verify.py](https://www.google.com/search?q=scripts/mcp_verify.py) — MCP reference verifier.
-- [scripts/runtime\_contradiction\_test.py](https://www.google.com/search?q=scripts/runtime_contradiction_test.py) — Controlled runtime contradiction test.
-- [scripts/doc\_verify\_test.py](https://www.google.com/search?q=scripts/doc_verify_test.py) — Documentation extraction and verification test.
-- [vscode-extension/](https://www.google.com/search?q=vscode-extension/) — VS Code integration source and manifest.
+- [PLAYBOOK.md](PLAYBOOK.md) — Operational workflows and command reference.
+- [docs/SPECS.md](docs/SPECS.md) — Detailed product and system specification.
+- [docs/CAPABILITIES.md](docs/CAPABILITIES.md) — Capability maturity and analyzer matrix.
+- [docs/WALKTHROUGH.md](docs/WALKTHROUGH.md) — Visual interface and screenshot tour.
+- [docs/adr/](docs/adr) — Architecture decision records.
+- [docs/invariants.md](docs/invariants.md) — Invariant contract.
+- [scripts/mcp_verify.py](scripts/mcp_verify.py) — MCP reference verifier.
+- [scripts/runtime_contradiction_test.py](scripts/runtime_contradiction_test.py) — Controlled runtime contradiction test.
+- [scripts/doc_verify_test.py](scripts/doc_verify_test.py) — Documentation extraction and verification test.
+- [vscode-extension/](vscode-extension) — VS Code integration source.
 
 Historical evidence documents may contain earlier corpus sizes or MCP check totals. Such entries should be read as historical milestones; the current MCP & Talon reference result is `63/63` (`scripts/mcp_verify.py`) alongside `24/24` strict ground-truth compiler benchmarks (`make benchmark-strict`) and the current public product surface is documented in `README.md`, `PLAYBOOK.md`, and `docs/SPECS.md`.

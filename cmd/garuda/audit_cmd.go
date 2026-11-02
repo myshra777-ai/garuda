@@ -436,7 +436,7 @@ var auditLogicCmd = &cobra.Command{
 		}
 
 		fmt.Println("╔══════════════════════════════════════════════════════════════════════════════╗")
-		fmt.Println("║     🦅 GARUDA v1.9.9 — HUMAN-IN-THE-LOOP WEIGHTED LOGIC DISAMBIGUATION      ║")
+		fmt.Println("║     🦅 GARUDA — HUMAN-IN-THE-LOOP WEIGHTED LOGIC DISAMBIGUATION             ║")
 		fmt.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
 		fmt.Printf("  Workspace:        %s\n", wsName)
 		fmt.Printf("  Concept:          %s\n", concept)
@@ -546,7 +546,7 @@ var auditDataLogicCmd = &cobra.Command{
 			return enc.Encode(report)
 		}
 		fmt.Println("╔══════════════════════════════════════════════════════════════════════════════╗")
-		fmt.Println("║       🦅 GARUDA v1.9.9 — DATA & BUSINESS LOGIC DISCREPANCY AUDIT        ║")
+		fmt.Println("║       🦅 GARUDA — DATA & BUSINESS LOGIC DISCREPANCY AUDIT               ║")
 		fmt.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
 		fmt.Printf("  Workspace:          %s\n", wsName)
 		fmt.Printf("  Metric Audited:     %s\n", auditMetricNameFlag)
@@ -651,7 +651,7 @@ var auditCriticalityCmd = &cobra.Command{
 			return enc.Encode(map[string]any{"workspace": wsName, "criticality_tiers": tiers})
 		}
 		fmt.Println("╔══════════════════════════════════════════════════════════════════════════════╗")
-		fmt.Println("║         🦅 GARUDA v1.9.9 — 3-TIER SURFACE CRITICALITY CLASSIFICATION        ║")
+		fmt.Println("║         🦅 GARUDA — 3-TIER SURFACE CRITICALITY CLASSIFICATION               ║")
 		fmt.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
 		fmt.Printf("  Workspace: %s\n\n", wsName)
 		for _, t := range tiers {

@@ -7,7 +7,7 @@
       "name": "garuda",
       "source": "./",
       "description": "Checks what AI coding agents change before it lands: impact analysis, architecture rules, and a tamper-evident record. MCP server plus 6 skills.",
-      "version": "1.9.9",
+      "version": "1.9.10",
       "category": "development",
       "tags": ["mcp", "governance", "architecture", "ai-agents"]
     }

@@ -1,3 +1,9 @@
+# Garuda API + PostgreSQL for local evaluation.
+#
+#   POSTGRES_PASSWORD='choose-one' docker compose up -d --build
+#
+# Both ports are published on 127.0.0.1 only. For anything that is not a laptop
+# demo, use deploy/compose/docker-compose.prod.yml or deploy/k8s/garuda-stack.yaml.
 services:
   postgres:
     image: postgres:16-alpine
@@ -5,10 +11,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: garuda
-      POSTGRES_PASSWORD: garudapassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD before starting}
       POSTGRES_DB: garuda
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
@@ -23,21 +29,24 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: garuda/garuda-api:v1.0.0
+    image: ghcr.io/myshra777-ai/garuda:latest
     container_name: garuda-api
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://garuda:garudapassword@postgres:5432/garuda?sslmode=disable
+      DATABASE_URL: postgres://garuda:${POSTGRES_PASSWORD}@postgres:5432/garuda?sslmode=disable
       PORT: "8080"
       GARUDA_ENV: development
-      JWT_SECRET: ${JWT_SECRET:-garuda-default-dev-secret}
+      # Optional: set both to keep sessions valid across restarts (Ed25519 keys, hex).
+      # When unset in development, the API generates temporary keys on every start.
+      JWT_PRIVATE_KEY_HEX: ${JWT_PRIVATE_KEY_HEX:-}
+      JWT_PUBLIC_KEY_HEX: ${JWT_PUBLIC_KEY_HEX:-}
     volumes:
       - ./migrations:/migrations:ro
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     networks:
       - garuda-net
 
