@@ -1,144 +1,191 @@
 <p align="center">
-  <img src="assets/garuda-logo.png" width="130" alt="Garuda Logo">
+  <img src="assets/garuda-logo.png" width="120" alt="Garuda logo">
 </p>
 
-<h1 align="center">Garuda — Architectural &amp; Data-Logic Governance for AI-Generated Software</h1>
+<h1 align="center">Garuda</h1>
+
+<p align="center">
+  <strong>AI can write the code. Garuda checks what it changed, and keeps the proof.</strong>
+</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
-  <a href="mcp-registry.json"><img src="https://img.shields.io/badge/MCP_Server-garuda--mcp_Ready-10b981.svg" alt="MCP Server Ready"></a>
-  <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/OpenAI_Codex-Plugin_Ready-4f46e5.svg" alt="Codex Plugin Ready"></a>
-  <a href="action.yml"><img src="https://img.shields.io/badge/GitHub_Action-SARIF_%26_PR_Gate-0f172a.svg" alt="GitHub Action Ready"></a>
-  <a href="EVIDENCE.md"><img src="https://img.shields.io/badge/Verified-63%2F63_MCP_%7C_10%2F10_Isolation-f59e0b.svg" alt="Verified"></a>
+  <a href="server.json"><img src="https://img.shields.io/badge/MCP-server-10b981.svg" alt="MCP server"></a>
+  <a href=".claude-plugin/plugin.json"><img src="https://img.shields.io/badge/Claude_Code-plugin-d97757.svg" alt="Claude Code plugin"></a>
+  <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-plugin-4f46e5.svg" alt="Codex plugin"></a>
+  <a href="action.yml"><img src="https://img.shields.io/badge/GitHub_Action-PR_gate-0f172a.svg" alt="GitHub Action"></a>
 </p>
 
 <p align="center">
-  <strong>Run <code>garuda init</code> and get a draft architectural &amp; data-logic rulebook reverse-engineered from your codebase in seconds.</strong>
+  <img src="assets/screenshots/about-garuda.png" alt="The Garuda dashboard: a map of your system, with the guard switched on" width="900">
 </p>
 
-Garuda is the deterministic **Change-Control & Epistemic Governance Layer** for autonomous coding agents (**Claude Code**, **Cursor**, **OpenAI Codex**, **Windsurf**) and regulated engineering teams. Instead of relying on probabilistic LLM prompts, Garuda builds a compiler-grade AST call graph, synthesizes an editable **Base Rulebook**, resolves competing cross-team business formulas using **`0.0–1.0` team weights**, catches unit-scale data discrepancies (**Data & Logic Audit Ledger**, e.g. `48.00 Crore` vs `4.80 Crore`), and seals every governance verdict in an **RFC 6962 SHA-256 Merkle tree**.
-
-> **AI can write the code. Who governs the change?**
-> An AI agent modifies a payment service. Garuda discovers that the change bypasses the service layer, violates an architectural decision (`ADR-0001`), and introduces a 10x unit-scaling precision risk. **Garuda Talon** evaluates the diff, identifies the violations, outputs a deterministic self-repair prompt, and blocks the broken change from passing the gate—while recording a cryptographic RFC 6962 Merkle proof of the decision.
-> **Understand the system. Govern the change. Preserve the proof.**
+<p align="center">
+  <a href="assets/garuda_dashboard_demo_video.mp4"><strong>▶ Watch the dashboard demo video</strong></a>
+</p>
 
 ---
 
-## 🚀 Start Here: Productive in 10 Minutes (`The Aha! Moment`)
+## What is this?
 
-- 📖 **[First 3 Rules in 10 Minutes (`QUICKSTART.md`)](QUICKSTART.md)** — The complete step-by-step happy path (`garuda init` → Auto-Rulebook Studio → `garuda rulebook approve` → `garuda check`).
-- ⚡ **60-Second Live Demo (Zero Config)**:
-  ```bash
-  ./bin/garuda demo
-  ```
-  Spins up a 200-line sample fintech microservice (`acme-pay`) with **3 intentional violations** (*direct `database/sql` in payment handler*, *`float64` currency math + `10x` Crore/Lakh unit drift*, and *upward `store → payment` layer bypass*), runs the full pipeline, and outputs the deterministic agent self-repair plan.
+You let an AI assistant (Claude Code, Cursor, Codex…) change your code. It works. The tests pass.
+But did it quietly skip your service layer, break a rule your team agreed on last year, or turn `48 crore` into `4.8 crore`?
+
+Garuda is a safety check that sits between your AI assistant and your codebase:
+
+1. **Before** the assistant edits something, Garuda tells it who depends on that code and which rules apply.
+2. **After** the edit, Garuda checks the change against your rules and says **allow** or **block**, with plain instructions for fixing it.
+3. Every verdict is written to a **tamper-evident log**, so you can prove later what was checked and when.
+
+It reads your code the way a compiler does (not by guessing), so the answers are repeatable. Works with Go, Python and TypeScript.
 
 ---
 
-## ✨ Killer Workflow: Auto-Synthesized Base Rulebook Studio
+## Take the tour (about 10 minutes)
 
-Most codebases don't have up-to-date architecture rules written down. Garuda does the grunt work for you:
+### 1. Install it  ·  *3 minutes*
 
 ```bash
-# 1. Interactive 5-question setup wizard (or pass --template financial-no-direct-sql / hexagonal / layered)
-./bin/garuda init . --wizard
-
-# 2. Reverse-engineer your repo's implicit layer boundaries, criticality tiers & formula weights
-./bin/garuda rulebook generate
-
-# 3. Review & edit in the Web Dashboard (Surface 04 — Base Rulebook Studio) or seal via CLI:
-./bin/garuda rulebook generate --approve --approver "Staff Architect"
-
-# 4. Enforce on every git diff, PR, and AI agent edit
-./bin/garuda check . --diff HEAD --policy policies --fail-on-block
+git clone https://github.com/myshra777-ai/garuda.git
+cd garuda
+./setup.sh
 ```
 
----
+`setup.sh` starts a local PostgreSQL database, builds the tools into `bin/`, and starts the dashboard.
+It prints your login at the end. On Windows use `setup.ps1`.
 
-## 🛡️ 10 Pre-Built Starter Policy Templates ([`policies/templates/`](policies/templates/))
+Prefer one line? `curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash` does the same.
+(As with any installer you pipe into a shell, [read it first](install.sh).)
 
-Run `./bin/garuda init --template <name>` or `./bin/garuda templates install <name>` to activate working guardrails in seconds:
-
-| Template | Command | Enforced Invariant |
-| :--- | :--- | :--- |
-| **Hexagonal / Ports & Adapters** | `garuda init --template hexagonal` | Domain/core packages never import SQL, HTTP, Redis, or gRPC adapters ([`hexagonal.yaml`](policies/templates/hexagonal.yaml)). |
-| **Layered Architecture** | `garuda init --template layered` | Persistence (`store`/`repo`) never imports upper `service` or `api` layers ([`layered.yaml`](policies/templates/layered.yaml)). |
-| **Microservices DB Isolation** | `garuda init --template microservices` | Services never access another microservice's internal store package ([`microservices.yaml`](policies/templates/microservices.yaml)). |
-| **Zero Circular Imports** | `garuda init --template no-circular-imports` | Blocks cyclic package dependencies across internal modules ([`no-circular-imports.yaml`](policies/templates/no-circular-imports.yaml)). |
-| **Data/Logic: No Direct SQL** | `garuda init --template financial-no-direct-sql` | Payment/refund handlers must route through `PaymentRepository`, never `database/sql` ([`financial-no-direct-sql.yaml`](policies/templates/financial-no-direct-sql.yaml)). |
-| **Data/Logic: Decimal Precision** | `garuda init --template financial-decimal-precision` | Monetary, fee, tax, and loss-ratio math must use `Decimal` / `int64` paise, never `float64` ([`financial-decimal-precision.yaml`](policies/templates/financial-decimal-precision.yaml)). |
-| **Zero-Trust Tenant Scope** | `garuda init --template zero-trust-auth` | Exported API handlers must verify `tenant_id` & `workspace_id` scope ([`zero-trust-auth.yaml`](policies/templates/zero-trust-auth.yaml)). |
-| **AI Agent Safety Gate** | `garuda init --template ai-agent-safety` | Freezes `HIGH_SEVERE` criticality Merkle & auth signing code against unapproved agent edits ([`ai-agent-safety.yaml`](policies/templates/ai-agent-safety.yaml)). |
-| **PII / GDPR / HIPAA Guard** | `garuda init --template pii-gdpr-hipaa` | Customer PII/PHI structs never flow into unredacted raw log sinks ([`pii-gdpr-hipaa.yaml`](policies/templates/pii-gdpr-hipaa.yaml)). |
-| **Idempotent Mutations** | `garuda init --template idempotent-mutations` | External charge/payout mutations must verify an idempotency key ([`idempotent-mutations.yaml`](policies/templates/idempotent-mutations.yaml)). |
-
-Already using **ArchUnit** (Java), **Dependency-Cruiser** (JS/TS), or **Import Linter** (Python)? Migrate in one command:
+### 2. Watch it catch three real bugs  ·  *1 minute*
 
 ```bash
-./bin/garuda import --from archunit --input src/test/java/ArchitectureTest.java
-./bin/garuda import --from dependency-cruiser --input .dependency-cruiser.json
-./bin/garuda import --from importlinter --input .importlinter
+./bin/garuda demo
 ```
 
----
+This builds a tiny fake payments service with three planted problems and runs Garuda on it:
 
-## ⚙️ Drop-In GitHub Action, SARIF & Slack/Teams Alerts
+| Planted problem | Why it matters |
+| :--- | :--- |
+| The payment handler talks to the database directly | Skips the layer that is supposed to guard money movement |
+| Money is calculated with `float64`, and one report is off by 10× (`48 Cr` vs `4.8 Cr`) | Silent wrong numbers |
+| The storage layer imports the payment layer | Dependencies pointing the wrong way |
 
-Copy **[`.github/workflows/garuda-gate.yml`](.github/workflows/garuda-gate.yml)** (or use [`action.yml`](action.yml)) into any repository to:
+You'll see each problem, the exact file and line, and a short "how to fix it" an AI assistant can follow.
 
-- Run `garuda check` against every PR diff (`--diff origin/$BASE_REF...HEAD`).
-- Post a rich Markdown governance & blast-radius table directly on the PR (`--pr-comment`).
-- Upload inline code annotations to the **GitHub Security** tab (`--sarif garuda.sarif`).
-- Send real-time violation alerts to **Slack** (`--notify-slack`) or **Microsoft Teams** (`--notify-teams`).
-- Fail the workflow (`exit 2`) if `CRITICAL` (`BLOCK`) violations are introduced.
+### 3. Open the dashboard  ·  *2 minutes*
 
----
-
-## 🔌 MCP Server, Agent Skills & Ecosystem Plugins
-
-Garuda ships a hardened MCP server (`garuda-mcp`), **6 specialist agent skills** ([`skills/`](skills/)), and native plugin manifests ready for local use and registry publication:
-
-- **Claude Code & Claude Desktop**: Auto-configured by `garuda init` (`.claude/settings.json` + [`CLAUDE.md`](CLAUDE.md) + [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json) + [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json)).
-- **Cursor IDE**: Auto-configured by `garuda init` (`.cursor/rules/garuda-talon.mdc` + `.cursor/mcp.json` + [`.cursor-plugin/plugin.json`](.cursor-plugin/plugin.json)).
-- **OpenAI Codex Plugin**: Native manifest at **[`.codex-plugin/plugin.json`](.codex-plugin/plugin.json)** and [`AGENTS.md`](AGENTS.md).
-- **6 Bundled Agent Skills ([`skills/`](skills/))**:
-  - [`garuda-pre-edit-governance`](skills/pre-edit-governance/SKILL.md) · [`garuda-post-edit-verification`](skills/post-edit-verification/SKILL.md) · [`garuda-violation-repair`](skills/violation-repair/SKILL.md) · [`garuda-architecture-review`](skills/architecture-review/SKILL.md) · [`garuda-change-impact`](skills/change-impact/SKILL.md) · [`garuda-evidence-verification`](skills/evidence-verification/SKILL.md)
-- **MCP Registries**: Ready-to-publish manifests for **Official MCP Registry** (**[`mcp-registry.json`](mcp-registry.json)**), **Smithery** (**[`smithery.yaml`](smithery.yaml)**), and **Glama** (**[`glama.json`](glama.json)**).
-
----
-
-## 💎 Open-Source Core vs. Garuda Enterprise & Cloud
-
-Garuda is built so individual developers and teams get an immediate, zero-friction **Aha! moment** locally for free—while scaling seamlessly into regulated multi-team organizations:
-
-| Capability | Garuda Open-Source (Free Local & CI) | Garuda Team & Enterprise (Paid Tier) |
-| :--- | :--- | :--- |
-| **60-Second Demo, Auto-Rulebook Studio & 10 Policy Templates** | ✅ Included (`garuda demo`, `garuda rulebook generate`) | ✅ Included + Org-Wide Policy Inheritance |
-| **Local AST Graph, Talon Pre-Commit Gate & MCP Server** | ✅ Included (Go, Python, TypeScript + `garuda-mcp`) | ✅ Included + Hosted Remote MCP Gateway |
-| **10-Surface Progressive-Disclosure Local Dashboard (`/dashboard`)** | ✅ Included (Light & Graphite Dark Mode PWA) | ✅ Included + Multi-Tenant RBAC & Invite Codes (`GRD-XXXXXX`) |
-| **Cross-Team Formula Disambiguation (`0.0–1.0` Weights) & Data-Logic Audit** | ✅ Local Repo & CLI (`garuda audit logic` / `data-logic`) | 🔒 **Cross-Org Pipeline Lineage, Live Warehouse Reconciliation & Slack/PagerDuty Escalation** |
-| **Cryptographic RFC 6962 Merkle Ledger & Compliance Exports** | ✅ Local Workspace Merkle Proofs | 🔒 **Tamper-Evident Multi-Region Audit Vault, SOC2 / ISO-27001 / RBI Signed Bundles & SSO/SAML** |
-
----
-
-## 📚 Architecture Decision Records (ADRs), Playbooks & Deep Dives
-
-- **Quickstart & Monorepo Guide**: **[`QUICKSTART.md`](QUICKSTART.md)**
-- **Persona Onboarding Guide**: **[`docs/PERSONA_ONBOARDING_GUIDE.md`](docs/PERSONA_ONBOARDING_GUIDE.md)**
-- **Data & Logic Audit Guide (`0.0–1.0` Weights & Unit Drift)**: **[`docs/DATA_AND_LOGIC_AUDIT_GUIDE.md`](docs/DATA_AND_LOGIC_AUDIT_GUIDE.md)**
-- **Technical Deep-Dive Blog Post**: **[`docs/BLOG_AST_MERKLE_AGENT_GOVERNANCE.md`](docs/BLOG_AST_MERKLE_AGENT_GOVERNANCE.md)**
-- **Architectural Decision Records ([`docs/adr/`](docs/adr/))**:
-  - **[`ADR-0001: Payment Idempotency & Hexagonal Store Isolation`](docs/adr/0001-payment-idempotency.md)**
-  - **[`ADR-0002: RFC 6962 Canonical SHA-256 Merkle Provenance Layer`](docs/adr/0002-rfc6962-merkle-ledger.md)**
-  - **[`ADR-0003: Three-State Epistemic Honesty (SUPPORTED, UNVERIFIED, CONTRADICTED)`](docs/adr/0003-epistemic-honesty.md)**
-- **Operational Playbooks ([`docs/playbooks/`](docs/playbooks/README.md))**: **[`docs/playbooks/README.md`](docs/playbooks/README.md)**
-- **Database Schema & 98 Migrations ([`migrations/`](migrations/))**: **[`migrations/`](migrations/)** (including [`095_data_logic_audit_ledger_and_hygiene.sql`](migrations/095_data_logic_audit_ledger_and_hygiene.sql), [`096_policy_evaluations_decision_check.sql`](migrations/096_policy_evaluations_decision_check.sql), [`097_multi_tenant_rbac_isolation.sql`](migrations/097_multi_tenant_rbac_isolation.sql), and [`098_strict_workspace_and_tenant_isolation.sql`](migrations/098_strict_workspace_and_tenant_isolation.sql))
-- **10/10 Multi-Tenant Isolation & Evidence Regression Suite**: **[`internal/api/tenant_isolation_test.go`](internal/api/tenant_isolation_test.go)**
-- **API & MCP Reference**: **[`docs/API.md`](docs/API.md)** · **[`EVIDENCE.md`](EVIDENCE.md)** · **[`INSTALL.md`](INSTALL.md)**
-
----
+Go to **http://localhost:8080/login** and sign in with the login `setup.sh` printed.
 
 <p align="center">
-  <strong>Understand the system. Govern the change. Preserve the proof.</strong><br>
+  <img src="assets/screenshots/quickstart-steps.png" alt="The dashboard's own five-step guide" width="900">
+</p>
+
+The dashboard's front page walks you through five steps. Here is what each part gives you:
+
+**Add your own project.** Click **New Workspace**, paste a GitHub link or a folder path, and Garuda reads the code for you.
+
+<p align="center">
+  <img src="assets/screenshots/create-workspace.png" alt="Create a workspace by pasting a repository link" width="760">
+</p>
+
+**See your system without the spaghetti.** Instead of one giant tangled graph, Garuda shows the small neighbourhood around the thing you care about: who calls it, and what it calls.
+
+<p align="center">
+  <img src="assets/screenshots/topology-overview.png" alt="Focused architecture map" width="900">
+</p>
+
+**Turn written decisions into enforced rules.** Drop in your design docs or decision records (ADRs). Garuda pulls out the "must" and "must not" lines and links them to the code they talk about. No docs yet? It drafts a rulebook from your code for you to approve.
+
+<p align="center">
+  <img src="assets/screenshots/docs-to-guardrails.png" alt="From design documents to enforced rules" width="900">
+</p>
+
+**Catch numbers that disagree.** When two teams calculate the same metric differently, or one query divides by `1e7` and another by `1e8`, Garuda points at the exact lines and asks a human to decide.
+
+<p align="center">
+  <img src="assets/screenshots/data-logic-audit.png" alt="Data and logic audit catching a 10x mismatch" width="900">
+</p>
+
+**Learn the signals.** Every badge has one fixed meaning:
+
+<p align="center">
+  <img src="assets/screenshots/signal-glossary.png" alt="Glossary of Garuda's signals" width="900">
+</p>
+
+| You see | It means |
+| :--- | :--- |
+| **ALLOW / WARN / REVIEW / BLOCK** | The verdict on a change. BLOCK stops it and tells the assistant how to repair it. |
+| **SUPPORTED** | Proven by the compiler. Safe to rely on. |
+| **UNVERIFIED** | Found in the code or docs but not confirmed yet. Not an error. |
+| **CONTRADICTED** | The code breaks a rule you wrote down. |
+| **HIGH / MEDIUM / LOW tier** | How many things depend on this code. High-tier code is protected from silent AI rewrites. |
+
+### 4. Point it at your own code  ·  *3 minutes*
+
+```bash
+cd /path/to/your/project
+/path/to/garuda/bin/garuda init . --wizard      # five short questions
+/path/to/garuda/bin/garuda rulebook generate    # drafts rules from your code
+/path/to/garuda/bin/garuda check . --diff HEAD  # checks what you just changed
+```
+
+Not sure which rules to start with? Pick a ready-made set: `garuda init . --template layered` (also `hexagonal`, `microservices`, `no-circular-imports`, `financial`, `zero-trust-auth`, `ai-agent-safety`, `pii-gdpr-hipaa`, `idempotent-mutations`, or `all`). They live in [`policies/templates/`](policies/templates/).
+
+Coming from ArchUnit, Dependency-Cruiser or Import Linter? `garuda import --from archunit --input <file>` converts your existing rules.
+
+If something looks off, run `./bin/garuda doctor`. It checks your database, migrations and hooks and tells you what is wrong.
+
+<p align="center">
+  <img src="assets/screenshots/command-cheatsheet.png" alt="Every command on one page" width="900">
+</p>
+
+---
+
+## Plug it into your AI assistant
+
+`garuda init` sets this up automatically for Claude Code, Claude Desktop and Cursor. To install it as a plugin instead:
+
+| Tool | How |
+| :--- | :--- |
+| **Claude Code** | `/plugin marketplace add myshra777-ai/garuda` then `/plugin install garuda@garuda` |
+| **OpenAI Codex** | `codex plugin marketplace add myshra777-ai/garuda` |
+| **Cursor** | Run `garuda init`; it writes the rules and MCP settings into your project ([`.cursor-plugin/`](.cursor-plugin/plugin.json) has the plugin manifest) |
+| **Anything that speaks MCP** | Run `garuda-mcp` over stdio ([example config](.mcp.json)) |
+
+The plugin needs the `garuda-mcp` program and a database, so do step 1 above first.
+
+What your assistant gets: **54 tools** (41 read-only, 13 that can change state) and **6 skills**, short playbooks that tell it when to use them:
+
+| Skill | When the assistant uses it |
+| :--- | :--- |
+| [`pre-edit-governance`](skills/pre-edit-governance/SKILL.md) | Before changing code: proceed, revise or ask a human? |
+| [`change-impact`](skills/change-impact/SKILL.md) | Who calls this, and how far does the damage spread? |
+| [`post-edit-verification`](skills/post-edit-verification/SKILL.md) | After the edit: any new violations in this diff? |
+| [`violation-repair`](skills/violation-repair/SKILL.md) | A change was blocked; fix it without breaking something else |
+| [`architecture-review`](skills/architecture-review/SKILL.md) | Does the real code match the documented design? |
+| [`evidence-verification`](skills/evidence-verification/SKILL.md) | Is this claim backed by code, and is the receipt genuine? |
+
+## Check every pull request
+
+Add the GitHub Action to get a verdict comment on each PR, findings in GitHub's Security tab, and optional Slack or Teams alerts. Start from [`.github/workflows/garuda-gate.yml`](.github/workflows/garuda-gate.yml) or use [`action.yml`](action.yml).
+
+---
+
+## Free and paid
+
+Everything above runs locally and is free and open source (Apache 2.0). Hosted and multi-team features (shared policies across an organisation, single sign-on, long-term audit storage) are planned for a paid tier.
+
+## Learn more
+
+- [`QUICKSTART.md`](QUICKSTART.md): the same journey with more detail
+- [`docs/DASHBOARD_WALKTHROUGH.md`](docs/DASHBOARD_WALKTHROUGH.md): every dashboard page
+- [`docs/DATA_AND_LOGIC_AUDIT_GUIDE.md`](docs/DATA_AND_LOGIC_AUDIT_GUIDE.md): the number-mismatch checks
+- [`docs/adr/`](docs/adr/): the decisions behind Garuda itself
+- [`docs/LISTING_GUIDE.md`](docs/LISTING_GUIDE.md): how this project gets listed in plugin and MCP directories
+- [`INSTALL.md`](INSTALL.md) · [`docs/API.md`](docs/API.md) · [`EVIDENCE.md`](EVIDENCE.md) · [`SECURITY.md`](SECURITY.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md)
+
+<p align="center">
+  <strong>Understand the system. Govern the change. Keep the proof.</strong><br>
   Released under the <a href="LICENSE">Apache 2.0 License</a>.
 </p>

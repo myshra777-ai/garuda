@@ -1,0 +1,19 @@
+# Garuda MCP server image (stdio). Used for the Official MCP Registry / Smithery.
+FROM golang:1.26-alpine AS builder
+WORKDIR /app
+RUN apk add --no-cache git ca-certificates
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG VERSION=v1.9.9
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/garuda-mcp ./cmd/garuda-mcp
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates git && adduser -D -u 65532 garuda
+# Ownership proof required by the Official MCP Registry (must equal server.json "name").
+LABEL io.modelcontextprotocol.server.name="io.github.myshra777-ai/garuda"
+COPY --from=builder /out/garuda-mcp /usr/local/bin/garuda-mcp
+COPY policies /policies
+USER garuda
+ENV GARUDA_TALON_ENFORCE=true
+ENTRYPOINT ["/usr/local/bin/garuda-mcp"]

@@ -185,3 +185,12 @@ coverage.out
 /garuda-talon
 sync*.sh
 /refund-api
+
+# Marketplace / plugin manifests must be tracked (the global *.json rule above hid them)
+!.mcp.json
+!server.json
+!glama.json
+!.claude-plugin/*.json
+!.codex-plugin/*.json
+!.cursor-plugin/*.json
+!.agents/plugins/*.json
