@@ -39,6 +39,7 @@ BEGIN;
 ALTER TABLE merkle_roots
   ADD COLUMN IF NOT EXISTS verification_version SMALLINT NOT NULL DEFAULT 0;
 
+ALTER TABLE merkle_roots DROP CONSTRAINT IF EXISTS merkle_roots_version_check;
 ALTER TABLE merkle_roots
   ADD CONSTRAINT merkle_roots_version_check
   CHECK (verification_version IN (0, 1));
@@ -52,6 +53,7 @@ ALTER TABLE merkle_roots
 ALTER TABLE merkle_snapshots
   ADD COLUMN IF NOT EXISTS verification_version SMALLINT NOT NULL DEFAULT 0;
 
+ALTER TABLE merkle_snapshots DROP CONSTRAINT IF EXISTS merkle_snapshots_version_check;
 ALTER TABLE merkle_snapshots
   ADD CONSTRAINT merkle_snapshots_version_check
   CHECK (verification_version IN (0, 1));
@@ -64,23 +66,28 @@ ALTER TABLE merkle_snapshots
 -- ─────────────────────────────────────────────────────────────────
 
 -- merkle_roots
+ALTER TABLE merkle_roots DROP CONSTRAINT IF EXISTS merkle_roots_root_hash_format;
 ALTER TABLE merkle_roots
   ADD CONSTRAINT merkle_roots_root_hash_format
   CHECK (root_hash ~ '^[0-9a-f]{64}$');
 
 -- merkle_snapshots: all five hash columns
+ALTER TABLE merkle_snapshots DROP CONSTRAINT IF EXISTS merkle_snapshots_root_hash_format;
 ALTER TABLE merkle_snapshots
   ADD CONSTRAINT merkle_snapshots_root_hash_format
   CHECK (root_hash ~ '^[0-9a-f]{64}$');
 
+ALTER TABLE merkle_snapshots DROP CONSTRAINT IF EXISTS merkle_snapshots_snapshot_hash_format;
 ALTER TABLE merkle_snapshots
   ADD CONSTRAINT merkle_snapshots_snapshot_hash_format
   CHECK (snapshot_hash ~ '^[0-9a-f]{64}$');
 
+ALTER TABLE merkle_snapshots DROP CONSTRAINT IF EXISTS merkle_snapshots_static_root_hash_format;
 ALTER TABLE merkle_snapshots
   ADD CONSTRAINT merkle_snapshots_static_root_hash_format
   CHECK (static_root_hash ~ '^[0-9a-f]{64}$');
 
+ALTER TABLE merkle_snapshots DROP CONSTRAINT IF EXISTS merkle_snapshots_runtime_root_hash_format;
 ALTER TABLE merkle_snapshots
   ADD CONSTRAINT merkle_snapshots_runtime_root_hash_format
   CHECK (runtime_root_hash ~ '^[0-9a-f]{64}$');

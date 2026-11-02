@@ -190,7 +190,12 @@ var initCmd = &cobra.Command{
 			password = os.Getenv("GARUDA_PASSWORD")
 		}
 		if password == "" {
-			password = "garuda2026"
+			gen, genErr := generateInitPassword()
+			if genErr != nil {
+				return fmt.Errorf("could not generate owner password: %w", genErr)
+			}
+			password = gen
+			fmt.Printf("  ! No --password/GARUDA_PASSWORD given; generated owner password (shown once, applies only if the account is new): %s\n", password)
 		}
 		port := os.Getenv("PORT")
 		if port == "" {
@@ -528,7 +533,7 @@ func ensureLocalOrDockerPostgres() {
 
 func init() {
 	initCmd.Flags().StringVar(&initEmailFlag, "email", "", "Owner email to provision (auto-detected from git config if omitted)")
-	initCmd.Flags().StringVar(&initPasswordFlag, "password", "", "Owner password to provision (defaults to GARUDA_PASSWORD or garuda2026)")
+	initCmd.Flags().StringVar(&initPasswordFlag, "password", "", "Owner password to provision (defaults to GARUDA_PASSWORD, otherwise a random password is generated and printed once)")
 	initCmd.Flags().StringVar(&initWorkspaceFlag, "workspace", "", "Workspace name to initialize (auto-detected if omitted)")
 	initCmd.Flags().StringVar(&initTargetFlag, "target", ".", "Repository path to index")
 	initCmd.Flags().BoolVar(&initSkipScanFlag, "skip-scan", false, "Skip initial repository AST scan")

@@ -285,6 +285,12 @@ func (s *Server) HandleDebugToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Never mint tokens for remote callers: this endpoint is unauthenticated by design.
+	if !debugTokenAllowed(r) {
+		s.RespondWithError(w, http.StatusNotFound, "debug endpoint is only available from the loopback interface", "")
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		s.RespondWithError(w, http.StatusMethodNotAllowed, "method not allowed", "")
 		return

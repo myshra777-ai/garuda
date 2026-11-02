@@ -35,7 +35,7 @@ Initializes Garuda in a single command: verifies or starts PostgreSQL (local use
 **Flags:**
 - `--workspace string` — Workspace name to initialize (defaults to `GARUDA_WORKSPACE` or target folder name).
 - `--email string` — Owner email to provision (auto-discovered from `GARUDA_EMAIL`, `git config user.email`, or OS username if omitted).
-- `--password string` — Owner password to provision (default `garuda2026`).
+- `--password string` — Owner password to provision (defaults to `GARUDA_PASSWORD`; if unset, a random password is generated and printed once).
 - `--target string` — Repository path to index (default `.`).
 - `--skip-scan` — Skip initial repository AST scan during setup.
 

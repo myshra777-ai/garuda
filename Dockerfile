@@ -40,6 +40,7 @@ COPY migrations /migrations
 COPY policies /policies
 
 USER 65532:65532
+ENV GARUDA_BIND=0.0.0.0:8080
 EXPOSE 8080
 
 ENTRYPOINT ["/garuda-api"]

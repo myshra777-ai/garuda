@@ -107,7 +107,7 @@ func resolveTalonPolicyDir(policyDir string) string {
 			filepath.Join(filepath.Dir(exeDir), "policies"),
 		)
 	}
-	candidates = append(candidates, "./policies", "../policies", "/home/rohit/garuda/policies", "/tmp/garuda/policies")
+	candidates = append(candidates, "./policies", "../policies")
 	for _, cand := range candidates {
 		if st, err := os.Stat(cand); err == nil && st.IsDir() {
 			if abs, aErr := filepath.Abs(cand); aErr == nil {

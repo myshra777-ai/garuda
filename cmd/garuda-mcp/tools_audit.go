@@ -148,7 +148,7 @@ func resolveMCPRepoRoot() string {
 			}
 		}
 	}
-	for _, c := range []string{".", "..", "../..", "/home/rohit/garuda", "/tmp/garuda"} {
+	for _, c := range []string{".", "..", "../.."} {
 		if st, err := os.Stat(filepath.Join(c, "policies")); err == nil && st.IsDir() {
 			if abs, err := filepath.Abs(c); err == nil {
 				return abs

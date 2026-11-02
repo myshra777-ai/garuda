@@ -137,7 +137,7 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	addr := ":" + port
+	addr := resolveBindAddr(port)
 	handler := api.SetupRouter(server, rateLimiter, mcp.BridgeHandler("http://localhost:"+port), nil)
 
 	// 9. HTTP Server

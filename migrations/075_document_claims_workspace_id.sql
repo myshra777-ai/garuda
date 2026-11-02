@@ -107,6 +107,7 @@ UPDATE document_claims dc
 ALTER TABLE document_claims
   ALTER COLUMN workspace_id SET NOT NULL;
 
+ALTER TABLE document_claims DROP CONSTRAINT IF EXISTS document_claims_workspace_id_fkey;
 ALTER TABLE document_claims
   ADD CONSTRAINT document_claims_workspace_id_fkey
   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE;

@@ -1,5 +1,6 @@
 -- 008_contradictions_schema.sql
 -- Drop and recreate contradictions table with correct foreign keys
+DO $$ BEGIN IF to_regclass('contradictions') IS NOT NULL AND EXISTS (SELECT 1 FROM contradictions LIMIT 1) THEN RAISE EXCEPTION '008: refusing to drop non-empty contradictions table'; END IF; END $$;
 DROP TABLE IF EXISTS contradictions CASCADE;
 
 CREATE TABLE IF NOT EXISTS contradictions (

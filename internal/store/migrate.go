@@ -129,6 +129,12 @@ func Migrate(connString string, migrationsDir string) error {
 		if _, execErr := tx.Exec(ctx, string(splitGooseUp(content))); execErr != nil {
 			_ = tx.Rollback(ctx)
 			if isAlreadyAppliedPgError(execErr) {
+				// The transaction was rolled back, so NONE of this migration ran. Recording it
+				// as applied hides schema drift; surface it, and let CI/operators opt into failing.
+				if os.Getenv("GARUDA_MIGRATE_STRICT") == "1" {
+					return fmt.Errorf("migration %s conflicts with existing schema and was not applied: %w", name, execErr)
+				}
+				fmt.Fprintf(os.Stderr, "WARN: migration %s hit an already-exists conflict and was rolled back (recording as applied; set GARUDA_MIGRATE_STRICT=1 to fail instead): %v\n", name, execErr)
 				_, _ = pool.Exec(ctx, "INSERT INTO migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", name)
 				continue
 			}

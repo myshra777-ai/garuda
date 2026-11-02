@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -33,7 +34,7 @@ const (
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Bypass authentication for public dashboard UI and read-only dashboard data endpoints.
-		if r.URL.Path == "/dashboard" || r.URL.Path == "/favicon.ico" || r.URL.Path == "/debug/token" ||
+		if r.URL.Path == "/dashboard" || r.URL.Path == "/favicon.ico" ||
 			strings.HasPrefix(r.URL.Path, "/dashboard/") || r.URL.Path == "/api/v1/dashboard/stats" ||
 			r.URL.Path == "/api/v1/graph" || r.URL.Path == "/api/v1/events" {
 			next.ServeHTTP(w, r)
@@ -65,10 +66,6 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 				token = authHeader
 			}
 		}
-		if token == "" {
-			token = strings.TrimSpace(r.Header.Get("X-Garuda-Actor"))
-		}
-
 		// 2. Extract token from Query Parameters (for SSE browser EventSource / curl)
 		if token == "" {
 			token = strings.TrimSpace(r.URL.Query().Get("token"))
@@ -84,6 +81,17 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"code":    412,
 				"message": "security constraint breach: missing token credentials",
+			})
+			return
+		}
+
+		// Fail closed: in production, never accept an unverifiable token.
+		if (s == nil || s.jwtConfig == nil) && strings.EqualFold(strings.TrimSpace(os.Getenv("GARUDA_ENV")), "production") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable) // 503
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"code":    503,
+				"message": "authentication is not configured; refusing to accept unverified tokens in production",
 			})
 			return
 		}
