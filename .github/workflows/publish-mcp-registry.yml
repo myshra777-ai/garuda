@@ -1,0 +1,44 @@
+name: Publish to the MCP Registry
+
+# Runs when you PUBLISH a GitHub release (or run it by hand). Prerequisites:
+#   1. publish-mcp-image.yml has pushed ghcr.io/myshra777-ai/garuda-mcp:<version>
+#   2. that package is PUBLIC (GitHub -> Packages -> garuda-mcp -> Package settings -> Visibility)
+# Authentication is GitHub OIDC; it proves you control the io.github.myshra777-ai/* namespace.
+# No secret is needed.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+      - name: server.json matches the release version
+        run: |
+          want="$(tr -d '[:space:]' < version.txt | sed 's/^v//')"
+          got="$(python3 -c 'import json;print(json.load(open("server.json"))["version"])')"
+          test "$want" = "$got" || { echo "::error::server.json version $got != version.txt $want"; exit 1; }
+          echo "ver=$want" >> "$GITHUB_ENV"
+      - name: The image is public and has the ownership label
+        run: |
+          img="ghcr.io/myshra777-ai/garuda-mcp:${ver}"
+          docker buildx imagetools inspect "$img" >/dev/null 2>&1 || {
+            echo "::error::Cannot read $img anonymously. Run publish-mcp-image.yml first and make the garuda-mcp package public."
+            exit 1
+          }
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+      - name: Authenticate (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+      - name: Publish server.json
+        run: ./mcp-publisher publish

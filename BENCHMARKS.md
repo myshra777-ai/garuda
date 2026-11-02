@@ -1,6 +1,8 @@
-# Garuda (`v1.9.9`) — Architecture, Agent Continuity, Distribution & Three-Tier Benchmark Report
+# Garuda — Architecture, Agent Continuity, Distribution & Three-Tier Benchmark Report
 
-Garuda (`v1.9.9`) has evolved from a local developer analyzer into a **distributable engineering governance and multi-agent continuity platform**. All counts, versions, and verification gates in this report are synchronized with [`capabilities.json`](capabilities.json), [`internal/version/manifest.go`](internal/version/manifest.go), and [`EVIDENCE.md`](EVIDENCE.md) via `python3 scripts/sync_docs_from_manifest.py --check`.
+> Benchmark figures and the release-blocker matrix below were recorded on the `v1.9.9` line. `v1.9.10` changed installers, documentation, packaging and CI, not the analyzers (see [`CHANGELOG.md`](CHANGELOG.md)).
+
+Garuda has evolved from a local developer analyzer into a **distributable engineering governance and multi-agent continuity platform**. All counts, versions, and verification gates in this report are synchronized with [`capabilities.json`](capabilities.json), [`internal/version/manifest.go`](internal/version/manifest.go), and [`EVIDENCE.md`](EVIDENCE.md) via `python3 scripts/sync_docs_from_manifest.py --check`.
 
 ---
 
@@ -40,14 +42,15 @@ Garuda understands the work of agents, not just their code—preserving shared o
 
 ## 3. Engineering Governance Distribution Platform
 
-Garuda (`v1.9.9`) provides an end-to-end adoption and enforcement path:
+Garuda provides an end-to-end adoption and enforcement path:
 
 `Developer machine → coding agent → GitHub repository → CI/CD gate → auditable governance record.`
 
-| Delivery Component | Path | Verified `v1.9.9` Behavior |
+| Delivery Component | Path | Behavior |
 | :--- | :--- | :--- |
 | **Composite GitHub Marketplace Action** | [`action.yml`](action.yml) | Builds zero-CGO binaries directly from `${GITHUB_ACTION_PATH}`, passes `--diff "${{ inputs.diff }}"` to `garuda talon guard`, captures exit codes without swallowing errors, and fails closed (`BLOCK`) if JSON output is unparsable or the gate exits non-zero. |
-| **GHCR Multi-Arch Container & Release Workflow** | [`.github/workflows/release-packages.yml`](.github/workflows/release-packages.yml) & [`Dockerfile`](Dockerfile) | Validates `capabilities.json` and `version.txt` (`v1.9.9`), runs the 54-tool behavioral & security test suite, builds all 4 static binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) into `ghcr.io/myshra777-ai/garuda:v1.9.9`, and uploads `dist/releases/*`. |
+| **Draft GitHub Release** | [`.github/workflows/release.yml`](.github/workflows/release.yml) | On a `vX.Y.Z` tag: checks `version.txt` equals the tag, runs the documentation/manifest consistency and link checks and `go build/vet/test`, runs `scripts/build_release_matrix.sh`, attests build provenance and creates a **draft** release with `dist/releases/*` and `SHA256SUMS.txt`. |
+| **GHCR Container Images** | [`.github/workflows/release-packages.yml`](.github/workflows/release-packages.yml), [`publish-mcp-image.yml`](.github/workflows/publish-mcp-image.yml) & [`Dockerfile`](Dockerfile) | Runs the consistency check and the MCP tool-contract tests, then pushes the multi-arch API image `ghcr.io/myshra777-ai/garuda:<version>` (all 4 static binaries: `garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`) and the MCP server image `ghcr.io/myshra777-ai/garuda-mcp:<version>`. |
 | **Multi-OS Zero-CGO Release Matrix Builder** | [`scripts/build_release_matrix.sh`](scripts/build_release_matrix.sh) | Cross-compiles Windows (`amd64`, `arm64`), macOS (`arm64`, `amd64`), Linux (`amd64`, `arm64`, `.deb`), Android Termux, and FreeBSD packages directly into `dist/releases/` with `SHA256SUMS.txt`. |
 
 ---
@@ -70,6 +73,6 @@ Garuda strictly separates deterministic compiler fixtures, synthetic fault-injec
 | Audit Finding | Severity | Resolution Applied & Verified |
 | :--- | :--- | :--- |
 | **1. `action.yml` working directory, missing `--diff` flag, and fail-open `\|\| true` / `ALLOW` fallback** | **Critical** | Updated `action.yml` to compile from `${GITHUB_ACTION_PATH}`, pass `--diff "${{ inputs.diff }}"`, capture `GUARD_EXIT` without `\|\| true`, and default any unparsable or non-zero exit to `BLOCK` (`exit 2`). |
-| **2. Canonical manifest (`capabilities.json`), `version.txt`, and version drift (`v1.9.1` / `v1.9.2` vs `v1.9.9`)** | **Critical** | Bundled `capabilities.json` and `version.txt` (`v1.9.9`) in the repository root and release archives; synchronized `Dockerfile`, `Dockerfile.release`, `scripts/build_release_matrix.sh`, and `setup.sh` to `v1.9.9`; added automated version & file checks to `scripts/sync_docs_from_manifest.py --check`. |
-| **3. Release artifact path mismatch (`dist/` vs `dist/releases/*`) & single-binary `Dockerfile`** | **High** | Updated `scripts/build_release_matrix.sh` default `OUT_DIR` to `dist/releases` (matching `.github/workflows/release-packages.yml`) and updated `Dockerfile` + `Dockerfile.release` to compile and package all 4 static binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`). |
+| **2. Canonical manifest (`capabilities.json`), `version.txt`, and version drift (`v1.9.1` / `v1.9.2` vs `v1.9.9`)** | **Critical** | Bundled `capabilities.json` and `version.txt` (`v1.9.9`) in the repository root and release archives; synchronized `Dockerfile`, `build/Dockerfile.release`, `scripts/build_release_matrix.sh`, and `setup.sh` to `v1.9.9`; added automated version & file checks to `scripts/sync_docs_from_manifest.py --check`. |
+| **3. Release artifact path mismatch (`dist/` vs `dist/releases/*`) & single-binary `Dockerfile`** | **High** | Updated `scripts/build_release_matrix.sh` default `OUT_DIR` to `dist/releases` (matching `.github/workflows/release-packages.yml`) and updated `Dockerfile` + `build/Dockerfile.release` to compile and package all 4 static binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`). |
 | **4. Outdated `docs/POSITIONING.md` (16-tool claim & stale beta status)** | **Medium** | Rewrote `docs/POSITIONING.md` for `v1.9.9` (`54` MCP tools, `10` progressive-disclosure surfaces, 4-tier Docs & Rules Graph with provenance qualification, multi-agent continuity layer, and 3-tier evidence separation) and added automated drift validation in `scripts/sync_docs_from_manifest.py --check`. |

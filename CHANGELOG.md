@@ -1,5 +1,49 @@
 # Changelog
 
+All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented in this file.
+
+## [v1.9.10] - 2026-11-03 — Installer rewrite, documentation corrected against the code, marketplace-ready repository, one release pipeline
+
+### Added
+- **Release pipeline.** `release.yml` verifies the tag, builds every platform archive, writes `SHA256SUMS.txt`, attests build provenance and creates a draft GitHub release from `RELEASE_NOTES.md`. `publish-mcp-registry.yml` publishes `server.json` to the MCP Registry (GitHub OIDC) when the release is published; `release-packages.yml` and `publish-mcp-image.yml` push the API and MCP images to GHCR.
+- **`installer-e2e.yml`** (manual and weekly): runs the real installers on Ubuntu (x64 and ARM), macOS and Windows runners.
+- **Checks in CI** (`ci-hygiene.yml`): `scripts/sync_docs_from_manifest.py --check` (version, counts, living docs, stale-count scan), `scripts/check_doc_links.py` (relative Markdown links), `scripts/check_marketplace_manifests.py` (manifests tracked, not ignored, versions consistent, skills valid) and a no-tracked-but-ignored-file check.
+- `scripts/render_packaging.py` fills release checksums into the Homebrew, AUR and winget manifests.
+- Plugin and registry manifests are tracked: `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `.agents/plugins/`, `.mcp.json`, `server.json`, `glama.json`, `smithery.yaml`, `skills/`.
+- `garuda init` writes a random `GARUDA_CONTROL_TOKEN` to `.env` (`cmd/garuda/randpw.go`); tests added.
+- Issue forms, a pull-request template and `dependabot.yml` (Go modules, GitHub Actions, Docker) under `.github/`.
+
+### Changed
+- **Installers** (`install.sh`, `setup.sh`, `install.ps1`, `setup.ps1`) rewritten: random owner password (or `GARUDA_PASSWORD`), safe `.env` loading, update guards that never discard local work, `go.mod`-driven Go selection, root/port/prerequisite checks with install hints, Visual C++ hint on Windows, API pid-file handling, Termux and ChromeOS notes.
+- `.gitignore` now lists specific paths only (no global `*.json`, `*.html` or `*.txt`); `.gitattributes` keeps scripts, Go and SQL files on LF on every platform.
+- `scripts/sync_docs_from_manifest.py` rewritten around `capabilities.json` (`--check`, `--set <tag>`), covering skills, packaging, Dockerfiles, OpenAPI and k8s versions.
+- Release facts moved to `v1.9.10`, 54 MCP tools (41 read-only, 13 mutating), 91 migrations, 6 skills.
+- `docker-compose.yml`: ports bound to `127.0.0.1`, `POSTGRES_PASSWORD` required, no guessable secrets. `Dockerfile` builds with Go 1.26. `deploy/k8s/garuda-stack.yaml` uses `ghcr.io/myshra777-ai/garuda`.
+- `docs/CAPABILITIES.md` / `docs/source/capabilities.yaml`: installer capability rows are **Beta** until the installer end-to-end runs are recorded; the weekly docs workflow writes its generated matrix to `docs/generated/` instead of overwriting the curated file.
+- Skill frontmatter names now equal their folder names, so Claude Code shows `/garuda:<skill>` instead of `/garuda:garuda-<skill>`.
+
+### Fixed
+- Stale counts in dashboard copy, the CLI banner, packaging descriptions and docs (23/35 tools, 93/95 migrations, "30/30" checks); `scripts/mcp_verify.py` now requires 54 tools.
+- Broken Markdown links and screenshots; `google.com/search` links that stood in for file links in `EVIDENCE.md` and `docs/SPECS.md`; escaped HTML in `docs/SPECS.md`.
+- `SECURITY.md` held two conflicting policies (two contact addresses, two version tables); merged into one that uses GitHub private vulnerability reporting.
+- `docs/API.md` and `PLAYBOOK.md` had duplicate section numbers and a hand-maintained tool registry that duplicated the generated table; `PLAYBOOK.md` listed 23 of the 54 tools under a "35 tools" heading (it now lists all 54).
+- Example credentials (`garuda2026`, `devtoken-changeme-please`, a personal email) removed from docs; the `garuda init` help text and `docs/API.md` now say a generated password is not displayed.
+- `CHANGELOG.md` had a stray introduction line in the middle of the file.
+- `CONTRIBUTING.md` began with a pasted shell heredoc and had no code fences; rewritten with the checks CI actually runs.
+- `garuda self-describe` printed `go install github.com/myshra777-ai/garuda@latest`, which cannot work (the module root is not a `main` package); it now prints `.../cmd/garuda@latest`.
+- `garuda up` generated a compose file that published PostgreSQL (login `test`/`test`) on every network interface; it now binds `127.0.0.1`.
+- `release.yml` still targeted v1.9.1 and "35-Tool MCP"; the packaging workflow ran Go 1.24 against a Go 1.26 module and raced `release.yml` to publish the same assets.
+
+### Removed
+- Generated or superseded files: `docker-compose.garuda.yml` (written by `garuda up`; now ignored) and the root `requirements.txt` (`scripts/requirements.txt` is the maintained list).
+- Duplicate or unsafe files: `scripts/install.sh`, `scripts/bump_version.py` (it rewrote `version.txt` without the manifest), `docs/API_REFERENCE.md`, `docs/playbooks/README.md`, two duplicate ADRs, two copies of `openapi.yaml`, duplicate logos.
+- Stray files that had been committed to the repository root: build products, scratch scripts, a SARIF report, benchmark output, and files named `=`, `main`, `FETCH_HEAD` (all empty) and `Garuda` (an August 2026 progress-report draft; still in git history).
+- Moved, not deleted: `Dockerfile.release` → `build/`, `otel-collector-garuda.yaml` → `deploy/otel/`, `build_garuda_demo.py` → `tools/demo/`, two historical reports → `docs/history/`.
+
+### Not yet verified
+- Full installer runs on Windows, macOS, ChromeOS and Android (Termux); use the `installer-e2e` workflow and a device run.
+- The release, image and MCP-registry workflows have not run on GitHub yet; the first tag push is their first real test.
+
 ## [v1.9.9] - 2026-10-31 — 54-Tool Hardened MCP Suite, Futuristic 10-Surface Progressive-Disclosure Dashboard, Dirty-Worktree Provenance (`--worktree-dirty`), and Data & Logic Audit Ledger
 
 ### Added
@@ -16,9 +60,7 @@
   - Added `data_logic_audit_ledger` and `data_audit_reconciliations` alongside `garuda audit data-logic` (retaining `garuda audit financial` as a backward-compatible alias).
 
 
-All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented in this file.
-
-## [v1.9.9] - 2026-10-29 — 54-Tool Extended MCP Integration, Zero-Stub CLI Hardening, Finance & Audit Guide, CLI Decision Matrix & Persona Onboarding Suite
+## [v1.9.9, earlier entry] - 2026-10-29 — 54-Tool Extended MCP Integration, Zero-Stub CLI Hardening, Finance & Audit Guide, CLI Decision Matrix & Persona Onboarding Suite
 
 ### Added & Fixed
 - **Extended 54-Tool Production MCP Server (`cmd/garuda-mcp/main.go`, `tools_audit.go`, `tools_whitelist.go`, `scripts/mcp_verify.py`)**:

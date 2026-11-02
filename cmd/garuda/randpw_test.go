@@ -21,3 +21,20 @@ func TestGenerateInitPassword(t *testing.T) {
 		t.Fatal("must not equal the legacy default")
 	}
 }
+
+func TestGenerateControlToken(t *testing.T) {
+	a, err := generateControlToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := generateControlToken()
+	if len(a) != 52 || a[:4] != "gct_" {
+		t.Fatalf("want gct_ + 48 hex chars (52 total), got %d: %q", len(a), a)
+	}
+	if a == b {
+		t.Fatal("two generated tokens must differ")
+	}
+	if a == "devtoken-changeme-please" {
+		t.Fatal("must not equal the legacy default")
+	}
+}

@@ -294,5 +294,5 @@ func handleMCPInstall() {
 			os.Exit(1)
 		}
 	}
-	fmt.Println("✓ Garuda MCP Server (35 tools) & Active Talon Harness registered!")
+	fmt.Println("✓ Garuda MCP Server & Active Talon Harness registered!")
 }

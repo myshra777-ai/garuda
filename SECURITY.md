@@ -1,26 +1,11 @@
 # Security Policy
 
-## Supported Versions
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-
-## Reporting a Vulnerability
-
-Garuda processes AST structures, dependency graphs, and code claims. If you discover a security vulnerability or ingestion isolation issue:
-
-1. **Do not create a public issue.**
-2. Send report details and reproduction steps to `security@garuda-engine.dev` or directly to Rohit Mishra.
-3. You will receive an acknowledgment within 48 hours with an estimated remediation timeline.
-
-# Security Policy
-
 ## Reporting a vulnerability
 
 Report security issues privately. **Do not open a public GitHub issue.**
 
-**Email:** security@garuda.dev
+1. **Preferred:** use GitHub's private vulnerability reporting: open the repository's **Security** tab and choose **Report a vulnerability** (<https://github.com/myshra777-ai/garuda/security/advisories/new>).
+2. **Fallback:** email the maintainer, Rohit Mishra, at `myshra777@gmail.com` with the subject `Garuda security report`.
 
 Include:
 
@@ -41,12 +26,12 @@ If the issue is not valid, we will explain why and close the report.
 
 ## Supported versions
 
-Security fixes are backported to the current minor release and the previous one. Anything older receives fixes only if the issue is critical and the fix is small.
+Security fixes go into the latest release. Older releases receive a fix only when the issue is critical and the fix is small.
 
 | Version | Supported |
 | :--- | :--- |
-| v0.1.x | Yes |
-| Older | Critical issues only |
+| Latest release (see [Releases](https://github.com/myshra777-ai/garuda/releases)) | Yes |
+| Older releases | Critical issues only |
 
 ## Scope
 
@@ -70,6 +55,8 @@ Out of scope:
 ## Security model
 
 The following properties are part of the design. Findings that show any of them is violated are in scope and treated as high severity.
+
+**Network exposure.** `garuda-api` binds to `127.0.0.1` by default. Set `GARUDA_BIND` (for example `0.0.0.0:8080`) only when you intend to expose it, and put TLS and access control in front of it.
 
 **Authentication.** Mutation endpoints are guarded by Ed25519 JWTs. The signing key is loaded from `JWT_PRIVATE_KEY_HEX`. In production, the process refuses to start if the key is not set.
 
@@ -97,7 +84,9 @@ We credit reporters in the release notes and the advisory, unless they prefer to
 ## History
 
 No advisories have been published as of 2026-09-15.
-## MCP & Agent Security Controls (`v1.9.9`)
+
+## MCP & agent security controls
+
 1. **Zero Fabricated Human Attribution (`GARUDA_MCP_APPROVER`)**: AI agents cannot self-approve business formulas, data reconciliations, or Base Rulebooks. Without an attested `GARUDA_MCP_APPROVER`, mutations are recorded as `PROPOSED_BY_AGENT_AWAITING_HUMAN_CLI_COSIGN`.
 2. **Global Read-Only Enforcement (`GARUDA_MCP_READ_ONLY=true`)**: Blocks all mutating MCP tools across untrusted or exploratory agent sessions.
 3. **Strict Argument Whitelisting (`toolArgWhitelist`)**: Every one of the 54 MCP tools strips unlisted JSON arguments prior to handler execution (`TestToolArgWhitelistCoversAllTools`).

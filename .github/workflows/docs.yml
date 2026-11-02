@@ -62,7 +62,7 @@ jobs:
           python scripts/generate_capabilities.py \
             --capabilities docs/source/capabilities.yaml \
             --snapshot garuda-snapshot.json \
-            --output docs/CAPABILITIES.md
+            --output docs/generated/capabilities.generated.md
 
       - name: Build Documentation Context
         if: hashFiles('scripts/build_docs_context.py') != ''
@@ -102,7 +102,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/CAPABILITIES.md docs/API.md CHANGELOG.md docs/generated/
+          git add docs/API.md CHANGELOG.md docs/generated/
           if git diff --staged --quiet; then
             echo "No documentation changes detected. Skipping push."
           else

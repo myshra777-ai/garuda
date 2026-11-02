@@ -61,7 +61,7 @@ func GenerateMarkdown(desc *SelfDescription) string {
 
 	b.WriteString("## Installation\n\n")
 	b.WriteString("```bash\n")
-	b.WriteString("go install github.com/myshra777-ai/garuda@latest\n")
+	b.WriteString("go install github.com/myshra777-ai/garuda/cmd/garuda@latest\n")
 	b.WriteString("```\n\n")
 
 	b.WriteString("## Quick Start\n\n")

@@ -1,5 +1,5 @@
 # Stage 1: Build all 4 static zero-CGO Garuda binaries
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
@@ -12,8 +12,8 @@ RUN go mod download
 # Copy source tree
 COPY . .
 
-# Compile all 4 fully static, stripped binaries with canonical v1.9.9 metadata
-ARG VERSION=v1.9.9
+# Compile all 4 fully static, stripped binaries with version metadata
+ARG VERSION=v1.9.10
 ARG COMMIT=release
 RUN mkdir -p /out && \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" -o /out/garuda ./cmd/garuda && \

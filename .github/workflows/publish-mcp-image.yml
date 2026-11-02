@@ -1,8 +1,12 @@
-name: Publish MCP image (ghcr.io)
+name: Publish MCP server image (ghcr.io)
+
+# Pushes ghcr.io/myshra777-ai/garuda-mcp:<version> (stdio MCP server). server.json points at this image.
+# After the FIRST run, open github.com/users/<owner>/packages (or the org's Packages tab), pick
+# "garuda-mcp" -> Package settings -> Change visibility -> Public. The MCP Registry cannot read a private image.
 
 on:
   push:
-    tags: [ "v*" ]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
 
 permissions:
@@ -14,20 +18,44 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: v
-        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-        env:
-          GITHUB_REF_NAME: ${{ github.ref_name }}
+        name: Read version
+        run: echo "ver=$(tr -d '[:space:]' < version.txt | sed 's/^v//')" >> "$GITHUB_OUTPUT"
+      - name: server.json must point at this version
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          s = json.load(open("server.json"))
+          want = "${{ steps.v.outputs.ver }}"
+          ident = s["packages"][0]["identifier"]
+          if s["version"] != want or not ident.endswith(":" + want):
+              sys.exit(f"server.json is out of date: version={s['version']} identifier={ident}, expected {want}")
+          PY
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.mcp
+          platforms: linux/amd64
           push: true
+          build-args: |
+            VERSION=v${{ steps.v.outputs.ver }}
           tags: |
             ghcr.io/myshra777-ai/garuda-mcp:${{ steps.v.outputs.ver }}
             ghcr.io/myshra777-ai/garuda-mcp:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.v.outputs.ver }}
+            org.opencontainers.image.licenses=Apache-2.0
+      - name: The registry ownership label must be on the pushed image
+        run: |
+          docker pull "ghcr.io/myshra777-ai/garuda-mcp:${{ steps.v.outputs.ver }}"
+          got="$(docker inspect --format '{{ index .Config.Labels "io.modelcontextprotocol.server.name" }}' "ghcr.io/myshra777-ai/garuda-mcp:${{ steps.v.outputs.ver }}")"
+          want="$(python3 -c 'import json;print(json.load(open("server.json"))["name"])')"
+          test "$got" = "$want" || { echo "::error::image label '$got' != server.json name '$want'"; exit 1; }
+          echo "OK: label io.modelcontextprotocol.server.name = $got"

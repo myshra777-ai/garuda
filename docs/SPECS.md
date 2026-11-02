@@ -213,7 +213,7 @@ These are different evidence sources and must not be treated as interchangeable.
 
 ## 6. Documentation and claims
 
-Garuda can ingest supported Markdown, ADR, and plain-text documentation. The document parser extracts eligible normative statements according to the contract in [docs/DOCUMENT\_FORMATS.md](https://www.google.com/search?q=docs/DOCUMENT_FORMATS.md).
+Garuda can ingest supported Markdown, ADR, and plain-text documentation. The document parser extracts eligible normative statements according to the contract in [docs/DOCUMENT_FORMATS.md](DOCUMENT_FORMATS.md).
 
 The claim lifecycle is:
 
@@ -311,7 +311,7 @@ garuda policy verify <evaluation-id>
 garuda verify
 ```
 
-The canonical trust and invariant contracts are documented in the ADRs and [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md).
+The canonical trust and invariant contracts are documented in the ADRs and [docs/invariants.md](invariants.md).
 
 ---
 
@@ -519,7 +519,7 @@ Hygiene findings are currently ephemeral CLI results. There is no current persis
 
 ## 19. Security and invariants
 
-The canonical invariant contract is [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md). This document records the practical boundaries relevant to current interfaces.
+The canonical invariant contract is [docs/invariants.md](invariants.md). This document records the practical boundaries relevant to current interfaces.
 
 - Scope is enforced at server/store boundaries.
 - Tenant and workspace IDs must remain attached to scoped records.
@@ -543,7 +543,7 @@ No current release guarantee is made for sandbox escape prevention, automatic re
 
 ## 20. Hygiene
 
-Hygiene is the current report-only static-analysis capability described in [docs/hygiene.md](https://www.google.com/search?q=docs/hygiene.md).
+Hygiene is the current report-only static-analysis capability described in [docs/hygiene.md](hygiene.md).
 
 ### Commands
 
@@ -738,24 +738,24 @@ Breaking changes should state which surface changed, how compatibility is handle
 
 ## Evidence index
 
-- [`README.md`](README.md) — product overview.
-- [PLAYBOOK.md](https://www.google.com/search?q=PLAYBOOK.md) — installation and operational workflows.
-- [EVIDENCE.md](https://www.google.com/search?q=EVIDENCE.md) — validation corpus and methodology.
-- [docs/CAPABILITIES.md](https://www.google.com/search?q=docs/CAPABILITIES.md) — capability matrix.
-- [docs/hygiene.md](https://www.google.com/search?q=docs/hygiene.md) — Hygiene command and report contract.
-- [docs/DOCUMENT\_FORMATS.md](https://www.google.com/search?q=docs/DOCUMENT_FORMATS.md) — documentation ingestion contract.
-- [docs/invariants.md](https://www.google.com/search?q=docs/invariants.md) — invariant contract.
-- [docs/adr/](https://www.google.com/search?q=docs/adr/) — architecture decision records.
-- [scripts/mcp\_verify.py](https://www.google.com/search?q=scripts/mcp_verify.py) — MCP reference verifier.
-- [openapi.yaml](https://www.google.com/search?q=openapi.yaml) — HTTP contract.
-- [vscode-extension/](https://www.google.com/search?q=vscode-extension/) — VS Code integration.
+- [`README.md`](../README.md) — product overview.
+- [PLAYBOOK.md](../PLAYBOOK.md) — installation and operational workflows.
+- [EVIDENCE.md](../EVIDENCE.md) — validation corpus and methodology.
+- [docs/CAPABILITIES.md](CAPABILITIES.md) — capability matrix.
+- [docs/hygiene.md](hygiene.md) — Hygiene command and report contract.
+- [docs/DOCUMENT_FORMATS.md](DOCUMENT_FORMATS.md) — documentation ingestion contract.
+- [docs/invariants.md](invariants.md) — invariant contract.
+- [docs/adr/](adr) — architecture decision records.
+- [scripts/mcp_verify.py](../scripts/mcp_verify.py) — MCP reference verifier.
+- [openapi.yaml](../internal/api/openapi.yaml) — HTTP contract.
+- [vscode-extension/](../vscode-extension) — VS Code integration.
 
 ---
 
-&lt;p align=&quot;center&quot;&gt;
-  &lt;strong&gt;Garuda&lt;/strong&gt;&lt;br&gt;
+<p align="center">
+  <strong>Garuda</strong><br>
   Analyze · Verify · Govern
-&lt;/p&gt;
+</p>
 
 ---
 
@@ -774,19 +774,19 @@ Garuda connects prose documentation to executable AST enforcement across four ex
 - **Tier 3 (`guardrail`)**: Active policy engine predicates (`layer_violation`, `cycle_exists`, `blast_radius_exceeds`, `contradiction_exists`, etc.) enforcing those clauses.
 - **Tier 4 (`symbol` / `package`)**: Concrete AST entities matched by package regex, symbol pattern, or explicit claim references.
 
-### 26.4 v1.9.9 Universal Zero-Dependency Provisioning, IPv4 Database Resolution & Schema Hardening
+### 26.4 One-Command Provisioning, IPv4 Database Resolution & Schema Hardening
 1. **Windows PowerShell 5.1 Pure-ASCII Invariant (`install.ps1` & `setup.ps1`)**: Windows PowerShell 5.1 interprets scripts without a UTF-8 BOM using the legacy `CP1252` codepage, where multi-byte UTF-8 sequences containing `0x93`/`0x94` are tokenized as closing smart quotes. Both `install.ps1` and `setup.ps1` enforce a strict 7-bit ASCII invariant, wrap native binary invocations (`git`, `initdb`, `pg_ctl`, `docker`) in `cmd.exe /c` helpers so informational `stderr` output never triggers a terminating `NativeCommandError`, and use native `System32\curl.exe` and `System32\tar.exe` with `$ProgressPreference = "SilentlyContinue"`.
 2. **Pre-Built Portable PostgreSQL 16 & Explicit IPv4 `127.0.0.1:5433` Binding (`setup.sh`, `cmd/garuda/init_cmd.go`, `internal/config/env.go`)**: When PostgreSQL is not running on `127.0.0.1:5433` and Docker is unavailable, `setup.sh` downloads pre-built Portable PostgreSQL `16.4.0` binaries (`darwin-arm64v8`, `darwin-amd64`, `linux-amd64`, `linux-arm64v8`) into `~/.garuda/runtime/postgres/bin`, initializes `~/.garuda/data/pg` with `LC_ALL=C LANG=C initdb --no-locale -E UTF8`, isolates Unix sockets in `~/.garuda/data/run` (`chmod 700`), and normalizes `@localhost:` to `@127.0.0.1:` in `config.ResolveDBURL()`.
-3. **Single-Download Portable Go Matching `go.mod` (`1.26.0`)**: Both `setup.sh` and `setup.ps1` provision Portable Go `1.26.0` matching the `go 1.26.0` directive in `go.mod` so the Go command never triggers a secondary toolchain download during compilation.
-4. **Canonical Schema Hardening (`migrations/095_data_logic_audit_ledger_and_hygiene.sql`)**: Ensures idempotent schema alignment across `workspaces`, `repositories`, `entities`, `relationships`, and `cross_repo_edges`, while `cmd/garuda-mcp/tools_graph.go` provides case-insensitive/suffix entity resolution and `resolveTopClaimTarget` fallback for `garuda.implementers` and `garuda.subclasses`.
+3. **Portable Go Matching `go.mod`**: When no suitable Go is installed, `setup.sh` and `setup.ps1` download the Go version named by the `toolchain` (or `go`) line of `go.mod`, so the Go command never needs a second toolchain download during compilation. An installed Go 1.21 or newer is used as is and fetches the exact toolchain by itself.
+4. **Canonical Schema Hardening (`migrations/095_data_logic_audit_ledger_and_hygiene*.sql`)**: Ensures idempotent schema alignment across `workspaces`, `repositories`, `entities`, `relationships`, and `cross_repo_edges`, while `cmd/garuda-mcp/tools_graph.go` provides case-insensitive/suffix entity resolution and `resolveTopClaimTarget` fallback for `garuda.implementers` and `garuda.subclasses`.
 
 
 ---
 
-## 27. v1.9.9 Human-in-the-Loop Weighted Logic, 3-Tier Surface Criticality, Financial Data Audit & Auto-Rulebook Specification
+## 27. Human-in-the-Loop Weighted Logic, 3-Tier Surface Criticality, Financial Data Audit & Auto-Rulebook Specification
 
-### 27.1 Relational Schema (`migrations/095_human_in_the_loop_audit_rulebook.sql`)
-Garuda `v1.9.9` introduces four PostgreSQL tables supporting human-in-the-loop business logic and financial governance:
+### 27.1 Relational Schema (`migrations/093_human_in_the_loop_audit_rulebook.sql`)
+Garuda adds four PostgreSQL tables supporting human-in-the-loop business logic and financial governance:
 1. **`surface_criticality_tiers`**: Stores tenant- and workspace-scoped surface classifications (`HIGH_SEVERE`, `MEDIUM`, `LOW`), package/symbol regex patterns, caller counts, and policy actions (`HUMAN_FREEZE_DO_NOT_TOUCH`, `HUMAN_TRADE_OFF_REVIEW`, `ALLOW_WITH_INFO`).
 2. **`logic_variants_registry`**: Stores competing multi-team formula implementations (`concept_name`, `team_scope`, `variant_id`, `symbol_name`, `file_path`, `formula_expression`), dynamic `0.00–1.00` weights (`calculated_weight`), `severity_tier`, `blast_radius_callers`, and human approval state (`AWAITING_HUMAN_DECISION`, `APPROVED_BY_HUMAN`, `FROZEN_SEVERE_DO_NOT_TOUCH`).
 3. **`financial_audit_reconciliations`**: Records cross-team metric discrepancies (`metric_name`, `team_a_value_raw`, `team_b_value_raw`, `variance_ratio`, `discrepancy_type`, `root_cause_ast_trace`, `audit_status`, `reconciled_by`, `reconciled_at`).

@@ -37,6 +37,29 @@ jobs:
       - name: No tracked binaries or oversized files
         run: scripts/check_repo_hygiene.sh 2048
 
+  docs-and-manifests:
+    name: Docs, counts, links and marketplace manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Version, counts and living docs agree with capabilities.json
+        run: python3 scripts/sync_docs_from_manifest.py --check
+      - name: Relative Markdown links resolve
+        run: python3 scripts/check_doc_links.py
+      - name: JSON and YAML files parse (manifests, workflows, OpenAPI)
+        run: |
+          pip install --quiet pyyaml
+          python3 scripts/check_data_files.py
+      - name: Marketplace and MCP-registry files are tracked, visible and consistent
+        run: python3 scripts/check_marketplace_manifests.py
+      - name: No tracked file is also git-ignored
+        run: |
+          bad="$(git ls-files -ci --exclude-standard)"
+          if [ -n "$bad" ]; then echo "Tracked but ignored (fix .gitignore):"; echo "$bad"; exit 1; fi
+
   go-checks:
     runs-on: ubuntu-latest
     steps:

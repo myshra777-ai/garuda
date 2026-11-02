@@ -78,11 +78,11 @@ categories:
   - name: "Garuda Talon Active Agent Harness, Universal Runtime & 54-Tool MCP Surface"
     description: "Active pre-edit and post-edit enforcement across Cursor, Claude Code, Codex, Windsurf, and Git hooks with 1-command cross-OS provisioning"
     capabilities:
-      - name: "Universal Zero-Dependency Installer & Doctor (install.ps1, install.sh, garuda doctor)"
-        status: "production"
-        verification_tier: "Windows PowerShell, macOS, Linux, Chromebook & Android"
-        supported_semantics: "Auto-provisions Portable Go, Portable PostgreSQL, CGO_ENABLED=0 Pure-Go binaries, PWA manifest/service-worker, and self-healing diagnostics (garuda doctor --fix)"
-        invariant: "Zero Pre-Installed Dependencies"
+      - name: "One-Command Installer & Doctor (install.ps1, install.sh, garuda doctor)"
+        status: "beta"
+        verification_tier: "Linux exercised end to end; Windows parse-checked and contract-tested in CI; macOS, ChromeOS and Termux pending (see INSTALL.md)"
+        supported_semantics: "Provisions portable Go and PostgreSQL in user space when they are missing, builds CGO_ENABLED=0 pure-Go binaries, serves the PWA manifest/service-worker, and repairs the local runtime (garuda doctor --fix)"
+        invariant: "No Admin or Pre-Installed Go/PostgreSQL Required"
 
       - name: "Active Contract & Hook Installer (garuda talon init)"
         status: "production"

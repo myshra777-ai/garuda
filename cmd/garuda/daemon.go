@@ -70,7 +70,7 @@ func handleInit() {
       POSTGRES_PASSWORD: test
       POSTGRES_DB: garuda_test
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - garuda-pgdata:/var/lib/postgresql/data
 volumes:

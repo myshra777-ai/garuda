@@ -1,118 +1,66 @@
-# Garuda `v1.9.9` — Official Release Notes & Multi-OS Package Downloads
+# Garuda v1.9.10
 
-**Release Date:** October 29, 2026  
-**Release Tag:** `v1.9.9` (`Apache-2.0`)  
-**Verification Status:** `24/24` Strict Compiler Benchmarks · `63/63` MCP Verification Checks (54 Tools) · `10/10` Runtime OTel Contradiction Quarantine · `CGO_ENABLED=0` Zero-Dependency All-OS Matrix
+**Release date:** 2026-11-03 · **License:** Apache-2.0 · [Full changelog](CHANGELOG.md) · [Install guide](INSTALL.md)
 
----
+v1.9.10 is a reliability and release-readiness update. It rewrites the installers, corrects the documentation against the code, hardens the shipped container and Kubernetes files, and puts the plugin and MCP-registry manifests into the repository so Garuda can be listed in the marketplaces.
 
-## 1. Executive Summary: What's New in Garuda `v1.9.9`
+## Highlights
 
-Garuda `v1.9.9` is our largest production milestone to date, evolving Garuda from an architectural change-control gate into a **complete Software & Financial Intelligence Instrument** with **54 deterministic MCP tools (41 read-only, 13 mutating)**, **Human-in-the-Loop multi-team formula disambiguation (`0.0–1.0` weights)**, **3-Tier Surface Criticality classification**, **continuous cross-team financial discrepancy auditing (48 Crore vs. 4.8 Crore)**, an **Auto-Synthesized Base Rulebook Studio**, and **pre-packaged standalone downloads for Windows, macOS, Linux, Chromebook, Android, and FreeBSD**.
+- **Installers rewritten and hardened** (`install.sh`, `setup.sh`, `install.ps1`, `setup.ps1`). No default password or token is ever used; a random owner password is generated (or take yours from `GARUDA_PASSWORD`) and a random `GARUDA_CONTROL_TOKEN` goes into `.env`. Safe updates: a folder that is not a Garuda checkout is never touched, and local edits or commits are never discarded. Better messages for missing tools, busy ports, root users, a missing Visual C++ runtime on Windows and failed downloads. The unsafe duplicate `scripts/install.sh` is gone.
+- **Documentation corrected against the code.** One accurate [INSTALL.md](INSTALL.md) for Windows, macOS, Linux, ChromeOS and Android (Termux); wrong tool and migration counts fixed everywhere (54 tools, 91 migrations); broken links and screenshots fixed; duplicate documents removed; `SECURITY.md` merged from two conflicting policies into one; example credentials removed. CI now fails when docs, counts or links drift.
+- **Marketplace-ready repository.** The plugin manifests for Claude Code, Codex and Cursor, `.mcp.json`, `server.json` (MCP Registry), `glama.json` and `smithery.yaml` are tracked. `.gitignore` no longer has a global `*.json` rule that kept them off GitHub. A CI check keeps it that way.
+- **One release pipeline.** Pushing a version tag verifies the repository, builds archives for Windows, macOS, Linux, Android (Termux) and FreeBSD, writes `SHA256SUMS.txt`, attests build provenance, and creates a **draft** GitHub release. Container images go to GHCR; publishing the release publishes `server.json` to the MCP Registry.
+- **Safer deployment files.** `docker-compose.yml` no longer exposes PostgreSQL with a known password on all interfaces or ships a guessable secret; the Kubernetes manifest points at an image that is actually published; the API image builds with the Go version `go.mod` requires.
 
-### Five Headline Upgrades in `v1.9.9`
+## Downloads
 
-1. **Human-in-the-Loop Multi-Team Formula Disambiguation (`0.0–1.0` Weights)**:
-   - When multiple teams implement undocumented competing formulas for the same business metric (e.g., `Loss Ratio` across **Ops**, **Marketing**, and **Management**), **Garuda never lets an AI agent silently guess or overwrite a formula**.
-   - Dynamically computes **`0.00–1.00` team relevance weights** (`0.70` active team vs. `0.10`/`0.10`), ranks each formula by **Least Architectural Harm**, and presents plain-English blast radius impacts so a human stakeholder makes the final call (`garuda audit logic` / `garuda.disambiguate_logic`).
-2. **3-Tier Surface Criticality Classification (Amazon Search vs. Wishlist Model)**:
-   - **`HIGH_SEVERE` (Core Surfaces — Freeze / Do Not Touch)**: Homepage, Search Bar, Search Results Redirect Router (142 callers), and Claims Settlement Ledger. Frozen against automated AI modifications.
-   - **`MEDIUM` (Non-Blocking Features — Human Trade-Off Review)**: Wishlist Loader and Promotional Badges (19 callers). Secondary features where trade-offs can be weighed.
-   - **`LOW` (Minor UI & Formatting — Allow with Info)**: Search Box UI alignment and badge helpers (4 callers).
-3. **Continuous Financial & Business Data Discrepancy Audit (48 Crore vs. 4.8 Crore)**:
-   - Traces AST and SQL unit-scaling lineage across team pipelines to quarantine **10x Lakhs-to-Crore divisor bugs** (`48.00 Crore INR` in Claims Ops vs. `4.80 Crore INR` in Finance's executive export) and omitted reinsurance cessions *before* statutory financial audits occur (`garuda audit data-logic` / `garuda.audit_financial_discrepancy`).
-4. **Auto-Synthesized Base Rulebook Studio**:
-   - Reverse-engineers unorganized repositories into `.garuda/DRAFT_BASE_RULEBOOK.md`. Engineers, architects, and finance leads can review, edit inline in `/dashboard` (`04 — Docs & Base Rulebook`), and lock the baseline in one click (`garuda rulebook generate` / `garuda rulebook approve`).
-5. **Extended 54-Tool Production MCP Server & Multi-OS Standalone Packages**:
-   - Expanded `bin/garuda-mcp` to **54 zero-stub tools** (`54/54` positive & negative behavioral tests + `63/63` protocol checks) (`63/63` checks passing in `scripts/mcp_verify.py`), upgraded the offline web console to **10 progressive-disclosure surfaces**, and added pre-built standalone archives + package-manager manifests for **Windows (`x64` & `ARM64`), macOS (`Apple Silicon` & `Intel`), Linux (`x86_64` & `ARM64`, `.tar.gz`, `.deb`, `.rpm`, `AUR`), Chromebook (`Crostini` + `PWA`), Android (`Termux` + `PWA`), and FreeBSD**.
+Attached to this release (`<tag>` is `v1.9.10`):
 
----
+| Platform | File |
+| :--- | :--- |
+| Windows x64 / ARM64 | `garuda-<tag>-windows-amd64.zip`, `garuda-<tag>-windows-arm64.zip` |
+| macOS Apple Silicon / Intel | `garuda-<tag>-darwin-arm64.tar.gz`, `garuda-<tag>-darwin-amd64.tar.gz` |
+| Linux x64 / ARM64 (and ChromeOS Linux) | `garuda-<tag>-linux-amd64.tar.gz`, `garuda-<tag>-linux-arm64.tar.gz`, `garuda_1.9.10_amd64.deb`, `garuda_1.9.10_arm64.deb` |
+| Android (Termux, ARM64) | `garuda-<tag>-android-arm64-termux.tar.gz` |
+| FreeBSD x64 | `garuda-<tag>-freebsd-amd64.tar.gz` |
+| Source plus installers | `garuda-<tag>-universal-source.tar.gz`, `install.sh`, `install.ps1`, `setup.sh`, `setup.ps1` |
+| Checksums | `SHA256SUMS.txt` |
+| Package-manager manifests with checksums filled in | `packaging/` (Homebrew, AUR, winget, RPM, Chocolatey; templates, not yet published to those repositories) |
 
-## 2. Direct Downloads & Packages by Operating System (`v1.9.9`)
+Containers: `ghcr.io/myshra777-ai/garuda:v1.9.10` (API and dashboard) and `ghcr.io/myshra777-ai/garuda-mcp:1.9.10` (MCP server over stdio).
 
-Every release on the [**GitHub Releases Page (`releases/tag/v1.9.9`)**](https://github.com/myshra777-ai/garuda/releases/tag/v1.9.9) includes 100% standalone, zero-CGO (`CGO_ENABLED=0`) bundles containing all four binaries (`garuda`, `garuda-api`, `garuda-mcp`, `garuda-talon`), SQL migrations (`001`–`095`), starter YAML policies, and the 1-command setup scripts:
+Binaries are static (`CGO_ENABLED=0`) but **not code-signed or notarized**. Verify them against `SHA256SUMS.txt` (see [INSTALL.md](INSTALL.md#prebuilt-release-archives)). Build provenance is attested with GitHub's artifact attestations: `gh attestation verify <file> --repo myshra777-ai/garuda`.
 
-| Operating System & Architecture | Standalone Release Archive | Package Manager / Native Installer |
-| :--- | :--- | :--- |
-| **Windows 10 / 11 (64-bit x64)** | [`garuda-v1.9.9-windows-amd64.zip`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda-v1.9.9-windows-amd64.zip) | **PowerShell**: `irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 \| iex`<br>**Winget / Scoop / Choco**: `packaging/winget`, `packaging/scoop`, `packaging/choco` |
-| **Windows 11 ARM64 (Snapdragon)** | [`garuda-v1.9.9-windows-arm64.zip`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda-v1.9.9-windows-arm64.zip) | **PowerShell**: `irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 \| iex` |
-| **macOS Apple Silicon (M1/M2/M3/M4)** | [`garuda-v1.9.9-darwin-arm64.tar.gz`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda-v1.9.9-darwin-arm64.tar.gz) | **Homebrew**: `brew install --formula packaging/homebrew/garuda.rb`<br>**1-Command**: `curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh \| bash` |
-| **macOS Intel (`x86_64`)** | [`garuda-v1.9.9-darwin-amd64.tar.gz`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda-v1.9.9-darwin-amd64.tar.gz) | **Homebrew**: `brew install --formula packaging/homebrew/garuda.rb`<br>**1-Command**: `curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh \| bash` |
-| **Linux x86_64 (Ubuntu, Debian, Fedora, Arch, WSL2)** | [`garuda-v1.9.9-linux-amd64.tar.gz`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda-v1.9.9-linux-amd64.tar.gz) | **Debian/Ubuntu `.deb`**: [`garuda_1.9.9_amd64.deb`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda_1.9.9_amd64.deb) (`sudo dpkg -i garuda_1.9.9_amd64.deb`)<br>**RPM / Arch AUR**: `packaging/rpm/garuda.spec` · `packaging/aur/PKGBUILD` |
-| **Linux ARM64 & Chromebook (Crostini)** | [`garuda-v1.9.9-linux-arm64.tar.gz`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda-v1.9.9-linux-arm64.tar.gz) | **Debian/Crostini `.deb`**: [`garuda_1.9.9_arm64.deb`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda_1.9.9_arm64.deb) + Chrome PWA (`/manifest.json`) |
-| **Android (Termux ARM64 + Chrome PWA)** | [`garuda-v1.9.9-android-arm64-termux.tar.gz`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda-v1.9.9-android-arm64-termux.tar.gz) | **Termux**: `curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh \| bash` |
-| **FreeBSD (`x86_64`)** | [`garuda-v1.9.9-freebsd-amd64.tar.gz`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda-v1.9.9-freebsd-amd64.tar.gz) | Extract `tar -xzf garuda-v1.9.9-freebsd-amd64.tar.gz` and run `./bin/garuda` |
-| **Docker / OCI Container & K8s** | `ghcr.io/myshra777-ai/garuda-api:v1.9.9` | `docker compose -f deploy/compose/docker-compose.prod.yml up -d`<br>`kubectl apply -f deploy/k8s/garuda-stack.yaml` |
-| **Checksums & Provenance** | [`SHA256SUMS.txt`](https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/SHA256SUMS.txt) | Verify with `sha256sum -c SHA256SUMS.txt` or `shasum -a 256 -c SHA256SUMS.txt` |
-
----
-
-## 3. Quick-Install Commands Across All Platforms
-
-### Option A: 1-Command Zero-Dependency Universal Install (Recommended)
-Automatically provisions Portable PostgreSQL `16.4` (`127.0.0.1:5433` with `pg_isready` WAL readiness polling), Portable Go `1.26.0`, database migrations, and all 6 IDE/Git hooks without needing `sudo` or Administrator rights:
+## Install
 
 ```bash
-# macOS (Apple Silicon & Intel), Linux, Chromebook & Android (Termux)
+# macOS, Linux, ChromeOS (Linux), Android (Termux)
 curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash
 ```
 
 ```powershell
-# Windows 10 / 11 (PowerShell 5.1 & PowerShell 7 — Pure ASCII, No Admin Required)
-Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 | iex
+# Windows 10 / 11
+irm https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.ps1 | iex
 ```
 
-### Option B: Download & Run Pre-Compiled Release Bundle Directly
-If you prefer to download a pre-compiled binary archive from GitHub Releases without compiling from source:
+Claude Code: `/plugin marketplace add myshra777-ai/garuda`. Codex: `codex plugin marketplace add myshra777-ai/garuda`. Both need `garuda-mcp` and a database, so run the installer first.
 
-```bash
-# Example: macOS Apple Silicon (darwin-arm64) or Linux (linux-amd64)
-OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"; [[ "$ARCH" == "x86_64" ]] && ARCH="amd64"; [[ "$ARCH" == "aarch64" ]] && ARCH="arm64"
-curl -fsSLO "https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda-v1.9.9-${OS}-${ARCH}.tar.gz"
-tar -xzf "garuda-v1.9.9-${OS}-${ARCH}.tar.gz"
-cd "garuda-v1.9.9-${OS}-${ARCH}" && ./setup.sh
-```
+## Upgrading
 
-```bash
-# Example: Ubuntu / Debian / Chromebook Crostini (.deb package)
-curl -fsSLO https://github.com/myshra777-ai/garuda/releases/download/v1.9.9/garuda_1.9.9_amd64.deb
-sudo dpkg -i garuda_1.9.9_amd64.deb
-garuda doctor --fix
-```
+- Re-run the installer. It updates a clean checkout and rebuilds; it stops without changing anything if you have local edits or commits.
+- Existing `.env` files and user accounts are kept. `garuda init` never overwrites an existing user's password.
+- The MCP Registry entry and the Kubernetes manifest now use the image names `ghcr.io/myshra777-ai/garuda-mcp` and `ghcr.io/myshra777-ai/garuda`. If you referenced `ghcr.io/myshra777-ai/garuda-api`, switch to `ghcr.io/myshra777-ai/garuda`.
+- If you use `docker-compose.yml`, set `POSTGRES_PASSWORD` (it is now required) and note that ports are bound to `127.0.0.1`.
 
----
+## What has and has not been verified
 
-## 4. Complete Release Evolution (`v1.1.0` → `v1.9.9`)
+- **Verified:** the Linux user-space install path end to end (fresh run, re-run, update guards, port and pid handling); PowerShell scripts parse under PowerShell 7 and stay ASCII; shell scripts pass `bash -n`; documentation links, counts and release facts are checked by `scripts/sync_docs_from_manifest.py --check` and `scripts/check_doc_links.py`; marketplace files are checked by `scripts/check_marketplace_manifests.py`.
+- **Not yet recorded:** a full install on Windows, macOS, ChromeOS and Android (Termux). The manual **Installer end-to-end** workflow runs Ubuntu, macOS and Windows runners and produces that evidence.
+- **Benchmarks and MCP checks** in [EVIDENCE.md](EVIDENCE.md) were recorded on the previous release line; the analyzers did not change in this release.
+- Package-manager manifests (Homebrew, winget, Chocolatey, AUR, RPM) are templates and have not been submitted to those repositories.
 
-| Release | Date | Key Milestone & Capabilities |
-| :--- | :--- | :--- |
-| **`v1.9.9`** | **2026-10-29** | **54-Tool MCP Server (`63/63` checks)**, zero-stub CLI (`garuda mcp install`, `audit`, `rulebook`), Finance & Audit Guide, CLI Decision Guide, Persona Onboarding Guide, and **Multi-OS Release & Package Matrix** (`Windows`, `macOS`, `Linux`, `.deb`, `Homebrew`, `Winget`, `Scoop`, `Chocolatey`, `AUR`, `RPM`, `FreeBSD`, `Android`). |
-| **`v1.9.0`** | **2026-10-28** | **Human-in-the-Loop Formula Disambiguation (`0.0–1.0` weights)**, **3-Tier Surface Criticality (`HIGH_SEVERE` / `MEDIUM` / `LOW`)**, **Continuous Financial Discrepancy Audit (`48 Cr` vs `4.8 Cr`)**, **Auto-Synthesized Base Rulebook Studio**, 10-Surface `/dashboard`, and `pg_isready` WAL Postgres handshake healing. |
-| **`v1.8.4`** | **2026-10-27** | 3-second pre-built Portable PostgreSQL `16.4` on macOS/Linux (`~18 MB`, eliminating Homebrew source compiles), explicit IPv4 `127.0.0.1:5433` normalization, single-download Portable Go `1.26.0`, and `095_data_logic_audit_ledger_and_hygiene.sql`. |
-| **`v1.8.2`–`v1.8.3`** | **2026-10-27** | Pure 7-bit ASCII Windows PowerShell 5.1 bootstrapper (`install.ps1` / `setup.ps1`), `cmd.exe /c` stderr-safe native wrappers, `System32\curl.exe` + `tar.exe` fast path, and self-healing `garuda doctor --fix`. |
-| **`v1.8.0`–`v1.8.1`** | **2026-10-26** | **Deterministic `BuildContext` Provenance Receipts**, `go/build.Context` conditional compilation & build-tag filtering (`TestTwoBuildsExposeDifferentEdges`), CI-vs-Editor drift detector, and 4-target cross-OS `--matrix` gate. |
-| **`v1.7.0`** | **2026-10-26** | **4-Tier Docs, Specs & Guardrails Lineage Graph**, **Garuda Talon & Risk Hub** leaderboard (`0–100` risk score), and zero-CDN offline SVG force/DAG layout engine. |
-| **`v1.6.0`** | **2026-10-25** | Universal zero-dependency installers across Windows, macOS, Linux, Chromebook, and Android; Pure-Go (`!cgo`) TypeScript AST parser; `garuda doctor`; and installable PWA (`/manifest.json`, `/sw.js`). |
-| **`v1.5.0`** | **2026-10-25** | **Garuda Talon Active Agent Execution Harness** (`.garuda/TALON_CONTRACT.md`, 6 IDE/MCP/Git hooks, `talon brief/guard/run`), Git-diff AST hunk targeting, net-new vs. baseline violation partitioning, and Python/TS alias/instance call resolution (`0.95`). |
-| **`v1.3.0`–`v1.4.0`** | **2026-10-24** | Cryptographic Ed25519 JWT enforcement in `AuthMiddleware`, edge-level `SUPPORTED` runtime promotion, fail-closed YAML policy parser, and 10-surface Software Intelligence Instrument. |
-| **`v1.1.0`–`v1.2.0`** | **2026-09-20 – 10-24** | Initial public release of `garuda`, `garuda-api`, `garuda-mcp`, Dual-Root RFC 6962 Merkle Ledger, `garuda check`, and recursive SQL CTE policy predicates (`layer_violation`, `transitive_claim_exists`, `cycle_exists`, `blast_radius_exceeds`). |
+## Known limitations
 
----
-
-## 5. Verification & Cryptographic Integrity Summary (`v1.9.9`)
-
-```bash
-# 1. Verify all 24 strict compiler & multi-module ground-truth benchmarks (100% precision/recall, 0.0% FP)
-make benchmark-strict
-
-# 2. Verify all 54 MCP tools, argument whitelists, and active Talon contract injection (63/63 checks)
-python3 scripts/mcp_verify.py
-
-# 3. Verify 10/10 controlled OpenTelemetry runtime contradiction quarantine
-python3 scripts/runtime_contradiction_test.py
-
-# 4. Run System Doctor & Cross-Platform Build Matrix Gate
-./bin/garuda doctor --fix
-./bin/garuda talon guard --matrix --fail-on-block
-```
+- The MCP server needs a PostgreSQL database. Directory users must run the installer first; a database-free demo mode is not part of this release.
+- The Python and TypeScript analyzers are structural, not full type resolution (see [SECURITY.md](SECURITY.md) and [docs/CAPABILITIES.md](docs/CAPABILITIES.md)).
+- The Merkle ledger is anchored locally; there is no external timestamp authority.

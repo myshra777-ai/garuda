@@ -724,7 +724,7 @@ function buildDefaultTalonHub() {
         high_hubs_count: 2,
         hooks: [
             { id: "hook-cursor-mdc", name: "Cursor Active Rule (.mdc)", agent: "Cursor IDE", path: ".cursor/rules/garuda-talon.mdc", installed: true, mode: "ALWAYS_APPLY", description: "Injects compiled ADR & YAML policy guardrails into every Cursor composer/agent turn." },
-            { id: "hook-cursor-mcp", name: "Cursor MCP Enforcement Server", agent: "Cursor MCP", path: ".cursor/mcp.json", installed: true, mode: "MCP_GATE", description: "Configures garuda-mcp with GARUDA_TALON_ENFORCE=true and 23 deterministic tools." },
+            { id: "hook-cursor-mcp", name: "Cursor MCP Enforcement Server", agent: "Cursor MCP", path: ".cursor/mcp.json", installed: true, mode: "MCP_GATE", description: "Configures garuda-mcp with GARUDA_TALON_ENFORCE=true and 54 deterministic tools." },
             { id: "hook-claude-settings", name: "Claude Code PostToolUse Hook", agent: "Claude Code", path: ".claude/settings.json", installed: true, mode: "POST_TOOL_USE", description: "Triggers `garuda talon guard --hook` after every Edit/Write/MultiEdit tool call." },
             { id: "hook-claude-md", name: "CLAUDE.md Active Contract", agent: "Claude Code", path: "CLAUDE.md", installed: true, mode: "ALWAYS_APPLY", description: "Embeds mandatory pre-edit briefing and post-edit verification rules into Claude's root memory." },
             { id: "hook-agents-md", name: "AGENTS.md & .windsurfrules", agent: "Codex / Windsurf / Aider", path: "AGENTS.md", installed: true, mode: "ALWAYS_APPLY", description: "Synchronizes workspace hubs, policies, and ADR constraints across Codex, Windsurf, and Aider." },
@@ -2751,9 +2751,9 @@ function openAPISpecModal() {
     var body = document.getElementById("info-modal-body");
     if (!modal || !body) return;
 
-    var specSummary = "# GARUDA v1.7 REST API & 23 MCP TOOLS SPECIFICATION\n\n" +
+    var specSummary = "# GARUDA REST API & 54 MCP TOOLS SPECIFICATION\n\n" +
         "## Primary Dashboard & Governance HTTP Endpoints\n" +
-        "- GET  /dashboard?workspace=<name>          — 8-Surface Interactive Intelligence Instrument\n" +
+        "- GET  /dashboard?workspace=<name>          — 10-Surface Interactive Intelligence Instrument\n" +
         "- GET  /api/v1/dashboard/stats              — Workspace AST, Epistemic 3-State & Drift Pulse\n" +
         "- GET  /api/v1/dashboard/docs-graph         — 4-Tier Document-to-Code & Guardrails Lineage Graph\n" +
         "- POST /api/v1/dashboard/docs-ingest        — Live ADR / Design Spec / Policy Rule Ingestion\n" +

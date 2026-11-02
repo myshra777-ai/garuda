@@ -18,3 +18,14 @@ func generateInitPassword() (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
+
+// generateControlToken returns a random bearer token for the /admin Control Plane
+// ("gct_" + 48 hex characters). It replaces the previous well-known default
+// "devtoken-changeme-please" so a fresh install never ships a guessable operator token.
+func generateControlToken() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "gct_" + hex.EncodeToString(b), nil
+}

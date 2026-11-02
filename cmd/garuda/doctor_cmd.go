@@ -88,14 +88,17 @@ var doctorCmd = &cobra.Command{
 		// 2. .env Configuration Check
 		if _, err := os.Stat(".env"); err != nil {
 			if doctorFixFlag {
-				_ = config.UpsertDotEnv(map[string]string{
+				envVals := map[string]string{
 					"DATABASE_URL":         dbURL,
 					"CONTROL_DATABASE_URL": dbURL,
-					"GARUDA_CONTROL_TOKEN": "devtoken-changeme-please",
 					"GARUDA_WORKSPACE":     wsName,
 					"GARUDA_TALON_ENFORCE": "true",
 					"PORT":                 "8080",
-				})
+				}
+				if tok, tokErr := generateControlToken(); tokErr == nil {
+					envVals["GARUDA_CONTROL_TOKEN"] = tok
+				}
+				_ = config.UpsertDotEnv(envVals)
 				report.Checks = append(report.Checks, DoctorCheck{
 					Name:   "Environment File (.env)",
 					Status: "FIXED",

@@ -194,8 +194,16 @@ func Test08_OldAPIProcessesCannotServeStaleBinaries(t *testing.T) {
 		t.Fatalf("read setup.sh: %v", err)
 	}
 	setup := string(setupBytes)
-	if !strings.Contains(setup, "pkill -f \"garuda-api\"") {
-		t.Errorf("expected setup.sh to terminate stale garuda-api processes via pkill before starting the newly compiled binary")
+	// setup.sh must stop a stale garuda-api before starting the newly compiled binary, but only
+	// processes it can prove are garuda-api (pid file or the verified listener on the API port).
+	// A blanket "pkill -f garuda-api" would also kill unrelated processes (editors, shells).
+	for _, want := range []string{"stop_previous_garuda_api", "API_PID_FILE", "*garuda-api*"} {
+		if !strings.Contains(setup, want) {
+			t.Errorf("expected setup.sh to stop stale garuda-api processes safely (missing %q) before starting the newly compiled binary", want)
+		}
+	}
+	if strings.Contains(setup, "pkill -f") {
+		t.Errorf("setup.sh must not use a blanket pkill -f; stop only verified garuda-api processes")
 	}
 }
 

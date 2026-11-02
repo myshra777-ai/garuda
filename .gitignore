@@ -1,196 +1,116 @@
-# Binaries
+# Garuda .gitignore
+#
+# Rules are deliberately specific. There are NO global "*.json", "*.txt" or "*.html" rules:
+# a global *.json rule once hid the plugin and MCP-registry manifests (.mcp.json, server.json,
+# glama.json, .claude-plugin/, .codex-plugin/, ...) from git, so they never reached GitHub.
+# Check a suspicious file with:  git check-ignore -v <path>
+
+# ---- Build output ---------------------------------------------------------
 /bin/
+/dist/
 /garuda
 /garuda-api
-/garuda-worker
 /garuda-mcp
+/garuda-talon
+/garuda-worker
 /garuda-slack
 /telemetry-collector
+/migrate
+/refund-api/refund-api
+/refund-api/bin/
+*.exe
+*.test
+*.prof
+coverage.out
+coverage.html
+c.out
 
-# Output files
-*.json
-!capabilities.json
-*.html
-!internal/api/templates/*.html
-*.md.gz
-*.txt
-!version.txt
-!README.md
-!docs/*.md
-!LICENSE
+# ---- Release archives (built under /dist; never committed) ----------------
+/*.tar.gz
+/*.zip
+/*.deb
+/*.rpm
+/install_garuda_*.sh
+/install_garuda_*.bash
+/update_garuda_*.sh
+/sync*.sh
+
+# ---- Local run state and secrets ------------------------------------------
+.env
+.env.*
+!.env.example
+.garuda/
+.claude/settings.local.json
+.claude/worktrees/
+*.db
+*.sqlite
+*.sqlite3
 *.log
 *.tmp
 *.tmp.*
+*.bak
+*.sql.bak
 
-# IDE
+# ---- Reports and scratch files written by Garuda commands and scripts ----
+/garuda.sarif
+/garuda-pr-report.md
+/benchmark_v2_results/
+/benchmark_v2_telemetry.csv
+/analyzer_diagnosis.txt
+garuda_graph_*.html
+garuda_audit_*.txt
+garuda_snapshot_*.txt
+garuda_truth_index_*.md
+docs/truth_index_latest.md
+test/benchmark/results/
+test_workspace/
+garuda-sync/
+/tmp/
+/docs/api/
+garuda_video_build/
+internal/api/bad_violation.go
+
+# ---- Internal planning documents: kept on the maintainer's machine only ---
+ROADMAP_INTERNAL.md
+COMPETITIVE_ANALYSIS.md
+GAP_ANALYSIS.md
+YC_APPLICATION_NOTES.md
+*.private.md
+docs/ROADMAP.md
+docs/roadmaps/
+docs/multi-tenant-roadmap.md
+docs/archive/
+docs/TRACKING.md
+docs/specs/README.md
+docs/specs/tenant-tabs.md
+garuda_Roadmap_tracking.md
+garuda_autonomy_Queue_plan.md
+DOCS/VISION.md
+
+# ---- Editors and OS -------------------------------------------------------
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Terraform
-*.tfstate
-*.tfstate.*
-.terraform/
-
-# Kubernetes
-*.kubeconfig
-
-# Docker
-docker-compose.override.yml
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Testing
-coverage.out
-coverage.html
-*.test
-*.prof
-
-# Vendor
-vendor/
-
-# Node
+# ---- Language tooling -----------------------------------------------------
+/vendor/
 node_modules/
-
-# Python
 __pycache__/
 *.pyc
 *.pyo
-
-# Temporary sync directories
-/tmp/
-garuda-sync/
-
-# Generated documentation
-/docs/api/
-/docs/openapi.yaml
-
-# Garuda specific generated files
-garuda_graph_*.html
-garuda_audit_*.txt
-!version.txt
-garuda_snapshot_*.txt
-!version.txt
-garuda_truth_index_*.md
-v*.json
-!capabilities.json
-*.bak
-*.sql.bak
-# Allow benchmark test fixtures
-!garuda-bench/**/*.json
-!capabilities.json
-
-# Track script requirements
-!scripts/requirements.txt
-
-# Allow benchmark test fixtures and golden manifests
-!test/benchmark/**/*.json
-!capabilities.json
-test/benchmark/results/
-test/benchmark/results/
-bin/
-bin/
-
-# Internal strategy documents — never commit
-ROADMAP_INTERNAL.md
-COMPETITIVE_ANALYSIS.md
-GAP_ANALYSIS.md
-YC_APPLICATION_NOTES.md
-.env
-.env.local
-*.private.md
-
-# Local workspace configuration (contains machine-specific paths)
-.garuda/
-
-# Test workspace (local validation data)
-test_workspace/
-
-# Stale graph HTML output
-garuda_graph_*.html
-/migrate
-
-# Merkle golden vectors — frozen test data. Must be committed.
-# Merkle golden test vectors — source artifacts, not generated output.
-# These define the canonical encoding contract. They MUST be committed.
-# Placed after the global *.json rule so the negation takes effect.
-!internal/merkle/testdata/
-!internal/merkle/testdata/**
-# Python virtualenv (should never be committed)
 .venv/
-venv/
-env/
-ENV/
+/venv/
+/env/
+/ENV/
 
-# Node modules (should never be committed)
-node_modules/
-**/node_modules/
-
-# Internal roadmap and architectural planning documents.
-# These describe the current state of the codebase and current priorities.
-# They are maintained locally and deliberately not published.
-docs/ROADMAP.md
-docs/roadmaps/
-docs/multi-tenant-roadmap.md
-garuda_Roadmap_tracking.md
-DOCS/VISION.md
-garuda_autonomy_Queue_plan.md
-
-
-garuda_truth_index_*.md
-docs/truth_index_latest.md
-docs/archive/
-docs/TRACKING.md
-docs/specs/README.md
-docs/specs/tenant-tabs.md
-
-# Demo recording scratch artifacts
-garuda_video_build/
-internal/api/bad_violation.go
-
-# Release packages & build outputs (never commit to git)
-/dist/
-dist/
-*.tar.gz
-*.zip
-*.deb
-*.rpm
-/refund-api/refund-api
-/refund-api/bin/
-install_garuda_*.sh
-install_garuda_*.bash
-update_garuda_*.sh
-
-# Local build/sync artefacts (never commit)
-c.out
-*.test
-coverage.out
-/garuda
-/garuda-api
-/garuda-mcp
-/garuda-talon
-sync*.sh
-/refund-api
-
-# Marketplace / plugin manifests must be tracked (the global *.json rule above hid them)
-!.mcp.json
-!server.json
-!glama.json
-!.claude-plugin/*.json
-!.codex-plugin/*.json
-!.cursor-plugin/*.json
-!.agents/plugins/*.json
+# ---- Infrastructure -------------------------------------------------------
+*.tfstate
+*.tfstate.*
+.terraform/
+*.kubeconfig
+docker-compose.override.yml
+/docker-compose.garuda.yml

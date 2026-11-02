@@ -6,7 +6,7 @@
 
 Software engineering has undergone a structural phase transition driven by autonomous and semi-autonomous coding assistants, including [Cursor](https://www.cursor.com/), [Anthropic Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview), [OpenAI Codex](https://openai.com/index/openai-codex/), and [Windsurf](https://codeium.com/windsurf). While code generation throughput has accelerated by an order of magnitude, verification infrastructure has remained anchored to legacy paradigms designed for human typing speeds. Traditional static linters validate localized syntax and formatting rules, whereas unit test suites evaluate isolated function inputs and outputs—frequently using mock objects synthesized by the very same language model that authored the implementation. Neither mechanism enforces macro-architectural invariants, cross-service dependency boundaries, multi-team business formula consistency, or statutory financial data lineage.
 
-[Garuda](https://github.com/myshra777-ai/garuda) (`github.com/myshra777-ai/garuda`, release version `v1.9.2`) addresses this structural deficit by operating as a local-first, PostgreSQL-backed software intelligence instrument, change-control gate, active AI agent execution harness (`Garuda Talon`), human-in-the-loop business formula disambiguator, and cryptographic audit ledger. Rather than competing with generative models to produce source code, Garuda functions as the deterministic referee that governs what code is permitted to enter a production repository. Every architectural claim, dependency edge, runtime trace, policy evaluation, and human stakeholder approval is anchored in a relational semantic graph and sealed inside an [RFC 6962 Certificate Transparency](https://datatracker.ietf.org/doc/html/rfc6962) Merkle tree.
+[Garuda](https://github.com/myshra777-ai/garuda) (`github.com/myshra777-ai/garuda`, release line documented in `version.txt`) addresses this structural deficit by operating as a local-first, PostgreSQL-backed software intelligence instrument, change-control gate, active AI agent execution harness (`Garuda Talon`), human-in-the-loop business formula disambiguator, and cryptographic audit ledger. Rather than competing with generative models to produce source code, Garuda functions as the deterministic referee that governs what code is permitted to enter a production repository. Every architectural claim, dependency edge, runtime trace, policy evaluation, and human stakeholder approval is anchored in a relational semantic graph and sealed inside an [RFC 6962 Certificate Transparency](https://datatracker.ietf.org/doc/html/rfc6962) Merkle tree.
 
 ### 1.2 Four Failure Modes Eliminated by the Garuda Control Plane
 
@@ -32,7 +32,7 @@ Fourth, most commercial software repositories lack formal, machine-readable docu
 
 ### 2.1 Multi-Persona Operational Alignment Across Technical and Executive Workflows
 
-Garuda is architected to serve seven distinct operational personas across the software delivery, architectural governance, and financial compliance lifecycle. Rather than confining software intelligence to command-line compiler output, the platform translates deep Abstract Syntax Tree (AST) topology and relational graph queries into role-specific interfaces across its command-line binary (`bin/garuda`), its 35-tool [Model Context Protocol](https://modelcontextprotocol.io/specification/2025-06-18) server (`bin/garuda-mcp`), and its 9-surface Progressive Web Application (`/dashboard`).
+Garuda is architected to serve seven distinct operational personas across the software delivery, architectural governance, and financial compliance lifecycle. Rather than confining software intelligence to command-line compiler output, the platform translates deep Abstract Syntax Tree (AST) topology and relational graph queries into role-specific interfaces across its command-line binary (`bin/garuda`), its 54-tool [Model Context Protocol](https://modelcontextprotocol.io/specification/2025-06-18) server (`bin/garuda-mcp`), and its 9-surface Progressive Web Application (`/dashboard`).
 
 For **Software Engineers and Full-Stack Developers**, the primary operational friction in large repositories is getting penalized for pre-existing technical debt or inadvertently breaking an unfamiliar upstream service during a routine change. Garuda resolves this through diff-scoped violation partitioning (`DiffScopeFilter`) and pre-edit impact briefings (`garuda talon brief`). When an engineer modifies a file, Garuda maps the exact `git diff --unified=0` line hunks to touched AST symbols and separates `net_new_violations` from `baseline_violations`. Consequently, a developer working in a legacy repository with 25 baseline architectural violations can merge clean code immediately as long as `net_new_violations == 0`.
 
@@ -42,7 +42,7 @@ For **Finance Controllers, Chief Financial Officers (CFOs), Actuaries, and Statu
 
 For **Non-Technical Founders, Product Managers, and Engineering Leads**, Garuda translates technical call graphs into business risk tiers using the Amazon Search versus Wishlist criticality model. High-fan-in customer pathways—such as the Homepage, Search Bar, Search Results Redirect Router (142 callers), and Claims Settlement Ledger—are classified as `HIGH_SEVERE` (`HUMAN_FREEZE_DO_NOT_TOUCH`), ensuring that automated refactors never take down revenue-critical flows. Secondary features such as the Wishlist Loader (19 callers) are classified as `MEDIUM` (`HUMAN_TRADE_OFF_REVIEW`), while cosmetic UI helpers (4 callers) are marked `LOW` (`ALLOW_WITH_INFO`).
 
-For **DevOps, Platform Engineers, and Site Reliability Engineers (SREs)**, Garuda eliminates environment drift between developer laptops and continuous integration runners (`DetectEnvironmentDrift`) and correlates live [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/) production spans (`POST /api/v1/telemetry/spans`) against the static call graph to quarantine unapproved shadow dependencies (`CONTRADICTED`). Finally, for **Autonomous AI Coding Agents** (`Cursor`, `Claude Code`, `Codex`, `Windsurf`) and **Technical Due-Diligence Evaluators**, Garuda provides a deterministic 35-tool JSON-RPC 2.0 MCP surface and a reproducible benchmark suite (`24/24` compiler benchmarks, `43/43` MCP protocol checks, and `10/10` runtime contradiction quarantines).
+For **DevOps, Platform Engineers, and Site Reliability Engineers (SREs)**, Garuda eliminates environment drift between developer laptops and continuous integration runners (`DetectEnvironmentDrift`) and correlates live [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/) production spans (`POST /api/v1/telemetry/spans`) against the static call graph to quarantine unapproved shadow dependencies (`CONTRADICTED`). Finally, for **Autonomous AI Coding Agents** (`Cursor`, `Claude Code`, `Codex`, `Windsurf`) and **Technical Due-Diligence Evaluators**, Garuda provides a deterministic 54-tool JSON-RPC 2.0 MCP surface and a reproducible benchmark suite (`24/24` compiler benchmarks, `43/43` MCP protocol checks, and `10/10` runtime contradiction quarantines).
 
 | Stakeholder Persona | Core Operational Objective | Primary Garuda Interface Surface | Key CLI Commands and MCP Primitives | Enforced Governance Outcome |
 | :--- | :--- | :--- | :--- | :--- |
@@ -66,8 +66,8 @@ The internal architecture of Garuda is partitioned into eight cohesive execution
 2. **Plane 02 (Epistemic Evidence and Edge-Level Runtime Drift Verification)**: Classifies every architectural claim into a strict 3-state epistemic model (`SUPPORTED`, `UNVERIFIED`, `CONTRADICTED`), ingests OpenTelemetry execution spans, and corroborates or quarantines static edges against live production traces.
 3. **Plane 03 (Deterministic Graph-Native Policy Engine and Diff Scoping)**: Evaluates nine declarative YAML predicates (`layer_violation`, `transitive_claim_exists`, `cycle_exists`, `blast_radius_exceeds`, `claim_exists`, `entity_exists`, `contradiction_exists`, `verification_missing`, `language_matches`) using recursive SQL Common Table Expressions (CTEs) and partitions findings by `git diff` AST line spans.
 4. **Plane 04 (Unified Change-Control and RFC 6962 Merkle Ledger)**: Orchestrates the 5-step change-control pipeline (`garuda check`) and anchors every decision and policy evaluation into a domain-separated SHA-256 Merkle tree with independently verifiable inclusion proofs (`V1Proof`).
-5. **Plane 05 (Garuda Talon Active Agent Harness and 35-Tool MCP Surface)**: Compiles live workspace rules into IDE agent contracts (`.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc`, `CLAUDE.md`, `AGENTS.md`, `.windsurfrules`), enforces pre-commit and `PostToolUse` hooks, and exposes 35 tools over JSON-RPC 2.0.
-6. **Plane 06 (Universal Zero-Dependency Runtime and Cross-OS Diagnostics)**: Provisions portable user-space PostgreSQL `16.4.0` (`127.0.0.1:5433`) and Go `1.26.0` toolchains across Windows PowerShell 5.1/7, macOS (ARM64/Intel), Linux, Chromebook (Crostini), and Android (Termux) with self-healing diagnostics (`garuda doctor --fix`).
+5. **Plane 05 (Garuda Talon Active Agent Harness and 54-Tool MCP Surface)**: Compiles live workspace rules into IDE agent contracts (`.garuda/TALON_CONTRACT.md`, `.cursor/rules/garuda-talon.mdc`, `CLAUDE.md`, `AGENTS.md`, `.windsurfrules`), enforces pre-commit and `PostToolUse` hooks, and exposes 54 tools over JSON-RPC 2.0.
+6. **Plane 06 (One-Command Runtime and Cross-OS Diagnostics)**: Provisions portable user-space PostgreSQL `16.4.0` (`127.0.0.1:5433`) and Go `1.26.0` toolchains across Windows PowerShell 5.1/7, macOS (ARM64/Intel), Linux, Chromebook (Crostini), and Android (Termux) with self-healing diagnostics (`garuda doctor --fix`).
 7. **Plane 07 (Deterministic BuildContext Provenance and 4-Tier Docs-to-Code Lineage)**: Binds OS, architecture, `CGO_ENABLED`, build tags, and dependency lockfile hashes into cryptographic `BuildContext` receipts and maps normative documents across four lineage tiers.
 8. **Plane 08 (Human-in-the-Loop Formula Disambiguation, Surface Criticality Tiers, Financial Audit, and Base Rulebook Studio)**: Governs multi-team formula weights (`0.00–1.00`), enforces 3-tier surface criticality freezes, reconciles cross-team financial discrepancies (`48.00 Cr` versus `4.80 Cr`), and synthesizes baseline rulebooks for undocumented repositories.
 
@@ -122,8 +122,6 @@ $$\text{GraphFingerprint} = \text{SHA256}\left(\text{BuildHeader} \;\|\; \bigopl
 
 Excluding transient runtime parsing counters (`result.Stats.Files`) from `repoHasher` guarantees mathematical fingerprint identity between cold full-parse runs and warm cache-skipping runs (`TestIncrementalWorkspaceAnalysis_CacheSkipping`).
 
-![Multi-Repository Semantic Extraction Progression](corpus_progression_chart.png)
-
 ### 4.3 Graph-Native Policy Predicates, Recursive CTEs, and Diff-Scoped Violation Partitioning
 
 Garuda's policy engine (`internal/policy/parser.go`, `evaluator.go`, `engine.go`) evaluates declarative YAML bundles (`policies/*.yaml`) directly against the PostgreSQL semantic graph. Rather than pulling millions of edges into application memory, the evaluator compiles predicates into parameterized SQL queries and recursive Common Table Expressions (`WITH RECURSIVE`):
@@ -152,8 +150,6 @@ For **Financial Discrepancy Auditing** (`financial_audit_reconciliations`), Garu
 $$\text{VarianceRatio} = \frac{\max(|V_A|, |V_B|)}{\min(|V_A|, |V_B|)}$$
 
 and inspects the AST binary expression divisors and embedded SQL aggregation strings. When $\text{VarianceRatio} \approx 10.0$ (such as `48.00 Crore INR` in `ops.AggregateClaimsPaidCrore` versus `4.80 Crore INR` in `finance.ExportExecutiveClaimsSummary`), Garuda automatically flags `SCALE_FACTOR_10X_MISMATCH`, identifies the `/ 1000.0` versus `/ 100.0` Lakhs-to-Crore divisor bug in the AST trace, and prescribes routing both pipelines through `store.CanonicalCroreAmount` (`SYNTH-AUDIT-005`).
-
-![Surface Criticality Blast Radius and Financial Audit Detection](logic_weights_criticality_chart.png)
 
 ### 4.5 RFC 6962 Cryptographic Merkle Ledger and Canonical Byte Encoding
 
@@ -194,7 +190,7 @@ The repository compiles seven specialized entrypoints under `cmd/` (with the fou
 
 1. **`cmd/garuda` (`./bin/garuda`)**: The unified command-line interface exposing 28 top-level and nested commands for repository initialization (`init`), health diagnostics (`doctor`), multi-language AST analysis (`analyze`), 5-plane change control (`check`), Talon agent harness control (`talon`), declarative policy management (`policy`), documentation lineage (`docs`), business and financial auditing (`audit`), rulebook synthesis (`rulebook`), static hygiene (`hygiene`), and daemon management (`dev`, `status`, `verify`).
 2. **`cmd/garuda-api` (`./bin/garuda-api`)**: The HTTP REST gateway, Ed25519 authentication server, OpenTelemetry span ingestion endpoint, and embedded web server hosting the 9-surface `/dashboard` PWA and `/admin` multi-tenant operator control plane.
-3. **`cmd/garuda-mcp` (`./bin/garuda-mcp`)**: The JSON-RPC 2.0 Model Context Protocol server (`protocolVersion: "2025-06-18"`) over `stdio`, exposing 35 deterministic tools, MCP Prompts (`garuda.architectural_contract`), MCP Resources (`garuda://workspace/contract`), strict argument whitelisting (`toolArgWhitelist`), and first-call active contract injection.
+3. **`cmd/garuda-mcp` (`./bin/garuda-mcp`)**: The JSON-RPC 2.0 Model Context Protocol server (`protocolVersion: "2025-06-18"`) over `stdio`, exposing 54 deterministic tools, MCP Prompts (`garuda.architectural_contract`), MCP Resources (`garuda://workspace/contract`), strict argument whitelisting (`toolArgWhitelist`), and first-call active contract injection.
 4. **`cmd/garuda-talon` (`./bin/garuda-talon`)**: Dedicated standalone binary for high-speed execution of the Garuda Talon pre-edit, post-edit, git hook, and autonomous supervisor loop workflows.
 5. **`cmd/garuda-worker`**: Asynchronous background daemon executing periodic runtime verification (`RecomputeWorkspaceVerification`) and 10-second Merkle epoch root anchoring.
 6. **`cmd/telemetry-collector`**: Standalone OpenTelemetry collector bridge for high-throughput span normalization.
@@ -202,7 +198,7 @@ The repository compiles seven specialized entrypoints under `cmd/` (with the fou
 
 ### 5.3 PostgreSQL Relational and Graph Schema Architecture (93 Idempotent Migrations)
 
-Garuda's persistence layer (`internal/store/` and `migrations/000_create_extensions.sql` through `093_human_in_the_loop_audit_rulebook.sql`) consists of 93 idempotent SQL migrations organized across six functional schema domains:
+Garuda's persistence layer (`internal/store/` and `migrations/000_create_extensions.sql` through the highest-numbered file in `migrations/`) consists of 91 idempotent SQL migrations organized across six functional schema domains:
 
 | Schema Domain | Core PostgreSQL Tables | Primary Keys, Indexes, and Architectural Purpose |
 | :--- | :--- | :--- |
@@ -262,7 +258,7 @@ In `v1.9.0` and `v1.9.1`, Garuda expanded from pure engineering governance to en
 
 ---
 
-## 7. Subsystem Reference: Garuda Talon, 35-Tool MCP Server, and 9-Surface Dashboard PWA
+## 7. Subsystem Reference: Garuda Talon, 54-Tool MCP Server, and 10-Surface Dashboard PWA
 
 ### 7.1 Garuda Talon Active Agent Harness and Six-Point Hook Matrix
 

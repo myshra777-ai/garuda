@@ -1,7 +1,7 @@
 ---
-name: garuda-post-edit-verification
+name: post-edit-verification
 description: Evaluates the completed git diff against configured YAML policies and ADR claims, separating net-new violations from pre-existing baseline findings.
-version: "1.9.9"
+version: "1.9.10"
 license: "Apache-2.0"
 read_only_default: true
 ---

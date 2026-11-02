@@ -108,7 +108,7 @@ Talon runs the given CLI agent command, checks the resulting working-tree diff, 
 
 ## MCP integration
 
-The MCP server exposes 23 tools, including:
+The MCP server exposes 54 tools (see [docs/API.md](API.md#the-54-mcp-tools)), including:
 
 - `garuda.talon_pre_edit` — targeted pre-edit context and guardrails.
 - `garuda.talon_verify_edit` — post-edit sync/check and repair feedback.
@@ -124,7 +124,7 @@ Verify the protocol and integration surface with:
 WORKSPACE=my-app python3 scripts/mcp_verify.py
 ```
 
-The current evidence record reports 30/30 reference checks. That number covers the verifier's specified protocol and integration checks; it is not a semantic accuracy score for all tools.
+The current evidence record reports 63/63 multi-repository reference checks (see [EVIDENCE.md](../EVIDENCE.md)). That number covers the verifier's specified protocol and integration checks; it is not a semantic accuracy score for all tools.
 
 ## CI is the merge-control boundary
 

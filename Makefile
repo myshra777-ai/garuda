@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Build, Release Matrix & Benchmark Targets (Garuda v1.9.1 + Garuda Talon)
+# Build, Release Matrix & Benchmark Targets
 # -----------------------------------------------------------------------------
 .PHONY: build release-matrix test benchmark benchmark-strict benchmark-record talon-init talon-guard
 

@@ -1,6 +1,6 @@
 # Garuda Dashboard Walkthrough
 
-> **Scope:** Dashboard UI in the current `main` line (v1.9.6 code), as served from `/dashboard`. This guide explains the visible controls, panels, their purpose, and when to use them. The dashboard is a workspace view over Garuda's index, evidence, policy, and Talon services; it is not a replacement for the CLI or MCP interface.
+> **Scope:** the dashboard UI on the current `main` branch, as served from `/dashboard`. This guide explains the visible controls, panels, their purpose, and when to use them. The dashboard is a workspace view over Garuda's index, evidence, policy, and Talon services; it is not a replacement for the CLI or MCP interface.
 
 ## 1. Before you begin
 
