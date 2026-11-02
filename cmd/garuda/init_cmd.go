@@ -195,7 +195,7 @@ var initCmd = &cobra.Command{
 				return fmt.Errorf("could not generate owner password: %w", genErr)
 			}
 			password = gen
-			fmt.Printf("  ! No --password/GARUDA_PASSWORD given; generated owner password (shown once, applies only if the account is new): %s\n", password)
+			fmt.Println("  ! No --password/GARUDA_PASSWORD given; generated owner password for bootstrap (value not shown). Set GARUDA_PASSWORD or use --password to provide one explicitly.")
 		}
 		port := os.Getenv("PORT")
 		if port == "" {
