@@ -75,18 +75,14 @@
     "logo_secondary": "assets/garuda-logo.png",
     "demo_video": "assets/garuda_dashboard_demo_video.mp4",
     "screenshots": {
-      "overview": "assets/screenshots/workspace-overview.png",
-      "search": "assets/screenshots/global_search.png",
-      "architecture_top": "assets/screenshots/top_level_repo_architecture.png",
-      "architecture_ast": "assets/screenshots/low-level-ast-graph.png",
-      "cross_repo": "assets/screenshots/cross-repo-graph.png",
-      "workspace_14repo": "assets/screenshots/14-repo-workspace-graph.png",
-      "workspace_clusters": "assets/screenshots/workspace-clusters-graph.png",
-      "repository_topology": "assets/screenshots/repository-topology.png",
-      "contradictions_14repo": "assets/screenshots/dashboard-14repo-contradictions.png",
-      "cryptographic_trust": "assets/screenshots/evidence-cryptographic-trust.png",
-      "ide_graph": "assets/screenshots/ide-graph-view.png",
-      "ide_contradictions": "assets/screenshots/ide-contradictions.png"
+      "about": "assets/screenshots/about-garuda.png",
+      "create_workspace": "assets/screenshots/create-workspace.png",
+      "topology": "assets/screenshots/topology-overview.png",
+      "quickstart_steps": "assets/screenshots/quickstart-steps.png",
+      "docs_to_guardrails": "assets/screenshots/docs-to-guardrails.png",
+      "data_logic_audit": "assets/screenshots/data-logic-audit.png",
+      "signal_glossary": "assets/screenshots/signal-glossary.png",
+      "command_cheatsheet": "assets/screenshots/command-cheatsheet.png"
     }
   }
 }

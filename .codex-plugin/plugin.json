@@ -1,0 +1,22 @@
+{
+  "name": "garuda",
+  "version": "1.9.9",
+  "description": "Checks what AI coding agents change before it lands: impact analysis, architecture rules, and a tamper-evident record. MCP server plus 6 skills.",
+  "author": { "name": "Rohit Mishra", "url": "https://github.com/myshra777-ai" },
+  "homepage": "https://github.com/myshra777-ai/garuda",
+  "repository": "https://github.com/myshra777-ai/garuda",
+  "license": "Apache-2.0",
+  "keywords": ["mcp", "architecture", "governance", "ai-agents"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Garuda",
+    "shortDescription": "Guardrails and proof for AI-written code",
+    "longDescription": "Before an agent edits code, Garuda shows who depends on it and which architecture rules apply. After the edit, it checks the diff and records the verdict in a tamper-evident ledger.",
+    "developerName": "Rohit Mishra",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/myshra777-ai/garuda",
+    "logo": "./assets/garuda-logo.png"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "garuda",
+  "owner": { "name": "Rohit Mishra", "url": "https://github.com/myshra777-ai" },
+  "metadata": { "description": "Garuda: guardrails and proof for AI-written code" },
+  "plugins": [
+    {
+      "name": "garuda",
+      "source": "./",
+      "description": "Checks what AI coding agents change before it lands: impact analysis, architecture rules, and a tamper-evident record. MCP server plus 6 skills.",
+      "version": "1.9.9",
+      "category": "development",
+      "tags": ["mcp", "governance", "architecture", "ai-agents"]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "garuda": {
+      "type": "stdio",
+      "command": "garuda-mcp",
+      "args": [],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL:-postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable}",
+        "GARUDA_WORKSPACE": "${GARUDA_WORKSPACE:-default}",
+        "GARUDA_TALON_ENFORCE": "true"
+      }
+    }
+  }
+}
