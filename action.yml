@@ -26,6 +26,10 @@ inputs:
     description: "Verify 4-profile cross-platform build matrix (linux/darwin/windows, cgo=0/1)"
     required: false
     default: "false"
+  database-url:
+    description: "PostgreSQL connection URI (if omitted, uses DATABASE_URL env or auto-starts local runner PostgreSQL)"
+    required: false
+    default: ""
 
 outputs:
   verdict:
@@ -41,7 +45,7 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Build or Locate Garuda Binaries from Action Source (Zero-CGO)
+    - name: Ensure PostgreSQL & Build Garuda Binaries (Zero-CGO)
       shell: bash
       run: |
         set -euo pipefail
@@ -62,6 +66,20 @@ runs:
         fi
         chmod +x "${GARUDA_BIN_DIR}/garuda" "${GARUDA_BIN_DIR}/garuda-talon"
 
+        # Auto-bootstrap local PostgreSQL on GitHub Actions Ubuntu runners if no external DB service was configured
+        DB_URL="${{ inputs.database-url }}"
+        if [[ -z "$DB_URL" ]]; then
+          DB_URL="${DATABASE_URL:-postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable}"
+        fi
+        if command -v pg_isready >/dev/null 2>&1 && ! pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
+          if command -v sudo >/dev/null 2>&1 && command -v service >/dev/null 2>&1; then
+            sudo service postgresql start || true
+            sudo -u postgres psql -c "CREATE USER garuda WITH PASSWORD 'garudapassword' SUPERUSER;" 2>/dev/null || true
+            sudo -u postgres psql -c "CREATE DATABASE garuda OWNER garuda;" 2>/dev/null || true
+          fi
+        fi
+        echo "GARUDA_RESOLVED_DB_URL=${DB_URL}" >> "$GITHUB_ENV"
+
     - name: Execute Fail-Closed Garuda Talon Diff-Scoped Architecture & Logic Gate
       id: garuda_gate
       shell: bash
@@ -72,10 +90,14 @@ runs:
         WORKSPACE="${{ inputs.workspace }}"
         POLICY_DIR="${{ inputs.policy-dir }}"
         DIFF_REV="${{ inputs.diff }}"
+        export DATABASE_URL="${GARUDA_RESOLVED_DB_URL:-${DATABASE_URL:-postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable}}"
 
         if [[ ! -d "$POLICY_DIR" && -d "${ACTION_SRC}/policies" ]]; then
           POLICY_DIR="${ACTION_SRC}/policies"
         fi
+
+        # Ensure workspace baseline is indexed before running diff-scoped guard
+        "$GARUDA_BIN" analyze . --workspace "$WORKSPACE" --save >/dev/null 2>&1 || true
 
         EXTRA_FLAGS=()
         if [[ -n "$DIFF_REV" ]]; then

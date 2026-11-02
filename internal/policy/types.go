@@ -36,9 +36,9 @@ func (d Decision) Severity() int {
 		return 4
 	case DecisionWarn:
 		return 3
-	case DecisionInconclusive:
-		return 2
 	case DecisionAllow:
+		return 2
+	case DecisionInconclusive:
 		return 1
 	default:
 		return 0

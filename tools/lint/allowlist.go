@@ -70,6 +70,54 @@ var Allowlist = []AllowEntry{
 		Hash:   "d2f82751400211687120b8acefcf07b7f3d9acc75ca330dcedad26207d4b1e43",
 		Reason: "Same as contradiction_store.go:72 — second tenant-wide contradiction query on the same table.",
 	},
+	{
+		File:   "../../cmd/garuda/stats.go",
+		Check:  "sql-scoping",
+		Hash:   "ebeda374f15f79fe1aa96057dd4db1897fae171d0a08e6631ec32b327e5099e9",
+		Reason: "Same as stats.go:67 — garuda stats reports tenant-wide aggregate decision count by design.",
+	},
+	{
+		File:   "../../internal/store/analysis.go",
+		Check:  "sql-scoping",
+		Hash:   "6012cca43a1cce55cce3fb451861aa47b4ec0d4f82c76c9e00e625ea5971f130",
+		Reason: "SaveAnalysisResult persists a tenant-level analysis decision record using scope_system for the workspace name; Migration 098 added nullable workspace_id for dashboard scoping while keeping legacy DecisionStore callers backward-compatible.",
+	},
+	{
+		File:   "../../internal/store/decision_store.go",
+		Check:  "sql-scoping",
+		Hash:   "40152e48058d25b6f8edea0ec041e6ccdd49e4b1667f08145d4181ac3961a35c",
+		Reason: "SaveDecision writes a canonical types.Decision (whose RFC 6962 canonical byte encoding in internal/merkle/decision.go commits to scope_domain and scope_system rather than workspace_id).",
+	},
+	{
+		File:   "../../internal/store/decision_store.go",
+		Check:  "sql-scoping",
+		Hash:   "6fd44960698ce493dec283177b704358cb6ae81e670e20b1ab929b032240eed2",
+		Reason: "ListDecisions(ctx, tenantID, filter) is a tenant-level store method that filters by scope_domain / scope_system; dashboard handlers scope by workspace_id directly.",
+	},
+	{
+		File:   "../../internal/store/decision_store.go",
+		Check:  "sql-scoping",
+		Hash:   "a5fed9f2e04b1762201871a5c5a03ddd47aa1dd0e3a7168a96a9cff07da82f87",
+		Reason: "Same as decision_store.go:181 — GetDecisionsByScope filters by tenant_id and scope_domain/scope_system.",
+	},
+	{
+		File:   "../../internal/store/postgres.go",
+		Check:  "sql-scoping",
+		Hash:   "7c5346829f747468e6d154c79677c6406ae83019376650c462266ad33d5877ca",
+		Reason: "GetDecisions(ctx, tenantID) is a legacy tenant-level store interface method; workspace-scoped callers use dashboard_handlers.go with workspace_id.",
+	},
+	{
+		File:   "../../internal/store/revision_store.go",
+		Check:  "sql-scoping",
+		Hash:   "58bb5f5a01a1b100f77ba70b04160c3869eb711ee2e9541c74edc15da0c02d93",
+		Reason: "CommitRevision inserts a revision-linked decision row keyed by tenant_id and scope_system.",
+	},
+	{
+		File:   "../../internal/store/temporal_store.go",
+		Check:  "sql-scoping",
+		Hash:   "689cc7130925a7caafda5bbea02c45de7359a8c7c5fb60c65f1d961bda068099",
+		Reason: "GetDecisionsAtTime queries historical tenant decisions across a temporal window.",
+	},
 }
 
 // IsAllowed reports whether (file, check, hash) is present in the

@@ -2031,15 +2031,17 @@ func (s *MCPServer) handleGetLineage(args map[string]interface{}) (interface{}, 
 		}
 	}
 
+	_, workspaceID, wErr := s.resolveTenantAndWorkspace(args)
 	matchedDecisions := make([]map[string]interface{}, 0)
 	dRows, dErr := s.safePool().Query(ctx, `
 		SELECT id::text, title, COALESCE(statement, ''), COALESCE(owner, ''), COALESCE(status::text, 'draft'), created_at
 		FROM decisions
 		WHERE tenant_id = $1
+		  AND ($3::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR workspace_id = $3 OR workspace_id IS NULL)
 		  AND (COALESCE(owner, '') ILIKE '%' || $2 || '%' OR title ILIKE '%' || $2 || '%')
 		ORDER BY created_at DESC
 		LIMIT 25
-	`, tenantID, targetStr)
+	`, tenantID, targetStr, workspaceID)
 	if dErr == nil {
 		for dRows.Next() {
 			var did, dtitle, dstmt, downer, dst string
@@ -2060,7 +2062,7 @@ func (s *MCPServer) handleGetLineage(args map[string]interface{}) (interface{}, 
 
 	matchedEvaluations := make([]map[string]interface{}, 0)
 	matchedEntities := make([]map[string]interface{}, 0)
-	if _, workspaceID, wErr := s.resolveTenantAndWorkspace(args); wErr == nil && workspaceID != uuid.Nil {
+	if wErr == nil && workspaceID != uuid.Nil {
 		evRows, evErr := s.safePool().Query(ctx, `
 			SELECT id::text, policy_id::text, COALESCE(decision, ''), COALESCE(actor, ''),
 			       COALESCE(subject_kind, ''), COALESCE(subject_id, ''), COALESCE(merkle_block_height, 0), evaluated_at

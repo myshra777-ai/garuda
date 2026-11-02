@@ -1868,9 +1868,10 @@ func (s *MCPServer) handleResetAuditState(args map[string]interface{}) (interfac
 		if tag, err := s.safePool().Exec(ctx, `
 			DELETE FROM decisions
 			 WHERE tenant_id = $1
+			   AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR workspace_id = $2 OR workspace_id IS NULL)
 			   AND (title ILIKE '%smoke%' OR title ILIKE '%audit%' OR owner = 'mcp-agent' OR owner LIKE 'mcp-client:%')
 			   AND status = 'draft'
-		`, tenantID); err == nil {
+		`, tenantID, workspaceID); err == nil {
 			deletedDecisions = tag.RowsAffected()
 		}
 		if workspaceID != uuid.Nil {
@@ -2261,8 +2262,8 @@ func (s *MCPServer) handleAuditExport(args map[string]interface{}) (interface{},
 	if s.store != nil && s.safePool() != nil {
 		dRows, dErr := s.safePool().Query(ctx, `
 			SELECT id::text, title, COALESCE(status::text, 'draft'), COALESCE(owner, ''), created_at
-			FROM decisions WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 50
-		`, tenantID)
+			FROM decisions WHERE tenant_id = $1 AND ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR workspace_id = $2 OR workspace_id IS NULL) ORDER BY created_at DESC LIMIT 50
+		`, tenantID, workspaceID)
 		if dErr == nil {
 			for dRows.Next() {
 				var id, title, st, owner string

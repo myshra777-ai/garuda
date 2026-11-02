@@ -16,7 +16,7 @@ when:
     params:
       claim_type: CALLS
       from_name_pattern: ".*(KYC|Customer|Patient|Identity).*"
-      to_name_pattern: "^(fmt\\.Print|log\\.Print).*RawPII.*"
+      to_name_pattern: '^(fmt\.Print|log\.Print).*RawPII.*'
 then:
   decision: BLOCK
   reason: |

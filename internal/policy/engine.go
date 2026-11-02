@@ -130,6 +130,12 @@ func LoadActivePolicies(ctx context.Context, pool *pgxpool.Pool, tenantID uuid.U
 				if pid == "" {
 					continue
 				}
+				// Starter template and imported tool policies are only active when installed in policyDir
+				if strings.HasPrefix(pid, "tpl-") || strings.HasPrefix(pid, "archunit-") || strings.HasPrefix(pid, "importlinter-") || strings.HasPrefix(pid, "depcruise-") || strings.Contains(filepath.ToSlash(srcPath), "/templates/") {
+					if _, inYAML := byID[pid]; !inYAML {
+						continue
+					}
+				}
 				if strings.EqualFold(status, "superseded") || supersededMap[pid] {
 					supersededSet[pid] = true
 					delete(byID, pid)
@@ -350,6 +356,8 @@ func (e *Engine) Run(
 			result.Evaluations = append(result.Evaluations, ev)
 			if ev.Decision.Severity() > result.FinalDecision.Severity() {
 				result.FinalDecision = ev.Decision
+			}
+			if ev.Decision == DecisionBlock {
 				id := ev.PolicyID
 				result.BlockedBy = &id
 				result.BlockedByPolicyID = p.ID
@@ -377,6 +385,8 @@ func (e *Engine) Run(
 		result.Evaluations = append(result.Evaluations, ev)
 		if ev.Decision.Severity() > result.FinalDecision.Severity() {
 			result.FinalDecision = ev.Decision
+		}
+		if ev.Decision == DecisionBlock {
 			id := ev.PolicyID
 			result.BlockedBy = &id
 			result.BlockedByPolicyID = p.ID

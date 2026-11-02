@@ -1,10 +1,9 @@
-name: Garuda Architectural & Financial PR Gate
+name: Garuda Architectural & Data-Logic PR Gate
 
 on:
   pull_request:
-    branches: [ main, master ]
   push:
-    branches: [ main, master ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,19 +12,56 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. Fast Drop-In PR Diff Gate (~30 lines — copy into any repo!)
-  #    Downloads or builds garuda, checks PR diff, comments on PR, fails on BLOCK
+  # 1. Diff-Scoped PR Gate (With Dedicated Postgres Service & Workspace Bootstrap)
   # ---------------------------------------------------------------------------
   garuda-pr-gate:
     name: Garuda Diff-Scoped PR Gate
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: garuda
+          POSTGRES_PASSWORD: garudapassword
+          POSTGRES_DB: garuda
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://garuda:garudapassword@localhost:5432/garuda?sslmode=disable
+      GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+      GARUDA_WORKSPACE: "default"
+
     steps:
       - name: Checkout Repository (Full History for Diff Scope)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install or Build Garuda Binary
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+
+      - name: Wait for PostgreSQL & Apply Migrations
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U garuda -d garuda 2>/dev/null; then
+              echo "✅ PostgreSQL ready"
+              break
+            fi
+            sleep 1
+          done
+          if [ -f "cmd/migrate/main.go" ]; then
+            go run cmd/migrate/main.go
+          fi
+
+      - name: Install or Build Garuda Binary & Index Workspace Baseline
         run: |
           if [ -f "cmd/garuda/main.go" ]; then
             CGO_ENABLED=0 go build -o /usr/local/bin/garuda ./cmd/garuda
@@ -34,6 +70,7 @@ jobs:
             curl -fsSL "$LATEST_URL" -o /usr/local/bin/garuda && chmod +x /usr/local/bin/garuda
           fi
           garuda --version
+          garuda analyze . --workspace default --save
 
       - name: Seed Starter Policy Templates (if policies/ is empty)
         run: |
@@ -43,18 +80,24 @@ jobs:
 
       - name: Run Garuda Check Against PR Diff
         id: garuda_check
-        continue-on-error: true
         run: |
           DIFF_RANGE="HEAD~1..HEAD"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             DIFF_RANGE="origin/${{ github.base_ref }}...HEAD"
           fi
+          set +e
           garuda check . \
+            --workspace default \
             --diff "$DIFF_RANGE" \
             --policy policies \
             --pr-comment garuda-pr-report.md \
             --sarif garuda.sarif \
-            --fail-on-block || echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+            --fail-on-block
+          CHECK_EXIT=$?
+          set -e
+          if [ "$CHECK_EXIT" -ne 0 ]; then
+            echo "exit_code=$CHECK_EXIT" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Post Garuda Governance Verdict Comment on PR
         if: github.event_name == 'pull_request' && hashFiles('garuda-pr-report.md') != ''
@@ -73,7 +116,7 @@ jobs:
       - name: Enforce Fail-Closed Gate on CRITICAL Violations
         if: steps.garuda_check.outputs.exit_code != ''
         run: |
-          echo "❌ Garuda blocked this PR due to CRITICAL architectural or financial policy violations."
+          echo "❌ Garuda blocked this PR due to CRITICAL architectural or data-logic policy violations (exit code: ${{ steps.garuda_check.outputs.exit_code }})."
           exit 2
 
   # ---------------------------------------------------------------------------

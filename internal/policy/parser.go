@@ -69,7 +69,7 @@ func ParseDirectory(root string) ([]ParsedPolicy, error) {
 		}
 		if info.IsDir() {
 			base := info.Name()
-			if (strings.HasPrefix(base, ".") && path != root) || base == "vendor" || base == "node_modules" {
+			if (strings.HasPrefix(base, ".") && path != root) || base == "vendor" || base == "node_modules" || (base == "templates" && filepath.Clean(path) != filepath.Clean(root)) {
 				return filepath.SkipDir
 			}
 			return nil

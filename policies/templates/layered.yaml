@@ -16,9 +16,9 @@ when:
     params:
       claim_type: IMPORTS
       from_name_pattern: ".*(store|repository|repo|dal).*"
-      to_name_pattern: ".*(api|handler|controller|transport|ui|payment).*"
+      to_name_pattern: "(^|/)(api|handler|handlers|controller|controllers|transport|ui)(/|$)"
 then:
   decision: BLOCK
   reason: |
-    Upward dependency violation: persistence/store layer imported service/transport symbols.
+    Upward dependency violation: persistence/store layer imported transport/API symbols.
     Move shared DTOs or interfaces into a domain/types package.

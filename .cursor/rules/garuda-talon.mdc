@@ -7,8 +7,8 @@ alwaysApply: true
 # GARUDA TALON — ACTIVE ARCHITECTURAL CONTRACT
 
 - **Workspace**: `go-validation-10` (`0c915bfa-afb0-4351-9108-ebf0e56e64a9`)
-- **Graph Scale**: 3301 AST entities | 13628 verified edges
-- **Build Receipt**: `lang=go platform=linux/amd64 cgo=off tags=[none] commit=uncommitted graph_fp=cabd233ead4f`
+- **Graph Scale**: 3301 AST entities | 13632 verified edges
+- **Build Receipt**: `lang=go platform=linux/amd64 cgo=off tags=[none] commit=uncommitted graph_fp=c495d231048d`
 - **Reproduce Command**: `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 garuda check --target linux/amd64 --cgo=false --workspace go-validation-10`
 - **Enforcement Mode**: `ACTIVE (FAIL-CLOSED)`
 
@@ -24,20 +24,7 @@ You are operating inside a **Garuda Talon Enforced Workspace**. Every code chang
 ## 2. Active Declarative Policy Guardrails
 
 - **`[WARN]` API handlers must not bypass store layer to access database/sql directly or transitively** (`architecture-no-api-to-store-bypass`, predicates: `verification_missing`): API handlers must not bypass store layer to access database/sql directly or transitively
-- **`[WARN]` ArchUnit Imported: domain must not depend on infrastructure** (`archunit-imported-01`, predicates: `verification_missing`): ArchUnit Imported: domain must not depend on infrastructure
-- **`[WARN]` Dependency-Cruiser Imported: no-ui-in-services** (`depcruise-no-ui-in-services-01`, predicates: `verification_missing`): Dependency-Cruiser Imported: no-ui-in-services
-- **`[WARN]` Import-Linter Imported: app.domain -> app.adapters forbidden** (`importlinter-contract-01`, predicates: `verification_missing`): Import-Linter Imported: app.domain -> app.adapters forbidden
 - **`[WARN]` Exported payment handlers must have runtime evidence** (`require-runtime-evidence-for-exported`, predicates: `verification_missing`): Exported payment handlers must have runtime evidence
-- **`[WARN]` AI Agent Harness: Autonomous agents must not modify cryptographic ledger or auth signing keys** (`tpl-ai-agent-safety-gate`, predicates: `verification_missing`): AI Agent Harness: Autonomous agents must not modify cryptographic ledger or auth signing keys
-- **`[WARN]` Financial Guardrail: Monetary & fee calculations must use Decimal or integer minor units, never float64** (`tpl-financial-decimal-precision`, predicates: `verification_missing`): Financial Guardrail: Monetary & fee calculations must use Decimal or integer minor units, never float64
-- **`[WARN]` Financial Guardrail: Payment & billing code must not import database/sql directly** (`tpl-financial-no-direct-sql`, predicates: `verification_missing`): Financial Guardrail: Payment & billing code must not import database/sql directly
-- **`[WARN]` Hexagonal Architecture: Domain core must not import infrastructure adapters** (`tpl-hexagonal-ports-adapters`, predicates: `verification_missing`): Hexagonal Architecture: Domain core must not import infrastructure adapters
-- **`[WARN]` Reliability Guardrail: External payment & state mutations must enforce idempotency keys** (`tpl-idempotent-state-mutations`, predicates: `verification_missing`): Reliability Guardrail: External payment & state mutations must enforce idempotency keys
-- **`[WARN]` Layered Architecture: Lower layers must never import upper layers** (`tpl-layered-no-upward-deps`, predicates: `verification_missing`): Layered Architecture: Lower layers must never import upper layers
-- **`[WARN]` Microservices Boundary: No cross-service internal store or table access** (`tpl-microservices-db-isolation`, predicates: `verification_missing`): Microservices Boundary: No cross-service internal store or table access
-- **`[WARN]` Package Hygiene: Zero circular package or module dependencies** (`tpl-no-circular-imports`, predicates: `verification_missing`): Package Hygiene: Zero circular package or module dependencies
-- **`[WARN]` Privacy Guardrail: Customer PII/PHI records must never flow into raw log sinks** (`tpl-pii-gdpr-hipaa-sink-guard`, predicates: `verification_missing`): Privacy Guardrail: Customer PII/PHI records must never flow into raw log sinks
-- **`[WARN]` Zero-Trust API Guardrail: Exported handlers must enforce tenant & workspace scope** (`tpl-zero-trust-tenant-scope`, predicates: `verification_missing`): Zero-Trust API Guardrail: Exported handlers must enforce tenant & workspace scope
 - **`[WARN]` Exported functions should have runtime evidence** (`warn-missing-runtime`, predicates: `verification_missing`): Exported function has no runtime evidence. Consider adding a smoke test or re-running OTel ingestion.
 
 ## 3. Ingested ADR & Documentation Claims (`document_claims`)
@@ -45,8 +32,8 @@ You are operating inside a **Garuda Talon Enforced Workspace**. Every code chang
 - **`[MUST_NOT]`** `HandleDashboard` **MUST_NOT CALLS** `DirectBankAPI` *(source: ADR-0004: Zero-Trust Agent Execution & Pre-Edit Gate, current status: SUPPORTED)*
 - **`[MUST_NOT]`** `RefundHandler` **MUST_NOT CALLS** `DirectBankAPI` *(source: ADR 0001: Payment Refund Processing, current status: UNVERIFIED)*
 - **`[MUST]`** `AppendLeafAndSealTx` **MUST IDEMPOTENT** `IdempotencyKey` *(source: ADR-0004: Zero-Trust Agent Execution & Pre-Edit Gate, current status: UNVERIFIED)*
-- **`[MUST]`** `RefundHandler` **MUST IDEMPOTENT** `IdempotencyKey` *(source: ADR 0001: Payment Refund Processing, current status: UNVERIFIED)*
 - **`[MUST]`** `RefundHandler` **MUST CALLS** `IdempotencyStore` *(source: ADR 0001: Payment Refund Processing, current status: UNVERIFIED)*
+- **`[MUST]`** `RefundHandler` **MUST IDEMPOTENT** `IdempotencyKey` *(source: ADR 0001: Payment Refund Processing, current status: UNVERIFIED)*
 - **`[MUST]`** `RunGuard` **MUST CALLS** `CompileContract` *(source: ADR-0004: Zero-Trust Agent Execution & Pre-Edit Gate, current status: SUPPORTED)*
 
 ## 4. High-Blast-Radius Architectural Hubs
