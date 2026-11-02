@@ -37,7 +37,7 @@ jobs:
           if s["version"] != want or not ident.endswith(":" + want):
               sys.exit(f"server.json is out of date: version={s['version']} identifier={ident}, expected {want}")
           PY
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.mcp
