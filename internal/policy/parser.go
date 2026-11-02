@@ -44,6 +44,38 @@ func ParseFile(path string) (*Policy, string, error) {
 	return &p, fmt.Sprintf("%x", sum), nil
 }
 
+// ParseFileAll loads every policy document in a .yaml/.yml file. Files with a
+// single document behave exactly like ParseFile (same SourceHash). Files with
+// several "---"-separated documents (as written by `garuda import`) yield one
+// ParsedPolicy per document; yaml.Unmarshal alone would silently keep only the first.
+func ParseFileAll(path string) ([]ParsedPolicy, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read policy: %w", err)
+	}
+	docs := splitYAMLDocuments(data)
+	if len(docs) <= 1 {
+		p, h, err := ParseFile(path)
+		if err != nil {
+			return nil, err
+		}
+		return []ParsedPolicy{{Policy: p, SourcePath: path, SourceHash: h}}, nil
+	}
+	out := make([]ParsedPolicy, 0, len(docs))
+	for i, d := range docs {
+		var p Policy
+		if err := yaml.Unmarshal(d, &p); err != nil {
+			return nil, fmt.Errorf("parse policy %s (document %d of %d): %w", path, i+1, len(docs), err)
+		}
+		if err := validate(&p); err != nil {
+			return nil, fmt.Errorf("validate policy %s (document %d of %d): %w", path, i+1, len(docs), err)
+		}
+		sum := sha256.Sum256(d)
+		out = append(out, ParsedPolicy{Policy: &p, SourcePath: path, SourceHash: fmt.Sprintf("%x", sum)})
+	}
+	return out, nil
+}
+
 // ParseDirectory walks a directory and loads every .yaml/.yml policy it finds.
 // Fail-Closed Invariant: If any .yaml/.yml file in the policy directory fails
 // to parse or validate, ParseDirectory returns an error immediately instead of
@@ -54,11 +86,7 @@ func ParseDirectory(root string) ([]ParsedPolicy, error) {
 		return nil, fmt.Errorf("access policy path %s: %w", root, statErr)
 	}
 	if !info.IsDir() {
-		p, h, err := ParseFile(root)
-		if err != nil {
-			return nil, err
-		}
-		return []ParsedPolicy{{Policy: p, SourcePath: root, SourceHash: h}}, nil
+		return ParseFileAll(root)
 	}
 
 	var parsed []ParsedPolicy
@@ -78,15 +106,11 @@ func ParseDirectory(root string) ([]ParsedPolicy, error) {
 		if ext != ".yaml" && ext != ".yml" {
 			return nil
 		}
-		p, h, err := ParseFile(path)
+		pps, err := ParseFileAll(path)
 		if err != nil {
 			return fmt.Errorf("fail-closed policy load error in %s: %w", path, err)
 		}
-		parsed = append(parsed, ParsedPolicy{
-			Policy:     p,
-			SourcePath: path,
-			SourceHash: h,
-		})
+		parsed = append(parsed, pps...)
 		return nil
 	})
 

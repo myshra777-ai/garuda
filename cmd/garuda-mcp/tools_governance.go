@@ -43,7 +43,7 @@ func resolveMCPPolicyDir(explicit string) string {
 			filepath.Join(filepath.Dir(exeDir), "policies"),
 		)
 	}
-	candidates = append(candidates, "./policies", "../policies", "/home/rohit/garuda/policies", "/tmp/garuda/policies")
+	candidates = append(candidates, "./policies", "../policies")
 	for _, c := range candidates {
 		if st, err := os.Stat(c); err == nil && st.IsDir() {
 			if abs, aErr := filepath.Abs(c); aErr == nil {

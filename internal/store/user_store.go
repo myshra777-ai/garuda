@@ -28,7 +28,7 @@ func (s *PostgresStore) CreateUser(ctx context.Context, user *auth.User) error {
 func (s *PostgresStore) GetUserByEmail(ctx context.Context, email string) (*auth.User, error) {
 	var user auth.User
 	err := s.pool.QueryRow(ctx,
-		"SELECT id, email, password_hash, full_name, role, created_at, updated_at FROM users WHERE email = $1",
+		"SELECT id, email, password_hash, full_name, role, created_at, updated_at FROM users WHERE lower(email) = lower($1) ORDER BY (email = $1) DESC, created_at ASC LIMIT 1",
 		email,
 	).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.FullName, &user.Role, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {

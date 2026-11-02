@@ -2,9 +2,7 @@
 set -euo pipefail
 
 HEADER="// Copyright 2026 Rohit Mishra
-// SPDX-License-Identifier: Apache-2.0
-//
-// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute."
+// SPDX-License-Identifier: Apache-2.0"
 
 find . -type f -name "*.go" ! -path "*/vendor/*" ! -path "*/.git/*" | while read -r file; do
     if ! grep -q "SPDX-License-Identifier: Apache-2.0" "$file"; then

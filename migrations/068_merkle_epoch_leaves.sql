@@ -28,18 +28,22 @@ CREATE TABLE IF NOT EXISTS merkle_epoch_leaves (
     created_at      timestamptz NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE merkle_epoch_leaves DROP CONSTRAINT IF EXISTS merkle_epoch_leaves_tier_check;
 ALTER TABLE merkle_epoch_leaves
   ADD CONSTRAINT merkle_epoch_leaves_tier_check
   CHECK (tier IN (0, 1));
 
+ALTER TABLE merkle_epoch_leaves DROP CONSTRAINT IF EXISTS merkle_epoch_leaves_leaf_hash_format;
 ALTER TABLE merkle_epoch_leaves
   ADD CONSTRAINT merkle_epoch_leaves_leaf_hash_format
   CHECK (leaf_hash ~ '^[0-9a-f]{64}$');
 
+ALTER TABLE merkle_epoch_leaves DROP CONSTRAINT IF EXISTS merkle_epoch_leaves_index_nonneg;
 ALTER TABLE merkle_epoch_leaves
   ADD CONSTRAINT merkle_epoch_leaves_index_nonneg
   CHECK (leaf_index >= 0);
 
+ALTER TABLE merkle_epoch_leaves DROP CONSTRAINT IF EXISTS merkle_epoch_leaves_unique_index;
 ALTER TABLE merkle_epoch_leaves
   ADD CONSTRAINT merkle_epoch_leaves_unique_index
   UNIQUE (tenant_id, epoch_height, tier, leaf_index);

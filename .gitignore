@@ -174,3 +174,14 @@ dist/
 install_garuda_*.sh
 install_garuda_*.bash
 update_garuda_*.sh
+
+# Local build/sync artefacts (never commit)
+c.out
+*.test
+coverage.out
+/garuda
+/garuda-api
+/garuda-mcp
+/garuda-talon
+sync*.sh
+/refund-api

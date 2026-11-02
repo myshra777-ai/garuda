@@ -12,6 +12,7 @@ BEGIN;
 ALTER TABLE policy_evaluations
   ADD COLUMN IF NOT EXISTS verification_version smallint NOT NULL DEFAULT 0;
 
+ALTER TABLE policy_evaluations DROP CONSTRAINT IF EXISTS policy_evaluations_verification_version_check;
 ALTER TABLE policy_evaluations
   ADD CONSTRAINT policy_evaluations_verification_version_check
   CHECK (verification_version IN (0, 1));

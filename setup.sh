@@ -64,7 +64,12 @@ fi
 # 1. Smart Dynamic Discovery of Email, Workspace, Port & DB URL
 GIT_EMAIL="$(git config user.email 2>/dev/null || true)"
 OWNER_EMAIL="${GARUDA_EMAIL:-${GIT_EMAIL:-${USER:-admin}@garuda.local}}"
-OWNER_PASSWORD="${GARUDA_PASSWORD:-garuda2026}"
+PASSWORD_GENERATED="false"
+if [[ -z "${GARUDA_PASSWORD:-}" ]]; then
+    GARUDA_PASSWORD="$(openssl rand -hex 12 2>/dev/null || head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    PASSWORD_GENERATED="true"
+fi
+OWNER_PASSWORD="${GARUDA_PASSWORD}"
 
 if [[ -n "${GARUDA_WORKSPACE:-}" ]]; then
     WORKSPACE="$GARUDA_WORKSPACE"
@@ -463,7 +468,11 @@ echo "==================================================================="
 echo "[OK] GARUDA v1.9.9 + GARUDA TALON IS 100% CONFIGURED, VERIFIED & ONLINE!"
 echo "   * Web Dashboard:  http://localhost:${API_PORT}/login"
 echo "   * Chromium PWA:   Open in Chrome/Edge/Brave -> Click 'Install Garuda'"
-echo "   * Email / Pass:   ${OWNER_EMAIL} / ${OWNER_PASSWORD}"
+if [[ "$PASSWORD_GENERATED" == "true" ]]; then
+    echo "   * Owner login:    ${OWNER_EMAIL} (generated password shown once: ${OWNER_PASSWORD}; export GARUDA_PASSWORD to choose your own)"
+else
+    echo "   * Owner login:    ${OWNER_EMAIL} (password from GARUDA_PASSWORD)"
+fi
 echo "   * System Doctor:  ./bin/garuda doctor"
 echo "   * Talon Contract: .garuda/TALON_CONTRACT.md"
 echo "   * Talon Guard:    ./bin/garuda talon guard --workspace ${WORKSPACE}"

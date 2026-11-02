@@ -12,5 +12,6 @@ COPY --from=builder /app/garuda-api .
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/internal/api/openapi.yaml ./internal/api/openapi.yaml
 
+ENV GARUDA_BIND=0.0.0.0:8080
 EXPOSE 8080
 CMD ["./garuda-api"]

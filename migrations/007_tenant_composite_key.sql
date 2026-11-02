@@ -1,4 +1,11 @@
 -- Drop the old decisions table (CASCADE will remove foreign key constraints automatically)
+-- Guard: never destroy existing decision data. On a fresh database the table is absent/empty.
+DO $$ BEGIN
+  IF to_regclass('decisions') IS NOT NULL AND EXISTS (SELECT 1 FROM decisions LIMIT 1) THEN
+    RAISE EXCEPTION '007: refusing to drop non-empty decisions table';
+  END IF;
+END $$;
+
 DROP TABLE IF EXISTS decisions CASCADE;
 
 -- Create new decisions table with composite primary key (tenant_id, id)

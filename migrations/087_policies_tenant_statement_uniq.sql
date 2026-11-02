@@ -29,6 +29,7 @@ BEGIN
   END IF;
 END $$;
 
+ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_tenant_statement_uniq;
 ALTER TABLE policies
   ADD CONSTRAINT policies_tenant_statement_uniq
   UNIQUE (tenant_id, statement);
