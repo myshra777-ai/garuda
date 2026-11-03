@@ -8,7 +8,7 @@ COPY . .
 ARG VERSION=v1.9.11
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/garuda-mcp ./cmd/garuda-mcp
 
-FROM alpine:3.20
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates git && adduser -D -u 65532 garuda
 # Ownership proof required by the Official MCP Registry (must equal server.json "name").
 LABEL io.modelcontextprotocol.server.name="io.github.myshra777-ai/garuda"
