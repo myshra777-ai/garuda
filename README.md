@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <strong>Leading an engineering team?</strong> <a href="docs/WHY_GARUDA.md">The business case in two minutes →</a>
+</p>
+
+<p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
   <a href="server.json"><img src="https://img.shields.io/badge/MCP-server-10b981.svg" alt="MCP server"></a>
   <a href=".claude-plugin/plugin.json"><img src="https://img.shields.io/badge/Claude_Code-plugin-d97757.svg" alt="Claude Code plugin"></a>
