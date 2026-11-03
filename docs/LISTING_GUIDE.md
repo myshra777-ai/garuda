@@ -55,21 +55,23 @@ Then, by hand, because GitHub does not let a workflow publish these for you:
 
 If a workflow fails, fix the cause and re-run it from the Actions tab (every one has *Run workflow*). `release.yml` also accepts an existing tag as input.
 
-## npm: `npx @myshra777-ai/garuda demo`
+## npm: `npx garuda-guard demo`
 
 [`packaging/npm/`](../packaging/npm/) is a small wrapper with no dependencies. On first run it downloads the release archive for the user's system, checks it against `SHA256SUMS.txt`, caches it under `~/.garuda/npm/<version>/` and runs it. It needs a published GitHub release for the same version, so publish the release first.
 
-First time only (free):
+The package is called `garuda-guard` (plain `garuda` and `garuda-code` are taken by other projects). It installs three commands: `garuda-guard` (so `npx garuda-guard` works), `garuda` and `garuda-mcp`. Before the first publish, check the name is still free: `npm view garuda-guard` should print an `E404` error. If it is taken, pick another name in `packaging/npm/package.json` (the `bin` entry named like the package is what makes `npx <name>` work).
+
+First time only (free, no organization needed):
 1. Create an npm account at npmjs.com and turn on two-factor authentication.
-2. Create the organization `myshra777-ai` at npmjs.com/org/create (free for public packages). The scope in `package.json` must match an organization or username you own. To use a different name, change `name` in `packaging/npm/package.json`.
+2. Run `npm login` in a terminal.
 
 Each release:
 ```bash
 cd packaging/npm
-npm publish --access public      # the version comes from package.json; sync_docs_from_manifest.py --set updates it
-npx @myshra777-ai/garuda --version   # check it from a clean folder
+npm publish                      # the version comes from package.json; sync_docs_from_manifest.py --set updates it
+npx garuda-guard --version       # check it from a clean folder
 ```
-Run `npm view @myshra777-ai/garuda version` afterwards to confirm. The wrapper was tested here against a fake local release only. Test it against the real release on Windows, macOS and Linux before you announce it.
+Run `npm view garuda-guard version` afterwards to confirm. The wrapper was tested here against a fake local release only. Test it against the real release on Windows, macOS and Linux before you announce it. Unscoped packages are public by default.
 
 ## Other listings, in order of effort
 

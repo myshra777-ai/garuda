@@ -1,18 +1,47 @@
 {
-  "name": "@myshra777-ai/garuda",
+  "name": "garuda-guard",
   "version": "1.9.10",
-  "description": "Change control for AI-written code. Run Garuda with npx; it downloads the verified release binary for your system.",
+  "description": "Guardrails for AI coding agents (Claude Code, Cursor, Codex): impact analysis, architecture rules, blocked bad changes and a tamper-evident record. Run with npx; downloads the verified Garuda release binary.",
   "license": "Apache-2.0",
   "author": "Rohit Mishra",
   "homepage": "https://github.com/myshra777-ai/garuda#readme",
-  "repository": { "type": "git", "url": "git+https://github.com/myshra777-ai/garuda.git", "directory": "packaging/npm" },
-  "bugs": { "url": "https://github.com/myshra777-ai/garuda/issues" },
-  "keywords": ["mcp", "ai-agents", "claude-code", "cursor", "architecture", "governance", "code-review"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/myshra777-ai/garuda.git",
+    "directory": "packaging/npm"
+  },
+  "bugs": {
+    "url": "https://github.com/myshra777-ai/garuda/issues"
+  },
+  "keywords": [
+    "garuda",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "claude-code",
+    "cursor",
+    "codex",
+    "ai-agents",
+    "ai-coding",
+    "guardrails",
+    "architecture",
+    "governance",
+    "code-review",
+    "ci",
+    "policy",
+    "adr"
+  ],
   "bin": {
+    "garuda-guard": "bin/garuda.js",
     "garuda": "bin/garuda.js",
     "garuda-mcp": "bin/garuda-mcp.js"
   },
-  "files": ["bin", "lib", "README.md"],
-  "engines": { "node": ">=18" },
-  "publishConfig": { "access": "public" }
+  "files": [
+    "bin",
+    "lib",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
 }
