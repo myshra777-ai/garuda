@@ -1,6 +1,6 @@
 # Installing Garuda
 
-Garuda runs on **Windows 10/11, macOS, Linux, ChromeOS (Linux container) and Android (Termux)**. One command installs everything into your home folder. No administrator rights, no `sudo` for the default path.
+Garuda runs on **Windows 10/11, macOS, Linux, ChromeOS (Linux container) and Android (Termux)**. One command installs everything into your home folder. No `sudo` for the default path, and no administrator rights, except that on a Windows PC without the Microsoft Visual C++ runtime, Windows asks once for permission to install it.
 
 - [Quick start](#quick-start)
 - [What you need first](#what-you-need-first)
@@ -94,7 +94,7 @@ Files outside the repository folder all live under `~/.garuda`:
 ### Windows 10 / 11
 
 - Works in Windows PowerShell 5.1 and PowerShell 7. The scripts are plain ASCII on purpose, so 5.1 does not mangle them.
-- PostgreSQL comes from the EnterpriseDB portable zip (about 55 MB). It needs the **Microsoft Visual C++ 2015-2022 Redistributable (x64)**. Windows 11 usually has it. If `initdb` fails with exit code `-1073741515` or `0xC0000135`, install it from <https://aka.ms/vs/17/release/vc_redist.x64.exe> and run the installer again.
+- PostgreSQL comes from the EnterpriseDB portable zip (about 320 MB, downloaded once). It needs the **Microsoft Visual C++ 2015-2022 Redistributable (x64)**. `setup.ps1` checks for it and installs it for you (Windows asks for permission; click Yes). If you decline, or the automatic install fails, install it yourself from <https://aka.ms/vs/17/release/vc_redist.x64.exe>. If `initdb` fails with exit code `-1073741515` or `0xC0000135`, install it from <https://aka.ms/vs/17/release/vc_redist.x64.exe> and run the installer again.
 - If Docker Desktop is already running, the installer uses a `garuda-postgres` container instead of the portable PostgreSQL.
 - Windows Defender or SmartScreen may scan the downloads; the first run can take a few minutes.
 - Windows on ARM: the installer builds native ARM64 Garuda binaries, but the PostgreSQL zip is x64 and runs under Windows' x64 emulation.

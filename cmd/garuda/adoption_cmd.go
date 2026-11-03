@@ -8,8 +8,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/myshra777-ai/garuda/internal/analyzer"
 	"github.com/spf13/cobra"
 )
 
@@ -811,17 +811,28 @@ func (r *PostgresLedgerRepo) RecordChargeTx(ctx context.Context, req domain.Char
 
 		_, _ = InstallStarterTemplates(demoDir, "financial,layered")
 
-		// Compute deterministic SHA-256 Merkle demo leaf & root
-		sum := sha256.Sum256([]byte("garuda-demo:acme-pay:3-violations-blocked"))
-		merkleRoot := hex.EncodeToString(sum[:])
+		// Run the real Garuda Go analyzer on the generated sample. It needs no
+		// database. If it cannot run (for example no Go toolchain is installed),
+		// the demo says so instead of printing invented numbers.
+		analysisStart := time.Now()
+		analysisRes, analysisErr := analyzer.AnalyzeDirectory(context.Background(), demoDir)
+		analysisMS := time.Since(analysisStart).Milliseconds()
+		analysisEntities, analysisEdges := 0, 0
+		if analysisErr == nil && analysisRes != nil {
+			analysisEntities = len(analysisRes.Entities)
+			analysisEdges = len(analysisRes.Relationships)
+		}
 
 		demoReport := map[string]interface{}{
-			"demo_project":     "acme-pay (Regulated Fintech Microservice)",
+			"demo_project":     "acme-pay (sample fintech microservice)",
 			"sample_lines":     totalLines,
-			"files_analyzed":   4,
-			"ast_entities":     14,
-			"ast_edges":        19,
-			"outcome":          "BLOCK",
+			"files_written":    len(files),
+			"analysis_ran":     analysisErr == nil,
+			"ast_entities":     analysisEntities,
+			"ast_edges":        analysisEdges,
+			"analysis_ms":      analysisMS,
+			"note":             "The three violations are planted by this demo. Policy evaluation and Merkle sealing need a database; see QUICKSTART.md.",
+			"expected_outcome": "BLOCK",
 			"violations_count": 3,
 			"violations": []map[string]interface{}{
 				{
@@ -852,8 +863,7 @@ func (r *PostgresLedgerRepo) RecordChargeTx(ctx context.Context, req domain.Char
 					"remedy":   "Move SettlementAuditDTO into 'internal/domain' so 'internal/store' depends only on 'internal/domain'.",
 				},
 			},
-			"merkle_epoch_root": merkleRoot,
-			"duration_ms":       time.Since(start).Milliseconds() + 14,
+			"duration_ms": time.Since(start).Milliseconds(),
 		}
 
 		if demoJSONFlag {
@@ -872,13 +882,18 @@ func (r *PostgresLedgerRepo) RecordChargeTx(ctx context.Context, req domain.Char
 		fmt.Println("        • internal/payment/settlement.go   (Injected Bug #2: float64 fee math + 10x Crore drift)")
 		fmt.Println("        • internal/store/ledger_repo.go    (Injected Bug #3: Upward store -> payment import)")
 		fmt.Println()
-		fmt.Println("  [2/5] AST & Call-Graph Extraction:")
-		fmt.Println("        ✓ Parsed 14 AST symbols, 19 semantic edges (IMPORTS / CALLS), 4 packages in 6ms")
+		fmt.Println("  [2/5] AST & Call-Graph Extraction (real run of the Garuda Go analyzer, no database needed):")
+		if analysisErr == nil {
+			fmt.Printf("        ✓ Found %d entities and %d relationships in %d ms\n", analysisEntities, analysisEdges, analysisMS)
+		} else {
+			fmt.Printf("        ! Analysis could not run here: %v\n", analysisErr)
+			fmt.Println("          (Analyzing Go code needs a Go toolchain. The planted problems below are still accurate.)")
+		}
 		fmt.Println()
-		fmt.Println("  [3/5] Auto-Synthesized Base Rulebook:")
-		fmt.Println("        ✓ Reverse-engineered 4 layer & financial invariants into .garuda/DRAFT_BASE_RULEBOOK.md")
+		fmt.Println("  [3/5] Starter policy templates:")
+		fmt.Printf("        ✓ Installed the financial and layered templates into %s\n", filepath.Join(demoDir, "policies"))
 		fmt.Println()
-		fmt.Println("  [4/5] Evaluating Declarative Policies & Data/Logic Audit Ledger:")
+		fmt.Println("  [4/5] The three problems planted in this sample (what `garuda check` reports once Garuda is set up):")
 		fmt.Println("        ✗ [BLOCK · CRITICAL] tpl-financial-no-direct-sql")
 		fmt.Println("          Location: internal/payment/checkout.go:5 (CheckoutHandler.ProcessInstantCheckout)")
 		fmt.Println("          Reason:   Payment code imports 'database/sql' directly instead of domain.PaymentRepository.")
@@ -889,10 +904,10 @@ func (r *PostgresLedgerRepo) RecordChargeTx(ctx context.Context, req domain.Char
 		fmt.Println("          Location: internal/store/ledger_repo.go:8 (PostgresLedgerRepo.RecordChargeTx)")
 		fmt.Println("          Reason:   Persistence layer 'internal/store' imports upper service layer 'internal/payment'.")
 		fmt.Println()
-		fmt.Println("  [5/5] Garuda Talon Self-Repair Prompt & RFC 6962 Merkle Seal:")
-		fmt.Printf("        • Governance Verdict: BLOCK (3 Critical/High violations caught pre-commit)\n")
-		fmt.Printf("        • RFC 6962 Root SHA:  %s\n", merkleRoot[:32]+"…")
-		fmt.Println("        • Agent Self-Repair Instructions emitted:")
+		fmt.Println("  [5/5] What an AI agent would be told:")
+		fmt.Println("        • Expected verdict: BLOCK (this demo lists the planted problems; it does not evaluate policies)")
+		fmt.Println("        • Policy evaluation and the Merkle ledger need a database. Run the installer, then see QUICKSTART.md.")
+		fmt.Println("        • Repair instructions:")
 		fmt.Println("          1. Remove \"database/sql\" from internal/payment/checkout.go; call h.repo.RecordChargeTx(ctx, req).")
 		fmt.Println("          2. Replace float64 in internal/payment/settlement.go with domain.MoneyMinorUnits (int64) and 1e7 Crore divisor.")
 		fmt.Println("          3. Move SettlementAuditDTO to internal/domain so internal/store does not import internal/payment.")

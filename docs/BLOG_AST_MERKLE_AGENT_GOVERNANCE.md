@@ -39,7 +39,7 @@ $ garuda demo
 ╚══════════════════════════════════════════════════════════════════════════════════╝
   [1/5] Sample Codebase Generated: /tmp/garuda-demo-acme-pay (156 lines across 4 Go files)
   [2/5] AST & Call-Graph Extraction:
-        ✓ Parsed 14 AST symbols, 19 semantic edges (IMPORTS / CALLS), 4 packages in 6ms
+        ✓ Found N entities and M relationships in X ms   (real numbers; they depend on your machine)
   [3/5] Auto-Synthesized Base Rulebook:
         ✓ Reverse-engineered 4 layer & financial invariants into .garuda/DRAFT_BASE_RULEBOOK.md
   [4/5] Evaluating Declarative Policies & Data/Logic Audit Ledger:
