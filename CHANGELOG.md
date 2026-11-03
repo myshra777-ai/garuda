@@ -5,6 +5,7 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 ## [v1.9.10] - 2026-11-03 — Installer rewrite, documentation corrected against the code, marketplace-ready repository, one release pipeline
 
 ### Added
+- **`docs/INSTALL_WITH_AI.md`**: one copy-and-paste prompt for ChatGPT, Claude, Codex and Cursor that sends the assistant to the official INSTALL.md and release, with a checklist for verifying what it returns; linked from the README and INSTALL.md.
 - **Release pipeline.** `release.yml` verifies the tag, builds every platform archive, writes `SHA256SUMS.txt`, attests build provenance and creates a draft GitHub release from `RELEASE_NOTES.md`. `publish-mcp-registry.yml` publishes `server.json` to the MCP Registry (GitHub OIDC) when the release is published; `release-packages.yml` and `publish-mcp-image.yml` push the API and MCP images to GHCR.
 - **`installer-e2e.yml`** (manual and weekly): runs the real installers on Ubuntu (x64 and ARM), macOS and Windows runners.
 - **Checks in CI** (`ci-hygiene.yml`): `scripts/sync_docs_from_manifest.py --check` (version, counts, living docs, stale-count scan), `scripts/check_doc_links.py` (relative Markdown links), `scripts/check_marketplace_manifests.py` (manifests tracked, not ignored, versions consistent, skills valid) and a no-tracked-but-ignored-file check.
