@@ -266,6 +266,7 @@ On Windows, stop `garuda-api.exe` and `postgres.exe` from Task Manager, or run `
 | `port 8080 is already in use` | Another program owns the port. Choose another: `GARUDA_PORT=8081 ./setup.sh` (`-Port 8081` on Windows). |
 | `initdb: invalid locale settings` | Make sure `xz`/`xz-utils` is installed; the script forces `LC_ALL=C` for the cluster. |
 | `PostgreSQL did not start` | Read `~/.garuda/data/postgres.log`. A stale `postmaster.pid` from a crash is cleaned up automatically on the next run. |
+| Windows: `blocked by your organization's Device Guard policy` / exit code `4551` | Windows security (Smart App Control, Device Guard or a work or school policy) refuses programs that are not code-signed, and Garuda's are not signed yet. Use WSL2 (`wsl --install -d Ubuntu`, then the Linux steps), or on a personal PC turn Smart App Control off (Windows cannot turn it back on without reinstalling), or ask your IT team to allow the `bin` folder. |
 | Windows: `initdb` exit code `-1073741515` / `0xC0000135` | Install the VC++ 2015-2022 Redistributable (x64), see above. |
 | Windows: `running scripts is disabled on this system` | Use the one-liner with `Set-ExecutionPolicy Bypass -Scope Process -Force`, or `powershell -ExecutionPolicy Bypass -File .\setup.ps1`. |
 | Windows: `Unexpected token` / `Missing closing '}'` in `setup.ps1` | Your copy was saved with a different encoding. Re-download it or `git checkout setup.ps1`; the file must stay plain ASCII. |
@@ -285,7 +286,7 @@ Being upfront about what is and is not covered by automated or manual runs:
 | Area | Status |
 | :--- | :--- |
 | Linux (x86-64) installer end to end with a user-space PostgreSQL, reruns, update guards, port/pid handling | Exercised manually, including with stubbed binaries for the Go build and API |
-| `setup.ps1` / `install.ps1` | Parsed with real PowerShell 7 and checked for ASCII-only content; contract strings enforced by the `windows-installer-smoke` workflow. **No full Windows run has been recorded yet.** |
+| `setup.ps1` / `install.ps1` | Parsed with real PowerShell 7 and checked for ASCII-only content; contract strings enforced by the `windows-installer-smoke` workflow. The first manual run on one Windows 11 PC found and fixed four problems (missing Visual C++ runtime, PostgreSQL start hang, API health probe, programs blocked by Smart App Control). **A clean re-run has not been recorded yet.** |
 | macOS (Intel and Apple Silicon) | Logic reviewed against Homebrew and macOS conventions; **not yet run end to end** |
 | ChromeOS (Linux/Crostini) | Same code path as Debian; **not yet run on a Chromebook** |
 | Android (Termux) | Uses `pkg` packages; **not yet run on a device** |

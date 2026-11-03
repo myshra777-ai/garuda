@@ -457,6 +457,25 @@ if ($bCode -ne 0 -or (-not (Test-Path "bin\garuda.exe"))) {
 }
 Write-Host "  [OK] Built bin\garuda.exe, bin\garuda-api.exe, bin\garuda-mcp.exe, bin\garuda-talon.exe" -ForegroundColor Green
 
+# Windows can refuse to run a program it does not trust (Smart App Control, Windows Defender
+# Application Control / Device Guard, or a work or school policy). Garuda's programs are not
+# code-signed yet. Detect that now and explain it, instead of failing later with a log dump.
+$smokeCode = Invoke-QuietCmd "`".\bin\garuda.exe`" --version"
+if ($smokeCode -eq 4551) {
+    Write-Host ""
+    Write-Host "Windows blocked the Garuda program that was just built (error 4551)." -ForegroundColor Red
+    Write-Host "This is Windows security, not a Garuda bug: Smart App Control, Device Guard or an"
+    Write-Host "organization policy refuses to run programs that are not code-signed."
+    Write-Host ""
+    Write-Host "Choose one:"
+    Write-Host "  1. Use WSL2 (no security change): run 'wsl --install -d Ubuntu', restart, then follow the Linux"
+    Write-Host "     steps in INSTALL.md inside Ubuntu. Open http://localhost:8080/login in your Windows browser."
+    Write-Host "  2. Personal PC only: Windows Security > App and browser control > Smart App Control settings > Off."
+    Write-Host "     Windows cannot turn Smart App Control back on without reinstalling Windows."
+    Write-Host "  3. Work or school PC: ask your IT team to allow $RepoRoot\bin."
+    throw "Windows blocked bin\garuda.exe by policy (exit code 4551). See the options above."
+}
+
 # 4. Run 1-Command Initialization (Migrations, .env, Owner Account, AST Scan, Active MCP & Talon Hooks)
 Write-Host "[4/7] Running migrations, provisioning account, indexing workspace, and activating Garuda Talon..." -ForegroundColor Yellow
 $initExit = Invoke-LoggedCmd "`".\bin\garuda.exe`" init --workspace `"$Workspace`" --email `"$Email`" --skip-scan"
