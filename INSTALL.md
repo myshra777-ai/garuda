@@ -3,6 +3,7 @@
 Garuda runs on **Windows 10/11, macOS, Linux, ChromeOS (Linux container) and Android (Termux)**. One command installs everything into your home folder. No `sudo` for the default path, and no administrator rights, except that on a Windows PC without the Microsoft Visual C++ runtime, Windows asks once for permission to install it.
 
 - [Quick start](#quick-start)
+- [Install with an AI assistant](docs/INSTALL_WITH_AI.md) (ChatGPT, Claude, Codex, Cursor)
 - [What you need first](#what-you-need-first)
 - [What the installer does](#what-the-installer-does)
 - [Per-OS notes](#per-os-notes) (Windows, macOS, Linux, ChromeOS, Android)
@@ -44,6 +45,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1   # Windows
 ```
 
 You can pass extra repositories to index: `./setup.sh ~/code/service-a ~/code/service-b`.
+
+**Just want to try it?** `npx garuda-guard demo` needs only Node 18 or newer and no database.
+**Want an AI assistant to do it?** Use the [copy-and-paste prompt](docs/INSTALL_WITH_AI.md).
 
 ## What you need first
 

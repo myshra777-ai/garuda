@@ -77,6 +77,9 @@ cd garuda
 `setup.sh` starts a local PostgreSQL database, builds the tools into `bin/`, and starts the dashboard.
 It prints your login at the end. On Windows use `setup.ps1`.
 
+Just want to look first? `npx garuda-guard demo` runs the demo below with no database (needs Node 18 or newer).
+Prefer to let an AI assistant do it? [Copy a prompt for ChatGPT, Claude, Codex or Cursor](docs/INSTALL_WITH_AI.md).
+
 Prefer one line? `curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash` does the same.
 (As with any installer you pipe into a shell, [read it first](install.sh).)
 
