@@ -14,6 +14,9 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 - Issue forms, a pull-request template and `dependabot.yml` (Go modules, GitHub Actions, Docker) under `.github/`.
 
 ### Changed
+- **`garuda demo` no longer prints invented numbers.** It used to print a fixed report (14 entities, 19 edges, "6ms", a Merkle "root" that was a hash of a constant). It now runs the real Go analyzer on the sample and reports the measured counts and time, says plainly that the three problems are planted, and no longer claims to have evaluated policies or sealed a receipt. It needs no database.
+- **Windows installer** checks for the Visual C++ runtime and installs it (Windows asks for permission) before the PostgreSQL download, instead of failing after it. The download size message now says about 320 MB.
+- **npm wrapper** `packaging/npm/` (`npx @myshra777-ai/garuda demo`): downloads, verifies and runs the release binary. Not published yet.
 - **README** rewritten around "change control for AI-written code": a start-to-finish example, new-versus-existing findings, a "What Garuda does not do" section, and a "required check" step for pull requests. Claims that the code does not back (every verdict logged, the compiler reads all three languages) were corrected.
 - `garuda-gate.yml` now uploads `garuda.sarif` to GitHub code scanning (it was generated but never uploaded) and reads the Go version from `go.mod`.
 - `docs/LISTING_GUIDE.md`: Anthropic directory and Cursor submission steps checked against current pages.

@@ -62,6 +62,7 @@ VERSION_TARGETS = [
     ("internal/telemetry/collector.go", [rf'Version:\s+"({SEMVER})"'], 1),
     ("internal/telemetry/telemetry.go", [rf'GarudaVersion:\s+"({SEMVER})"'], 1),
     ("deploy/k8s/garuda-stack.yaml", [rf"myshra777-ai/garuda:v({SEMVER})"], 1),
+    ("packaging/npm/package.json", [rf'"version":\s*"({SEMVER})"'], 1),
     ("packaging/homebrew/garuda.rb", [rf'version "({SEMVER})"', rf"download/v({SEMVER})/", rf"garuda-v({SEMVER})-", rf'assert_match "({SEMVER})"'], 4),
     ("packaging/aur/PKGBUILD", [rf"pkgver=({SEMVER})"], 1),
     ("packaging/rpm/garuda.spec", [rf"Version:\s+({SEMVER})", rf"Garuda v({SEMVER}) "], 2),

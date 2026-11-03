@@ -232,6 +232,41 @@ function Test-PostgresServerReady {
     return (Test-TcpPort "127.0.0.1" 5433)
 }
 
+# Microsoft Visual C++ 2015-2022 runtime (x64). The portable PostgreSQL needs it.
+function Test-VCRuntime {
+    $keys = @(
+        "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"
+    )
+    foreach ($k in $keys) {
+        $v = Get-ItemProperty -Path $k -ErrorAction SilentlyContinue
+        if ($v -and $v.Installed -eq 1) { return $true }
+    }
+    return (Test-Path (Join-Path $env:SystemRoot "System32\vcruntime140_1.dll"))
+}
+
+function Ensure-VCRuntime {
+    if (Test-VCRuntime) { return }
+    Write-Host "  [*] Windows needs the Microsoft Visual C++ runtime (a small, standard Microsoft download)." -ForegroundColor Cyan
+    Write-Host "  [*] Installing it now. Windows will ask for permission: please click Yes."
+    $vcExe = Join-Path $RuntimeDir "vc_redist.x64.exe"
+    try {
+        Download-FileFast "https://aka.ms/vs/17/release/vc_redist.x64.exe" $vcExe
+        $proc = Start-Process -FilePath $vcExe -ArgumentList "/install", "/quiet", "/norestart" -Verb RunAs -Wait -PassThru
+        # 0 = installed, 3010 = installed (restart suggested), 1638 = a newer version is already present
+        if (@(0, 3010, 1638) -contains $proc.ExitCode) {
+            Write-Host "  [OK] Visual C++ runtime installed."
+        } else {
+            Write-Host "  [!] The Visual C++ installer returned code $($proc.ExitCode)." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "  [!] Could not install the Visual C++ runtime automatically: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "      Install it by hand from https://aka.ms/vs/17/release/vc_redist.x64.exe and re-run this script."
+    } finally {
+        Remove-Item $vcExe -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # 1. Stop any stale garuda-api process on $Port
 Write-Host ""
 Write-Host "[1/7] Checking port $Port..." -ForegroundColor Yellow
@@ -271,10 +306,12 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
         $PgDataDir = Join-Path $DataDir "pg"
         $PgLog = Join-Path $DataDir "postgres.log"
 
+        Ensure-VCRuntime
+
         if (-not (Test-Path (Join-Path $PgBinDir "pg_ctl.exe"))) {
             $PgZip = Join-Path $RuntimeDir "postgresql-16-win64.zip"
             $PgUrl = "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64-binaries.zip"
-            Write-Host "  [*] Downloading Portable PostgreSQL 16 (~55 MB, one-time setup)..."
+            Write-Host "  [*] Downloading Portable PostgreSQL 16 (about 320 MB, one-time setup)..."
             Download-FileFast $PgUrl $PgZip
             Write-Host "  [*] Extracting Portable PostgreSQL to $PgDir..."
             Extract-ArchiveFast $PgZip $PgDir

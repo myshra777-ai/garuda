@@ -86,7 +86,7 @@ These tools are good at what they do. Garuda can import your existing ArchUnit, 
 ## 6. Try it, then talk
 
 ```text
-./bin/garuda demo              three planted bugs, caught and explained
+./bin/garuda demo              three planted bugs, listed and explained (no database needed)
 ./bin/garuda init . --wizard   five questions, then your own rules on your own code
 ```
 

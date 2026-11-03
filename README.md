@@ -86,7 +86,7 @@ Prefer one line? `curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garu
 ./bin/garuda demo
 ```
 
-This builds a tiny fake payments service with three problems planted on purpose, and runs Garuda on it:
+This builds a tiny fake payments service with three problems planted on purpose, runs Garuda's analyzer on it, and lists the problems Garuda is built to catch. It needs no database:
 
 | Planted problem | Why it matters |
 | :--- | :--- |
@@ -95,7 +95,7 @@ This builds a tiny fake payments service with three problems planted on purpose,
 | The storage layer imports the payment layer | Dependencies pointing the wrong way |
 
 You'll see each problem, the exact file and line, and a short "how to fix it" an AI assistant can follow.
-The service is made up for the demo. The point is to show what the checks look like.
+The service and its three problems are made up for the demo, and the demo lists them rather than detecting them. To see real detection on real code, finish step 1 and run `garuda check` in step 4. On Windows, run `.\bin\garuda.exe demo`.
 
 ### 3. Open the dashboard  ·  *2 minutes*
 

@@ -6,10 +6,10 @@ Garuda governs autonomous coding agents (Claude Code, Cursor, OpenAI Codex, Wind
 
 ## ⚡ Try It in 60 Seconds (Zero Setup Demo)
 
-Want to see Garuda catch 3 real-world architectural & financial bugs on a 200-line sample fintech microservice before configuring anything?
+Want to see what Garuda is built to catch, on a 200-line sample fintech microservice, before configuring anything? The demo needs no database.
 
 ```bash
-./bin/garuda demo
+./bin/garuda demo          # Windows: .\bin\garuda.exe demo
 ```
 
 This spins up `acme-pay` (4 Go files, ~200 lines) with 3 intentional violations:
@@ -17,7 +17,7 @@ This spins up `acme-pay` (4 Go files, ~200 lines) with 3 intentional violations:
 2. **`[CRITICAL]` `float64` currency rounding + 10x Crore/Lakh unit scale drift (`48 Cr` vs `4.8 Cr`)** (`internal/payment/settlement.go:7`)
 3. **`[HIGH]` Upward layer dependency (`internal/store` → `internal/payment`, created by `garuda demo`)** (`internal/store/ledger_repo.go:8`)
 
-Garuda extracts the AST, reverse-engineers a draft rulebook, blocks the commit, generates deterministic self-repair instructions for your AI coding agent, and seals an RFC 6962 Merkle receipt.
+The demo writes this sample, runs the real Garuda Go analyzer on it (the entity and relationship counts and the timing are measured, and analyzing Go code needs a Go toolchain), and lists the three planted problems with the repair instructions an agent would receive. It does not evaluate policies or seal a Merkle receipt: those need a database. Finish [INSTALL.md](INSTALL.md), then use the steps below to see real checks.
 
 ---
 
