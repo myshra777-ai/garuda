@@ -351,11 +351,19 @@ if (-not (Test-TcpPort "127.0.0.1" 5433)) {
 
         Write-Host "  [*] Starting local PostgreSQL server on port 5433..."
         $pgCtlExe = Join-Path $PgBinDir "pg_ctl.exe"
-        $null = Invoke-QuietCmd "`"$pgCtlExe`" -D `"$PgDataDir`" -l `"$PgLog`" -o `"-p 5433`" start"
-        for ($i = 0; $i -lt 25; $i++) {
+        $postgresExe = Join-Path $PgBinDir "postgres.exe"
+        # Start the server directly and detached. Going through "pg_ctl start" inside
+        # cmd.exe blocked forever on a real Windows PC even though the server was
+        # already accepting connections, so the script never moved on.
+        $pgArgs = @("-D", "`"$PgDataDir`"", "-p", "5433", "-c", "listen_addresses=127.0.0.1")
+        Start-Process -FilePath $postgresExe -ArgumentList $pgArgs -WindowStyle Hidden -RedirectStandardOutput "$PgLog.out" -RedirectStandardError $PgLog
+        Write-Host -NoNewline "  [*] Waiting for PostgreSQL to accept connections"
+        for ($i = 0; $i -lt 90; $i++) {
             if (Test-PostgresServerReady) { break }
+            Write-Host -NoNewline "."
             Start-Sleep -Seconds 1
         }
+        Write-Host ""
         $createDbExe = Join-Path $PgBinDir "createdb.exe"
         $null = Invoke-QuietCmd "`"$createDbExe`" -h 127.0.0.1 -p 5433 -U test garuda_test"
     }
@@ -467,13 +475,26 @@ $ApiLog = Join-Path $DataDir "garuda-api.log"
 $ApiErrLog = Join-Path $DataDir "garuda-api.err.log"
 Start-Process -FilePath (Join-Path $RepoRoot "bin\garuda-api.exe") -WorkingDirectory $RepoRoot -RedirectStandardOutput $ApiLog -RedirectStandardError $ApiErrLog -WindowStyle Hidden
 
-$apiHealthy = $false
-for ($i = 0; $i -lt 25; $i++) {
+# Probe 127.0.0.1, not "localhost": Windows can resolve localhost to IPv6 (::1) while
+# the API listens on IPv4 only. Skip any system proxy for this local request.
+function Test-ApiHealthy([int]$PortNumber) {
     try {
-        $resp = Invoke-WebRequest -Uri "http://localhost:$Port/health" -UseBasicParsing -TimeoutSec 2
-        if ($resp.StatusCode -eq 200) { $apiHealthy = $true; break }
-    } catch {}
-    Start-Sleep -Milliseconds 400
+        $req = [System.Net.WebRequest]::Create("http://127.0.0.1:$PortNumber/health")
+        $req.Proxy = $null
+        $req.Timeout = 2000
+        $resp = $req.GetResponse()
+        $ok = ([int]$resp.StatusCode -eq 200)
+        $resp.Close()
+        return $ok
+    } catch {
+        return $false
+    }
+}
+
+$apiHealthy = $false
+for ($i = 0; $i -lt 40; $i++) {
+    if (Test-ApiHealthy $Port) { $apiHealthy = $true; break }
+    Start-Sleep -Milliseconds 500
 }
 if (-not $apiHealthy) {
     if (Test-Path $ApiErrLog) {
@@ -484,7 +505,7 @@ if (-not $apiHealthy) {
         Write-Host "  --- API stdout ---" -ForegroundColor Red
         Get-Content $ApiLog -Tail 40 | ForEach-Object { Write-Host $_ }
     }
-    throw "Garuda API did not become healthy at http://localhost:$Port/health. Review logs under $DataDir."
+    throw "Garuda API did not become healthy at http://127.0.0.1:$Port/health. Review logs under $DataDir."
 }
 
 # 5b. Index the installed repository in a separate CLI process rather than
