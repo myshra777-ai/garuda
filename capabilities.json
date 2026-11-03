@@ -16,7 +16,7 @@
     "mcp_resources": 2,
     "dashboard_surfaces": 10,
     "dashboard_api_endpoints": 19,
-    "sql_migrations": 91,
+    "sql_migrations": 92,
     "yaml_policy_predicates": 9,
     "talon_hooks": 6,
     "supported_languages": 3,

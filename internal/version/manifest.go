@@ -37,7 +37,7 @@ const (
 	DashboardEndpointCount = 19
 
 	// MigrationCount is the canonical count of PostgreSQL migration files in migrations/*.sql.
-	MigrationCount = 91
+	MigrationCount = 92
 
 	// PolicyPredicateCount is the canonical count of graph-native YAML policy predicates.
 	PolicyPredicateCount = 9

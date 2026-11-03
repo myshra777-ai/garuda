@@ -2,6 +2,15 @@
 
 All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented in this file.
 
+## [Unreleased]
+
+### Changed
+- New tenants default to the `community` plan instead of `enterprise` (migration 100, and the inline schema in `internal/store`). Nothing assigned or enforced a plan before, so existing `enterprise` values were only the old default and are reset to `community`.
+- Contributors now sign commits with a `Signed-off-by` line (Developer Certificate of Origin); see CONTRIBUTING.md.
+
+### Added
+- `docs/PRICING_PLAN.md`: the intended free and paid split, with every paid item marked as planned.
+
 ## [v1.9.11] - 2026-11-03 — Honest demo, `npx garuda-guard`, Windows setup fixes, install with an AI assistant
 
 See [RELEASE_NOTES.md](RELEASE_NOTES.md). The v1.9.10 entries for the README rewrite, the demo, the Windows installer and the npm wrapper describe changes first released here, because they were merged after the v1.9.10 binaries were built.

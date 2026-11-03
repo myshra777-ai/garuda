@@ -168,7 +168,7 @@ func Migrate(connString string, migrationsDir string) error {
 		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS org_domain TEXT NOT NULL DEFAULT '';
 		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS invite_code TEXT NOT NULL DEFAULT '';
 		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS owner_user_id UUID;
-		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_tier TEXT NOT NULL DEFAULT 'enterprise';
+		ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_tier TEXT NOT NULL DEFAULT 'community';
 
 		UPDATE tenants
 		   SET invite_code = CASE
