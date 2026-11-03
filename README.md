@@ -5,7 +5,8 @@
 <h1 align="center">Garuda</h1>
 
 <p align="center">
-  <strong>AI can write the code. Garuda checks what it changed, and keeps the proof.</strong>
+  <strong>AI can write the code. Garuda makes sure the change respects your system.</strong><br>
+  Change control for AI-written code.
 </p>
 
 <p align="center">
@@ -29,15 +30,33 @@
 ## What is this?
 
 You let an AI assistant (Claude Code, Cursor, Codex…) change your code. It works. The tests pass.
-But did it quietly skip your service layer, break a rule your team agreed on last year, or turn `48 crore` into `4.8 crore`?
+But did it quietly skip your service layer, break a rule your team agreed on last year, or change a number your finance team relies on?
+
+Your assistant is good at writing code. It does not automatically know every decision your team made, every part of the system that depends on the code, or every rule that has to stay true.
 
 Garuda is a safety check that sits between your AI assistant and your codebase:
 
 1. **Before** the assistant edits something, Garuda tells it who depends on that code and which rules apply.
-2. **After** the edit, Garuda checks the change against your rules and says **allow** or **block**, with plain instructions for fixing it.
-3. Every verdict is written to a **tamper-evident log**, so you can prove later what was checked and when.
+2. **After** the edit, Garuda checks the change against your rules and says **allow**, **warn**, **review** or **block**, with plain instructions for fixing it.
+3. Saved decisions are sealed into a **tamper-evident log**, so you can prove later what was checked and when.
 
-It reads your code the way a compiler does (not by guessing), so the answers are repeatable. Works with Go, Python and TypeScript.
+**Know the impact. Enforce the rules. Keep the evidence.**
+
+Works with Go, Python and TypeScript, and more languages are on the way.
+
+### One change, start to finish
+
+Say your assistant is asked to add a feature to the payment handler.
+
+1. **It asks Garuda first.** Garuda replies: "12 other things depend on this. It is high-risk code. Rule: the payment handler must not talk to the database directly."
+2. **The assistant makes its edit.** In a hurry, it calls the database straight from the handler.
+3. **Garuda checks the change.** It sees the broken rule, says **BLOCK**, and tells the assistant exactly what to move and where.
+4. **The assistant fixes it.** The second check says **ALLOW**.
+5. **The result is saved.** You get a receipt you can look up later.
+
+Garuda also separates problems **this change introduced** from problems that were **already there**. You are not asked to clean up years of old code before you can move forward. You only answer for what is new.
+
+It reads Go the way the compiler does, so the answers are repeatable. Python and TypeScript are read by their code structure, which is accurate but not as deep (see [What Garuda does not do](#what-garuda-does-not-do)).
 
 ---
 
@@ -57,13 +76,13 @@ It prints your login at the end. On Windows use `setup.ps1`.
 Prefer one line? `curl -fsSL https://raw.githubusercontent.com/myshra777-ai/garuda/main/install.sh | bash` does the same.
 (As with any installer you pipe into a shell, [read it first](install.sh).)
 
-### 2. Watch it catch three real bugs  ·  *1 minute*
+### 2. Watch it catch three planted bugs  ·  *1 minute*
 
 ```bash
 ./bin/garuda demo
 ```
 
-This builds a tiny fake payments service with three planted problems and runs Garuda on it:
+This builds a tiny fake payments service with three problems planted on purpose, and runs Garuda on it:
 
 | Planted problem | Why it matters |
 | :--- | :--- |
@@ -72,6 +91,7 @@ This builds a tiny fake payments service with three planted problems and runs Ga
 | The storage layer imports the payment layer | Dependencies pointing the wrong way |
 
 You'll see each problem, the exact file and line, and a short "how to fix it" an AI assistant can follow.
+The service is made up for the demo. The point is to show what the checks look like.
 
 ### 3. Open the dashboard  ·  *2 minutes*
 
@@ -101,7 +121,7 @@ The dashboard's front page walks you through five steps. Here is what each part 
   <img src="assets/screenshots/docs-to-guardrails.png" alt="From design documents to enforced rules" width="900">
 </p>
 
-**Catch numbers that disagree.** When two teams calculate the same metric differently, or one query divides by `1e7` and another by `1e8`, Garuda points at the exact lines and asks a human to decide.
+**Spot numbers that disagree.** When two teams calculate the same metric differently, or one query divides by `1e7` and another by `1e8`, Garuda helps you line up the two versions, shows the formulas it found in the code, and asks a human to decide which one is right. It does not guess.
 
 <p align="center">
   <img src="assets/screenshots/data-logic-audit.png" alt="Data and logic audit catching a 10x mismatch" width="900">
@@ -116,9 +136,9 @@ The dashboard's front page walks you through five steps. Here is what each part 
 | You see | It means |
 | :--- | :--- |
 | **ALLOW / WARN / REVIEW / BLOCK** | The verdict on a change. BLOCK stops it and tells the assistant how to repair it. |
-| **SUPPORTED** | Proven by the compiler. Safe to rely on. |
+| **SUPPORTED** | The evidence backs this claim, within what was checked. Safe to rely on. |
 | **UNVERIFIED** | Found in the code or docs but not confirmed yet. Not an error. |
-| **CONTRADICTED** | The code breaks a rule you wrote down. |
+| **CONTRADICTED** | The evidence conflicts with a rule or claim you wrote down. |
 | **HIGH / MEDIUM / LOW tier** | How many things depend on this code. High-tier code is protected from silent AI rewrites. |
 
 ### 4. Point it at your own code  ·  *3 minutes*
@@ -168,9 +188,32 @@ What your assistant gets: **54 tools** (41 read-only, 13 that can change state) 
 
 ## Check every pull request
 
-Add the GitHub Action to get a verdict comment on each PR, findings in GitHub's Security tab, and optional Slack or Teams alerts. Start from [`.github/workflows/garuda-gate.yml`](.github/workflows/garuda-gate.yml) or use [`action.yml`](action.yml).
+Your assistant's good behaviour is a request. A pull request check is a rule. Add the GitHub Action and every pull request gets a verdict:
+
+- the verdict (**ALLOW**, **WARN**, **REVIEW** or **BLOCK**) and a receipt hash in the run summary, with a one-line command to reproduce it on your machine;
+- a **BLOCK** fails the check;
+- with the ready-made workflow, [`.github/workflows/garuda-gate.yml`](.github/workflows/garuda-gate.yml), you also get a verdict comment on the pull request and findings in GitHub's Security tab;
+- optional Slack or Teams alerts through `garuda check --notify-slack` / `--notify-teams`.
+
+Copy a ready-to-paste snippet from [`docs/GITHUB_MARKETPLACE_STRATEGY.md`](docs/GITHUB_MARKETPLACE_STRATEGY.md#33-copy-paste-snippet-for-users), or use [`action.yml`](action.yml) directly.
+
+**One more step makes it real:** in your repository go to **Settings → Rules** (or **Branches**), and make the Garuda check a **required status check**. Until you do, a failing check is only a warning that people can merge past.
 
 ---
+
+## What Garuda does not do
+
+We would rather you trust the rest of this page.
+
+- **It is not a cage for your assistant.** Garuda gives the assistant context and blocks bad changes, but an assistant can ignore advice and hooks can be switched off. The check that cannot be skipped is the required pull request check above.
+- **Go is understood more deeply than Python and TypeScript.** Go is read with the compiler's own type information. Python and TypeScript are read by code structure, which is accurate for imports, calls and layers but does not resolve every type.
+- **Not every check is stored automatically.** A result is only sealed into the tamper-evident log when the check is saved. The log proves a record was not changed afterwards. It does not prove the analysis was complete.
+- **The number-mismatch tools help a human decide.** They line up the formulas and values you point them at. They do not automatically understand every financial calculation in a company. `48 Cr` vs `4.8 Cr` in the demo is a planted example.
+- **The numbers on this page come from a specific release.** See [`EVIDENCE.md`](EVIDENCE.md) for what was measured, on what, and when.
+
+## Who is it for?
+
+Teams that already use AI coding assistants a lot, on a real codebase with rules that matter: layers that must not be skipped, data-access limits, security or money-handling requirements. If you cannot read every AI-written change yourself, Garuda is for you.
 
 ## Free and paid
 
@@ -179,6 +222,7 @@ Everything above runs locally and is free and open source (Apache 2.0). Hosted a
 ## Learn more
 
 - [`QUICKSTART.md`](QUICKSTART.md): the same journey with more detail
+- [`docs/TALON.md`](docs/TALON.md): how the before-and-after check works
 - [`docs/DASHBOARD_WALKTHROUGH.md`](docs/DASHBOARD_WALKTHROUGH.md): every dashboard page
 - [`docs/DATA_AND_LOGIC_AUDIT_GUIDE.md`](docs/DATA_AND_LOGIC_AUDIT_GUIDE.md): the number-mismatch checks
 - [`docs/adr/`](docs/adr/): the decisions behind Garuda itself
@@ -186,6 +230,6 @@ Everything above runs locally and is free and open source (Apache 2.0). Hosted a
 - [`INSTALL.md`](INSTALL.md) · [`docs/API.md`](docs/API.md) · [`EVIDENCE.md`](EVIDENCE.md) · [`SECURITY.md`](SECURITY.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 <p align="center">
-  <strong>Understand the system. Govern the change. Keep the proof.</strong><br>
+  <strong>Let AI move fast. Keep control of what it changes.</strong><br>
   Released under the <a href="LICENSE">Apache 2.0 License</a>.
 </p>
