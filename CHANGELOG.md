@@ -14,6 +14,9 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 - Issue forms, a pull-request template and `dependabot.yml` (Go modules, GitHub Actions, Docker) under `.github/`.
 
 ### Changed
+- **README** rewritten around "change control for AI-written code": a start-to-finish example, new-versus-existing findings, a "What Garuda does not do" section, and a "required check" step for pull requests. Claims that the code does not back (every verdict logged, the compiler reads all three languages) were corrected.
+- `garuda-gate.yml` now uploads `garuda.sarif` to GitHub code scanning (it was generated but never uploaded) and reads the Go version from `go.mod`.
+- `docs/LISTING_GUIDE.md`: Anthropic directory and Cursor submission steps checked against current pages.
 - **Installers** (`install.sh`, `setup.sh`, `install.ps1`, `setup.ps1`) rewritten: random owner password (or `GARUDA_PASSWORD`), safe `.env` loading, update guards that never discard local work, `go.mod`-driven Go selection, root/port/prerequisite checks with install hints, Visual C++ hint on Windows, API pid-file handling, Termux and ChromeOS notes.
 - `.gitignore` now lists specific paths only (no global `*.json`, `*.html` or `*.txt`); `.gitattributes` keeps scripts, Go and SQL files on LF on every platform.
 - `scripts/sync_docs_from_manifest.py` rewritten around `capabilities.json` (`--check`, `--set <tag>`), covering skills, packaging, Dockerfiles, OpenAPI and k8s versions.
