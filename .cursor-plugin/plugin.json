@@ -1,6 +1,6 @@
 {
   "name": "garuda",
-  "version": "1.9.10",
+  "version": "1.9.11",
   "description": "Checks what AI coding agents change before it lands: impact analysis, architecture rules, and a tamper-evident record. MCP server plus 6 skills.",
   "author": { "name": "Rohit Mishra" },
   "homepage": "https://github.com/myshra777-ai/garuda",

@@ -1,7 +1,7 @@
 ---
 name: change-impact
 description: Calculates direct callers, transitive blast radius, criticality tier, and governing ADRs/policies before modifying any symbol or package.
-version: "1.9.10"
+version: "1.9.11"
 license: "Apache-2.0"
 read_only_default: true
 ---

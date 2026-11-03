@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
 PackageIdentifier: GarudaAI.Garuda
-PackageVersion: 1.9.10
+PackageVersion: 1.9.11
 PackageLocale: en-US
 Publisher: Rohit Mishra (Garuda AI)
 PublisherUrl: https://github.com/myshra777-ai/garuda
@@ -19,27 +19,27 @@ Installers:
     InstallerType: zip
     NestedInstallerType: portable
     NestedInstallerFiles:
-      - RelativeFilePath: garuda-v1.9.10-windows-amd64\bin\garuda.exe
+      - RelativeFilePath: garuda-v1.9.11-windows-amd64\bin\garuda.exe
         PortableCommandAlias: garuda
-      - RelativeFilePath: garuda-v1.9.10-windows-amd64\bin\garuda-api.exe
+      - RelativeFilePath: garuda-v1.9.11-windows-amd64\bin\garuda-api.exe
         PortableCommandAlias: garuda-api
-      - RelativeFilePath: garuda-v1.9.10-windows-amd64\bin\garuda-mcp.exe
+      - RelativeFilePath: garuda-v1.9.11-windows-amd64\bin\garuda-mcp.exe
         PortableCommandAlias: garuda-mcp
-      - RelativeFilePath: garuda-v1.9.10-windows-amd64\bin\garuda-talon.exe
+      - RelativeFilePath: garuda-v1.9.11-windows-amd64\bin\garuda-talon.exe
         PortableCommandAlias: garuda-talon
-    InstallerUrl: https://github.com/myshra777-ai/garuda/releases/download/v1.9.10/garuda-v1.9.10-windows-amd64.zip
+    InstallerUrl: https://github.com/myshra777-ai/garuda/releases/download/v1.9.11/garuda-v1.9.11-windows-amd64.zip
   - Architecture: arm64
     InstallerType: zip
     NestedInstallerType: portable
     NestedInstallerFiles:
-      - RelativeFilePath: garuda-v1.9.10-windows-arm64\bin\garuda.exe
+      - RelativeFilePath: garuda-v1.9.11-windows-arm64\bin\garuda.exe
         PortableCommandAlias: garuda
-      - RelativeFilePath: garuda-v1.9.10-windows-arm64\bin\garuda-api.exe
+      - RelativeFilePath: garuda-v1.9.11-windows-arm64\bin\garuda-api.exe
         PortableCommandAlias: garuda-api
-      - RelativeFilePath: garuda-v1.9.10-windows-arm64\bin\garuda-mcp.exe
+      - RelativeFilePath: garuda-v1.9.11-windows-arm64\bin\garuda-mcp.exe
         PortableCommandAlias: garuda-mcp
-      - RelativeFilePath: garuda-v1.9.10-windows-arm64\bin\garuda-talon.exe
+      - RelativeFilePath: garuda-v1.9.11-windows-arm64\bin\garuda-talon.exe
         PortableCommandAlias: garuda-talon
-    InstallerUrl: https://github.com/myshra777-ai/garuda/releases/download/v1.9.10/garuda-v1.9.10-windows-arm64.zip
+    InstallerUrl: https://github.com/myshra777-ai/garuda/releases/download/v1.9.11/garuda-v1.9.11-windows-arm64.zip
 ManifestType: singleton
 ManifestVersion: 1.6.0

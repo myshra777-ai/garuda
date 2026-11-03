@@ -7,7 +7,7 @@ body:
     attributes:
       label: Garuda version and commit
       description: Output of `garuda --version`, or the commit SHA if you built from source.
-      placeholder: v1.9.10
+      placeholder: v1.9.11
     validations:
       required: true
   - type: dropdown

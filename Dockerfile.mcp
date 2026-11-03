@@ -5,7 +5,7 @@ RUN apk add --no-cache git ca-certificates
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-ARG VERSION=v1.9.10
+ARG VERSION=v1.9.11
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/garuda-mcp ./cmd/garuda-mcp
 
 FROM alpine:3.20
