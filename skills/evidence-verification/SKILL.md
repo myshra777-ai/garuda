@@ -1,7 +1,7 @@
 ---
 name: evidence-verification
 description: Substantiates architectural claims (`SUPPORTED`, `UNVERIFIED`, `CONTRADICTED`) and verifies RFC 6962 SHA-256 Merkle inclusion proofs and governance receipts.
-version: "1.9.10"
+version: "1.9.11"
 license: "Apache-2.0"
 read_only_default: true
 ---

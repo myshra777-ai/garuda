@@ -1,6 +1,6 @@
 # Maintainer: Rohit Mishra <myshra777@gmail.com>
 pkgname=garuda-bin
-pkgver=1.9.10
+pkgver=1.9.11
 pkgrel=1
 pkgdesc="Local-first AI change-control gate, Garuda Talon harness, financial discrepancy audit & 54-tool MCP server"
 arch=('x86_64' 'aarch64')

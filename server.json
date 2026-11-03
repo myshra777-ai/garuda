@@ -3,11 +3,11 @@
   "name": "io.github.myshra777-ai/garuda",
   "description": "Impact analysis, architecture rules and a tamper-evident ledger for AI coding agents.",
   "repository": { "url": "https://github.com/myshra777-ai/garuda", "source": "github" },
-  "version": "1.9.10",
+  "version": "1.9.11",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/myshra777-ai/garuda-mcp:1.9.10",
+      "identifier": "ghcr.io/myshra777-ai/garuda-mcp:1.9.11",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         { "name": "DATABASE_URL", "description": "PostgreSQL connection URL for the Garuda graph and ledger", "isRequired": true, "isSecret": true, "format": "string" },

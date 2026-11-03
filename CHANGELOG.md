@@ -2,6 +2,10 @@
 
 All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented in this file.
 
+## [v1.9.11] - 2026-11-03 — Honest demo, `npx garuda-guard`, Windows setup fixes, install with an AI assistant
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md). The v1.9.10 entries for the README rewrite, the demo, the Windows installer and the npm wrapper describe changes first released here, because they were merged after the v1.9.10 binaries were built.
+
 ## [v1.9.10] - 2026-11-03 — Installer rewrite, documentation corrected against the code, marketplace-ready repository, one release pipeline
 
 ### Added

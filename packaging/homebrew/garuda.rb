@@ -4,22 +4,22 @@
 class Garuda < Formula
   desc "Local-first AI code change-control gate, active agent harness (Talon), financial audit & 54-tool MCP engine"
   homepage "https://github.com/myshra777-ai/garuda"
-  version "1.9.10"
+  version "1.9.11"
   license "Apache-2.0"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/myshra777-ai/garuda/releases/download/v1.9.10/garuda-v1.9.10-darwin-arm64.tar.gz"
+      url "https://github.com/myshra777-ai/garuda/releases/download/v1.9.11/garuda-v1.9.11-darwin-arm64.tar.gz"
     else
-      url "https://github.com/myshra777-ai/garuda/releases/download/v1.9.10/garuda-v1.9.10-darwin-amd64.tar.gz"
+      url "https://github.com/myshra777-ai/garuda/releases/download/v1.9.11/garuda-v1.9.11-darwin-amd64.tar.gz"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://github.com/myshra777-ai/garuda/releases/download/v1.9.10/garuda-v1.9.10-linux-arm64.tar.gz"
+      url "https://github.com/myshra777-ai/garuda/releases/download/v1.9.11/garuda-v1.9.11-linux-arm64.tar.gz"
     else
-      url "https://github.com/myshra777-ai/garuda/releases/download/v1.9.10/garuda-v1.9.10-linux-amd64.tar.gz"
+      url "https://github.com/myshra777-ai/garuda/releases/download/v1.9.11/garuda-v1.9.11-linux-amd64.tar.gz"
     end
   end
 
@@ -33,6 +33,6 @@ class Garuda < Formula
   end
 
   test do
-    assert_match "1.9.10", shell_output("#{bin}/garuda --version")
+    assert_match "1.9.11", shell_output("#{bin}/garuda --version")
   end
 end

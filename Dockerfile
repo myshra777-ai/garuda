@@ -13,7 +13,7 @@ RUN go mod download
 COPY . .
 
 # Compile all 4 fully static, stripped binaries with version metadata
-ARG VERSION=v1.9.10
+ARG VERSION=v1.9.11
 ARG COMMIT=release
 RUN mkdir -p /out && \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" -o /out/garuda ./cmd/garuda && \

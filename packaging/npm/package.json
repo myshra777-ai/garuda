@@ -1,6 +1,6 @@
 {
   "name": "garuda-guard",
-  "version": "1.9.10",
+  "version": "1.9.11",
   "description": "Guardrails for AI coding agents (Claude Code, Cursor, Codex): impact analysis, architecture rules, blocked bad changes and a tamper-evident record. Run with npx; downloads the verified Garuda release binary.",
   "license": "Apache-2.0",
   "author": "Rohit Mishra",

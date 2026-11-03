@@ -152,7 +152,7 @@ runs:
         echo "reproduce_command=${REPRO}" >> "$GITHUB_OUTPUT"
 
         {
-          echo "### 🦅 Garuda Talon Architecture & Data-Logic Gate (\`v1.9.10\`)"
+          echo "### 🦅 Garuda Talon Architecture & Data-Logic Gate (\`v1.9.11\`)"
           echo "- **Verdict**: \`${VERDICT}\` (exit code: \`${GUARD_EXIT}\`)"
           echo "- **Workspace**: \`${WORKSPACE}\` · **Diff Scope**: \`${DIFF_REV}\`"
           echo "- **Receipt Hash**: \`${RECEIPT:-unanchored}\`"

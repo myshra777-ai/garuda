@@ -1,33 +1,33 @@
-# Garuda v1.9.10
+# Garuda v1.9.11
 
 **Release date:** 2026-11-03 · **License:** Apache-2.0 · [Full changelog](CHANGELOG.md) · [Install guide](INSTALL.md)
 
-v1.9.10 is a reliability and release-readiness update. It rewrites the installers, corrects the documentation against the code, hardens the shipped container and Kubernetes files, and puts the plugin and MCP-registry manifests into the repository so Garuda can be listed in the marketplaces.
+v1.9.11 makes Garuda easier to try and fixes an overstated demo. Run `npx garuda-guard demo` (Node 18 or newer, no database) to see it work.
 
 ## Highlights
 
-- **Installers rewritten and hardened** (`install.sh`, `setup.sh`, `install.ps1`, `setup.ps1`). No default password or token is ever used; a random owner password is generated (or take yours from `GARUDA_PASSWORD`) and a random `GARUDA_CONTROL_TOKEN` goes into `.env`. Safe updates: a folder that is not a Garuda checkout is never touched, and local edits or commits are never discarded. Better messages for missing tools, busy ports, root users, a missing Visual C++ runtime on Windows and failed downloads. The unsafe duplicate `scripts/install.sh` is gone.
-- **Documentation corrected against the code.** One accurate [INSTALL.md](INSTALL.md) for Windows, macOS, Linux, ChromeOS and Android (Termux); wrong tool and migration counts fixed everywhere (54 tools, 91 migrations); broken links and screenshots fixed; duplicate documents removed; `SECURITY.md` merged from two conflicting policies into one; example credentials removed. CI now fails when docs, counts or links drift.
-- **Marketplace-ready repository.** The plugin manifests for Claude Code, Codex and Cursor, `.mcp.json`, `server.json` (MCP Registry), `glama.json` and `smithery.yaml` are tracked. `.gitignore` no longer has a global `*.json` rule that kept them off GitHub. A CI check keeps it that way.
-- **One release pipeline.** Pushing a version tag verifies the repository, builds archives for Windows, macOS, Linux, Android (Termux) and FreeBSD, writes `SHA256SUMS.txt`, attests build provenance, and creates a **draft** GitHub release. Container images go to GHCR; publishing the release publishes `server.json` to the MCP Registry.
-- **Safer deployment files.** `docker-compose.yml` no longer exposes PostgreSQL with a known password on all interfaces or ships a guessable secret; the Kubernetes manifest points at an image that is actually published; the API image builds with the Go version `go.mod` requires.
+- **Honest `garuda demo`.** The demo now runs the real analyzer on the sample service and prints its real symbol, edge and timing numbers. The fake Merkle root hash is gone. The three planted problems are still listed from a fixed list, not detected; the demo says so.
+- **One-command try-it: `npx garuda-guard demo`.** A small Node wrapper downloads the release archive for your system, checks it against `SHA256SUMS.txt`, caches it and runs it. `garuda-guard` also provides the `garuda` and `garuda-mcp` commands.
+- **Windows setup fixes.** `setup.ps1` installs the Visual C++ runtime when it is missing, starts PostgreSQL reliably, checks the API over IPv4, and explains error 4551 when Windows blocks the unsigned binary (options: WSL2, Smart App Control, or asking IT to allow the folder).
+- **Install with an AI assistant.** [docs/INSTALL_WITH_AI.md](docs/INSTALL_WITH_AI.md) has one copy-and-paste prompt for ChatGPT, Claude, Codex and Cursor, with a checklist for verifying what the assistant returns.
+- **README and business case.** A rewritten README and a new [Why Garuda](docs/WHY_GARUDA.md) page for engineering leaders.
 
 ## Downloads
 
-Attached to this release (`<tag>` is `v1.9.10`):
+Attached to this release (`<tag>` is `v1.9.11`):
 
 | Platform | File |
 | :--- | :--- |
 | Windows x64 / ARM64 | `garuda-<tag>-windows-amd64.zip`, `garuda-<tag>-windows-arm64.zip` |
 | macOS Apple Silicon / Intel | `garuda-<tag>-darwin-arm64.tar.gz`, `garuda-<tag>-darwin-amd64.tar.gz` |
-| Linux x64 / ARM64 (and ChromeOS Linux) | `garuda-<tag>-linux-amd64.tar.gz`, `garuda-<tag>-linux-arm64.tar.gz`, `garuda_1.9.10_amd64.deb`, `garuda_1.9.10_arm64.deb` |
+| Linux x64 / ARM64 (and ChromeOS Linux) | `garuda-<tag>-linux-amd64.tar.gz`, `garuda-<tag>-linux-arm64.tar.gz`, `garuda_1.9.11_amd64.deb`, `garuda_1.9.11_arm64.deb` |
 | Android (Termux, ARM64) | `garuda-<tag>-android-arm64-termux.tar.gz` |
 | FreeBSD x64 | `garuda-<tag>-freebsd-amd64.tar.gz` |
 | Source plus installers | `garuda-<tag>-universal-source.tar.gz`, `install.sh`, `install.ps1`, `setup.sh`, `setup.ps1` |
 | Checksums | `SHA256SUMS.txt` |
 | Package-manager manifests with checksums filled in | `packaging/` (Homebrew, AUR, winget, RPM, Chocolatey; templates, not yet published to those repositories) |
 
-Containers: `ghcr.io/myshra777-ai/garuda:v1.9.10` (API and dashboard) and `ghcr.io/myshra777-ai/garuda-mcp:1.9.10` (MCP server over stdio).
+Containers: `ghcr.io/myshra777-ai/garuda:v1.9.11` (API and dashboard) and `ghcr.io/myshra777-ai/garuda-mcp:1.9.11` (MCP server over stdio).
 
 Binaries are static (`CGO_ENABLED=0`) but **not code-signed or notarized**. Verify them against `SHA256SUMS.txt` (see [INSTALL.md](INSTALL.md#prebuilt-release-archives)). Build provenance is attested with GitHub's artifact attestations: `gh attestation verify <file> --repo myshra777-ai/garuda`.
 

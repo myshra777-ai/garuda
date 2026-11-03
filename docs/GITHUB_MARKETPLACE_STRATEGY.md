@@ -13,7 +13,7 @@ Everything here works on a **free GitHub account**. No organization or LLC is ne
 | **GitHub Releases** | Static binaries (Linux, macOS, Windows, FreeBSD, Android/Termux), `.deb`, `SHA256SUMS.txt`, build-provenance attestations | `https://github.com/myshra777-ai/garuda/releases` | [`release.yml`](../.github/workflows/release.yml) |
 | **GitHub Packages (`ghcr.io`), API** | Multi-arch container (`linux/amd64`, `linux/arm64`) with all four binaries | `ghcr.io/myshra777-ai/garuda:<version>` | [`release-packages.yml`](../.github/workflows/release-packages.yml) |
 | **GitHub Packages (`ghcr.io`), MCP server** | The `garuda-mcp` image the MCP Registry points at | `ghcr.io/myshra777-ai/garuda-mcp:<version>` | [`publish-mcp-image.yml`](../.github/workflows/publish-mcp-image.yml) |
-| **GitHub Marketplace (Action)** | A pull-request and push gate: diff-scoped blast-radius checks, Talon policy verification, a deterministic `receipt_hash` in `$GITHUB_STEP_SUMMARY` | `myshra777-ai/garuda@v1.9.10` | [`action.yml`](../action.yml) |
+| **GitHub Marketplace (Action)** | A pull-request and push gate: diff-scoped blast-radius checks, Talon policy verification, a deterministic `receipt_hash` in `$GITHUB_STEP_SUMMARY` | `myshra777-ai/garuda@v1.9.11` | [`action.yml`](../action.yml) |
 | **Official MCP Registry** | Listing for `io.github.myshra777-ai/garuda` | [`server.json`](../server.json) | [`publish-mcp-registry.yml`](../.github/workflows/publish-mcp-registry.yml) |
 
 The three tag-triggered workflows start when you push a `vX.Y.Z` tag. The registry workflow starts when you publish the draft release.
@@ -31,10 +31,10 @@ The three tag-triggered workflows start when you push a `vX.Y.Z` tag. The regist
 Pull the API image:
 
 ```bash
-docker pull ghcr.io/myshra777-ai/garuda:1.9.10
+docker pull ghcr.io/myshra777-ai/garuda:1.9.11
 ```
 
-Image tags use the bare version (`1.9.10`) and `latest`. Release archives use the `v` prefix (`garuda-v1.9.10-linux-amd64.tar.gz`).
+Image tags use the bare version (`1.9.10`) and `latest`. Release archives use the `v` prefix (`garuda-v1.9.11-linux-amd64.tar.gz`).
 
 ---
 
@@ -72,7 +72,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run Garuda Talon Gate
-        uses: myshra777-ai/garuda@v1.9.10
+        uses: myshra777-ai/garuda@v1.9.11
         with:
           workspace: default
           policy-dir: policies

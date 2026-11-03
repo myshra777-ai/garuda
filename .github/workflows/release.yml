@@ -3,7 +3,7 @@ name: Release (draft GitHub release with binaries, checksums and notes)
 # Push a version tag to build every platform archive and create a DRAFT release.
 # Review the draft on the Releases page, then press "Publish release".
 #
-#   git tag v1.9.10 && git push origin v1.9.10
+#   git tag v1.9.11 && git push origin v1.9.10
 #
 # Publishing the release also triggers publish-mcp-registry.yml. The container images
 # are built by release-packages.yml and publish-mcp-image.yml from the same tag.
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Existing tag to build and draft a release for (for example v1.9.10)"
+        description: "Existing tag to build and draft a release for (for example v1.9.11)"
         required: true
         type: string
       draft:

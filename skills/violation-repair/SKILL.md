@@ -1,7 +1,7 @@
 ---
 name: violation-repair
 description: Guides an agent through remediating a `BLOCK` or `REVIEW` governance finding without introducing secondary boundary violations.
-version: "1.9.10"
+version: "1.9.11"
 license: "Apache-2.0"
 read_only_default: true
 ---

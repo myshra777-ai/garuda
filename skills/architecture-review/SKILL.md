@@ -1,7 +1,7 @@
 ---
 name: architecture-review
 description: Reviews actual repository architecture against documented ADRs, design specs, and declarative YAML policies with file-and-line AST evidence.
-version: "1.9.10"
+version: "1.9.11"
 license: "Apache-2.0"
 read_only_default: true
 ---

@@ -1,7 +1,7 @@
 ---
 name: pre-edit-governance
 description: Acts as the mandatory pre-change checkpoint before an AI coding agent modifies code, returning a proceed, revise, or escalate decision.
-version: "1.9.10"
+version: "1.9.11"
 license: "Apache-2.0"
 read_only_default: true
 ---
