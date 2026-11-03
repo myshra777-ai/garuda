@@ -85,6 +85,17 @@ python3 scripts/check_data_files.py                  # JSON and YAML files parse
 
 `capabilities.json` is the single source of truth for the version and the tool, migration and skill counts. Change it first, then run `python3 scripts/sync_docs_from_manifest.py` to update the files that mirror it. To prepare a release, see [docs/LISTING_GUIDE.md](docs/LISTING_GUIDE.md#cutting-a-release).
 
+## Sign your commits (Developer Certificate of Origin)
+
+Every commit must carry a `Signed-off-by` line. It states that you wrote the change, or have the right to submit it, under the project's Apache-2.0 license (the [Developer Certificate of Origin](https://developercertificate.org/)).
+
+```bash
+git commit -s -m "fix: describe the change"      # adds: Signed-off-by: Your Name <you@example.com>
+git commit --amend -s --no-edit                  # add it to the last commit
+```
+
+Use your real name and an email address you control. A pull request with unsigned commits will be asked to fix them before review.
+
 ## What makes a good pull request
 
 - **One change per PR.** A PR that fixes a bug and refactors an unrelated file is two PRs. Small PRs get reviewed fast; large ones sit.
