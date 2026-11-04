@@ -1,4 +1,4 @@
-module github.com/myshra777-ai/garuda // v1.9.8
+module github.com/myshra777-ai/garuda
 
 go 1.26.0
 

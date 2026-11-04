@@ -2,8 +2,6 @@
 
 // Copyright 2026 Rohit Mishra
 // SPDX-License-Identifier: Apache-2.0
-//
-// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
 // Package treesitter provides a thin shared wrapper around the smacker
 // tree-sitter Go bindings. Language-specific extractors live in sibling

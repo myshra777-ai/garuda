@@ -2,8 +2,6 @@
 
 // Copyright 2026 Rohit Mishra
 // SPDX-License-Identifier: Apache-2.0
-//
-// Law Enforcement. I am bound by the ACGM Resolution Invariant and the 10 Immutable Laws. Truth Preservation is Absolute.
 
 // Package typescript provides a 100% pure-Go TypeScript AST & call-graph extractor
 // when compiled with CGO_ENABLED=0 (no GCC/Clang/MinGW/Xcode required).
