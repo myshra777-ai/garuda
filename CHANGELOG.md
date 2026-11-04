@@ -4,6 +4,9 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 
 ## [Unreleased]
 
+### Fixed
+- `install.sh`: an existing checkout whose history diverged from `origin/main` (e.g. cloned before the history rewrite) no longer dead-ends with "Local commits exist". The old checkout is moved aside intact to `<dir>.old-<timestamp>` and a fresh copy is installed; `~/.garuda` data is reused.
+
 ### Security
 - **Fixed: account takeover of the original tenant.** A fixed owner address was compiled into the sign-up handler. On any installation where nobody had registered it, a new sign-up using that address (no email check) was made owner of the original tenant and all its workspaces. Sign-up now trusts only the address set in `GARUDA_OWNER_EMAIL`, and never trusts a built-in address. A duplicate sign-up request no longer returns the existing account's id, role or email, and no longer changes that account's access. Added unit tests and `scripts/security-smoke.sh`, a black-box test for cross-tenant access and these sign-up cases.
 

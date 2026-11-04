@@ -81,10 +81,26 @@ else
             exit 1
         }
         if [[ "$local_ahead" =~ ^[0-9]+$ ]] && (( local_ahead > 0 )); then
-            echo "[ERROR] Local commits exist that are not in origin/main. The installer will not discard them." >&2
-            exit 1
-        fi
-        if ! git -C "$INSTALL_DIR" reset --hard origin/main; then
+            # Either the user has real local commits, or upstream history was
+            # rewritten (force-pushed / re-rooted) since they cloned. We cannot
+            # tell which from a shallow fetch, and we never discard commits, so
+            # move the old checkout aside intact and take a fresh clone. Data
+            # in ~/.garuda lives outside this directory and is reused.
+            backup="${INSTALL_DIR}.old-$(date +%Y%m%d-%H%M%S)"
+            echo "[!] Local commits exist that are not in origin/main ($local_ahead in $INSTALL_DIR): upstream history was rewritten, or you committed locally."
+            echo "[*] Moving it aside, unchanged, to $backup and installing a fresh copy."
+            mv "$INSTALL_DIR" "$backup" || {
+                echo "[ERROR] Could not move $INSTALL_DIR aside. Nothing was changed." >&2
+                exit 1
+            }
+            if ! git clone --depth 1 --single-branch --branch main https://github.com/myshra777-ai/garuda.git "$INSTALL_DIR"; then
+                echo "[ERROR] Fresh clone failed. Restoring your original checkout." >&2
+                rmdir "$INSTALL_DIR" 2>/dev/null || true
+                mv "$backup" "$INSTALL_DIR"
+                exit 1
+            fi
+            echo "[OK] Fresh copy installed. Your previous checkout is kept at $backup (delete it when you no longer need it)."
+        elif ! git -C "$INSTALL_DIR" reset --hard origin/main; then
             echo "[ERROR] Update failed. Inspect $INSTALL_DIR before retrying." >&2
             exit 1
         fi

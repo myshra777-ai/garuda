@@ -87,5 +87,6 @@ jobs:
           grep -q 'Tracked local changes found' install.sh
           grep -q 'Local commits exist' install.sh
           grep -q 'already exists and is not a Garuda installation' install.sh
+          grep -q 'Moving it aside, unchanged' install.sh
           if grep -Fq 'rm -rf "$INSTALL_DIR"' install.sh; then exit 1; fi
           echo "PASS: shell installers parse and protect local commits"
