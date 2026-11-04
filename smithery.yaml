@@ -3,6 +3,8 @@ startCommand:
   type: stdio
   configSchema:
     type: object
+    required:
+      - databaseUrl
     properties:
       workspace:
         type: string
@@ -10,8 +12,7 @@ startCommand:
         description: "Active Garuda workspace name"
       databaseUrl:
         type: string
-        default: "postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable"
-        description: "PostgreSQL connection URL for AST & RFC 6962 Merkle ledger"
+        description: "PostgreSQL connection URL for AST & RFC 6962 Merkle ledger (required; no default is provided)"
       talonEnforce:
         type: boolean
         default: true
@@ -26,7 +27,7 @@ startCommand:
       args: [],
       env: {
         GARUDA_WORKSPACE: config.workspace || 'default',
-        DATABASE_URL: config.databaseUrl || 'postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable',
+        DATABASE_URL: config.databaseUrl,
         GARUDA_TALON_ENFORCE: config.talonEnforce !== false ? 'true' : 'false',
         GARUDA_MCP_READ_ONLY: config.readOnly ? 'true' : 'false'
       }

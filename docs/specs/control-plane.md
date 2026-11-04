@@ -1,6 +1,6 @@
 # Control Plane — design
 
-**Status:** agreed 2026-09-17. Not yet implemented.
+**Status:** agreed 2026-09-17. Partly implemented: an owner-only console exists under `/_/control` (see `internal/api/control_plane*.go`). Not every section below is built; where this document and the code differ, the code is the reference. This is the internal owner panel, not the customer-facing organization console.
 **Scope:** owner-facing platform management panel.
 **Depends on:** `mcp-sessions.md` (Operations tab), `control-plane-metrics.md`
 (Business and Tenants tabs).

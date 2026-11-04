@@ -19,6 +19,7 @@
   <a href=".claude-plugin/plugin.json"><img src="https://img.shields.io/badge/Claude_Code-plugin-d97757.svg" alt="Claude Code plugin"></a>
   <a href=".codex-plugin/plugin.json"><img src="https://img.shields.io/badge/Codex-plugin-4f46e5.svg" alt="Codex plugin"></a>
   <a href="action.yml"><img src="https://img.shields.io/badge/GitHub_Action-PR_gate-0f172a.svg" alt="GitHub Action"></a>
+  <a href="https://www.npmjs.com/package/garuda-guard"><img src="https://img.shields.io/npm/v/garuda-guard.svg?label=npm" alt="npm: garuda-guard"></a>
 </p>
 
 <p align="center">

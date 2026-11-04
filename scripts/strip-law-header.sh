@@ -8,7 +8,10 @@ import re, subprocess
 files = subprocess.check_output(["git", "ls-files", "*.go", "*.py", "*.sh"], text=True).split("\n")
 pat = re.compile(r"^(?:(?://|#)[ ]*\n)?(?://|#) Law Enforcement\. I am bound by the ACGM[^\n]*\n", re.M)
 n = 0
+SKIP = ("test/", "garuda-bench/", "evidence/")
 for f in filter(None, files):
+    if f.startswith(SKIP):
+        continue  # fixtures and recorded evidence depend on exact line numbers
     try:
         s = open(f, encoding="utf-8").read()
     except Exception:
