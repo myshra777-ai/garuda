@@ -87,7 +87,7 @@ else
             # move the old checkout aside intact and take a fresh clone. Data
             # in ~/.garuda lives outside this directory and is reused.
             backup="${INSTALL_DIR}.old-$(date +%Y%m%d-%H%M%S)"
-            echo "[!] $INSTALL_DIR has $local_ahead commit(s) not in origin/main (upstream history was rewritten, or you have local commits)."
+            echo "[!] Local commits exist that are not in origin/main ($local_ahead in $INSTALL_DIR): upstream history was rewritten, or you committed locally."
             echo "[*] Moving it aside, unchanged, to $backup and installing a fresh copy."
             mv "$INSTALL_DIR" "$backup" || {
                 echo "[ERROR] Could not move $INSTALL_DIR aside. Nothing was changed." >&2
@@ -95,7 +95,7 @@ else
             }
             if ! git clone --depth 1 --single-branch --branch main https://github.com/myshra777-ai/garuda.git "$INSTALL_DIR"; then
                 echo "[ERROR] Fresh clone failed. Restoring your original checkout." >&2
-                rm -rf "$INSTALL_DIR"
+                rmdir "$INSTALL_DIR" 2>/dev/null || true
                 mv "$backup" "$INSTALL_DIR"
                 exit 1
             fi
