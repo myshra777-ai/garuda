@@ -31,10 +31,14 @@ func isAPIClient(r *http.Request) bool {
 		strings.HasPrefix(ua, "httpie/")
 }
 
+// isCanonicalBootstrapOwner reports whether email is the owner configured for this
+// installation through GARUDA_OWNER_EMAIL. No address is trusted by default: a fixed
+// address in the source would let anyone who registers it first take over the
+// original tenant on every installation.
 func isCanonicalBootstrapOwner(email string) bool {
 	e := strings.ToLower(strings.TrimSpace(email))
 	ownerEnv := strings.ToLower(strings.TrimSpace(os.Getenv("GARUDA_OWNER_EMAIL")))
-	return e == "admin@local" || e == "myshra777@gmail.com" || (ownerEnv != "" && e == ownerEnv)
+	return ownerEnv != "" && e == ownerEnv
 }
 
 // HandleSignupGET renders the 3-mode registration page (Organization Tenant Owner,
@@ -187,22 +191,8 @@ func (s *Server) HandleSignupPOST(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, store.ErrEmailExists) {
 			slog.Info("signup: duplicate email", "email", email)
-			if isAPIClient(r) {
-				if existingUser, uErr := pgStore.GetUserByEmail(r.Context(), email); uErr == nil && existingUser != nil {
-					if isCanonicalBootstrapOwner(email) {
-						grantCanonicalWorkspaceAccess(r, pgStore, existingUser.ID)
-					}
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusOK)
-					_ = json.NewEncoder(w).Encode(map[string]any{
-						"status":  "already_exists",
-						"user_id": existingUser.ID,
-						"email":   existingUser.Email,
-						"role":    existingUser.Role,
-					})
-					return
-				}
-			}
+			// Never return the existing account's id, role or email to an unauthenticated caller,
+			// and never change its access from a sign-up request.
 			s.respondSignupError(w, r, "An account with this email already exists. Please sign in instead.", email, fullName, opts)
 			return
 		}
@@ -217,7 +207,7 @@ func (s *Server) HandleSignupPOST(w http.ResponseWriter, r *http.Request) {
 
 	// STRICT MULTI-TENANT ISOLATION:
 	// Only link the canonical CLI tenant (00000000-0000-0000-0000-000000000001)
-	// if this signup is the designated primary system owner (e.g. myshra777@gmail.com).
+	// if this signup is the owner configured through GARUDA_OWNER_EMAIL.
 	// Never grant canonical tenant access to other tenants or external users!
 	if isCanonicalBootstrapOwner(user.Email) && opts.AccountType == "tenant_owner" {
 		grantCanonicalWorkspaceAccess(r, pgStore, user.ID)

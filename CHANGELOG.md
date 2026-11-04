@@ -4,6 +4,9 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 
 ## [Unreleased]
 
+### Security
+- **Fixed: account takeover of the original tenant.** A fixed owner address was compiled into the sign-up handler. On any installation where nobody had registered it, a new sign-up using that address (no email check) was made owner of the original tenant and all its workspaces. Sign-up now trusts only the address set in `GARUDA_OWNER_EMAIL`, and never trusts a built-in address. A duplicate sign-up request no longer returns the existing account's id, role or email, and no longer changes that account's access. Added unit tests and `scripts/security-smoke.sh`, a black-box test for cross-tenant access and these sign-up cases.
+
 ### Changed
 - New tenants default to the `community` plan instead of `enterprise` (migration 100, and the inline schema in `internal/store`). Nothing assigned or enforced a plan before, so existing `enterprise` values were only the old default and are reset to `community`.
 - Contributors now sign commits with a `Signed-off-by` line (Developer Certificate of Origin); see CONTRIBUTING.md.
