@@ -1,6 +1,6 @@
 ---
 name: architecture-review
-description: Reviews actual repository architecture against documented ADRs, design specs, and declarative YAML policies with file-and-line AST evidence.
+description: "Use when asked to review a repository's architecture, check whether code follows documented layer or service boundaries, audit package coupling, or test ADR and AGENTS.md compliance. Garuda indexes the code into a call and import graph, extracts the rules written in ADRs, specs and agent instruction files, and evaluates them with declarative YAML policies. Every finding cites the file and line behind it, labels whether the match was exact or only keyword-based, and lists contradictions between documented intent and actual code. It reports verified facts only, never guesses, and separates confirmed violations from advisory observations so reviewers can trust what they read. Read-only by default."
 version: "1.9.11"
 license: "Apache-2.0"
 read_only_default: true

@@ -5,6 +5,10 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 ## [Unreleased]
 
 ### Fixed
+- `garuda audit logic|data-logic|criticality` and `garuda rulebook generate` no longer fall back to built-in insurance/search sample data. That data was shown as if it were workspace findings and was written into the workspace tables. Samples now require `--include-fixtures` and are never persisted; otherwise the commands say there is not enough indexed data. `audit data-logic` now requires `--team-a-cr/--team-b-cr` and no longer asserts a fixed root cause.
+- Skill descriptions (`skills/*/SKILL.md`) expanded to 100-110 words each; `check_marketplace_manifests.py` now enforces 60-120 words.
+
+### Fixed
 - `install.sh`: an existing checkout whose history diverged from `origin/main` (e.g. cloned before the history rewrite) no longer dead-ends with "Local commits exist". The old checkout is moved aside intact to `<dir>.old-<timestamp>` and a fresh copy is installed; `~/.garuda` data is reused.
 
 ### Security

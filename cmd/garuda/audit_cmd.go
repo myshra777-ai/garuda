@@ -41,6 +41,10 @@ var (
 	rulebookApproveBy   string
 	rulebookOutputFlag  string
 	critTierFilterFlag  string
+	// auditIncludeFixtures mirrors the MCP `include_fixtures` argument: built-in
+	// sample data (insurance-claims / search-router demo) is shown only on request
+	// and is never written to a real workspace.
+	auditIncludeFixtures bool
 )
 
 func resolveAuditWorkspaceName(explicit string) string {
@@ -290,6 +294,7 @@ var auditLogicCmd = &cobra.Command{
 		}
 
 		leastHarmSummary := "ops.CalculateLossRatio (LOW Severity)"
+		usingFixture := true
 
 		// 1. Dynamic hub discovery from PostgreSQL or local filesystem AST
 		hubs := discoverDiskSymbolHubs(".", concept, 15)
@@ -332,6 +337,7 @@ var auditLogicCmd = &cobra.Command{
 				})
 			}
 			variants = dynamicVariants
+			usingFixture = false
 			leastHarmSummary = fmt.Sprintf("%s (LOW Severity, %d callers)", variants[0]["symbol"], variants[0]["callers"])
 		}
 
@@ -386,11 +392,15 @@ var auditLogicCmd = &cobra.Command{
 							})
 						}
 						variants = dynamicVariants
+						usingFixture = false
 						leastHarmSummary = fmt.Sprintf("%s (LOW Severity, %d callers)", variants[0]["symbol"], variants[0]["callers"])
 					}
 				}
 
 				for _, v := range variants {
+					if usingFixture {
+						break // never register built-in sample variants in a real workspace
+					}
 					_, _ = st.Pool().Exec(ctx, `
 						INSERT INTO logic_variants_registry (
 							tenant_id, workspace_id, concept_name, team_scope, variant_id, symbol_name,
@@ -418,6 +428,17 @@ var auditLogicCmd = &cobra.Command{
 			}
 		}
 
+		if usingFixture && !auditIncludeFixtures {
+			msg := fmt.Sprintf("No competing implementations of %q were found in workspace %q (need at least 3 indexed symbols matching the concept). Run `garuda analyze` first or try a different --concept. Use --include-fixtures to see built-in sample output.", concept, wsName)
+			if auditJSONFlag {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(map[string]any{"workspace": wsName, "concept": concept, "status": "INSUFFICIENT_DATA", "message": msg, "variants": []any{}})
+			}
+			fmt.Println(msg)
+			return nil
+		}
+
 		payload := map[string]any{
 			"workspace":          wsName,
 			"concept":            concept,
@@ -438,6 +459,9 @@ var auditLogicCmd = &cobra.Command{
 		fmt.Println("╚══════════════════════════════════════════════════════════════════════════════╝")
 		fmt.Printf("  Workspace:        %s\n", wsName)
 		fmt.Printf("  Concept:          %s\n", concept)
+		if usingFixture {
+			fmt.Println("  ⚠ SAMPLE DATA (--include-fixtures): not derived from your workspace.")
+		}
 		fmt.Printf("  Active Team Role: %s (Weights normalized 0.0 -> 1.0; Human takes final call)\n\n", strings.ToUpper(team))
 		for i, v := range variants {
 			tLabel := strings.ToUpper(fmt.Sprintf("%v TEAM", v["team"]))
@@ -459,6 +483,17 @@ var auditDataLogicCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		wsName := resolveAuditWorkspaceName(auditWorkspaceFlag)
+		valuesSupplied := cmd.Flags().Changed("team-a-cr") && cmd.Flags().Changed("team-b-cr")
+		if !valuesSupplied && !auditIncludeFixtures {
+			msg := "data-logic compares two reported figures that YOU supply; it does not extract them from code. Pass --team-a-cr and --team-b-cr (and optionally --metric, --team-a-name, --team-b-name). Use --include-fixtures to see built-in sample output."
+			if auditJSONFlag {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(map[string]any{"workspace": wsName, "status": "INSUFFICIENT_INPUT", "message": msg})
+			}
+			fmt.Println(msg)
+			return nil
+		}
 		ratio := 1.0
 		if auditTeamBValFlag != 0 && auditTeamAValFlag != 0 {
 			ratio = math.Max(math.Abs(auditTeamAValFlag), math.Abs(auditTeamBValFlag)) / math.Min(math.Abs(auditTeamAValFlag), math.Abs(auditTeamBValFlag))
@@ -475,8 +510,10 @@ var auditDataLogicCmd = &cobra.Command{
 			status = "RECONCILED_BY_HUMAN"
 		}
 
-		teamASymbol := "metrics.ComputeOpsRetention"
-		teamBSymbol := "metrics.ComputeMarketingRetention"
+		teamASymbol, teamBSymbol := "(symbol not specified)", "(symbol not specified)"
+		if !valuesSupplied {
+			teamASymbol, teamBSymbol = "metrics.ComputeOpsRetention", "metrics.ComputeMarketingRetention"
+		}
 
 		if st, err := store.NewPostgresStore(getDBURL()); err == nil {
 			defer st.Close()
@@ -487,14 +524,11 @@ var auditDataLogicCmd = &cobra.Command{
 					teamASymbol = fmt.Sprintf("%s.%s", hubs[0].PackagePath, hubs[0].Name)
 					teamBSymbol = fmt.Sprintf("%s.%s", hubs[1].PackagePath, hubs[1].Name)
 				}
-				traceMsg := fmt.Sprintf("%s normalizes raw units to %.2f Cr, whereas %s reports %.2f Cr (%.2fx unit scaling variance).",
+				traceMsg := fmt.Sprintf("%s reports %.2f Cr, whereas %s reports %.2f Cr (%.2fx variance).",
 					teamASymbol, auditTeamAValFlag, teamBSymbol, auditTeamBValFlag, ratio)
-				if math.Abs(ratio-10.0) < 0.05 {
-					traceMsg = fmt.Sprintf("%s divides raw INR by 1e7 (%.2f Cr), whereas %s divides Lakhs by 1000.0 instead of 100.0 (%.2f Cr — 10x unit scaling error).",
-						teamASymbol, auditTeamAValFlag, teamBSymbol, auditTeamBValFlag)
-				}
 
-				_, _ = st.Pool().Exec(ctx, `
+				if valuesSupplied {
+					_, _ = st.Pool().Exec(ctx, `
 					INSERT INTO financial_audit_reconciliations (
 						tenant_id, workspace_id, metric_name, team_a_name, team_a_value_raw,
 						team_a_value_formatted, team_a_source_symbol, team_b_name, team_b_value_raw,
@@ -503,12 +537,13 @@ var auditDataLogicCmd = &cobra.Command{
 					) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Unit Scale / Formula Variance', $13, $14, $15)
 					ON CONFLICT DO NOTHING
 				`,
-					tenantID, wsID, auditMetricNameFlag, auditTeamANameFlag, auditTeamAValFlag*1e7,
-					fmt.Sprintf("%.2f Crore INR", auditTeamAValFlag), teamASymbol,
-					auditTeamBNameFlag, auditTeamBValFlag*1e7,
-					fmt.Sprintf("%.2f Crore INR", auditTeamBValFlag), teamBSymbol,
-					ratio, traceMsg, severity, status,
-				)
+						tenantID, wsID, auditMetricNameFlag, auditTeamANameFlag, auditTeamAValFlag*1e7,
+						fmt.Sprintf("%.2f Crore INR", auditTeamAValFlag), teamASymbol,
+						auditTeamBNameFlag, auditTeamBValFlag*1e7,
+						fmt.Sprintf("%.2f Crore INR", auditTeamBValFlag), teamBSymbol,
+						ratio, traceMsg, severity, status,
+					)
+				}
 				if auditReconcileID != "" {
 					_, _ = st.Pool().Exec(ctx, `
 						UPDATE financial_audit_reconciliations
@@ -519,8 +554,11 @@ var auditDataLogicCmd = &cobra.Command{
 			}
 		}
 
-		rootCause := fmt.Sprintf("%s divides raw INR by 1e7 (%.2f Cr), whereas %s divides Lakhs by 1000.0 instead of 100.0 (%.2f Cr — %.1fx unit scaling error).",
+		rootCause := fmt.Sprintf("%s reports %.2f Cr and %s reports %.2f Cr (%.2fx variance). Root cause is not determined automatically; inspect both pipelines for unit scaling or formula differences.",
 			teamASymbol, auditTeamAValFlag, teamBSymbol, auditTeamBValFlag, ratio)
+		if !valuesSupplied {
+			rootCause = "SAMPLE DATA (--include-fixtures): " + teamASymbol + " divides raw INR by 1e7 (48.00 Cr), whereas " + teamBSymbol + " divides Lakhs by 1000.0 instead of 100.0 (4.80 Cr — 10x unit scaling error)."
+		}
 
 		report := map[string]any{
 			"workspace":            wsName,
@@ -566,7 +604,7 @@ var auditCriticalityCmd = &cobra.Command{
 		ctx := context.Background()
 		wsName := resolveAuditWorkspaceName(auditWorkspaceFlag)
 
-		tiers := []map[string]any{
+		demoTiers := []map[string]any{
 			{
 				"tier":          "HIGH_SEVERE",
 				"surface":       "Core Search Bar, Search Redirect & Homepage Router",
@@ -599,6 +637,10 @@ var auditCriticalityCmd = &cobra.Command{
 				"policy_action": "ALLOW_WITH_INFO",
 				"impact":        "Minor visual box alignment only; zero business logic impact.",
 			},
+		}
+		tiers := []map[string]any{}
+		if auditIncludeFixtures {
+			tiers = append(tiers, demoTiers...)
 		}
 
 		// Dynamically enrich with live indexed workspace hubs when PostgreSQL is reachable
@@ -643,6 +685,10 @@ var auditCriticalityCmd = &cobra.Command{
 			}
 		}
 
+		if len(tiers) == 0 && !auditJSONFlag {
+			fmt.Printf("No indexed symbols found in workspace %q. Run `garuda analyze <path> --workspace %s --save` first. Use --include-fixtures to see built-in sample output.\n", wsName, wsName)
+			return nil
+		}
 		if auditJSONFlag {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
@@ -708,20 +754,23 @@ var rulebookGenerateCmd = &cobra.Command{
 			}
 		}
 
+		sampleSections := ""
+		if auditIncludeFixtures {
+			sampleSections = "## SAMPLE DATA (--include-fixtures; not derived from this workspace)\n" +
+				"- **[HIGH_SEVERE] Core Homepage, Search Bar & Search Results Redirect**: 142 callers. Freeze against automated AI edits.\n" +
+				"- **[MEDIUM] Non-Blocking Features (Wishlist Loader, Promo Badges)**: 19 callers.\n" +
+				"- **[LOW] Minor UI Box Alignment & Telemetry Helpers**: 4 callers.\n" +
+				"- **Crore Normalization (`SYNTH-AUDIT-005`)**: sample invariant for the Loss Ratio demo.\n\n"
+		}
+		if dynamicHubSection.Len() == 0 && sampleSections == "" {
+			dynamicHubSection.WriteString("\n## Discovered AST Hubs\nNo indexed symbols found for this workspace. Run `garuda analyze <path> --workspace " + wsName + " --save`, then regenerate. Documented rules (AGENTS.md, ADRs) are listed by `garuda docs graph`.\n")
+		}
+
 		content := "# GARUDA AUTO-SYNTHESIZED BASE RULEBOOK (DRAFT FOR HUMAN APPROVAL)\n\n" +
 			"- **Workspace**: `" + wsName + "`\n" +
 			"- **Status**: `DRAFT_AWAITING_HUMAN_APPROVAL`\n" +
 			"- **Generated At**: `" + time.Now().UTC().Format(time.RFC3339) + "`\n\n" +
-			"## 1. Surface Criticality Tiers\n" +
-			"- **[HIGH_SEVERE] Core Homepage, Search Bar & Search Results Redirect**: Mission-critical (142 callers). Freeze against automated AI edits.\n" +
-			"- **[MEDIUM] Non-Blocking Features (Wishlist Loader, Promo Badges)**: 19 callers. Trade-offs permitted with human review.\n" +
-			"- **[LOW] Minor UI Box Alignment & Telemetry Helpers**: 4 callers. Safe for routine changes.\n\n" +
-			"## 2. Multi-Team Formula Weights (`Loss Ratio`)\n" +
-			"- **Ops Team (`ops.CalculateLossRatio`)**: Weight `0.70` (LOW severity, least architectural harm).\n" +
-			"- **Marketing Team (`marketing.ComputeCampaignLossRatio`)**: Weight `0.10` (MEDIUM severity).\n" +
-			"- **Management Team (`management.EvaluateEnterpriseLossRatioGate`)**: Weight `0.10` (HIGH_SEVERE — frozen).\n\n" +
-			"## 3. Financial & Data Audit Invariants\n" +
-			"- **Crore Normalization (`SYNTH-AUDIT-005`)**: All Claims Paid aggregations must normalize raw INR by `1e7` (preventing 48 Crore vs 4.8 Crore 10x drift).\n" +
+			sampleSections +
 			dynamicHubSection.String()
 
 		if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {
@@ -795,6 +844,7 @@ var rulebookApproveCmd = &cobra.Command{
 
 func init() {
 	auditCmd.PersistentFlags().StringVarP(&auditWorkspaceFlag, "workspace", "w", "", "Target workspace name (defaults to GARUDA_WORKSPACE or 'default')")
+	auditCmd.PersistentFlags().BoolVar(&auditIncludeFixtures, "include-fixtures", false, "Show built-in sample data (never written to the workspace)")
 
 	auditLogicCmd.Flags().StringVar(&auditTeamFlag, "team", "ops", "Active team context (ops, marketing, management)")
 	auditLogicCmd.Flags().StringVar(&auditConceptFlag, "concept", "Loss Ratio", "Business concept or formula to disambiguate")
@@ -818,6 +868,7 @@ func init() {
 
 	rulebookCmd.PersistentFlags().StringVarP(&rulebookWorkspace, "workspace", "w", "", "Target workspace name (defaults to GARUDA_WORKSPACE or 'default')")
 	rulebookGenerateCmd.Flags().StringVar(&rulebookOutputFlag, "output", "", "Output path for draft rulebook")
+	rulebookGenerateCmd.Flags().BoolVar(&auditIncludeFixtures, "include-fixtures", false, "Include built-in sample sections (not derived from the workspace)")
 	rulebookApproveCmd.Flags().StringVar(&rulebookApproveBy, "by", "Primary Stakeholder", "Approver name or role")
 	rulebookCmd.AddCommand(rulebookGenerateCmd, rulebookApproveCmd)
 
