@@ -47,7 +47,7 @@ Garuda is a safety check that sits between your AI assistant and your codebase:
 
 **Know the impact. Enforce the rules. Keep the evidence.**
 
-Works with Go, Python and TypeScript, and more languages are on the way.
+Works with Go, Python, TypeScript, and Java (Beta), with more languages on the way.
 
 ### One change, start to finish
 
@@ -61,7 +61,7 @@ Say your assistant is asked to add a feature to the payment handler.
 
 Garuda also separates problems **this change introduced** from problems that were **already there**. You are not asked to clean up years of old code before you can move forward. You only answer for what is new.
 
-It reads Go the way the compiler does, so the answers are repeatable. Python and TypeScript are read by their code structure, which is accurate but not as deep (see [What Garuda does not do](#what-garuda-does-not-do)).
+It reads Go with the compiler's full type checker (`go/types`), and its Beta Python, TypeScript, and Java analyzers resolve cross-file imports (`__init__.py`, barrel `index.ts`, `tsconfig.json` `@/*` paths, `JAVA_IMPORT` package/static imports), import aliases, type annotations (`Optional[T]`, `Promise<T>`, `CompletableFuture<T>`), constructor fields (`self.attr` / `private readonly` / Spring `@Autowired` DI), interface implementations, inheritance (`super()`), and return-type method calls at `0.95` confidence with exact file and line evidence (see [What Garuda does not do](#what-garuda-does-not-do)).
 
 ---
 
@@ -214,7 +214,7 @@ Copy a ready-to-paste snippet from [`docs/GITHUB_MARKETPLACE_STRATEGY.md`](docs/
 We would rather you trust the rest of this page.
 
 - **It is not a cage for your assistant.** Garuda gives the assistant context and blocks bad changes, but an assistant can ignore advice and hooks can be switched off. The check that cannot be skipped is the required pull request check above.
-- **Go is understood more deeply than Python and TypeScript.** Go is read with the compiler's own type information. Python and TypeScript are read by code structure, which is accurate for imports, calls and layers but does not resolve every type.
+- **Go is compiler-complete; Python, TypeScript, and Java (Beta) are high-precision AST + type-annotation resolvers.** Go is read with the compiler's own type checker (`go/types`). Python, TypeScript, and Java (Beta) resolve cross-file imports (including `JAVA_IMPORT` / `JVM_IMPORT`, `tsconfig.json` path aliases, and Python packages), interface implementations, Spring/Jakarta dependency injection, parameter/property type annotations, constructor field bindings, inheritance (`super()`), and return-type calls (`0.95` confidence, `RESOLVED` / `AST_EXACT`), while dynamic runtime reflection without annotations remains outside static scope.
 - **Not every check is stored automatically.** A result is only sealed into the tamper-evident log when the check is saved. The log proves a record was not changed afterwards. It does not prove the analysis was complete.
 - **The number-mismatch tools help a human decide.** They line up the formulas and values you point them at. They do not automatically understand every financial calculation in a company. `48 Cr` vs `4.8 Cr` in the demo is a planted example.
 - **The numbers on this page come from a specific release.** See [`EVIDENCE.md`](EVIDENCE.md) for what was measured, on what, and when.

@@ -171,7 +171,7 @@ Extracts normative architectural claims (`MUST` / `MUST_NOT`) from Markdown ADRs
 ---
 
 ### `garuda summary`, `garuda topology`, `garuda impact`, & `garuda hygiene`
-- `./bin/garuda summary` — Executive architectural summary of repositories, entities, relationships, top hubs, and Merkle ledger height.
+- `./bin/garuda summary [--workspace <name>] [--json]` — Executive architectural summary of repositories, entities, relationships, top hubs, and Merkle ledger height.
 - `./bin/garuda topology` — Package-level layering, fan-in/fan-out, and circular dependency report.
 - `./bin/garuda impact --workspace <ws-uuid> --target <entity-uuid> --depth 3` — Confidence-weighted transitive blast radius.
 - `./bin/garuda hygiene [path]` (alias `garuda ponytail`) — Advisory static report for unreferenced symbols and duplicate candidates.
@@ -199,7 +199,7 @@ Every policy file specifies `when` predicates evaluated against the workspace gr
 | `entity_exists` | `kind`, `name_pattern`, `exported` | Fires when an entity matches the filter and `scope.package`/`scope.pattern`. |
 | `contradiction_exists` | `severity`, `unresolved_only` | Fires when unresolved runtime or decision contradictions exist. |
 | `verification_missing` | `kind`, `exported`, `limit` | Fires when matching entities have no `SUPPORTED` runtime verification row. |
-| `language_matches` | `language` (`go`, `python`, `typescript`) | Scopes evaluation to repositories/entities of the target language. |
+| `language_matches` | `language` (`go`, `python`, `typescript`, `java`) | Scopes evaluation to repositories/entities of the target language. |
 
 ---
 

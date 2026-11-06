@@ -1,8 +1,8 @@
 # Garuda Multi-Language Roadmap
 
 **Status:** Active roadmap
-**Last updated:** 2026-09-12
-**Current coverage:** Go (Stable, type-resolved), Python (Beta, import-resolved), TypeScript (Beta, import-resolved)
+**Last updated:** 2026-11-06
+**Current coverage:** Go (Stable, Tier 5 `go/types`), Python (Beta, Tier 3.5 AST + type-annotation), TypeScript (Beta, Tier 3.5 AST + `tsconfig.json` paths), Java (Beta, Tier 3.5 AST + Spring/Jakarta DI)
 
 ## The Core Problem
 
@@ -27,8 +27,9 @@ Every language Garuda supports progresses through five tiers of resolution. Each
 | Language | Tier | Method constant | Notes |
 |---|---|---|---|
 | Go | 5 | `GO_TYPES` / `IMPORT_RESOLUTION` / `AST_EXACT` | `go/types` provides tiers 4–5 natively |
-| Python | 2 | `PYTHON_IMPORT` for imports, `HEURISTIC` for calls | Tier 3+ requires jedi/pyright |
-| TypeScript | 2 | `TS_IMPORT` for imports, `HEURISTIC` for calls | Tier 3+ requires tsserver |
+| Python | 3.5 (Beta) | `PYTHON_IMPORT` (imports) & `AST_EXACT` (`0.95` for typed/alias/field/return-type calls & `INHERITS`) | Resolves `src/` layouts, `__init__.py` re-exports, `self.attr`, `Optional[T]`/`Awaitable[T]`, `super()`, and return types without external subprocesses |
+| TypeScript | 3.5 (Beta) | `TS_IMPORT` (imports) & `AST_EXACT` (`0.95-1.0` for `IMPLEMENTS`, `INHERITS`, and typed/alias/field/return-type calls) | Resolves `tsconfig.json` `paths` (`@/*`), barrel `index.ts` re-exports, `private readonly` constructor DI, `Promise<T>`, and `super.method()` in pure Go (`!cgo`) and Tree-sitter (`cgo`) |
+| Java | 3.5 (Beta) | `JAVA_IMPORT` (imports/static/wildcard) & `AST_EXACT` (`0.95-1.0` for `IMPLEMENTS`, `INHERITS`, and Spring/Jakarta DI field/constructor/return-type calls) | Resolves Maven (`pom.xml`) & Gradle (`build.gradle`) packages, interface-to-implementation DI (`@Autowired`/`private final`), `Optional<T>`/`CompletableFuture<T>`, `import static`, and `super.method()` in pure Go (`CGO_ENABLED=0`) |
 | All others | — | — | Not yet implemented |
 
 ## The Language Ladder
@@ -42,7 +43,7 @@ Ten languages cover roughly 95% of enterprise software. Priority is by (a) enter
 | 1 | **Go** | `go/parser` | `go/types` | 5 | ✅ Done |
 | 2 | **Python** | Custom AST scanner | `jedi` or `pyright` | 4 | 2 weeks |
 | 3 | **TypeScript** | `tree-sitter-typescript` | `tsserver` or `ts-morph` | 4 | 2 weeks |
-| 4 | **Java** | `JavaParser` | `Eclipse JDT` LSP or `javac` API | 4 | 3 weeks |
+| 4 | **Java** | Pure-Go AST + DI Resolver (`internal/ast/java`) | Tier 3.5 Beta (`JAVA_IMPORT` + `AST_EXACT` ≥95%); Tier 4 via `Eclipse JDT` LSP | 4 | 🟢 Beta Live |
 | 5 | **C#** | `tree-sitter-c-sharp` | `Roslyn` (via LSP) | 4 | 3 weeks |
 
 ### Tier B — Should have (target: within 12 months)
