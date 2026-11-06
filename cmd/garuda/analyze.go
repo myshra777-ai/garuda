@@ -232,9 +232,25 @@ func handleAnalyze(path string) {
 		fmt.Printf("✓ %d entities, %d relationships extracted\n",
 			len(result.Entities), len(result.Relationships))
 
+	case analyzer.IsJavaProject(absPath):
+		fmt.Printf("☕ Analyzing Java project %s...\n", absPath)
+		javaResult, err := analyzer.AnalyzeJavaWorkspace(ctx, absPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Java analysis failed: %v\n", err)
+			os.Exit(1)
+		}
+		if len(javaResult.Entities) == 0 {
+			fmt.Fprintf(os.Stderr, "❌ No Java entities extracted from '%s'. Aborting.\n", path)
+			os.Exit(1)
+		}
+		result = javaResult
+		language = "java"
+		fmt.Printf("✓ %d entities, %d relationships extracted\n",
+			len(result.Entities), len(result.Relationships))
+
 	default:
 		fmt.Fprintf(os.Stderr, "❌ No supported project marker found in '%s'.\n", absPath)
-		fmt.Fprintf(os.Stderr, "   Expected one of: go.mod, tsconfig.json, package.json, pyproject.toml, setup.py\n")
+		fmt.Fprintf(os.Stderr, "   Expected one of: go.mod, tsconfig.json, package.json, pyproject.toml, setup.py, pom.xml, build.gradle, build.gradle.kts\n")
 		fmt.Fprintf(os.Stderr, "   (requirements.txt alone is not sufficient — it can appear in non-Python projects.)\n")
 		os.Exit(1)
 	}

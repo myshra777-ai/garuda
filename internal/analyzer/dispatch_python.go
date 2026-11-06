@@ -15,8 +15,6 @@ import (
 )
 
 // IsPythonProject returns true if absPath looks like a Python project.
-// Markers: pyproject.toml, setup.py, requirements.txt, Pipfile.
-// Fallback: no go.mod but at least one .py file exists.
 func IsPythonProject(absPath string) bool {
 	markers := []string{"pyproject.toml", "setup.py", "requirements.txt", "Pipfile"}
 	for _, m := range markers {
@@ -25,12 +23,10 @@ func IsPythonProject(absPath string) bool {
 		}
 	}
 
-	// If a go.mod exists, treat as Go — Python projects don't ship go.mod.
 	if _, err := os.Stat(filepath.Join(absPath, "go.mod")); err == nil {
 		return false
 	}
 
-	// Count .py files, skipping common vendored dirs.
 	pyCount := 0
 	_ = filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -55,8 +51,9 @@ func IsPythonProject(absPath string) bool {
 	return pyCount > 0
 }
 
-// AnalyzePythonWorkspace runs the Python parser and converts the result
-// into the standard analyzer.Result shape so downstream persistence works.
+// AnalyzePythonWorkspace runs the Python AST & type-annotation resolver and converts
+// the result into the standard analyzer.Result shape with explicit ResolutionStatus,
+// ResolutionMethod, and source file/line Evidence.
 func AnalyzePythonWorkspace(ctx context.Context, absPath string) (*Result, error) {
 	pyResult, err := python.AnalyzeDirectory(absPath, "", "")
 	if err != nil {
@@ -102,36 +99,83 @@ func AnalyzePythonWorkspace(ctx context.Context, absPath string) (*Result, error
 		})
 	}
 
+	seenEdges := make(map[string]bool)
 	for _, r := range pyResult.Relationships {
+		resStatus := r.ResolutionStatus
+		if resStatus == "" {
+			resStatus = "RESOLVED"
+		}
+		resMethod := r.ResolutionMethod
+		if resMethod == "" {
+			if r.ClaimType == "IMPORTS" {
+				resMethod = "PYTHON_IMPORT"
+			} else if r.Confidence >= 0.90 {
+				resMethod = "AST_EXACT"
+			} else {
+				resMethod = "HEURISTIC"
+			}
+		}
+		evFile := r.FilePath
+		if rel, relErr := filepath.Rel(absPath, r.FilePath); relErr == nil && !strings.HasPrefix(rel, "..") {
+			evFile = rel
+		}
+		evLine := r.Line
+		if evLine <= 0 {
+			evLine = 1
+		}
+		edgeKey := r.FromID + "|" + r.ToID + "|" + r.ClaimType
+		seenEdges[edgeKey] = true
+
 		result.Relationships = append(result.Relationships, Relationship{
-			From:       r.FromID,
-			To:         r.ToID,
-			Type:       r.ClaimType,
-			Confidence: r.Confidence,
+			From:             r.FromID,
+			To:               r.ToID,
+			Type:             r.ClaimType,
+			Confidence:       r.Confidence,
+			ResolutionStatus: resStatus,
+			ResolutionMethod: resMethod,
+			EpistemicClass:   "OBSERVATION",
 			Evidence: Evidence{
-				Commit:   buildCtx.CommitSHA,
-				Analyzer: "python/structural",
+				File:      evFile,
+				Line:      evLine,
+				LineStart: evLine,
+				LineEnd:   evLine,
+				Commit:    buildCtx.CommitSHA,
+				Analyzer:  "python/ast-type-resolver",
 			},
 		})
 	}
-	// Path A: import resolution.
-	{
-		pkgIndex := make(map[string]uuid.UUID)
-		for _, e := range result.Entities {
-			if e.Kind == KindPackage {
-				pkgIndex[e.Name] = uuid.MustParse(e.ID)
+
+	// Path A supplemental module-name import resolution
+	pkgIndex := make(map[string]uuid.UUID)
+	for _, e := range result.Entities {
+		if e.Kind == KindPackage {
+			if parsedID, pErr := uuid.Parse(e.ID); pErr == nil {
+				pkgIndex[e.Name] = parsedID
 			}
 		}
-		if len(pkgIndex) > 0 {
-			if importRels, ierr := ResolvePythonImports(absPath, pkgIndex); ierr == nil {
-				result.Relationships = append(result.Relationships, importRels...)
+	}
+	if len(pkgIndex) > 0 {
+		if importRels, ierr := ResolvePythonImports(absPath, pkgIndex); ierr == nil {
+			for _, ir := range importRels {
+				fromID := ir.From
+				if id, ok := pkgIndex[ir.From]; ok {
+					fromID = id.String()
+				}
+				toID := ir.To
+				if id, ok := pkgIndex[ir.To]; ok {
+					toID = id.String()
+				}
+				key := fromID + "|" + toID + "|" + ir.Type
+				if !seenEdges[key] {
+					seenEdges[key] = true
+					result.Relationships = append(result.Relationships, ir)
+				}
 			}
 		}
 	}
 	return result, nil
 }
 
-// mapPythonKindToEntityKind converts Python entity kinds to analyzer's typed enum.
 func mapPythonKindToEntityKind(kind string) EntityKind {
 	switch kind {
 	case "class":
@@ -148,15 +192,13 @@ func mapPythonKindToEntityKind(kind string) EntityKind {
 		return KindVariable
 	case "constant":
 		return KindConstant
-	case "type":
-		return KindType
 	default:
 		return EntityKind(kind)
 	}
 }
 
 func countUniquePackages(entities []python.EntityRecord) int {
-	seen := map[string]bool{}
+	seen := make(map[string]bool)
 	for _, e := range entities {
 		if e.Package != "" {
 			seen[e.Package] = true

@@ -62,5 +62,5 @@ Claude Code: `/plugin marketplace add myshra777-ai/garuda`. Codex: `codex plugin
 ## Known limitations
 
 - The MCP server needs a PostgreSQL database. Directory users must run the installer first; a database-free demo mode is not part of this release.
-- The Python and TypeScript analyzers are structural, not full type resolution (see [SECURITY.md](SECURITY.md) and [docs/CAPABILITIES.md](docs/CAPABILITIES.md)).
+- The Python, TypeScript, and Java (Beta) analyzers resolve cross-file imports, barrel re-exports, `tsconfig.json` path aliases, constructor fields, inheritance (`super()`), and parameter/return type annotations at `0.95` confidence (`AST_EXACT`), but do not run external language servers on unannotated dynamic duck-typing (see [SECURITY.md](SECURITY.md) and [docs/CAPABILITIES.md](docs/CAPABILITIES.md)).
 - The Merkle ledger is anchored locally; there is no external timestamp authority.

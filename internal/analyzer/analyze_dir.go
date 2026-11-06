@@ -31,12 +31,21 @@ import (
 // and pass a context.
 func AnalyzeDirectory(ctx context.Context, path string) (*Result, error) {
 	ws, err := DiscoverWorkspace(path)
-	if err != nil {
-		return nil, fmt.Errorf("discover workspace: %w", err)
+	if err == nil {
+		return AnalyzeWorkspaceWithOptions(ctx, ws, WorkspaceAnalysisOptions{
+			Cache: NewMemoryPackageCache(),
+		})
 	}
-	return AnalyzeWorkspaceWithOptions(ctx, ws, WorkspaceAnalysisOptions{
-		Cache: NewMemoryPackageCache(),
-	})
+	if IsTypeScriptProject(path) {
+		return AnalyzeTypeScriptWorkspace(ctx, path)
+	}
+	if IsPythonProject(path) {
+		return AnalyzePythonWorkspace(ctx, path)
+	}
+	if IsJavaProject(path) {
+		return AnalyzeJavaWorkspace(ctx, path)
+	}
+	return nil, fmt.Errorf("discover workspace: %w", err)
 }
 
 // Analyze is a backward-compatible wrapper around AnalyzeDirectory.

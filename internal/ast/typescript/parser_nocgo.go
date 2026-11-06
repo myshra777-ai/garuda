@@ -25,16 +25,19 @@ func NewParser() *Parser {
 func (p *Parser) Close() {}
 
 var (
-	reTSImport    = regexp.MustCompile(`(?m)^\s*import\s+(.+?)\s+from\s+['"]([^'"]+)['"]`)
-	reTSClass     = regexp.MustCompile(`^\s*(export\s+)?(abstract\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+([A-Za-z0-9_$.<>]+))?(?:\s+implements\s+([^{]+))?\s*\{`)
-	reTSInterface = regexp.MustCompile(`^\s*(export\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+([^{]+))?\s*\{`)
-	reTSFunc      = regexp.MustCompile(`^\s*(export\s+)?(async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*(?::\s*([^{]+))?\s*\{`)
-	reTSArrow     = regexp.MustCompile(`^\s*(export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::[^=]+)?=\s*(async\s+)?\(([^)]*)\)\s*(?::\s*([^=]+))?=>`)
-	reTSMethod    = regexp.MustCompile(`^\s*(?:(?:public|private|protected|readonly|static|override|abstract)\s+)*(async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*(?::\s*([^{;]+))?\s*\{`)
-	reTSProperty  = regexp.MustCompile(`^\s*(?:(?:public|private|protected)\s+)?(readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)(\?)?\s*:\s*([^;=]+)\s*[;=]?`)
-	reTSNewAssign = regexp.MustCompile(`(?:(?:const|let|var)\s+)?((?:this\.)?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?::[^=]+)?=\s*new\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*\(`)
-	reTSNewExpr   = regexp.MustCompile(`\bnew\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*\(`)
-	reTSCallExpr  = regexp.MustCompile(`\b((?:this\.)?[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\s*\(`)
+	reTSImport     = regexp.MustCompile(`(?m)^\s*import\s+(.+?)\s+from\s+['"]([^'"]+)['"]`)
+	reTSReExport   = regexp.MustCompile(`(?m)^\s*export\s+(\*(?:\s+as\s+[A-Za-z_$][A-Za-z0-9_$]*)?|\{[^}]+\})\s+from\s+['"]([^'"]+)['"]`)
+	reTSClass      = regexp.MustCompile(`^\s*(export\s+)?(abstract\s+)?class\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+([A-Za-z0-9_$.<>]+))?(?:\s+implements\s+([^{]+))?\s*\{`)
+	reTSInterface  = regexp.MustCompile(`^\s*(export\s+)?interface\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+extends\s+([^{]+))?\s*\{`)
+	reTSFunc       = regexp.MustCompile(`^\s*(export\s+)?(async\s+)?function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*(?::\s*([^{]+))?\s*\{`)
+	reTSArrow      = regexp.MustCompile(`^\s*(export\s+)?(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?::[^=]+)?=\s*(async\s+)?\(([^)]*)\)\s*(?::\s*([^=]+))?=>`)
+	reTSMethod     = regexp.MustCompile(`^\s*(?:(?:public|private|protected|readonly|static|override|abstract)\s+)*(async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>]*>)?\s*\(([^)]*)\)\s*(?::\s*([^{;]+))?\s*\{`)
+	reTSProperty   = regexp.MustCompile(`^\s*(?:(?:public|private|protected)\s+)?(readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)(\?)?\s*:\s*([^;=]+)\s*[;=]?`)
+	reTSNewAssign  = regexp.MustCompile(`(?:(?:const|let|var)\s+)?((?:this\.)?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([^=]+))?=\s*new\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*(?:<[^>]*>)?\s*\(`)
+	reTSCallAssign = regexp.MustCompile(`(?:(?:const|let|var)\s+)?((?:this\.)?[A-Za-z_$][A-Za-z0-9_$]*)\s*(?::\s*([^=]+))?=\s*(?:await\s+)?((?:this\.)?[A-Za-z_$][A-Za-z0-9_$.]*)\s*\(`)
+	reTSChainCall  = regexp.MustCompile(`(?:\(\s*await\s+((?:this\.)?[A-Za-z_$][A-Za-z0-9_$.]*)\s*\([^)]*\)\s*\)|((?:this\.)?[A-Za-z_$][A-Za-z0-9_$.]*)\s*\([^)]*\))\s*\.\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\(`)
+	reTSNewExpr    = regexp.MustCompile(`\bnew\s+([A-Za-z_$][A-Za-z0-9_$.]*)\s*(?:<[^>]*>)?\s*\(`)
+	reTSCallExpr   = regexp.MustCompile(`\b((?:this\.|super\.)?[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\s*\(`)
 )
 
 // Parse parses TypeScript source bytes into a structured Module without requiring CGO.
@@ -43,16 +46,30 @@ func (p *Parser) Parse(_ context.Context, src []byte, path, moduleName string) (
 	lines := strings.Split(text, "\n")
 	m := &Module{Path: path, Module: moduleName}
 
-	// 1. Extract Imports
+	// 1. Extract Imports and Barrel Re-Exports
 	for idx, rawLine := range lines {
 		lineNum := idx + 1
 		trimmed := strings.TrimSpace(rawLine)
-		if !strings.HasPrefix(trimmed, "import ") {
-			continue
-		}
-		if im := reTSImport.FindStringSubmatch(trimmed); im != nil {
-			imp := parseTSImportClause(im[1], im[2], lineNum)
-			m.Imports = append(m.Imports, imp)
+		if strings.HasPrefix(trimmed, "import ") {
+			if im := reTSImport.FindStringSubmatch(trimmed); im != nil {
+				imp := parseTSImportClause(im[1], im[2], lineNum)
+				m.Imports = append(m.Imports, imp)
+			}
+		} else if strings.HasPrefix(trimmed, "export ") && strings.Contains(trimmed, " from ") {
+			if rm := reTSReExport.FindStringSubmatch(trimmed); rm != nil {
+				clause := strings.TrimSpace(rm[1])
+				source := strings.TrimSpace(rm[2])
+				if clause == "*" {
+					m.ReExports = append(m.ReExports, Import{
+						Source:      source,
+						Namespace:   "*",
+						NameAliases: make(map[string]string),
+						Line:        lineNum,
+					})
+				} else {
+					m.ReExports = append(m.ReExports, parseTSImportClause(clause, source, lineNum))
+				}
+			}
 		}
 	}
 
@@ -69,7 +86,7 @@ func (p *Parser) Parse(_ context.Context, src []byte, path, moduleName string) (
 			endIdx := findMatchingBraceLine(lines, i)
 			cls := Class{
 				Name:       strings.TrimSpace(cm[3]),
-				Extends:    strings.TrimSpace(cm[4]),
+				Extends:    UnwrapTSTypeAnnotation(cm[4]),
 				IsExported: strings.TrimSpace(cm[1]) != "",
 				IsAbstract: strings.TrimSpace(cm[2]) != "",
 				LineStart:  i + 1,
@@ -77,7 +94,7 @@ func (p *Parser) Parse(_ context.Context, src []byte, path, moduleName string) (
 			}
 			if strings.TrimSpace(cm[5]) != "" {
 				for _, impl := range strings.Split(cm[5], ",") {
-					if v := strings.TrimSpace(impl); v != "" {
+					if v := UnwrapTSTypeAnnotation(impl); v != "" {
 						cls.Implements = append(cls.Implements, v)
 					}
 				}
@@ -99,7 +116,7 @@ func (p *Parser) Parse(_ context.Context, src []byte, path, moduleName string) (
 			}
 			if strings.TrimSpace(im[3]) != "" {
 				for _, ext := range strings.Split(im[3], ",") {
-					if v := strings.TrimSpace(ext); v != "" {
+					if v := UnwrapTSTypeAnnotation(ext); v != "" {
 						iface.Extends = append(iface.Extends, v)
 					}
 				}
@@ -112,7 +129,7 @@ func (p *Parser) Parse(_ context.Context, src []byte, path, moduleName string) (
 				if pm := reTSProperty.FindStringSubmatch(pLine); pm != nil && !strings.Contains(pLine, "(") {
 					iface.Properties = append(iface.Properties, Property{
 						Name:       strings.TrimSpace(pm[2]),
-						Type:       strings.TrimSpace(pm[4]),
+						Type:       UnwrapTSTypeAnnotation(pm[4]),
 						IsOptional: strings.TrimSpace(pm[3]) == "?",
 						IsReadonly: strings.TrimSpace(pm[1]) != "",
 					})
@@ -131,14 +148,14 @@ func (p *Parser) Parse(_ context.Context, src []byte, path, moduleName string) (
 			fn := Function{
 				Name:       strings.TrimSpace(fm[3]),
 				Params:     params,
-				ReturnType: strings.TrimSpace(fm[5]),
+				ReturnType: UnwrapTSTypeAnnotation(fm[5]),
 				IsAsync:    strings.TrimSpace(fm[2]) != "",
 				IsExported: strings.TrimSpace(fm[1]) != "",
 				LineStart:  i + 1,
 				LineEnd:    endIdx + 1,
 				LocalTypes: localTypes,
 			}
-			fn.Calls = extractTSBodyCalls(lines[i:endIdx+1], fn.Name, fn.LocalTypes)
+			fn.Calls, fn.CallSites = extractTSBodyCallsWithLines(lines[i:endIdx+1], i+1, fn.Name, fn.LocalTypes)
 			m.Functions = append(m.Functions, fn)
 			i = endIdx
 			continue
@@ -152,7 +169,7 @@ func (p *Parser) Parse(_ context.Context, src []byte, path, moduleName string) (
 			fn := Function{
 				Name:       strings.TrimSpace(am[2]),
 				Params:     params,
-				ReturnType: strings.TrimSpace(am[5]),
+				ReturnType: UnwrapTSTypeAnnotation(am[5]),
 				IsAsync:    strings.TrimSpace(am[3]) != "",
 				IsArrow:    true,
 				IsExported: true,
@@ -160,7 +177,7 @@ func (p *Parser) Parse(_ context.Context, src []byte, path, moduleName string) (
 				LineEnd:    endIdx + 1,
 				LocalTypes: localTypes,
 			}
-			fn.Calls = extractTSBodyCalls(lines[i:endIdx+1], fn.Name, fn.LocalTypes)
+			fn.Calls, fn.CallSites = extractTSBodyCallsWithLines(lines[i:endIdx+1], i+1, fn.Name, fn.LocalTypes)
 			m.Functions = append(m.Functions, fn)
 			i = endIdx
 			continue
@@ -188,14 +205,14 @@ func parseTSClassBody(lines []string, startIdx, endIdx int, cls *Class) {
 			fn := Function{
 				Name:       mName,
 				Params:     params,
-				ReturnType: strings.TrimSpace(mm[4]),
+				ReturnType: UnwrapTSTypeAnnotation(mm[4]),
 				IsAsync:    strings.TrimSpace(mm[1]) != "",
 				Receiver:   cls.Name,
 				LineStart:  i + 1,
 				LineEnd:    mEnd + 1,
 				LocalTypes: localTypes,
 			}
-			fn.Calls = extractTSBodyCalls(lines[i:mEnd+1], mName, fn.LocalTypes)
+			fn.Calls, fn.CallSites = extractTSBodyCallsWithLines(lines[i:mEnd+1], i+1, mName, fn.LocalTypes)
 			cls.Methods = append(cls.Methods, fn)
 			i = mEnd
 			continue
@@ -203,7 +220,7 @@ func parseTSClassBody(lines []string, startIdx, endIdx int, cls *Class) {
 		if pm := reTSProperty.FindStringSubmatch(line); pm != nil && !strings.Contains(line, "(") {
 			cls.Properties = append(cls.Properties, Property{
 				Name:       strings.TrimSpace(pm[2]),
-				Type:       strings.TrimSpace(pm[4]),
+				Type:       UnwrapTSTypeAnnotation(pm[4]),
 				IsOptional: strings.TrimSpace(pm[3]) == "?",
 				IsReadonly: strings.TrimSpace(pm[1]) != "",
 			})
@@ -229,7 +246,7 @@ func parseTSParams(rawParams string, localTypes map[string]string) []string {
 		}
 		if colon := strings.Index(p, ":"); colon >= 0 {
 			pName := strings.TrimSuffix(strings.TrimSpace(p[:colon]), "?")
-			tName := strings.TrimSpace(p[colon+1:])
+			tName := UnwrapTSTypeAnnotation(p[colon+1:])
 			if pName != "" {
 				names = append(names, pName)
 				if tName != "" && localTypes != nil {
@@ -247,21 +264,55 @@ func parseTSParams(rawParams string, localTypes map[string]string) []string {
 	return names
 }
 
-func extractTSBodyCalls(bodyLines []string, selfFuncName string, localTypes map[string]string) []string {
+func extractTSBodyCallsWithLines(bodyLines []string, startLine int, selfFuncName string, localTypes map[string]string) ([]string, []CallSite) {
 	var calls []string
+	var sites []CallSite
 	for idx, raw := range bodyLines {
+		lineNum := startLine + idx
 		line := stripTSLineComment(raw)
 		for _, nam := range reTSNewAssign.FindAllStringSubmatch(line, -1) {
 			lhs := strings.TrimSpace(nam[1])
-			ctor := strings.TrimSpace(nam[2])
-			if lhs != "" && ctor != "" && localTypes != nil {
-				localTypes[lhs] = ctor
+			annot := UnwrapTSTypeAnnotation(nam[2])
+			ctor := UnwrapTSTypeAnnotation(nam[3])
+			if lhs != "" && localTypes != nil {
+				if annot != "" {
+					localTypes[lhs] = annot
+				} else if ctor != "" {
+					localTypes[lhs] = ctor
+				}
+			}
+		}
+		for _, cam := range reTSCallAssign.FindAllStringSubmatch(line, -1) {
+			lhs := strings.TrimSpace(cam[1])
+			annot := UnwrapTSTypeAnnotation(cam[2])
+			rhsCall := strings.TrimSpace(cam[3])
+			if lhs != "" && localTypes != nil {
+				if annot != "" {
+					localTypes[lhs] = annot
+				} else if rhsCall != "" && !isTSControlKeyword(rhsCall) && !strings.HasPrefix(rhsCall, "new ") {
+					if _, exists := localTypes[lhs]; !exists {
+						localTypes[lhs] = rhsCall
+					}
+				}
+			}
+		}
+		for _, chm := range reTSChainCall.FindAllStringSubmatch(line, -1) {
+			producer := strings.TrimSpace(chm[1])
+			if producer == "" {
+				producer = strings.TrimSpace(chm[2])
+			}
+			chainedMethod := strings.TrimSpace(chm[3])
+			if producer != "" && chainedMethod != "" && !isTSControlKeyword(producer) {
+				target := producer + "()." + chainedMethod
+				calls = append(calls, target)
+				sites = append(sites, CallSite{Target: target, Line: lineNum})
 			}
 		}
 		for _, nm := range reTSNewExpr.FindAllStringSubmatch(line, -1) {
-			ctor := strings.TrimSpace(nm[1])
+			ctor := UnwrapTSTypeAnnotation(nm[1])
 			if ctor != "" {
 				calls = append(calls, ctor)
+				sites = append(sites, CallSite{Target: ctor, Line: lineNum})
 			}
 		}
 		for _, cm := range reTSCallExpr.FindAllStringSubmatch(line, -1) {
@@ -269,18 +320,17 @@ func extractTSBodyCalls(bodyLines []string, selfFuncName string, localTypes map[
 			if callee == "" || isTSControlKeyword(callee) {
 				continue
 			}
-			// Skip declaration header on first line
 			if idx == 0 && callee == selfFuncName {
 				continue
 			}
-			// Avoid duplicating `new Foo()` as both new_expression and call_expression
 			if strings.Contains(line, "new "+callee+"(") {
 				continue
 			}
 			calls = append(calls, callee)
+			sites = append(sites, CallSite{Target: callee, Line: lineNum})
 		}
 	}
-	return calls
+	return calls, sites
 }
 
 func parseTSImportClause(clause, source string, line int) Import {

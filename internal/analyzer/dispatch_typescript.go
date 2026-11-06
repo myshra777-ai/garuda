@@ -43,7 +43,8 @@ func IsTypeScriptProject(absPath string) bool {
 	return false
 }
 
-// AnalyzeTypeScriptWorkspace converts a TypeScript Result to analyzer.Result.
+// AnalyzeTypeScriptWorkspace converts a TypeScript Result to analyzer.Result
+// with explicit ResolutionStatus, ResolutionMethod, and source file/line Evidence.
 func AnalyzeTypeScriptWorkspace(ctx context.Context, absPath string) (*Result, error) {
 	tsResult, err := typescript.AnalyzeDirectory(absPath)
 	if err != nil {
@@ -89,31 +90,77 @@ func AnalyzeTypeScriptWorkspace(ctx context.Context, absPath string) (*Result, e
 		})
 	}
 
+	seenEdges := make(map[string]bool)
 	for _, r := range tsResult.Relationships {
+		resStatus := r.ResolutionStatus
+		if resStatus == "" {
+			resStatus = "RESOLVED"
+		}
+		resMethod := r.ResolutionMethod
+		if resMethod == "" {
+			if r.ClaimType == "IMPORTS" {
+				resMethod = "TS_IMPORT"
+			} else if r.Confidence >= 0.90 {
+				resMethod = "AST_EXACT"
+			} else {
+				resMethod = "HEURISTIC"
+			}
+		}
+		evFile := r.FilePath
+		if rel, relErr := filepath.Rel(absPath, r.FilePath); relErr == nil && !strings.HasPrefix(rel, "..") {
+			evFile = rel
+		}
+		evLine := r.Line
+		if evLine <= 0 {
+			evLine = 1
+		}
+		edgeKey := r.FromID + "|" + r.ToID + "|" + r.ClaimType
+		seenEdges[edgeKey] = true
+
 		result.Relationships = append(result.Relationships, Relationship{
-			From:       r.FromID,
-			To:         r.ToID,
-			Type:       r.ClaimType,
-			Confidence: r.Confidence,
+			From:             r.FromID,
+			To:               r.ToID,
+			Type:             r.ClaimType,
+			Confidence:       r.Confidence,
+			ResolutionStatus: resStatus,
+			ResolutionMethod: resMethod,
+			EpistemicClass:   "OBSERVATION",
 			Evidence: Evidence{
-				Commit:   buildCtx.CommitSHA,
-				Analyzer: "typescript/tree-sitter",
+				File:      evFile,
+				Line:      evLine,
+				LineStart: evLine,
+				LineEnd:   evLine,
+				Commit:    buildCtx.CommitSHA,
+				Analyzer:  "typescript/ast-type-resolver",
 			},
 		})
 	}
-	// Path A: import resolution.
-	{
-		fileIndex := make(map[string]uuid.UUID)
-		for _, e := range result.Entities {
-			if e.Kind == KindFile || e.Kind == KindPackage {
-				if id, err := uuid.Parse(e.ID); err == nil {
-					fileIndex[e.Name] = id
-				}
+
+	// Path A supplemental import resolution
+	fileIndex := make(map[string]uuid.UUID)
+	for _, e := range result.Entities {
+		if e.Kind == KindFile || e.Kind == KindPackage {
+			if id, err := uuid.Parse(e.ID); err == nil {
+				fileIndex[e.Name] = id
 			}
 		}
-		if len(fileIndex) > 0 {
-			if importRels, ierr := ResolveTypeScriptImports(absPath, fileIndex); ierr == nil {
-				result.Relationships = append(result.Relationships, importRels...)
+	}
+	if len(fileIndex) > 0 {
+		if importRels, ierr := ResolveTypeScriptImports(absPath, fileIndex); ierr == nil {
+			for _, ir := range importRels {
+				fromID := ir.From
+				if id, ok := fileIndex[ir.From]; ok {
+					fromID = id.String()
+				}
+				toID := ir.To
+				if id, ok := fileIndex[ir.To]; ok {
+					toID = id.String()
+				}
+				key := fromID + "|" + toID + "|" + ir.Type
+				if !seenEdges[key] {
+					seenEdges[key] = true
+					result.Relationships = append(result.Relationships, ir)
+				}
 			}
 		}
 	}
