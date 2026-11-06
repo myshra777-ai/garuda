@@ -65,7 +65,7 @@ Most teams already use some of these tools. Garuda works alongside them.
 
 | | Architecture rule tools (ArchUnit, Dependency-Cruiser, Import Linter) | Static scanners (Semgrep, Snyk) | AI code reviewers (CodeRabbit, Greptile) | Garuda |
 | :--- | :--- | :--- | :--- | :--- |
-| Enforces layer and dependency rules | Yes, one language each | With custom rules | As written guidelines, judged by an AI model | Yes: Go, Python, TypeScript |
+| Enforces layer and dependency rules | Yes, one language each | With custom rules | As written guidelines, judged by an AI model | Yes: Go, Python, TypeScript, Java (Beta) |
 | How it decides | Fixed rules | Fixed rules | AI model's judgment | Fixed rules on the code's structure |
 | Briefs the agent **before** it edits | No | No | No (reviews the pull request) | Yes |
 | Separates new problems from old ones | Yes, with a saved baseline | Yes, diff-aware scans | Reviews the diff only | Yes |
@@ -80,7 +80,7 @@ These tools are good at what they do. Garuda can import your existing ArchUnit, 
 ## 5. What Garuda is not
 
 - **Not a sandbox.** An agent can ignore advice. The check that cannot be skipped is a required status check on your pull requests, which takes one setting in GitHub.
-- **Not equally deep in every language.** Go is read with the compiler's type information. Python and TypeScript are read by code structure.
+- **Go is compiler-complete; Python, TypeScript, and Java (Beta) resolve AST structure plus type annotations.** Go is read with `go/types`. Python, TypeScript, and Java (Beta) resolve cross-file imports (including `JAVA_IMPORT` / `JVM_IMPORT`, `tsconfig.json` paths, and Python packages), interfaces/inheritance, Spring/Jakarta dependency injection, constructor/field types, and return-type calls (`0.95` confidence), while unannotated dynamic reflection/duck-typing is not inferred statically.
 - **Not a log of everything.** Only saved checks are sealed in the tamper-evident record. It proves a record was not changed. It does not prove the analysis was complete.
 
 ## 6. Try it, then talk

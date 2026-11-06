@@ -16,6 +16,7 @@
 | **Sub-Second Incremental Working-Tree Sync** | 🟢 **Production (GA)** | `garuda analyze --incremental --files` | Shared in-memory package cache + targeted file re-indexing for dirty working-tree edits | `Deterministic Graph Parity` |
 | **Python AST, Alias & Instance Call Graph** | 🟢 **Production (GA)** | `Multi-Repo Corpus + Alias/Receiver Tests` | Modules, classes, methods, functions, `import X as Y`, `from X import Y as Z`, and `self.attr.method()` / instance calls (`0.95` confidence) | `Deterministic SHA-1 UUID` |
 | **TypeScript Tree-Sitter & Pure-Go (`!cgo`) AST Graph** | 🟢 **Production (GA)** | `Tree-sitter (cgo) + Pure-Go Lexical/Scope (!cgo)` | Interfaces, classes, functions, named/namespace import aliases (`import { X as Y }`, `import * as NS`), `new Class()` instance calls (`0.95` confidence, zero C compiler needed) | `Deterministic SHA-1 UUID` |
+| **Java Pure-Go AST, Spring/Jakarta DI & Call Graph** | 🟢 **Beta** | `internal/ast/java + Maven/Gradle Tests` | Classes, interfaces, methods, annotations (`@Autowired`, `@Service`, `@Repository`), `JAVA_IMPORT` / `JVM_IMPORT` resolution, interface implementation, and constructor/field DI calls (`0.95` confidence, `CGO_ENABLED=0`) | `Deterministic SHA-1 UUID` |
 | **Cross-Repository Dependency Resolution** | 🟢 **Production (GA)** | `Postgres Workspace Symbol Cache` | Multi-repository module path and symbol bridge mapping within a workspace | `Workspace Isolation` |
 
 ---

@@ -16,10 +16,15 @@ import (
 	"github.com/myshra777-ai/garuda/internal/store"
 )
 
-var summaryJSONFlag bool
+var (
+	summaryJSONFlag      bool
+	summaryWorkspaceFlag string
+)
 
 func init() {
 	summaryCmd.Flags().BoolVarP(&summaryJSONFlag, "json", "j", false, "Output summary in structured JSON format")
+	summaryCmd.Flags().StringVarP(&summaryWorkspaceFlag, "workspace", "w", "", "Workspace name to summarize")
+	summaryCmd.Flags().StringVar(&summaryWorkspaceFlag, "project", "", "Alias for --workspace")
 }
 
 type HubNodeDTO struct {
@@ -108,7 +113,19 @@ var summaryCmd = &cobra.Command{
 
 		tenantID := getTenantID()
 
-		workspaceName := getWorkspaceName()
+		workspaceName := strings.TrimSpace(summaryWorkspaceFlag)
+		if len(args) > 0 && workspaceName == "" {
+			targetCandidate := strings.TrimSpace(args[0])
+			var exists bool
+			_ = st.Pool().QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM workspaces WHERE tenant_id = $1 AND name = $2)", tenantID, targetCandidate).Scan(&exists)
+			if exists {
+				workspaceName = targetCandidate
+				args = args[1:]
+			}
+		}
+		if workspaceName == "" {
+			workspaceName = getWorkspaceName()
+		}
 
 		workspaceID, resolvedName, err := st.ResolveWorkspaceTarget(ctx, tenantID, workspaceName)
 		if err != nil {

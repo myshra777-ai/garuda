@@ -174,7 +174,7 @@ TypeScript support (`internal/ast/typescript`) uses Tree-sitter AST parsing to e
 | Python | Current; structural + cross-file alias & instance call resolution (`0.95` confidence) |
 | TypeScript | Current; Tree-sitter + cross-file alias & instance call resolution (`0.95` confidence) |
 | Rust | Planned |
-| Java | Planned |
+| Java | Beta; Pure-Go AST + Spring/Jakarta DI & Maven/Gradle package import resolution (`0.95` confidence) |
 | Elixir | Planned |
 
 ### Analysis persistence

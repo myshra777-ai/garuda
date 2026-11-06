@@ -58,6 +58,7 @@ const (
 	// that provenance remains language-attributable.
 	ResolutionMethodPythonImport ResolutionMethod = "PYTHON_IMPORT"
 	ResolutionMethodTSImport     ResolutionMethod = "TS_IMPORT"
+	ResolutionMethodJavaImport   ResolutionMethod = "JAVA_IMPORT"
 )
 
 // EntityKind defines semantic categorization of code nodes.

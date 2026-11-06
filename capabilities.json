@@ -16,10 +16,10 @@
     "mcp_resources": 2,
     "dashboard_surfaces": 10,
     "dashboard_api_endpoints": 19,
-    "sql_migrations": 92,
+    "sql_migrations": 93,
     "yaml_policy_predicates": 9,
     "talon_hooks": 6,
-    "supported_languages": 3,
+    "supported_languages": 4,
     "compiler_fixture_benchmarks": 24,
     "synthetic_runtime_contradiction_simulations": 10,
     "mcp_protocol_verification_checks": 63,
@@ -54,7 +54,7 @@
       "mode_flag": "include_fixtures=true / make benchmark-strict",
       "default_in_production": "EXCLUDED (scope: production_only filters out benchmark/test fixture paths by default)",
       "suite_size": "24/24 strict multi-module & AST cases",
-      "what_it_proves": "100% deterministic extraction precision and recall on Go (go/types, go.work, vendor), Python AST, and TypeScript AST fixtures, plus checkout-path-invariant package cache fingerprints (TestDoubleRunDeterminism)."
+      "what_it_proves": "100% deterministic extraction precision and recall on Go (go/types, go.work, vendor), Python AST, TypeScript AST, and Java AST (Maven/Gradle Spring DI) fixtures, plus checkout-path-invariant package cache fingerprints (TestDoubleRunDeterminism)."
     },
     "tier_2_synthetic_grounding_simulations": {
       "label": "Synthetic Grounding & Contradiction Simulations (Controlled Fault Injection)",
