@@ -23,7 +23,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/otel/sdk v1.43.0
 	golang.org/x/crypto v0.57.0
-	golang.org/x/mod v0.41.0
+	golang.org/x/mod v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
