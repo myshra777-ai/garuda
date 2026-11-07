@@ -120,11 +120,11 @@ These values describe analyzer output on the named validation sources. They are 
 **Workspace:** `go-validation-10`
 **Workspace ID:** `c71c76f5-5dad-4eb8-b35f-fc9b01e0fff7`
 **Measured:** 2026-09-15
-**Scope:** 9 repositories across Go, Python, and TypeScript.
+**Scope:** 9 repositories across Go, Python, TypeScript, and Java.
 
 | Verification dimension | Measured metric | Verification state |
 |---|---:|---|
-| Tested codebases | **9 repositories** | Go, Python, and TypeScript |
+| Tested codebases | **9 repositories** | Go, Python, TypeScript, and Java |
 | AST symbols indexed | **14,333 entities** | Single unified semantic model |
 | Static claims indexed | **40,956 relationships** | Calls, imports, implementations, embeddings, and references |
 | Cross-repository edges | **2 edges** | Both observed between Go modules |
@@ -135,8 +135,8 @@ These values describe analyzer output on the named validation sources. They are 
 | Language | Resolution tier | Method |
 |---|---|---|
 | Go | Tier 5 — compiler-resolved | Compiler/type information |
-| Python | Tier 2 — structural | Imports are stronger; dynamic calls are heuristic |
-| TypeScript | Tier 2 — structural | Structural/tree-sitter analysis |
+| Python | Tier 3.5 (Beta) — AST + type-annotation resolved | `PYTHON_IMPORT` (`1.0`) for module/`__init__.py`/`src/` imports; `AST_EXACT` (`0.95`) for alias, `self.attr`, parameter/return-type, and `super()` calls |
+| TypeScript | Tier 3.5 (Beta) — AST + `tsconfig` path & type resolved | `TS_IMPORT` (`1.0`) for relative, barrel `index.ts`, and `tsconfig.json` `@/*` imports; `AST_EXACT` (`0.95-1.0`) for `IMPLEMENTS`, `INHERITS`, constructor DI, `Promise<T>` return types, and `super` calls |
 
 Tier 5 is the strongest supported static resolution tier in this evidence set. Tier 2 results are useful structural evidence but should not be interpreted as equivalent to compiler-resolved relationships.
 

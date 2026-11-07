@@ -442,6 +442,9 @@ func detectRepoLanguage(absDir string) string {
 	if IsPythonProject(absDir) {
 		return "python"
 	}
+	if IsJavaProject(absDir) {
+		return "java"
+	}
 	return "go"
 }
 

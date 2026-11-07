@@ -31,10 +31,14 @@ type EntityRecord struct {
 }
 
 type RelationRecord struct {
-	FromID     string
-	ToID       string
-	ClaimType  string // IMPORTS | CALLS | INHERITS
-	Confidence float64
+	FromID           string
+	ToID             string
+	ClaimType        string // IMPORTS | CALLS | INHERITS
+	Confidence       float64
+	ResolutionStatus string // RESOLVED | AMBIGUOUS
+	ResolutionMethod string // PYTHON_IMPORT | AST_EXACT | HEURISTIC
+	FilePath         string
+	Line             int
 }
 
 type Result struct {
@@ -86,8 +90,12 @@ func AnalyzeDirectory(rootPath, repoID, workspaceID string) (*Result, error) {
 	classIDs := make(map[string]string)
 	// Maps class name → module name
 	classModule := make(map[string]string)
-	// Maps qualified name (module.Class.method) → entity ID, for CALLS resolution
+	// Maps qualified name (module.Class.method or module.fn) → entity ID, for CALLS resolution
 	qualifiedIDs := make(map[string]string)
+	// Maps qualified function/method name → declared ReturnType (e.g. "OrderRepository")
+	funcReturnTypes := make(map[string]string)
+	// Maps qualified class name (module.Class) → list of raw base class names
+	classRawBases := make(map[string][]string)
 
 	// Pass 1: extract entities
 	parsedModules := make(map[string]*Module) // path → module
@@ -107,6 +115,13 @@ func AnalyzeDirectory(rootPath, repoID, workspaceID string) (*Result, error) {
 		// Module entity
 		modID := deterministicID("python", "module", moduleName, filePath, 0)
 		moduleIDs[moduleName] = modID
+		// Support `src/` layout by also indexing the stripped module path
+		if strings.HasPrefix(moduleName, "src.") {
+			stripped := strings.TrimPrefix(moduleName, "src.")
+			if _, exists := moduleIDs[stripped]; !exists {
+				moduleIDs[stripped] = modID
+			}
+		}
 		result.Entities = append(result.Entities, EntityRecord{
 			ID:         modID,
 			Name:       moduleName,
@@ -125,8 +140,12 @@ func AnalyzeDirectory(rootPath, repoID, workspaceID string) (*Result, error) {
 		for _, cls := range m.Classes {
 			classID := deterministicID("python", "class", moduleName+"."+cls.Name, filePath, cls.LineStart)
 			qualifiedIDs[moduleName+"."+cls.Name] = classID
+			if strings.HasPrefix(moduleName, "src.") {
+				qualifiedIDs[strings.TrimPrefix(moduleName, "src.")+"."+cls.Name] = classID
+			}
 			classIDs[cls.Name] = classID
 			classModule[cls.Name] = moduleName
+			classRawBases[moduleName+"."+cls.Name] = cls.Bases
 			result.Entities = append(result.Entities, EntityRecord{
 				ID:         classID,
 				Name:       cls.Name,
@@ -144,8 +163,20 @@ func AnalyzeDirectory(rootPath, repoID, workspaceID string) (*Result, error) {
 
 			// Methods
 			for _, mth := range cls.Methods {
+				if mth.Name == "__init__" && mth.LineStart == cls.LineStart {
+					// Synthetic class-attribute holder
+					continue
+				}
 				methodID := deterministicID("python", "method", moduleName+"."+cls.Name+"."+mth.Name, filePath, mth.LineStart)
-				qualifiedIDs[moduleName+"."+cls.Name+"."+mth.Name] = methodID
+				qMethod := moduleName + "." + cls.Name + "." + mth.Name
+				qualifiedIDs[qMethod] = methodID
+				if strings.HasPrefix(moduleName, "src.") {
+					qualifiedIDs[strings.TrimPrefix(moduleName, "src.")+"."+cls.Name+"."+mth.Name] = methodID
+				}
+				if mth.ReturnType != "" {
+					funcReturnTypes[qMethod] = mth.ReturnType
+					funcReturnTypes[cls.Name+"."+mth.Name] = mth.ReturnType
+				}
 				result.Entities = append(result.Entities, EntityRecord{
 					ID:         methodID,
 					Name:       mth.Name,
@@ -165,7 +196,15 @@ func AnalyzeDirectory(rootPath, repoID, workspaceID string) (*Result, error) {
 		// Module-level functions
 		for _, fn := range m.Functions {
 			fnID := deterministicID("python", "function", moduleName+"."+fn.Name, filePath, fn.LineStart)
-			qualifiedIDs[moduleName+"."+fn.Name] = fnID
+			qFn := moduleName + "." + fn.Name
+			qualifiedIDs[qFn] = fnID
+			if strings.HasPrefix(moduleName, "src.") {
+				qualifiedIDs[strings.TrimPrefix(moduleName, "src.")+"."+fn.Name] = fnID
+			}
+			if fn.ReturnType != "" {
+				funcReturnTypes[qFn] = fn.ReturnType
+				funcReturnTypes[fn.Name] = fn.ReturnType
+			}
 			result.Entities = append(result.Entities, EntityRecord{
 				ID:         fnID,
 				Name:       fn.Name,
@@ -199,14 +238,35 @@ func AnalyzeDirectory(rootPath, repoID, workspaceID string) (*Result, error) {
 		}
 	}
 
+	// Pass 1.5: Propagate __init__.py re-exports (e.g., `from .repo import OrderRepository` in `db/__init__.py`)
+	for _, m := range parsedModules {
+		for _, imp := range m.Imports {
+			targetMod := resolvePythonModuleName(m.Module, imp.Module, moduleIDs)
+			for localAlias, origName := range imp.NameAliases {
+				srcQ := targetMod + "." + origName
+				dstQ := m.Module + "." + localAlias
+				if id, ok := qualifiedIDs[srcQ]; ok {
+					if _, exists := qualifiedIDs[dstQ]; !exists {
+						qualifiedIDs[dstQ] = id
+					}
+					// Also copy method IDs for re-exported classes
+					prefix := srcQ + "."
+					for k, mID := range qualifiedIDs {
+						if strings.HasPrefix(k, prefix) {
+							mSuffix := strings.TrimPrefix(k, prefix)
+							qualifiedIDs[dstQ+"."+mSuffix] = mID
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Pass 2: extract relations
 	for filePath, m := range parsedModules {
 		moduleName := m.Module
 		moduleID := moduleIDs[moduleName]
 
-		// Build per-file import symbol & module alias tables:
-		//   importedModules[aliasOrMod] = canonicalModulePath
-		//   importedSymbols[localAlias] = canonicalModulePath + "." + exportedSymbol
 		importedModules := make(map[string]string)
 		importedSymbols := make(map[string]string)
 
@@ -214,22 +274,24 @@ func AnalyzeDirectory(rootPath, repoID, workspaceID string) (*Result, error) {
 			targetModule := resolvePythonModuleName(moduleName, imp.Module, moduleIDs)
 			if targetID, ok := moduleIDs[targetModule]; ok {
 				result.Relationships = append(result.Relationships, RelationRecord{
-					FromID:     moduleID,
-					ToID:       targetID,
-					ClaimType:  "IMPORTS",
-					Confidence: 1.0,
+					FromID:           moduleID,
+					ToID:             targetID,
+					ClaimType:        "IMPORTS",
+					Confidence:       1.0,
+					ResolutionStatus: "RESOLVED",
+					ResolutionMethod: "PYTHON_IMPORT",
+					FilePath:         filePath,
+					Line:             imp.Line,
 				})
 			}
 
 			if len(imp.Names) == 0 {
-				// `import foo.bar` or `import foo.bar as fb`
 				localMod := imp.Module
 				if imp.Alias != "" {
 					localMod = imp.Alias
 				}
 				importedModules[localMod] = targetModule
 			} else {
-				// `from foo.bar import Baz as B, qux`
 				for localAlias, origName := range imp.NameAliases {
 					subMod := targetModule + "." + origName
 					if _, isSubMod := moduleIDs[subMod]; isSubMod {
@@ -251,200 +313,306 @@ func AnalyzeDirectory(rootPath, repoID, workspaceID string) (*Result, error) {
 			}
 		}
 
-		// Collect class-level attribute types from __init__ (e.g., self.repo = OrderRepo())
+		// Collect class-level attribute types from __init__ and class body annotations,
+		// resolving function return types if `self.repo = get_repo()` was used.
+		resolveTypeBinding := func(callerClass, rawRHS string) string {
+			if rawRHS == "" {
+				return ""
+			}
+			if strings.HasPrefix(rawRHS, "self.") && callerClass != "" {
+				mName := strings.TrimPrefix(rawRHS, "self.")
+				if rt, ok := funcReturnTypes[moduleName+"."+callerClass+"."+mName]; ok && rt != "" {
+					return rt
+				}
+			}
+			if qSym, ok := importedSymbols[rawRHS]; ok {
+				if rt, hasRT := funcReturnTypes[qSym]; hasRT && rt != "" {
+					return rt
+				}
+			}
+			if rt, ok := funcReturnTypes[moduleName+"."+rawRHS]; ok && rt != "" {
+				return rt
+			}
+			if rt, ok := funcReturnTypes[rawRHS]; ok && rt != "" {
+				return rt
+			}
+			return rawRHS
+		}
+
 		classFieldTypes := make(map[string]map[string]string)
+		classResolvedBases := make(map[string][]string) // cls.Name → qualified base class names (e.g. "db.BaseRepo")
 		for _, cls := range m.Classes {
 			ft := make(map[string]string)
 			for _, mth := range cls.Methods {
 				for k, v := range mth.LocalTypes {
-					if strings.HasPrefix(k, "self.") {
-						ft[k] = v
+					if strings.HasPrefix(k, "self.") || strings.HasPrefix(k, "cls.") {
+						normKey := "self." + strings.TrimPrefix(strings.TrimPrefix(k, "self."), "cls.")
+						ft[normKey] = resolveTypeBinding(cls.Name, v)
 					}
 				}
 			}
 			classFieldTypes[cls.Name] = ft
-		}
 
-		// INHERITS relations: class → base class
-		for _, cls := range m.Classes {
+			// INHERITS relations: class → base class
 			classID := qualifiedIDs[moduleName+"."+cls.Name]
 			for _, base := range cls.Bases {
 				if qSym, ok := importedSymbols[base]; ok {
+					classResolvedBases[cls.Name] = append(classResolvedBases[cls.Name], qSym)
 					if baseID, ok := qualifiedIDs[qSym]; ok {
 						result.Relationships = append(result.Relationships, RelationRecord{
-							FromID:     classID,
-							ToID:       baseID,
-							ClaimType:  "INHERITS",
-							Confidence: 0.95,
+							FromID:           classID,
+							ToID:             baseID,
+							ClaimType:        "INHERITS",
+							Confidence:       0.95,
+							ResolutionStatus: "RESOLVED",
+							ResolutionMethod: "AST_EXACT",
+							FilePath:         filePath,
+							Line:             cls.LineStart,
 						})
 						continue
 					}
 				}
-				if baseID, ok := qualifiedIDs[base]; ok {
+				if dotIdx := strings.IndexByte(base, '.'); dotIdx > 0 {
+					modAlias := base[:dotIdx]
+					bName := base[dotIdx+1:]
+					if targetMod, ok := importedModules[modAlias]; ok {
+						qBase := targetMod + "." + bName
+						classResolvedBases[cls.Name] = append(classResolvedBases[cls.Name], qBase)
+						if baseID, ok := qualifiedIDs[qBase]; ok {
+							result.Relationships = append(result.Relationships, RelationRecord{
+								FromID:           classID,
+								ToID:             baseID,
+								ClaimType:        "INHERITS",
+								Confidence:       0.95,
+								ResolutionStatus: "RESOLVED",
+								ResolutionMethod: "AST_EXACT",
+								FilePath:         filePath,
+								Line:             cls.LineStart,
+							})
+							continue
+						}
+					}
+				}
+				if baseID, ok := qualifiedIDs[moduleName+"."+base]; ok {
+					classResolvedBases[cls.Name] = append(classResolvedBases[cls.Name], moduleName+"."+base)
 					result.Relationships = append(result.Relationships, RelationRecord{
-						FromID:     classID,
-						ToID:       baseID,
-						ClaimType:  "INHERITS",
-						Confidence: 1.0,
+						FromID:           classID,
+						ToID:             baseID,
+						ClaimType:        "INHERITS",
+						Confidence:       1.0,
+						ResolutionStatus: "RESOLVED",
+						ResolutionMethod: "AST_EXACT",
+						FilePath:         filePath,
+						Line:             cls.LineStart,
 					})
 				} else if baseID, ok := classIDs[base]; ok {
+					if cMod, ok := classModule[base]; ok {
+						classResolvedBases[cls.Name] = append(classResolvedBases[cls.Name], cMod+"."+base)
+					}
 					result.Relationships = append(result.Relationships, RelationRecord{
-						FromID:     classID,
-						ToID:       baseID,
-						ClaimType:  "INHERITS",
-						Confidence: 0.85,
+						FromID:           classID,
+						ToID:             baseID,
+						ClaimType:        "INHERITS",
+						Confidence:       0.90,
+						ResolutionStatus: "RESOLVED",
+						ResolutionMethod: "AST_EXACT",
+						FilePath:         filePath,
+						Line:             cls.LineStart,
 					})
 				}
 			}
 		}
 
-		resolvePyTarget := func(callerClass string, localTypes map[string]string, rawCallee string) (string, float64) {
-			// 1. Direct self.<method>() inside a class
-			if strings.HasPrefix(rawCallee, "self.") && callerClass != "" {
-				rest := strings.TrimPrefix(rawCallee, "self.")
-				if !strings.Contains(rest, ".") {
-					if tid, ok := qualifiedIDs[moduleName+"."+callerClass+"."+rest]; ok {
-						return tid, 0.95
+		resolveMethodOnType := func(typeName, mName string) string {
+			if typeName == "" || mName == "" {
+				return ""
+			}
+			if qClass, ok := importedSymbols[typeName]; ok {
+				if tid, ok := qualifiedIDs[qClass+"."+mName]; ok {
+					return tid
+				}
+			}
+			if dotT := strings.IndexByte(typeName, '.'); dotT > 0 {
+				modAlias := typeName[:dotT]
+				clsName := typeName[dotT+1:]
+				if targetMod, ok := importedModules[modAlias]; ok {
+					if tid, ok := qualifiedIDs[targetMod+"."+clsName+"."+mName]; ok {
+						return tid
 					}
-				} else {
-					// self.attr.method() where self.attr was bound to a class
-					parts := strings.SplitN(rest, ".", 2)
-					attrKey := "self." + parts[0]
-					mName := parts[1]
-					typeName := localTypes[attrKey]
-					if typeName == "" && classFieldTypes[callerClass] != nil {
-						typeName = classFieldTypes[callerClass][attrKey]
-					}
-					if typeName != "" {
-						if qClass, ok := importedSymbols[typeName]; ok {
-							if tid, ok := qualifiedIDs[qClass+"."+mName]; ok {
-								return tid, 0.95
-							}
-						}
-						if tid, ok := qualifiedIDs[moduleName+"."+typeName+"."+mName]; ok {
-							return tid, 0.95
-						}
-						if cMod, ok := classModule[typeName]; ok {
-							if tid, ok := qualifiedIDs[cMod+"."+typeName+"."+mName]; ok {
-								return tid, 0.95
-							}
-						}
+				}
+			}
+			if tid, ok := qualifiedIDs[moduleName+"."+typeName+"."+mName]; ok {
+				return tid
+			}
+			if tid, ok := qualifiedIDs[typeName+"."+mName]; ok {
+				return tid
+			}
+			if cMod, ok := classModule[typeName]; ok {
+				if tid, ok := qualifiedIDs[cMod+"."+typeName+"."+mName]; ok {
+					return tid
+				}
+			}
+			return ""
+		}
+
+		resolvePyTarget := func(callerClass string, localTypes map[string]string, rawCallee string) (string, float64, string) {
+			// 0. Chained call: `self.get_repo().fetch_order` or `get_repo().fetch_order`
+			if strings.Contains(rawCallee, "().") {
+				parts := strings.SplitN(rawCallee, "().", 2)
+				producer := parts[0]
+				mName := parts[1]
+				retType := resolveTypeBinding(callerClass, producer)
+				if tid := resolveMethodOnType(retType, mName); tid != "" {
+					return tid, 0.95, "AST_EXACT"
+				}
+			}
+
+			// 1. super.<method>() inside a subclass
+			if strings.HasPrefix(rawCallee, "super.") && callerClass != "" {
+				mName := strings.TrimPrefix(rawCallee, "super.")
+				for _, qBase := range classResolvedBases[callerClass] {
+					if tid, ok := qualifiedIDs[qBase+"."+mName]; ok {
+						return tid, 0.95, "AST_EXACT"
 					}
 				}
 			}
 
-			// 2. Dotted call: `alias.func()`, `Class.method()`, or `local_var.method()`
+			// 2. Direct self.<method>() or cls.<method>() inside a class
+			if (strings.HasPrefix(rawCallee, "self.") || strings.HasPrefix(rawCallee, "cls.")) && callerClass != "" {
+				rest := strings.TrimPrefix(strings.TrimPrefix(rawCallee, "self."), "cls.")
+				if !strings.Contains(rest, ".") {
+					if tid, ok := qualifiedIDs[moduleName+"."+callerClass+"."+rest]; ok {
+						return tid, 0.95, "AST_EXACT"
+					}
+					// Check inherited methods on base classes
+					for _, qBase := range classResolvedBases[callerClass] {
+						if tid, ok := qualifiedIDs[qBase+"."+rest]; ok {
+							return tid, 0.95, "AST_EXACT"
+						}
+					}
+				} else {
+					parts := strings.SplitN(rest, ".", 2)
+					attrKey := "self." + parts[0]
+					mName := parts[1]
+					typeName := resolveTypeBinding(callerClass, localTypes[attrKey])
+					if typeName == "" && classFieldTypes[callerClass] != nil {
+						typeName = classFieldTypes[callerClass][attrKey]
+					}
+					if tid := resolveMethodOnType(typeName, mName); tid != "" {
+						return tid, 0.95, "AST_EXACT"
+					}
+				}
+			}
+
+			// 3. Dotted call: `alias.func()`, `Class.method()`, or `local_var.method()`
 			if dotIdx := strings.IndexByte(rawCallee, '.'); dotIdx > 0 {
 				prefix := rawCallee[:dotIdx]
 				member := rawCallee[dotIdx+1:]
 
-				// Check local variable type binding: `svc = Svc(); svc.execute()`
-				if varType, ok := localTypes[prefix]; ok {
-					// Strip any module alias prefix on varType
-					if qClass, ok := importedSymbols[varType]; ok {
-						if tid, ok := qualifiedIDs[qClass+"."+member]; ok {
-							return tid, 0.95
-						}
-						if tid, ok := qualifiedIDs[qClass]; ok {
-							return tid, 0.95
-						}
-					}
-					if dotT := strings.IndexByte(varType, '.'); dotT > 0 {
-						modAlias := varType[:dotT]
-						clsName := varType[dotT+1:]
-						if targetMod, ok := importedModules[modAlias]; ok {
-							if tid, ok := qualifiedIDs[targetMod+"."+clsName+"."+member]; ok {
-								return tid, 0.95
-							}
-						}
-					}
-					if tid, ok := qualifiedIDs[moduleName+"."+varType+"."+member]; ok {
-						return tid, 0.95
-					}
-					if cMod, ok := classModule[varType]; ok {
-						if tid, ok := qualifiedIDs[cMod+"."+varType+"."+member]; ok {
-							return tid, 0.95
-						}
+				if rawVarType, ok := localTypes[prefix]; ok {
+					varType := resolveTypeBinding(callerClass, rawVarType)
+					if tid := resolveMethodOnType(varType, member); tid != "" {
+						return tid, 0.95, "AST_EXACT"
 					}
 				}
 
-				// Check imported module alias: `import db_layer as db; db.run_query()`
 				if targetMod, ok := importedModules[prefix]; ok {
 					if tid, ok := qualifiedIDs[targetMod+"."+member]; ok {
-						return tid, 0.95
+						return tid, 0.95, "AST_EXACT"
 					}
-					// If `member` is a class instantiation `db.OrderRepo` and has `__init__`
 					if tid, ok := qualifiedIDs[targetMod+"."+member+".__init__"]; ok {
-						return tid, 0.95
+						return tid, 0.95, "AST_EXACT"
 					}
 				}
 
-				// Check imported symbol alias (e.g., `from repo import OrderRepo as OR; OR.fetch()`)
 				if targetSym, ok := importedSymbols[prefix]; ok {
 					if tid, ok := qualifiedIDs[targetSym+"."+member]; ok {
-						return tid, 0.95
+						return tid, 0.95, "AST_EXACT"
 					}
 				}
 			}
 
-			// 3. Bare call to an explicitly imported symbol or alias: `from pkg import fn as f; f()`
+			// 4. Bare call to an explicitly imported symbol or alias: `from pkg import fn as f; f()`
 			if targetSym, ok := importedSymbols[rawCallee]; ok {
 				if tid, ok := qualifiedIDs[targetSym]; ok {
-					return tid, 0.95
+					return tid, 0.95, "AST_EXACT"
 				}
 				if tid, ok := qualifiedIDs[targetSym+".__init__"]; ok {
-					return tid, 0.95
+					return tid, 0.95, "AST_EXACT"
 				}
 			}
 
-			// 4. Same-module function or class
+			// 5. Same-module function or class
 			if tid, ok := qualifiedIDs[moduleName+"."+rawCallee]; ok {
-				return tid, 0.95
+				return tid, 0.95, "AST_EXACT"
 			}
 			if tid, ok := qualifiedIDs[rawCallee]; ok {
-				return tid, 0.95
+				return tid, 0.95, "AST_EXACT"
 			}
 
-			// 5. Fallback scan across imported modules
+			// 6. Fallback scan across imported modules
 			for _, imp := range m.Imports {
 				targetMod := resolvePythonModuleName(moduleName, imp.Module, moduleIDs)
 				if tid, ok := qualifiedIDs[targetMod+"."+rawCallee]; ok {
-					return tid, 0.90
+					return tid, 0.90, "PYTHON_IMPORT"
 				}
 			}
-			return "", 0
+			return "", 0, ""
 		}
 
 		for _, fn := range m.Functions {
 			fromID := qualifiedIDs[moduleName+"."+fn.Name]
 			seenCalls := make(map[string]bool)
-			for _, callee := range fn.Calls {
-				if targetID, conf := resolvePyTarget("", fn.LocalTypes, callee); targetID != "" && !seenCalls[targetID] {
+			for idx, callee := range fn.Calls {
+				callLine := fn.LineStart
+				if idx < len(fn.CallSites) && fn.CallSites[idx].Line > 0 {
+					callLine = fn.CallSites[idx].Line
+				}
+				if targetID, conf, method := resolvePyTarget("", fn.LocalTypes, callee); targetID != "" && !seenCalls[targetID] {
 					seenCalls[targetID] = true
 					result.Relationships = append(result.Relationships, RelationRecord{
-						FromID: fromID, ToID: targetID, ClaimType: "CALLS", Confidence: conf,
+						FromID:           fromID,
+						ToID:             targetID,
+						ClaimType:        "CALLS",
+						Confidence:       conf,
+						ResolutionStatus: "RESOLVED",
+						ResolutionMethod: method,
+						FilePath:         filePath,
+						Line:             callLine,
 					})
 				}
 			}
 		}
 		for _, cls := range m.Classes {
 			for _, mth := range cls.Methods {
+				if mth.Name == "__init__" && mth.LineStart == cls.LineStart {
+					continue
+				}
 				fromID := qualifiedIDs[moduleName+"."+cls.Name+"."+mth.Name]
 				seenCalls := make(map[string]bool)
-				for _, callee := range mth.Calls {
-					if targetID, conf := resolvePyTarget(cls.Name, mth.LocalTypes, callee); targetID != "" && !seenCalls[targetID] {
+				for idx, callee := range mth.Calls {
+					callLine := mth.LineStart
+					if idx < len(mth.CallSites) && mth.CallSites[idx].Line > 0 {
+						callLine = mth.CallSites[idx].Line
+					}
+					if targetID, conf, method := resolvePyTarget(cls.Name, mth.LocalTypes, callee); targetID != "" && !seenCalls[targetID] {
 						seenCalls[targetID] = true
 						result.Relationships = append(result.Relationships, RelationRecord{
-							FromID: fromID, ToID: targetID, ClaimType: "CALLS", Confidence: conf,
+							FromID:           fromID,
+							ToID:             targetID,
+							ClaimType:        "CALLS",
+							Confidence:       conf,
+							ResolutionStatus: "RESOLVED",
+							ResolutionMethod: method,
+							FilePath:         filePath,
+							Line:             callLine,
 						})
 					}
 				}
 			}
 		}
-		_ = filePath
 	}
 
-	// Determinism: sort by stable keys
 	sort.Slice(result.Entities, func(i, j int) bool {
 		return result.Entities[i].ID < result.Entities[j].ID
 	})
@@ -488,7 +656,9 @@ func resolvePythonModuleName(currentModule, rawImport string, moduleIDs map[stri
 	if _, ok := moduleIDs[rawImport]; ok {
 		return rawImport
 	}
-	// Suffix match for package-prefixed imports
+	if _, ok := moduleIDs["src."+rawImport]; ok {
+		return "src." + rawImport
+	}
 	for mod := range moduleIDs {
 		if strings.HasSuffix(mod, "."+rawImport) {
 			return mod
@@ -496,10 +666,6 @@ func resolvePythonModuleName(currentModule, rawImport string, moduleIDs map[stri
 	}
 	return rawImport
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 func deriveModuleName(root, filePath string) string {
 	rel, err := filepath.Rel(root, filePath)

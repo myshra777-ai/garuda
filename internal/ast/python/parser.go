@@ -31,6 +31,11 @@ type Class struct {
 	Methods    []Function
 }
 
+type CallSite struct {
+	Target string
+	Line   int
+}
+
 type Function struct {
 	Name       string
 	Params     []string
@@ -43,7 +48,8 @@ type Function struct {
 	LineEnd    int
 	IsExported bool
 	Calls      []string
-	LocalTypes map[string]string // variable name → instantiated class/type name (e.g. svc = OrderService())
+	CallSites  []CallSite
+	LocalTypes map[string]string // variable name → instantiated class/type name or "call:<fn>"
 }
 
 type Import struct {
@@ -67,22 +73,20 @@ type analysisFrame struct {
 // ─────────────────────────────────────────────────────────────────────────────
 
 var (
-	reClass      = regexp.MustCompile(`^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\))?\s*:`)
-	reDef        = regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*(?:->\s*([^:]+))?\s*:`)
-	reImport     = regexp.MustCompile(`^import\s+(.+)$`)
-	reFromImpt   = regexp.MustCompile(`^from\s+([A-Za-z0-9_.]+)\s+import\s+(.+)$`)
-	reDecor      = regexp.MustCompile(`^@([A-Za-z_][A-Za-z0-9_.]*(?:\([^)]*\))?)`)
-	reDocstring  = regexp.MustCompile(`^\s*(?:"""|''')`)
-	rePyCall     = regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\(`)
-	rePyAssign   = regexp.MustCompile(`^\s*((?:self\.)?[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*[A-Za-z_][A-Za-z0-9_.]*\s*)?=\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\(`)
-	rePyParamTyp = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_.]*)`)
+	reClass       = regexp.MustCompile(`^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\))?\s*:`)
+	reDef         = regexp.MustCompile(`^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*(?:->\s*([^:]+))?\s*:`)
+	reImport      = regexp.MustCompile(`^import\s+(.+)$`)
+	reFromImpt    = regexp.MustCompile(`^from\s+([A-Za-z0-9_.]+)\s+import\s+(.+)$`)
+	reDecor       = regexp.MustCompile(`^@([A-Za-z_][A-Za-z0-9_.]*(?:\([^)]*\))?)`)
+	rePyCall      = regexp.MustCompile(`\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\(`)
+	rePySuperCall = regexp.MustCompile(`\bsuper\s*\(\s*[^)]*\)\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
+	rePyChainCall = regexp.MustCompile(`\b((?:self|cls)\.[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(`)
+	rePyAssign    = regexp.MustCompile(`^\s*((?:self\.|cls\.)?[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([A-Za-z_][A-Za-z0-9_.\[\], |]*))?\s*=\s*(?:await\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*\(`)
+	rePyTypeAnnot = regexp.MustCompile(`^\s*((?:self\.|cls\.)?[A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_.\[\], |]+)`)
+	rePyParamTyp  = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_.\[\], |]+)`)
 )
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Parse
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Parse reads Python source and returns a structural module.
+// Parse reads Python source and returns a structural module with type annotations and call sites.
 func Parse(src, path, moduleName string) (*Module, error) {
 	lines := stripAndClean(src)
 	m := &Module{Path: path, Module: moduleName}
@@ -130,7 +134,7 @@ func Parse(src, path, moduleName string) (*Module, error) {
 			fn := Function{
 				Name:       dm[1],
 				Params:     parseParams(dm[2]),
-				ReturnType: strings.TrimSpace(dm[3]),
+				ReturnType: UnwrapPythonTypeAnnotation(strings.TrimSpace(dm[3])),
 				Decorators: lastDecorators,
 				IsAsync:    strings.HasPrefix(strings.TrimSpace(text), "async"),
 				LineStart:  ln.LineNum,
@@ -139,7 +143,6 @@ func Parse(src, path, moduleName string) (*Module, error) {
 			}
 			lastDecorators = nil
 
-			// Attach to enclosing class if stack top is a class
 			if len(stack) > 0 && stack[len(stack)-1].kind == "class" {
 				ci := stack[len(stack)-1].classIdx
 				fn.Receiver = m.Classes[ci].Name
@@ -152,7 +155,39 @@ func Parse(src, path, moduleName string) (*Module, error) {
 			continue
 		}
 
-		// Extract function/method body calls and local constructor bindings when inside an open def block
+		// Class-level attribute type annotations: `repo: OrderRepository` inside class body
+		if len(stack) > 0 && stack[len(stack)-1].kind == "class" {
+			ci := stack[len(stack)-1].classIdx
+			if ci >= 0 && ci < len(m.Classes) {
+				if tam := rePyTypeAnnot.FindStringSubmatch(text); tam != nil {
+					fieldName := strings.TrimSpace(tam[1])
+					fieldType := UnwrapPythonTypeAnnotation(tam[2])
+					if fieldName != "" && fieldType != "" && !isPythonKeywordOrBuiltin(fieldType) {
+						if !strings.HasPrefix(fieldName, "self.") && !strings.HasPrefix(fieldName, "cls.") {
+							fieldName = "self." + fieldName
+						}
+						// Store as synthetic __class_fields__ method entry or propagate when methods parse
+						if len(m.Classes[ci].Methods) == 0 {
+							m.Classes[ci].Methods = append(m.Classes[ci].Methods, Function{
+								Name:       "__init__",
+								Receiver:   m.Classes[ci].Name,
+								LineStart:  ln.LineNum,
+								LineEnd:    ln.LineNum,
+								IsExported: false,
+								LocalTypes: map[string]string{fieldName: fieldType},
+							})
+						} else {
+							if m.Classes[ci].Methods[0].LocalTypes == nil {
+								m.Classes[ci].Methods[0].LocalTypes = make(map[string]string)
+							}
+							m.Classes[ci].Methods[0].LocalTypes[fieldName] = fieldType
+						}
+					}
+				}
+			}
+		}
+
+		// Extract function/method body calls and local constructor/type bindings when inside an open def block
 		if len(stack) > 0 && stack[len(stack)-1].kind == "def" {
 			top := stack[len(stack)-1]
 			var targetFn *Function
@@ -168,17 +203,52 @@ func Parse(src, path, moduleName string) (*Module, error) {
 				}
 				if am := rePyAssign.FindStringSubmatch(text); am != nil {
 					lhs := strings.TrimSpace(am[1])
-					rhs := strings.TrimSpace(am[2])
-					if lhs != "" && rhs != "" && !isPythonKeywordOrBuiltin(rhs) {
-						targetFn.LocalTypes[lhs] = rhs
+					explicitAnnot := UnwrapPythonTypeAnnotation(am[2])
+					rhs := strings.TrimSpace(am[3])
+					if lhs != "" {
+						if explicitAnnot != "" && !isPythonKeywordOrBuiltin(explicitAnnot) {
+							targetFn.LocalTypes[lhs] = explicitAnnot
+						} else if rhs != "" && !isPythonKeywordOrBuiltin(rhs) {
+							targetFn.LocalTypes[lhs] = rhs
+						}
+					}
+				} else if tam := rePyTypeAnnot.FindStringSubmatch(text); tam != nil {
+					lhs := strings.TrimSpace(tam[1])
+					annot := UnwrapPythonTypeAnnotation(tam[2])
+					if lhs != "" && annot != "" && !isPythonKeywordOrBuiltin(annot) {
+						targetFn.LocalTypes[lhs] = annot
 					}
 				}
+
+				// 1. Check super().method() calls
+				for _, sm := range rePySuperCall.FindAllStringSubmatch(text, -1) {
+					mName := strings.TrimSpace(sm[1])
+					if mName != "" {
+						callee := "super." + mName
+						targetFn.Calls = append(targetFn.Calls, callee)
+						targetFn.CallSites = append(targetFn.CallSites, CallSite{Target: callee, Line: ln.LineNum})
+					}
+				}
+
+				// 2. Check chained calls like `self.get_repo().fetch_order()` or `get_repo().fetch_order()`
+				for _, cm := range rePyChainCall.FindAllStringSubmatch(text, -1) {
+					producer := strings.TrimSpace(cm[1])
+					chainedMethod := strings.TrimSpace(cm[2])
+					if producer != "" && chainedMethod != "" && !isPythonKeywordOrBuiltin(producer) {
+						callee := producer + "()." + chainedMethod
+						targetFn.Calls = append(targetFn.Calls, callee)
+						targetFn.CallSites = append(targetFn.CallSites, CallSite{Target: callee, Line: ln.LineNum})
+					}
+				}
+
+				// 3. Standard calls
 				for _, mcall := range rePyCall.FindAllStringSubmatch(text, -1) {
 					callee := mcall[1]
 					if isPythonKeywordOrBuiltin(callee) {
 						continue
 					}
 					targetFn.Calls = append(targetFn.Calls, callee)
+					targetFn.CallSites = append(targetFn.CallSites, CallSite{Target: callee, Line: ln.LineNum})
 				}
 			}
 		}
@@ -241,10 +311,48 @@ func Parse(src, path, moduleName string) (*Module, error) {
 		closeBlock(m, &stack, lines, len(lines))
 	}
 
-	// Attach docstrings
 	attachDocstrings(m, lines)
-
 	return m, nil
+}
+
+// UnwrapPythonTypeAnnotation strips Optional[T], Union[T, None], Awaitable[T],
+// Annotated[T, ...], Final[T], ClassVar[T], and `T | None` wrappers to yield T.
+func UnwrapPythonTypeAnnotation(raw string) string {
+	t := strings.TrimSpace(raw)
+	t = strings.Trim(t, `"'`)
+	if t == "" || t == "None" || t == "Any" {
+		return ""
+	}
+	if pipe := strings.Index(t, "|"); pipe >= 0 {
+		for _, part := range strings.Split(t, "|") {
+			p := strings.TrimSpace(part)
+			if p != "" && p != "None" {
+				t = p
+				break
+			}
+		}
+	}
+	wrappers := []string{
+		"Optional[", "typing.Optional[",
+		"Awaitable[", "typing.Awaitable[",
+		"Union[", "typing.Union[",
+		"Final[", "typing.Final[",
+		"ClassVar[", "typing.ClassVar[",
+		"Annotated[", "typing.Annotated[",
+	}
+	for _, w := range wrappers {
+		if strings.HasPrefix(t, w) && strings.HasSuffix(t, "]") {
+			inner := t[len(w) : len(t)-1]
+			parts := splitTopLevel(inner, ',')
+			for _, p := range parts {
+				cand := strings.TrimSpace(p)
+				if cand != "" && cand != "None" && cand != "Any" {
+					return UnwrapPythonTypeAnnotation(cand)
+				}
+			}
+		}
+	}
+	return strings.TrimSpace(t)
 }
 
 func isPythonKeywordOrBuiltin(callee string) bool {
@@ -269,7 +377,10 @@ func parseParamTypes(s string) map[string]string {
 			p = strings.TrimSpace(p[:eq])
 		}
 		if m := rePyParamTyp.FindStringSubmatch(p); m != nil {
-			out[m[1]] = m[2]
+			tName := UnwrapPythonTypeAnnotation(m[2])
+			if tName != "" && !isPythonKeywordOrBuiltin(tName) {
+				out[m[1]] = tName
+			}
 		}
 	}
 	return out
@@ -303,10 +414,6 @@ func closeBlock(m *Module, stack *[]analysisFrame, lines []cleanLine, endIdx int
 		}
 	}
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Cleaner: strip comments, handle multi-line strings, implicit continuations
-// ─────────────────────────────────────────────────────────────────────────────
 
 type cleanLine struct {
 	Text    string

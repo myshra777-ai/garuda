@@ -1,6 +1,6 @@
 ---
 name: change-impact
-description: Calculates direct callers, transitive blast radius, criticality tier, and governing ADRs/policies before modifying any symbol or package.
+description: "Use before changing a function, interface, package or file, or when asked what breaks if something changes, who calls a symbol, or how risky an edit is. Garuda resolves the exact symbol, then reports its direct callers, transitive blast radius, the call chains that reach it, whether tests cover it and its callers, and which ADRs or policies govern it. It assigns a criticality tier so high fan-in hubs are flagged for human review before any AI agent touches them. It can also assess the combined impact of every currently modified file in a git diff. Results come from the indexed code graph, not from model guesses. Read-only by default."
 version: "1.9.11"
 license: "Apache-2.0"
 read_only_default: true

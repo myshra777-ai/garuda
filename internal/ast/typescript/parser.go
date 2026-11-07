@@ -3,9 +3,6 @@
 // Copyright 2026 Rohit Mishra
 // SPDX-License-Identifier: Apache-2.0
 
-// Package typescript extracts semantic entities and relationships from
-// TypeScript source using tree-sitter (when CGO is enabled) or the pure-Go
-// structural parser (when built with CGO_ENABLED=0).
 package typescript
 
 import (
@@ -52,7 +49,7 @@ func (p *Parser) Parse(ctx context.Context, src []byte, path, moduleName string)
 		case "class_declaration", "abstract_class_declaration":
 			cls := extractClass(n, parsed)
 			m.Classes = append(m.Classes, cls)
-			return false // don't descend; we already extracted methods
+			return false
 		case "interface_declaration":
 			iface := extractInterface(n, parsed)
 			m.Interfaces = append(m.Interfaces, iface)
@@ -70,11 +67,18 @@ func (p *Parser) Parse(ctx context.Context, src []byte, path, moduleName string)
 		return true
 	})
 
-	// Handle exported declarations: export statement wraps the inner decl.
-	// We catch these on the second pass so we don't double-count.
 	parsed.Walk(func(n *sitter.Node) bool {
 		if n.Type() != "export_statement" {
 			return true
+		}
+		if srcNode := treesitter.ChildByField(n, "source"); srcNode != nil {
+			reExp := extractImport(n, parsed)
+			if reExp.Source != "" {
+				if len(reExp.Names) == 0 && reExp.Default == "" && reExp.Namespace == "" {
+					reExp.Namespace = "*"
+				}
+				m.ReExports = append(m.ReExports, reExp)
+			}
 		}
 		for i := 0; i < int(n.NamedChildCount()); i++ {
 			child := n.NamedChild(i)
@@ -98,10 +102,6 @@ func (p *Parser) Parse(ctx context.Context, src []byte, path, moduleName string)
 	return m, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Extractors
-// ─────────────────────────────────────────────────────────────────────────────
-
 func extractClass(n *sitter.Node, f *treesitter.ParsedFile) Class {
 	cls := Class{
 		LineStart:  treesitter.NodeLine(n),
@@ -113,7 +113,6 @@ func extractClass(n *sitter.Node, f *treesitter.ParsedFile) Class {
 		cls.Name = f.NodeText(nameNode)
 	}
 
-	// Heritage: class_heritage contains extends_clause and implements_clause
 	if heritage := treesitter.FindChildByType(n, "class_heritage"); heritage != nil {
 		for i := 0; i < int(heritage.NamedChildCount()); i++ {
 			clause := heritage.NamedChild(i)
@@ -123,20 +122,19 @@ func extractClass(n *sitter.Node, f *treesitter.ParsedFile) Class {
 			switch clause.Type() {
 			case "extends_clause":
 				if t := firstTypeName(clause, f); t != "" {
-					cls.Extends = t
+					cls.Extends = UnwrapTSTypeAnnotation(t)
 				}
 			case "implements_clause":
 				for j := 0; j < int(clause.NamedChildCount()); j++ {
 					c := clause.NamedChild(j)
 					if c != nil {
-						cls.Implements = append(cls.Implements, f.NodeText(c))
+						cls.Implements = append(cls.Implements, UnwrapTSTypeAnnotation(f.NodeText(c)))
 					}
 				}
 			}
 		}
 	}
 
-	// Methods and properties live in class_body
 	if body := treesitter.ChildByField(n, "body"); body != nil {
 		for i := 0; i < int(body.NamedChildCount()); i++ {
 			member := body.NamedChild(i)
@@ -170,7 +168,7 @@ func extractInterface(n *sitter.Node, f *treesitter.ParsedFile) Interface {
 			for j := 0; j < int(c.NamedChildCount()); j++ {
 				tc := c.NamedChild(j)
 				if tc != nil {
-					iface.Extends = append(iface.Extends, f.NodeText(tc))
+					iface.Extends = append(iface.Extends, UnwrapTSTypeAnnotation(f.NodeText(tc)))
 				}
 			}
 		}
@@ -201,10 +199,10 @@ func extractFunction(n *sitter.Node, f *treesitter.ParsedFile, receiver string) 
 		extractParamTypes(params, f, fn.LocalTypes)
 	}
 	if rt := treesitter.ChildByField(n, "return_type"); rt != nil {
-		fn.ReturnType = strings.TrimSpace(f.NodeText(rt))
+		fn.ReturnType = UnwrapTSTypeAnnotation(f.NodeText(rt))
 	}
 	fn.IsAsync = hasChildOfType(n, "async")
-	fn.Calls = extractCallTargets(n, f, fn.LocalTypes)
+	fn.Calls, fn.CallSites = extractCallTargets(n, f, fn.LocalTypes)
 	return fn
 }
 
@@ -223,30 +221,57 @@ func extractMethod(n *sitter.Node, f *treesitter.ParsedFile, receiver string) Fu
 		extractParamTypes(params, f, fn.LocalTypes)
 	}
 	if rt := treesitter.ChildByField(n, "return_type"); rt != nil {
-		fn.ReturnType = strings.TrimSpace(f.NodeText(rt))
+		fn.ReturnType = UnwrapTSTypeAnnotation(f.NodeText(rt))
 	}
 	fn.IsAsync = hasChildOfType(n, "async")
-	fn.Calls = extractCallTargets(n, f, fn.LocalTypes)
+	fn.Calls, fn.CallSites = extractCallTargets(n, f, fn.LocalTypes)
 	return fn
 }
 
-func extractCallTargets(root *sitter.Node, f *treesitter.ParsedFile, localTypes map[string]string) []string {
+func extractCallTargets(root *sitter.Node, f *treesitter.ParsedFile, localTypes map[string]string) ([]string, []CallSite) {
 	var calls []string
+	var sites []CallSite
 	var walk func(node *sitter.Node)
 	walk = func(node *sitter.Node) {
 		if node == nil {
 			return
 		}
+		lineNum := treesitter.NodeLine(node)
 		switch node.Type() {
 		case "variable_declarator":
 			nameNode := treesitter.ChildByField(node, "name")
+			typeNode := treesitter.ChildByField(node, "type")
 			valNode := treesitter.ChildByField(node, "value")
-			if nameNode != nil && valNode != nil && valNode.Type() == "new_expression" {
-				if ctorNode := treesitter.ChildByField(valNode, "constructor"); ctorNode != nil {
-					varName := strings.TrimSpace(f.NodeText(nameNode))
-					ctorName := strings.TrimSpace(f.NodeText(ctorNode))
-					if varName != "" && ctorName != "" && localTypes != nil {
-						localTypes[varName] = ctorName
+			if nameNode != nil && localTypes != nil {
+				varName := strings.TrimSpace(f.NodeText(nameNode))
+				if typeNode != nil {
+					if tName := UnwrapTSTypeAnnotation(f.NodeText(typeNode)); tName != "" {
+						localTypes[varName] = tName
+					}
+				} else if valNode != nil && valNode.Type() == "new_expression" {
+					if ctorNode := treesitter.ChildByField(valNode, "constructor"); ctorNode != nil {
+						ctorName := UnwrapTSTypeAnnotation(f.NodeText(ctorNode))
+						if varName != "" && ctorName != "" {
+							localTypes[varName] = ctorName
+						}
+					}
+				} else if valNode != nil {
+					// `const x = foo()` / `const x = await this.getRepo()`: record the callee so
+					// integration.resolveTypeBinding can map it to the callee's (unwrapped) return
+					// type. Mirrors the regex parser's reTSCallAssign behaviour.
+					inner := valNode
+					if inner.Type() == "await_expression" && inner.NamedChildCount() > 0 {
+						inner = inner.NamedChild(0)
+					}
+					if inner != nil && inner.Type() == "call_expression" {
+						if fnNode := treesitter.ChildByField(inner, "function"); fnNode != nil {
+							callee := strings.TrimSpace(f.NodeText(fnNode))
+							if varName != "" && callee != "" {
+								if _, exists := localTypes[varName]; !exists {
+									localTypes[varName] = callee
+								}
+							}
+						}
 					}
 				}
 			}
@@ -256,7 +281,7 @@ func extractCallTargets(root *sitter.Node, f *treesitter.ParsedFile, localTypes 
 			if leftNode != nil && rightNode != nil && rightNode.Type() == "new_expression" {
 				if ctorNode := treesitter.ChildByField(rightNode, "constructor"); ctorNode != nil {
 					lhs := strings.TrimSpace(f.NodeText(leftNode))
-					ctorName := strings.TrimSpace(f.NodeText(ctorNode))
+					ctorName := UnwrapTSTypeAnnotation(f.NodeText(ctorNode))
 					if lhs != "" && ctorName != "" && localTypes != nil {
 						localTypes[lhs] = ctorName
 					}
@@ -264,9 +289,10 @@ func extractCallTargets(root *sitter.Node, f *treesitter.ParsedFile, localTypes 
 			}
 		case "new_expression":
 			if ctorNode := treesitter.ChildByField(node, "constructor"); ctorNode != nil {
-				txt := strings.TrimSpace(f.NodeText(ctorNode))
+				txt := UnwrapTSTypeAnnotation(f.NodeText(ctorNode))
 				if txt != "" {
 					calls = append(calls, txt)
+					sites = append(sites, CallSite{Target: txt, Line: lineNum})
 				}
 			}
 		case "call_expression":
@@ -274,6 +300,7 @@ func extractCallTargets(root *sitter.Node, f *treesitter.ParsedFile, localTypes 
 				txt := strings.TrimSpace(f.NodeText(fnNode))
 				if txt != "" {
 					calls = append(calls, txt)
+					sites = append(sites, CallSite{Target: txt, Line: lineNum})
 				}
 			}
 		}
@@ -282,7 +309,7 @@ func extractCallTargets(root *sitter.Node, f *treesitter.ParsedFile, localTypes 
 		}
 	}
 	walk(root)
-	return calls
+	return calls, sites
 }
 
 func extractProperty(n *sitter.Node, f *treesitter.ParsedFile) Property {
@@ -291,9 +318,7 @@ func extractProperty(n *sitter.Node, f *treesitter.ParsedFile) Property {
 		p.Name = f.NodeText(nameNode)
 	}
 	if ta := treesitter.ChildByField(n, "type"); ta != nil {
-		tTxt := strings.TrimSpace(f.NodeText(ta))
-		tTxt = strings.TrimSpace(strings.TrimPrefix(tTxt, ":"))
-		p.Type = tTxt
+		p.Type = UnwrapTSTypeAnnotation(f.NodeText(ta))
 	}
 	p.IsOptional = hasChildOfType(n, "?")
 	p.IsReadonly = hasChildOfType(n, "readonly")
@@ -388,17 +413,13 @@ func extractExportedArrow(n *sitter.Node, f *treesitter.ParsedFile, m *Module) {
 				extractParamTypes(params, f, fn.LocalTypes)
 			}
 			if rt := treesitter.ChildByField(valueNode, "return_type"); rt != nil {
-				fn.ReturnType = strings.TrimSpace(f.NodeText(rt))
+				fn.ReturnType = UnwrapTSTypeAnnotation(f.NodeText(rt))
 			}
-			fn.Calls = extractCallTargets(valueNode, f, fn.LocalTypes)
+			fn.Calls, fn.CallSites = extractCallTargets(valueNode, f, fn.LocalTypes)
 			m.Functions = append(m.Functions, fn)
 		}
 	}
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
 
 func extractParamNames(params *sitter.Node, f *treesitter.ParsedFile) []string {
 	var names []string
@@ -433,7 +454,7 @@ func extractParamTypes(params *sitter.Node, f *treesitter.ParsedFile, localTypes
 		typeNode := treesitter.ChildByField(p, "type")
 		if nameNode != nil && typeNode != nil {
 			pName := strings.TrimSpace(f.NodeText(nameNode))
-			tName := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(f.NodeText(typeNode)), ":"))
+			tName := UnwrapTSTypeAnnotation(f.NodeText(typeNode))
 			if pName != "" && tName != "" {
 				localTypes[pName] = tName
 				localTypes["this."+pName] = tName

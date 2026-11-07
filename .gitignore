@@ -114,3 +114,16 @@ __pycache__/
 *.kubeconfig
 docker-compose.override.yml
 /docker-compose.garuda.yml
+scan_reports/
+audit-report/
+diagnose-out/
+test-results/
+benchmark_report.json
+garuda-snapshot.json
+docs/generated/
+.claude/
+/mcp.json
+/mcp-registry.json
+/plugin.json
+.cursor/mcp.json
+scripts/eval_harness/*.json

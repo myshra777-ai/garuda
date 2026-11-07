@@ -1,6 +1,6 @@
 ---
 name: violation-repair
-description: Guides an agent through remediating a `BLOCK` or `REVIEW` governance finding without introducing secondary boundary violations.
+description: "Use after Garuda reports a BLOCK or REVIEW finding and you need to fix it without causing a second violation. Garuda returns the exact violating lines together with self-repair instructions, explains which policy or documented rule was broken and how the match was resolved, and lets you check a proposed replacement interface or helper before editing. Make the smallest diff that satisfies the rule, ask a human before touching a high-severity surface, then re-run verification until the outcome is allow. The skill keeps repairs minimal and prevents fixes that move the problem to another layer boundary. Use it for remediation, not for first-time review."
 version: "1.9.11"
 license: "Apache-2.0"
 read_only_default: true

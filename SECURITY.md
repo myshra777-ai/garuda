@@ -74,7 +74,7 @@ The following are known limitations, documented so they are not reported as find
 
 - The Merkle ledger is anchored locally. Independent verification requires the source of `internal/merkle/`, not an external timestamp authority or a public ledger. If you want external anchoring, the source is available for you to integrate.
 - Call edges at the leaf are sparse (median 1, 90th percentile 4). This is a property of the code under analysis, not a defect in the analyzer.
-- The Python and TypeScript analyzers are structural and have not been validated against a real cross-language workspace. Claims from these analyzers are labelled at the tier they were derived at.
+- The Python, TypeScript, and Java (Beta) analyzers resolve cross-file imports (`PYTHON_IMPORT` / `TS_IMPORT`), barrel re-exports, `tsconfig.json` paths, constructor fields, inheritance, and explicit parameter/return type annotations (`AST_EXACT` at `0.95` confidence), while unannotated dynamic calls are labelled at their derived resolution tier.
 - Runtime verification correlates static structure with OpenTelemetry spans. The correlation path is exercised against synthetic spans. Production correlation is in beta.
 
 ## Credit

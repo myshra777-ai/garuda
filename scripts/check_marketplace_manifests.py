@@ -124,6 +124,11 @@ for entry in sorted(os.listdir(skills_dir)):
         err(f"{md}: needs YAML frontmatter with name and description")
     elif not re.search(rf"^name:\s*{re.escape(entry)}\s*$", front, re.M):
         err(f"{md}: frontmatter name must equal the folder name {entry!r}")
+    else:
+        dm = re.search(r'^description:\s*"?(.*?)"?\s*$', front, re.M)
+        words = len(dm.group(1).split()) if dm else 0
+        if not 60 <= words <= 120:
+            err(f"{md}: description must be 60-120 words so agents can decide when to use the skill (found {words})")
     if sh("git", "ls-files", "--error-unmatch", md).returncode != 0:
         err(f"{md}: not tracked by git")
 if count == 0:
