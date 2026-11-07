@@ -122,8 +122,8 @@ benchmark_report.json
 garuda-snapshot.json
 docs/generated/
 .claude/
-mcp.json
-mcp-registry.json
-plugin.json
+/mcp.json
+/mcp-registry.json
+/plugin.json
 .cursor/mcp.json
 scripts/eval_harness/*.json

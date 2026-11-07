@@ -255,6 +255,24 @@ func extractCallTargets(root *sitter.Node, f *treesitter.ParsedFile, localTypes 
 							localTypes[varName] = ctorName
 						}
 					}
+				} else if valNode != nil {
+					// `const x = foo()` / `const x = await this.getRepo()`: record the callee so
+					// integration.resolveTypeBinding can map it to the callee's (unwrapped) return
+					// type. Mirrors the regex parser's reTSCallAssign behaviour.
+					inner := valNode
+					if inner.Type() == "await_expression" && inner.NamedChildCount() > 0 {
+						inner = inner.NamedChild(0)
+					}
+					if inner != nil && inner.Type() == "call_expression" {
+						if fnNode := treesitter.ChildByField(inner, "function"); fnNode != nil {
+							callee := strings.TrimSpace(f.NodeText(fnNode))
+							if varName != "" && callee != "" {
+								if _, exists := localTypes[varName]; !exists {
+									localTypes[varName] = callee
+								}
+							}
+						}
+					}
 				}
 			}
 		case "assignment_expression":
