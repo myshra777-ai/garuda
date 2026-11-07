@@ -46,7 +46,7 @@ jobs:
           python scripts/weekly_benchmark.py || true
 
       - name: Commit benchmark results
-        uses: EndBug/add-and-commit@v9
+        uses: EndBug/add-and-commit@v11
         with:
           author_name: "github-actions[bot]"
           author_email: "github-actions[bot]@users.noreply.github.com"
