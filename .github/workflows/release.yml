@@ -98,7 +98,7 @@ jobs:
       - name: Fill checksums into the package-manager manifests
         run: python3 scripts/render_packaging.py --sums dist/releases/SHA256SUMS.txt --out dist/releases/packaging
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/releases/*.tar.gz
