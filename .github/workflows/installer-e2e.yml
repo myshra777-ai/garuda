@@ -47,7 +47,7 @@ jobs:
         run: |
           mkdir -p e2e-logs
           cp -f "$HOME"/.garuda/data/*.log e2e-logs/ 2>/dev/null || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-logs-${{ matrix.os }}
@@ -78,7 +78,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force e2e-logs | Out-Null
           Get-ChildItem "$HOME\.garuda\data" -Filter *.log -ErrorAction SilentlyContinue | Copy-Item -Destination e2e-logs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-logs-windows
