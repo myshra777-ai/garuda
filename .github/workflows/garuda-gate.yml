@@ -101,7 +101,7 @@ jobs:
 
       - name: Post Garuda Governance Verdict Comment on PR
         if: github.event_name == 'pull_request' && hashFiles('garuda-pr-report.md') != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
