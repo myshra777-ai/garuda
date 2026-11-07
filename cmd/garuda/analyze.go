@@ -324,7 +324,13 @@ func handleAnalyze(path string) {
 		fmt.Printf("   Revision:    #%d\n", rev)
 		if result.BuildContext != nil {
 			fmt.Printf("   Receipt SHA: %s\n", result.BuildContext.ReceiptHash[:min(16, len(result.BuildContext.ReceiptHash))])
-			fmt.Printf("   Reproduce:   %s\n", result.BuildContext.ReproduceCommand)
+			// Always show the workspace this run actually used (--workspace wins over
+			// GARUDA_WORKSPACE); the stored command may carry an ambient env value.
+			reproWs := workspaceFlag
+			if reproWs == "" {
+				reproWs = getWorkspaceName()
+			}
+			fmt.Printf("   Reproduce:   %s\n", result.BuildContext.FormatReproduceCommand(reproWs))
 		}
 		fmt.Printf("   Status:      COMMITTED ✓\n")
 		fmt.Printf("   🔗 Run `./garuda explain %s` to inspect.\n", decisionID)
