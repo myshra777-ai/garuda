@@ -26,7 +26,7 @@ jobs:
   powershell-parse-and-contract:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Parse installer scripts and enforce ASCII contract
         shell: pwsh
         run: |
@@ -79,7 +79,7 @@ jobs:
   shell-installer-syntax:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check shell installer syntax
         run: |
           bash -n install.sh

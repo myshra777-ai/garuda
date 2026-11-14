@@ -26,14 +26,14 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Cold boot + idempotent re-run of every migration (no masking)
         run: scripts/check_migrations.sh "postgres://test:test@localhost:5433/garuda_test?sslmode=disable"
 
   repo-hygiene:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: No tracked binaries or oversized files
         run: scripts/check_repo_hygiene.sh 2048
 
@@ -41,7 +41,7 @@ jobs:
     name: Docs, counts, links and marketplace manifests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -63,7 +63,7 @@ jobs:
   go-checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
