@@ -104,7 +104,7 @@ jobs:
             dist/releases/*.tar.gz
             dist/releases/*.zip
             dist/releases/*.deb
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: garuda-release-${{ env.TAG }}
           path: dist/releases
