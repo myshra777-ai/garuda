@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run setup.sh from a fresh checkout
         env:
           GARUDA_PASSWORD: e2e-Test-Passphrase-1
@@ -59,7 +59,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Run setup.ps1 (Windows PowerShell 5.1)
         shell: powershell
         env:
