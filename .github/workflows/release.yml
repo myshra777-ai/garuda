@@ -47,7 +47,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Tag must match version.txt and capabilities.json
@@ -85,7 +85,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Build the release matrix (static, CGO_ENABLED=0)
