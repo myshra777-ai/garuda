@@ -1,6 +1,6 @@
 ---
 name: pre-edit-governance
-description: "Use before an AI coding agent modifies code, or whenever someone asks whether a planned change is safe to make. This is the mandatory checkpoint that runs first: in one call Garuda returns the target's caller fan-in, its criticality tier, the active YAML policies that apply, and the MUST and MUST NOT rules from ADRs and agent instruction files. It also flags metrics or calculations with competing implementations across teams and any surface frozen against unreviewed edits. The result is a proceed, revise or escalate decision, so the agent knows what to respect, or when to ask a human, before writing any code. Read-only by default."
+description: "Use before an AI coding agent modifies code, or whenever someone asks whether a planned change is safe to make. This is the checkpoint meant to run first: in one call Garuda returns the target's caller fan-in, its criticality tier, the active YAML policies that apply, and the MUST and MUST NOT rules from ADRs and agent instruction files. It also flags metrics or calculations with competing implementations across teams and any surface frozen against unreviewed edits. The result is a proceed, revise or escalate decision, so the agent knows what to respect, or when to ask a human, before writing any code. Read-only by default."
 version: "1.9.11"
 license: "Apache-2.0"
 read_only_default: true
@@ -8,7 +8,7 @@ read_only_default: true
 
 # 03 — Garuda Pre-Edit Governance Gate
 
-Acts as the mandatory pre-change checkpoint before an AI coding agent modifies code, returning a proceed, revise, or escalate decision.
+Acts as the pre-change checkpoint before an AI coding agent modifies code, returning a proceed, revise, or escalate decision.
 
 ## 1. Purpose & Triggers
 Invoke this skill when the user or coding workflow asks:
