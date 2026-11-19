@@ -1,0 +1,35 @@
+{
+  "version": "1.9.1",
+  "description": "Garuda — Local-first AI code change-control gate, Garuda Talon harness, 0.0-1.0 formula disambiguation, financial audit & 35-tool MCP server.",
+  "homepage": "https://github.com/myshra777-ai/garuda",
+  "license": "Apache-2.0",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/myshra777-ai/garuda/releases/download/v1.9.1/garuda-v1.9.1-windows-amd64.zip",
+      "extract_dir": "garuda-v1.9.1-windows-amd64"
+    },
+    "arm64": {
+      "url": "https://github.com/myshra777-ai/garuda/releases/download/v1.9.1/garuda-v1.9.1-windows-arm64.zip",
+      "extract_dir": "garuda-v1.9.1-windows-arm64"
+    }
+  },
+  "bin": [
+    "bin\\garuda.exe",
+    "bin\\garuda-api.exe",
+    "bin\\garuda-mcp.exe",
+    "bin\\garuda-talon.exe"
+  ],
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/myshra777-ai/garuda/releases/download/v$version/garuda-v$version-windows-amd64.zip",
+        "extract_dir": "garuda-v$version-windows-amd64"
+      },
+      "arm64": {
+        "url": "https://github.com/myshra777-ai/garuda/releases/download/v$version/garuda-v$version-windows-arm64.zip",
+        "extract_dir": "garuda-v$version-windows-arm64"
+      }
+    }
+  }
+}

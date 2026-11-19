@@ -1,0 +1,102 @@
+{
+  "name": "garuda-architecture-shield",
+  "displayName": "Garuda — AI Architecture, Formula & Financial Audit Shield",
+  "description": "Local-first change-control gate, Garuda Talon active AI harness, 0.0-1.0 formula disambiguation, 3-tier surface criticality, financial discrepancy audit (48Cr vs 4.8Cr), and 35-tool MCP integration.",
+  "version": "1.9.1",
+  "publisher": "garuda-ai",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/myshra777-ai/garuda.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "Testing",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:go",
+    "onLanguage:python",
+    "onLanguage:typescript",
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "garuda.refreshState",
+        "title": "Garuda: Refresh Architectural State & Contradictions"
+      },
+      {
+        "command": "garuda.openVisualizer",
+        "title": "Garuda: Open 9-Surface Software Intelligence Dashboard"
+      },
+      {
+        "command": "garuda.reanalyzeWorkspace",
+        "title": "Garuda: Re-Index Workspace AST & Seal Merkle Ledger"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "garuda-shield",
+          "title": "Garuda Architecture Shield",
+          "icon": "resources/garuda-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "garuda-shield": [
+        {
+          "id": "garuda-ledger-view",
+          "name": "RFC 6962 Cryptographic Ledger"
+        },
+        {
+          "id": "garuda-contradictions-view",
+          "name": "Quarantined Contradictions & Violations"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Garuda Architecture Shield",
+      "properties": {
+        "garuda.daemonUrl": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "URL of the local Garuda API & 9-Surface Dashboard Gateway"
+        },
+        "garuda.executablePath": {
+          "type": "string",
+          "default": "garuda",
+          "description": "Path to the garuda CLI executable"
+        },
+        "garuda.databaseUrl": {
+          "type": "string",
+          "default": "postgres://test:test@127.0.0.1:5433/garuda_test?sslmode=disable",
+          "description": "PostgreSQL connection URL for Garuda workspace graph"
+        },
+        "garuda.hoverBlastRadius": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline caller fan-in, criticality tier, and blast radius on symbol hover"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --out ../dist/garuda-vscode-extension-v1.9.1.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.3.0"
+  }
+}
