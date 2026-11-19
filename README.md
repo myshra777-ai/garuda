@@ -14,6 +14,13 @@
 </p>
 
 <p align="center">
+  <a href="https://getgaruda.in"><strong>Website</strong></a> &nbsp;|&nbsp;
+  <a href="https://getgaruda.in/#install">Install</a> &nbsp;|&nbsp;
+  <a href="https://getgaruda.in/#contact">Book a call</a> &nbsp;|&nbsp;
+  <a href="mailto:contact@getgaruda.in">contact@getgaruda.in</a>
+</p>
+
+<p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
   <a href="server.json"><img src="https://img.shields.io/badge/MCP-server-10b981.svg" alt="MCP server"></a>
   <a href=".claude-plugin/plugin.json"><img src="https://img.shields.io/badge/Claude_Code-plugin-d97757.svg" alt="Claude Code plugin"></a>
@@ -226,6 +233,13 @@ Teams that already use AI coding assistants a lot, on a real codebase with rules
 ## Free and paid
 
 Everything above runs locally and is free and open source (Apache 2.0). Hosted and multi-team features (shared policies across an organisation, single sign-on, long-term audit storage) are planned for a paid tier.
+
+## Talk to us
+
+- **Website:** [getgaruda.in](https://getgaruda.in) has the install options, the guides and a request form.
+- **Book a call or ask about a pilot:** [getgaruda.in/#contact](https://getgaruda.in/#contact), or write to [contact@getgaruda.in](mailto:contact@getgaruda.in).
+- **Help with using Garuda:** [support@getgaruda.in](mailto:support@getgaruda.in), or [open an issue](https://github.com/myshra777-ai/garuda/issues).
+- **Security reports:** see [`SECURITY.md`](SECURITY.md). Please do not open a public issue.
 
 ## Learn more
 

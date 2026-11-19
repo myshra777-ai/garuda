@@ -5,7 +5,7 @@
 Report security issues privately. **Do not open a public GitHub issue.**
 
 1. **Preferred:** use GitHub's private vulnerability reporting: open the repository's **Security** tab and choose **Report a vulnerability** (<https://github.com/myshra777-ai/garuda/security/advisories/new>).
-2. **Fallback:** email the maintainer, Rohit Mishra, at `myshra777@gmail.com` with the subject `Garuda security report`.
+2. **Fallback:** email the maintainer, Rohit Mishra, at `contact@getgaruda.in` with the subject `Garuda security report`.
 
 Include:
 

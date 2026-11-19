@@ -3,7 +3,7 @@
   "version": "1.9.11",
   "description": "Checks what AI coding agents change before it lands: impact analysis, architecture rules, and a tamper-evident record. MCP server plus 6 skills.",
   "author": { "name": "Rohit Mishra", "url": "https://github.com/myshra777-ai" },
-  "homepage": "https://github.com/myshra777-ai/garuda",
+  "homepage": "https://getgaruda.in",
   "repository": "https://github.com/myshra777-ai/garuda",
   "license": "Apache-2.0",
   "keywords": ["mcp", "architecture", "governance", "ai-agents", "code-review", "merkle", "policy"]
