@@ -127,6 +127,8 @@ In diff mode (`--diff`, `--staged`, `--files`), `garuda check --json` and `garud
 
 `gaps` lists each reason in plain words. `unresolved_files` and `unsupported_code_files` name the files that were not analyzed. A CI gate can require `evidence_coverage.verdict == "COMPLETE"` in addition to `governance_outcome == "ALLOW"`.
 
+`garuda check --json` also lists `impacted_entities`: what the change can affect, most severe first, with `name`, `package`, `kind`, `file` (relative to the repository root), `severity`, `depth` and `confidence`. The list is capped at 200 entries; `impacted_entities_truncated` is `true` when it was cut. `affected_entities` is still the full count.
+
 ### 3.5 Human-in-the-Loop Logic Audit, Criticality Tiers, Financial Audit & Base Rulebook (`v1.9.9`)
 ```bash
 # 1. Multi-team formula disambiguation (0.0-1.0 weights + Least Architectural Harm)

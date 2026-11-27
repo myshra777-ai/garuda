@@ -75,7 +75,11 @@ type ChangeControlDecision struct {
 	// how much of the change was analyzed, so an ALLOW on a partly analyzed
 	// change is not read as "safe".
 	EvidenceCoverage *talon.EvidenceCoverage `json:"evidence_coverage,omitempty"`
-	DurationMs       int64                   `json:"duration_ms"`
+	// ImpactedEntities lists what the change can affect, most severe first,
+	// with repository-relative file paths (capped; see the truncated flag).
+	ImpactedEntities          []impact.ImpactedSummary `json:"impacted_entities,omitempty"`
+	ImpactedEntitiesTruncated bool                     `json:"impacted_entities_truncated,omitempty"`
+	DurationMs                int64                    `json:"duration_ms"`
 }
 
 var checkCmd = &cobra.Command{
@@ -212,6 +216,7 @@ var checkCmd = &cobra.Command{
 			}
 		}
 
+		var blastResults []*impact.BlastRadiusResult
 		idx, idxErr := st.BuildImpactIndex(ctx, wsID)
 		if idxErr == nil && diffRes != nil && len(diffRes.TouchedEntities) > 0 {
 			seenAffected := make(map[string]impact.SeverityLevel)
@@ -221,6 +226,7 @@ var checkCmd = &cobra.Command{
 					MinConfidence:   0.50,
 					IncludeInferred: true,
 				})
+				blastResults = append(blastResults, br)
 				for sev, list := range br.BySeverity {
 					for _, item := range list {
 						if prev, exists := seenAffected[item.EntityID]; !exists || sevRank(sev) > sevRank(prev) {
@@ -247,6 +253,7 @@ var checkCmd = &cobra.Command{
 					MinConfidence:   0.50,
 					IncludeInferred: true,
 				})
+				blastResults = append(blastResults, br)
 				affectedCount = br.TotalAffected
 				sevMap["CRITICAL"] = len(br.BySeverity[impact.SeverityCritical])
 				sevMap["HIGH"] = len(br.BySeverity[impact.SeverityHigh])
@@ -441,6 +448,11 @@ var checkCmd = &cobra.Command{
 			for _, te := range diffRes.TouchedEntities {
 				decision.TouchedSymbols = append(decision.TouchedSymbols, fmt.Sprintf("%s.%s (%s:%d)", te.Package, te.Name, filepath.Base(te.FilePath), te.LineStart))
 			}
+		}
+
+		decision.ImpactedEntities, decision.ImpactedEntitiesTruncated = impact.SummarizeImpacted(blastResults, absDir, impact.DefaultImpactedLimit)
+		if len(decision.ImpactedEntities) == 0 {
+			decision.ImpactedEntities = nil
 		}
 
 		if covIn != nil {

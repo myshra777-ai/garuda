@@ -5,6 +5,7 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 ## [Unreleased]
 
 ### Added
+- `impacted_entities` in `garuda check --json`: the entities a change can affect, most severe first, with repository-relative file paths, capped at 200 (`impacted_entities_truncated` says when the list was cut). Tools can use it to tell which teams own the affected code.
 - `evidence_coverage` in `garuda check --json` and `garuda talon guard --json` (diff mode): how many changed files were analyzed, which were not and why, policy decision counts, and a `COMPLETE` / `PARTIAL` / `INCONCLUSIVE` verdict. The terminal output shows it as a `Coverage:` line. See docs/CLI_DECISION_GUIDE.md. Additive: existing keys are unchanged, and contract tests now pin the keys of both JSON outputs.
 - Database migrations are embedded in the binary. Before, an install that put the SQL files somewhere other than `./migrations` (for example Homebrew) silently applied no migrations and then failed on missing tables. Files on disk are still preferred when present, and finding none at all is now an error.
 - Unit tests for `internal/impact`, `internal/graph`, `internal/runtime`, `internal/knowledge` and `internal/knowledge/markdown`, which had none.
