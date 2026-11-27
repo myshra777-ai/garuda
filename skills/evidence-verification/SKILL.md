@@ -1,7 +1,7 @@
 ---
 name: evidence-verification
 description: "Use when someone asks you to prove that an architectural claim or requirement actually holds, verify a governance receipt, or export an audit trail. Garuda checks natural-language or ADR statements against the indexed code and returns each claim as supported, unverified or contradicted, with evidence. It validates deterministic receipt hashes and graph fingerprints so a result can be reproduced, verifies RFC 6962 SHA-256 Merkle inclusion proofs, and exports the full decision, policy evaluation and proof bundle for auditors or compliance review. Use it whenever a conclusion must be checkable by someone else rather than taken on trust. Read-only by default."
-version: "1.9.11"
+version: "1.9.12"
 license: "Apache-2.0"
 read_only_default: true
 ---

@@ -71,7 +71,7 @@ func (s *Server) HandleSystemDiscover(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"version": "v1.9.11",
+		"version": "v1.9.12",
 		"modules": modules,
 	})
 }
@@ -140,7 +140,7 @@ func (s *Server) HandleSystemBootstrap(w http.ResponseWriter, r *http.Request) {
 
 	resp := map[string]interface{}{
 		"system":             "Garuda Engine",
-		"version":            "v1.9.11",
+		"version":            "v1.9.12",
 		"tenant_id":          tenantID.String(),
 		"active_merkle_root": rootHash,
 		"block_height":       blockHeight,
