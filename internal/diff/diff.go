@@ -71,6 +71,10 @@ type TargetResolution struct {
 	TouchedEntities []TouchedEntity `json:"touched_entities"`
 	TouchedPackages []string        `json:"touched_packages"`
 	TouchedFiles    []string        `json:"touched_files"`
+	// ResolvedFiles lists the changed files that matched at least one entity
+	// in the indexed graph. A changed source file missing from this list was
+	// not analyzed (new since the last index, or outside the indexed tree).
+	ResolvedFiles []string `json:"resolved_files"`
 }
 
 var hunkHeaderRe = regexp.MustCompile(`^@@\s+-[0-9]+(?:,[0-9]+)?\s+\+([0-9]+)(?:,([0-9]+))?\s+@@`)
@@ -304,6 +308,7 @@ func ResolveTouchedEntities(
 	defer rows.Close()
 
 	pkgSet := make(map[string]bool)
+	resolvedSet := make(map[string]bool)
 	var exactMatches []TouchedEntity
 	var fileMatches []TouchedEntity
 
@@ -321,6 +326,7 @@ func ResolveTouchedEntities(
 		if !matchedFile {
 			continue
 		}
+		resolvedSet[filepath.ToSlash(strings.TrimPrefix(delta.FilePath, "./"))] = true
 		if pkg != "" {
 			pkgSet[pkg] = true
 		}
@@ -376,6 +382,11 @@ func ResolveTouchedEntities(
 		res.TouchedPackages = append(res.TouchedPackages, pkg)
 	}
 	sort.Strings(res.TouchedPackages)
+
+	for f := range resolvedSet {
+		res.ResolvedFiles = append(res.ResolvedFiles, f)
+	}
+	sort.Strings(res.ResolvedFiles)
 
 	return res, nil
 }

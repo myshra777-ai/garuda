@@ -71,7 +71,11 @@ type ChangeControlDecision struct {
 	EnvironmentDrift       *analyzer.EnvironmentDriftReport `json:"environment_drift,omitempty"`
 	MatrixResults          []talon.MatrixTargetVerdict      `json:"matrix_results,omitempty"`
 	ReproduceCommand       string                           `json:"reproduce_command,omitempty"`
-	DurationMs             int64                            `json:"duration_ms"`
+	// EvidenceCoverage is set in diff mode (--staged, --diff, --files). It says
+	// how much of the change was analyzed, so an ALLOW on a partly analyzed
+	// change is not read as "safe".
+	EvidenceCoverage *talon.EvidenceCoverage `json:"evidence_coverage,omitempty"`
+	DurationMs       int64                   `json:"duration_ms"`
 }
 
 var checkCmd = &cobra.Command{
@@ -165,8 +169,13 @@ var checkCmd = &cobra.Command{
 		}
 
 		var diffRes *diff.TargetResolution
+		var covIn *talon.CoverageInputs
 		if isDiffMode {
 			mode, deltas, dErr := diff.CollectGitDeltas(absDir, checkStagedFlag, checkDiffFlag, explicitFiles)
+			covIn = &talon.CoverageInputs{DiffError: dErr}
+			for _, d := range deltas {
+				covIn.ChangedFiles = append(covIn.ChangedFiles, d.FilePath)
+			}
 			if dErr == nil && diff.HasSourceFileDeltas(deltas) && checkAutoIndexFlag {
 				workspaceFlag = wsName
 				incrementalFlag = true
@@ -244,7 +253,10 @@ var checkCmd = &cobra.Command{
 				sevMap["MEDIUM"] = len(br.BySeverity[impact.SeverityMedium])
 				sevMap["LOW"] = len(br.BySeverity[impact.SeverityLow])
 			}
-		} else {
+		} else if !isDiffMode {
+			// Whole-workspace check: report the workspace size. In diff mode a
+			// change that touches no indexed symbols affects nothing we can see,
+			// so the count stays 0 and evidence_coverage explains why.
 			_ = st.Pool().QueryRow(ctx, `
 				SELECT COUNT(*) FROM entities WHERE workspace_id = $1 AND kind != 'external'
 			`, wsID).Scan(&affectedCount)
@@ -431,6 +443,19 @@ var checkCmd = &cobra.Command{
 			}
 		}
 
+		if covIn != nil {
+			covIn.GraphAvailable = diffRes != nil && (idxErr == nil || len(diffRes.TouchedEntities) == 0)
+			covIn.ImpactedEntities = affectedCount
+			if diffRes != nil {
+				covIn.ResolvedFiles = diffRes.ResolvedFiles
+				covIn.TouchedEntities = len(diffRes.TouchedEntities)
+			}
+			for _, ev := range runRes.Evaluations {
+				covIn.PolicyDecisions = append(covIn.PolicyDecisions, string(ev.Decision))
+			}
+			decision.EvidenceCoverage = talon.ComputeEvidenceCoverage(*covIn)
+		}
+
 		if checkJSONFlag {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
@@ -461,6 +486,13 @@ var checkCmd = &cobra.Command{
 			}
 			fmt.Printf("  Affected:    %d entities (CRITICAL=%d, HIGH=%d)\n",
 				decision.AffectedEntities, sevMap["CRITICAL"], sevMap["HIGH"])
+			for i, line := range decision.EvidenceCoverage.SummaryLines() {
+				if i == 0 {
+					fmt.Printf("  Coverage:    %s\n", line)
+				} else {
+					fmt.Printf("               • %s\n", line)
+				}
+			}
 			fmt.Printf("  Evidence:    SUPPORTED=%d  |  UNVERIFIED=%d  |  CONTRADICTED=%d\n",
 				evState["SUPPORTED"], evState["UNVERIFIED"], evState["CONTRADICTED"])
 			fmt.Printf("  Policies:    %d evaluated in %dms (Net-New=%d, Baseline=%d)\n",

@@ -725,7 +725,11 @@ type GuardVerdict struct {
 	EnvironmentDrift        *analyzer.EnvironmentDriftReport `json:"environment_drift,omitempty"`
 	MatrixResults           []MatrixTargetVerdict            `json:"matrix_results,omitempty"`
 	ReproduceCommand        string                           `json:"reproduce_command,omitempty"`
-	DurationMs              int64                            `json:"duration_ms"`
+	// EvidenceCoverage says how much of the change the guard could see.
+	// An ALLOW with PARTIAL or INCONCLUSIVE coverage means "nothing found in
+	// what was analyzed", not "safe".
+	EvidenceCoverage *EvidenceCoverage `json:"evidence_coverage,omitempty"`
+	DurationMs       int64             `json:"duration_ms"`
 }
 
 func RunGuard(
@@ -761,7 +765,7 @@ func RunGuard(
 		activeBuildCtx.ReceiptHash = activeBuildCtx.ComputeReceiptHash()
 	}
 
-	mode, deltas, _ := diff.CollectGitDeltas(absRepo, opts.Staged, opts.DiffRev, opts.ExplicitFiles)
+	mode, deltas, deltaErr := diff.CollectGitDeltas(absRepo, opts.Staged, opts.DiffRev, opts.ExplicitFiles)
 	var diffRes *diff.TargetResolution
 	if pool != nil {
 		diffRes, _ = diff.ResolveTouchedEntities(ctx, pool, workspaceID, absRepo, mode, opts.DiffRev, deltas)
@@ -769,9 +773,13 @@ func RunGuard(
 
 	sevMap := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
 	affectedCount := 0
+	graphAvailable := diffRes != nil
 
 	if st != nil && diffRes != nil && len(diffRes.TouchedEntities) > 0 {
-		if idx, idxErr := st.BuildImpactIndex(ctx, workspaceID); idxErr == nil {
+		idx, idxErr := st.BuildImpactIndex(ctx, workspaceID)
+		if idxErr != nil {
+			graphAvailable = false
+		} else {
 			seen := make(map[string]impact.SeverityLevel)
 			for _, te := range diffRes.TouchedEntities {
 				br := impact.ComputeBlastRadius(idx, te.ID.String(), impact.BlastRadiusConfig{
@@ -942,7 +950,6 @@ func RunGuard(
 		EnvironmentDrift:        runRes.EnvironmentDrift,
 		MatrixResults:           matrixResults,
 		ReproduceCommand:        activeBuildCtx.ReproduceCommand,
-		DurationMs:              time.Since(start).Milliseconds(),
 	}
 
 	if diffRes != nil {
@@ -958,9 +965,27 @@ func RunGuard(
 		}
 	}
 
+	covIn := CoverageInputs{
+		DiffError:        deltaErr,
+		GraphAvailable:   graphAvailable,
+		ImpactedEntities: affectedCount,
+	}
+	for _, d := range deltas {
+		covIn.ChangedFiles = append(covIn.ChangedFiles, d.FilePath)
+	}
+	if diffRes != nil {
+		covIn.ResolvedFiles = diffRes.ResolvedFiles
+		covIn.TouchedEntities = len(diffRes.TouchedEntities)
+	}
+	for _, ev := range runRes.Evaluations {
+		covIn.PolicyDecisions = append(covIn.PolicyDecisions, string(ev.Decision))
+	}
+	verdict.EvidenceCoverage = ComputeEvidenceCoverage(covIn)
+
 	if outcome == string(policy.DecisionBlock) {
 		verdict.SelfRepairPrompt = BuildSelfRepairPrompt(verdict)
 	}
+	verdict.DurationMs = time.Since(start).Milliseconds()
 
 	if opts.SaveLedger {
 		garudaDir := filepath.Join(absRepo, ".garuda")

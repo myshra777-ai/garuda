@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -96,14 +95,16 @@ func Migrate(connString string, migrationsDir string) error {
 		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
-	files, err := filepath.Glob(filepath.Join(migrationsDir, "*.sql"))
+	files, _, err := loadMigrationFiles(migrationsDir)
 	if err != nil {
-		return fmt.Errorf("failed to list migration files: %w", err)
+		return err
 	}
-	sort.Strings(files)
+	if len(files) == 0 {
+		return fmt.Errorf("no migrations found in %q or embedded in this binary", migrationsDir)
+	}
 
-	for _, file := range files {
-		name := filepath.Base(file)
+	for _, mf := range files {
+		name := mf.Name
 
 		var exists bool
 		err := pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM migrations WHERE name = $1)", name).Scan(&exists)
@@ -114,10 +115,7 @@ func Migrate(connString string, migrationsDir string) error {
 			continue
 		}
 
-		content, err := os.ReadFile(file)
-		if err != nil {
-			return fmt.Errorf("failed to read migration %s: %w", name, err)
-		}
+		content := mf.Content
 
 		tx, err := pool.Begin(ctx)
 		if err != nil {
