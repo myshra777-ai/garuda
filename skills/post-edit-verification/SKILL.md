@@ -1,7 +1,7 @@
 ---
 name: post-edit-verification
 description: "Use after finishing a code change, and before committing or opening a pull request, to check that the edit introduced no new architectural or policy violations. Garuda re-indexes only the modified files, evaluates the git diff against configured YAML policies and ADR claims, and separates net-new violations from findings that already existed on the baseline, so reviewers see only what this change caused. It confirms the build context behind the result (platform, CGO, build tags, commit) and can verify that conditional build tags are not hiding violations on other operating systems. Returns an allow, review or block outcome with file-and-line evidence. Read-only by default."
-version: "1.9.11"
+version: "1.9.12"
 license: "Apache-2.0"
 read_only_default: true
 ---

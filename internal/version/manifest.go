@@ -8,13 +8,13 @@ import "fmt"
 const (
 	// Version is the single canonical release version across all Garuda binaries and docs.
 	// Do not edit by hand: run `python3 scripts/sync_docs_from_manifest.py --set vX.Y.Z` (capabilities.json is the source).
-	Version = "v1.9.11"
+	Version = "v1.9.12"
 
 	// SemVer is the bare semantic version string used in MCP serverInfo and OpenAPI specs.
-	SemVer = "1.9.11"
+	SemVer = "1.9.12"
 
 	// ReleaseDate is the canonical release date of Version.
-	ReleaseDate = "2026-11-03"
+	ReleaseDate = "2026-11-28"
 
 	// MCPProtocolVersion is the JSON-RPC 2.0 MCP protocol version negotiated on initialize.
 	MCPProtocolVersion = "2025-06-18"

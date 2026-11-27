@@ -4,11 +4,20 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 
 ## [Unreleased]
 
+## [v1.9.12] - 2026-11-28 — Evidence coverage, impacted entities, embedded migrations, tests for untested packages
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md).
+
 ### Added
 - `impacted_entities` in `garuda check --json`: the entities a change can affect, most severe first, with repository-relative file paths, capped at 200 (`impacted_entities_truncated` says when the list was cut). Tools can use it to tell which teams own the affected code.
 - `evidence_coverage` in `garuda check --json` and `garuda talon guard --json` (diff mode): how many changed files were analyzed, which were not and why, policy decision counts, and a `COMPLETE` / `PARTIAL` / `INCONCLUSIVE` verdict. The terminal output shows it as a `Coverage:` line. See docs/CLI_DECISION_GUIDE.md. Additive: existing keys are unchanged, and contract tests now pin the keys of both JSON outputs.
 - Database migrations are embedded in the binary. Before, an install that put the SQL files somewhere other than `./migrations` (for example Homebrew) silently applied no migrations and then failed on missing tables. Files on disk are still preferred when present, and finding none at all is now an error.
 - Unit tests for `internal/impact`, `internal/graph`, `internal/runtime`, `internal/knowledge` and `internal/knowledge/markdown`, which had none.
+- `docs/PRICING_PLAN.md`: the intended free and paid split, with every paid item marked as planned.
+
+### Changed
+- New tenants default to the `community` plan instead of `enterprise` (migration 100, and the inline schema in `internal/store`). Nothing assigned or enforced a plan before, so existing `enterprise` values were only the old default and are reset to `community`.
+- Contributors now sign commits with a `Signed-off-by` line (Developer Certificate of Origin); see CONTRIBUTING.md.
 
 ### Fixed
 - The impact report's `evidence_root` was different on every run for the same change, because findings came out of a map in random order and the hash included the random report ID. Findings are now sorted and the ID is left out of the hash, so the same change always gives the same root.
@@ -18,19 +27,10 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 - `garuda check --diff` reported every entity in the workspace as affected when the diff touched no indexed symbols. It now reports 0, and `evidence_coverage` explains why.
 - `garuda audit logic|data-logic|criticality` and `garuda rulebook generate` no longer fall back to built-in insurance/search sample data. That data was shown as if it were workspace findings and was written into the workspace tables. Samples now require `--include-fixtures` and are never persisted; otherwise the commands say there is not enough indexed data. `audit data-logic` now requires `--team-a-cr/--team-b-cr` and no longer asserts a fixed root cause.
 - Skill descriptions (`skills/*/SKILL.md`) expanded to 100-110 words each; `check_marketplace_manifests.py` now enforces 60-120 words.
-
-### Fixed
 - `install.sh`: an existing checkout whose history diverged from `origin/main` (e.g. cloned before the history rewrite) no longer dead-ends with "Local commits exist". The old checkout is moved aside intact to `<dir>.old-<timestamp>` and a fresh copy is installed; `~/.garuda` data is reused.
 
 ### Security
 - **Fixed: account takeover of the original tenant.** A fixed owner address was compiled into the sign-up handler. On any installation where nobody had registered it, a new sign-up using that address (no email check) was made owner of the original tenant and all its workspaces. Sign-up now trusts only the address set in `GARUDA_OWNER_EMAIL`, and never trusts a built-in address. A duplicate sign-up request no longer returns the existing account's id, role or email, and no longer changes that account's access. Added unit tests and `scripts/security-smoke.sh`, a black-box test for cross-tenant access and these sign-up cases.
-
-### Changed
-- New tenants default to the `community` plan instead of `enterprise` (migration 100, and the inline schema in `internal/store`). Nothing assigned or enforced a plan before, so existing `enterprise` values were only the old default and are reset to `community`.
-- Contributors now sign commits with a `Signed-off-by` line (Developer Certificate of Origin); see CONTRIBUTING.md.
-
-### Added
-- `docs/PRICING_PLAN.md`: the intended free and paid split, with every paid item marked as planned.
 
 ## [v1.9.11] - 2026-11-03 — Honest demo, `npx garuda-guard`, Windows setup fixes, install with an AI assistant
 
