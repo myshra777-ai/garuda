@@ -32,7 +32,32 @@ var (
 
 	// Bullet list prefixes to strip before parsing
 	bulletPrefixes = []string{"- ", "* ", "+ ", "• "}
+
+	// naturalLanguageModals are the modal boundaries used to split a plain
+	// English rule into subject and object, longest first so "must not" wins
+	// over "must" at the same position. Each is matched on word boundaries,
+	// so "requirement" does not match "require" and "reinforced" does not
+	// match "enforce".
+	naturalLanguageModals = compileModals(
+		"must not", "shall not", "cannot", "may not", "never",
+		"must", "shall", "requires", "require", "enforces", "enforce",
+		"has to", "have to",
+		"should", "recommended", "ought to",
+	)
 )
+
+type modalBoundary struct {
+	text string
+	re   *regexp.Regexp
+}
+
+func compileModals(modals ...string) []modalBoundary {
+	out := make([]modalBoundary, 0, len(modals))
+	for _, m := range modals {
+		out = append(out, modalBoundary{text: m, re: regexp.MustCompile(`\b` + regexp.QuoteMeta(m) + `\b`)})
+	}
+	return out
+}
 
 // ParseADR parses an Architecture Decision Record into structured claims.
 func ParseADR(filePath string, tenantID uuid.UUID, workspace string) ([]knowledge.ClaimIR, error) {
@@ -243,22 +268,14 @@ func detectModality(line string) knowledge.Modality {
 func extractNaturalLanguageClaim(line string, modality knowledge.Modality) (string, knowledge.Predicate, string) {
 	lowerLine := strings.ToLower(line)
 
-	// Modal boundaries in priority order (longest first to avoid partial matches)
-	modals := []string{
-		"must not", "shall not", "cannot", "may not", "never",
-		"must", "shall", "requires", "require", "enforces", "enforce",
-		"has to", "have to",
-		"should", "recommended", "ought to",
-	}
-
-	// Find earliest modal
+	// Find the earliest whole-word modal (see naturalLanguageModals).
 	modalIdx := -1
 	matchedModal := ""
-	for _, m := range modals {
-		if idx := strings.Index(lowerLine, m); idx >= 0 {
-			if modalIdx == -1 || idx < modalIdx {
-				modalIdx = idx
-				matchedModal = m
+	for _, m := range naturalLanguageModals {
+		if loc := m.re.FindStringIndex(lowerLine); loc != nil {
+			if modalIdx == -1 || loc[0] < modalIdx {
+				modalIdx = loc[0]
+				matchedModal = m.text
 			}
 		}
 	}

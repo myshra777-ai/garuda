@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -107,8 +108,29 @@ func AnalyzeImpact(
 		TotalAffected: len(diff.EntityDiffs),
 	}
 
-	// 5. Generate evidence root (Merkle-like)
+	// 5. Generate evidence root (Merkle-like).
+	// The root must depend only on what changed, so the same inputs always
+	// produce the same root: findings are put in a stable order (the diff
+	// is built from maps, so its order varies between runs) and the random
+	// report ID is left out of the hash.
+	sort.Slice(report.BreakingChanges, func(i, j int) bool {
+		a, b := report.BreakingChanges[i], report.BreakingChanges[j]
+		if a.Entity != b.Entity {
+			return a.Entity < b.Entity
+		}
+		return a.ChangeType < b.ChangeType
+	})
+	sort.Slice(report.Warnings, func(i, j int) bool {
+		a, b := report.Warnings[i], report.Warnings[j]
+		if a.Entity != b.Entity {
+			return a.Entity < b.Entity
+		}
+		return a.Message < b.Message
+	})
+	reportID := report.ID
+	report.ID = ""
 	evidenceData, _ := json.Marshal(report)
+	report.ID = reportID
 	hash := sha256.Sum256(evidenceData)
 	report.EvidenceRoot = hex.EncodeToString(hash[:])
 

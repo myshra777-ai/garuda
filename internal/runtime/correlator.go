@@ -20,22 +20,19 @@ func NewEntityCorrelator(pool *pgxpool.Pool) *EntityCorrelator {
 }
 
 func (c *EntityCorrelator) Correlate(ctx context.Context, tenantID, workspaceID uuid.UUID, obs *RuntimeObservation) CorrelationResult {
-	funcName, _ := obs.Attributes["code.function"].(string)
+	funcName, namespace := spanFunctionName(obs)
 	if funcName == "" {
-		funcName = obs.Operation
+		return CorrelationResult{EntityID: nil, Confidence: 0.0}
 	}
 
-	namespace, _ := obs.Attributes["code.namespace"].(string)
-
-	// Clean function name (strip pointer receiver or package prefixes)
-	if idx := strings.LastIndex(funcName, "."); idx != -1 {
-		funcName = funcName[idx+1:]
-	}
-	funcName = strings.TrimPrefix(funcName, "*")
-
-	// 1. Exact Match on name and package suffix
 	var entityID uuid.UUID
-	err := c.pool.QueryRow(ctx, `
+
+	// 1. Exact match on name and package suffix. Only possible when the span
+	// names a namespace: with an empty namespace the package condition below
+	// matches every package, which reported same-named functions in unrelated
+	// packages at full confidence.
+	if namespace != "" {
+		err := c.pool.QueryRow(ctx, `
 		SELECT id FROM entities 
 		WHERE workspace_id = $1 
 		  AND name = $2 
@@ -44,12 +41,13 @@ func (c *EntityCorrelator) Correlate(ctx context.Context, tenantID, workspaceID 
 		LIMIT 1
 	`, workspaceID, funcName, namespace).Scan(&entityID)
 
-	if err == nil && entityID != uuid.Nil {
-		return CorrelationResult{EntityID: &entityID, Confidence: 1.0}
+		if err == nil && entityID != uuid.Nil {
+			return CorrelationResult{EntityID: &entityID, Confidence: 1.0}
+		}
 	}
 
 	// 2. Fallback Match on function/entity name within workspace
-	err = c.pool.QueryRow(ctx, `
+	err := c.pool.QueryRow(ctx, `
 		SELECT id FROM entities 
 		WHERE workspace_id = $1 
 		  AND name = $2
@@ -62,4 +60,24 @@ func (c *EntityCorrelator) Correlate(ctx context.Context, tenantID, workspaceID 
 	}
 
 	return CorrelationResult{EntityID: nil, Confidence: 0.0}
+}
+
+// spanFunctionName extracts the bare function name and namespace a span
+// refers to. The name comes from the "code.function" attribute, falling back
+// to the span operation; package, receiver and pointer prefixes are removed,
+// so "payments.(*Handler).Charge" becomes "Charge".
+func spanFunctionName(obs *RuntimeObservation) (name, namespace string) {
+	name, _ = obs.Attributes["code.function"].(string)
+	if name == "" {
+		name = obs.Operation
+	}
+	namespace, _ = obs.Attributes["code.namespace"].(string)
+	namespace = strings.TrimSpace(namespace)
+
+	name = strings.TrimSpace(name)
+	if idx := strings.LastIndex(name, "."); idx != -1 {
+		name = name[idx+1:]
+	}
+	name = strings.Trim(name, "(*)")
+	return name, namespace
 }

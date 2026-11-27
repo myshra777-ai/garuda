@@ -24,8 +24,9 @@ var docsCmd = &cobra.Command{
 	Short: "Document ingestion, intent extraction, and verification commands",
 	Long: `Document ingestion and verification for Garuda's Knowledge Layer.
 
-Supported formats: Markdown (.md, .markdown), PDF (.pdf), DOCX (.docx),
-Plain text (.txt), reStructuredText (.rst).
+Supported formats: Markdown (.md, .markdown), DOCX (.docx), plain text (.txt)
+and reStructuredText (.rst). PDF files are found but skipped with a message:
+export them to Markdown, DOCX or text first.
 
 Commands:
   ingest <path>   Extract claims from a file or directory
@@ -40,7 +41,7 @@ Commands:
 
 var docsIngestCmd = &cobra.Command{
 	Use:   "ingest [file or directory]",
-	Short: "Extract verifiable claims from documents (Markdown, PDF, DOCX, TXT)",
+	Short: "Extract verifiable claims from documents (Markdown, DOCX, TXT, RST)",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runDocsIngest,
 }
