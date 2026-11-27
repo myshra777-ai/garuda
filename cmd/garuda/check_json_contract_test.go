@@ -20,7 +20,8 @@ func TestCheckJSONContract(t *testing.T) {
 		"adr_contradictions", "policies_evaluated", "net_new_violations", "baseline_violations",
 		"violations", "self_repair_instructions", "blocked_by", "blocked_by_policy",
 		"governance_outcome", "merkle_block_height", "build_context", "environment_drift",
-		"matrix_results", "reproduce_command", "evidence_coverage", "duration_ms",
+		"matrix_results", "reproduce_command", "evidence_coverage", "impacted_entities",
+		"impacted_entities_truncated", "duration_ms",
 	}
 	typ := reflect.TypeOf(ChangeControlDecision{})
 	got := make([]string, 0, typ.NumField())
