@@ -43,7 +43,7 @@ Many users ask how these three verification commands differ. Here is the exact d
 
 ### 2.2 `garuda docs ingest` vs. `garuda rulebook generate`
 
-- **Use `garuda docs ingest ./docs/adr` when you ALREADY have written documents** (Markdown ADRs, design specs, `.txt`, `.docx`, `.pdf`) and want Garuda to extract `MUST` / `MUST_NOT` rules and link them to code symbols.
+- **Use `garuda docs ingest ./docs/adr` when you ALREADY have written documents** (Markdown ADRs, design specs, `.txt`, `.rst`, `.docx`; export PDFs to one of these first) and want Garuda to extract `MUST` / `MUST_NOT` rules and link them to code symbols.
 - **Use `garuda rulebook generate` when your repo is UNORGANIZED or undocumented** and you want Garuda to automatically reverse-engineer your codebase's layer boundaries, surface criticality tiers (`HIGH_SEVERE` / `MEDIUM` / `LOW`), competing team formula weights (`0.0–1.0`), and financial invariants into `.garuda/DRAFT_BASE_RULEBOOK.md` so a human can review and approve it in one click (`garuda rulebook approve`).
 
 ---
@@ -114,6 +114,18 @@ Many users ask how these three verification commands differ. Here is the exact d
 ./bin/garuda policy show <evaluation-uuid>
 ./bin/garuda policy verify <evaluation-uuid>
 ```
+
+#### Evidence coverage (diff mode)
+
+In diff mode (`--diff`, `--staged`, `--files`), `garuda check --json` and `garuda talon guard --json` include an `evidence_coverage` block. It says how much of the change Garuda could actually analyze, so an `ALLOW` on a partly analyzed change is not read as "safe".
+
+| `verdict` | Meaning |
+| --- | --- |
+| `COMPLETE` | Every changed source file was found in the indexed graph and every policy reached a decision. Docs-only and config-only changes are also `COMPLETE`. |
+| `PARTIAL` | Some changed code was not analyzed: a source file is not in the graph yet (re-index), a file is in a language Garuda does not analyze, or some policies were `INCONCLUSIVE`. |
+| `INCONCLUSIVE` | Nothing in the changed code could be analyzed (no graph, unreadable diff, or only unanalyzed languages), or every policy was `INCONCLUSIVE`. |
+
+`gaps` lists each reason in plain words. `unresolved_files` and `unsupported_code_files` name the files that were not analyzed. A CI gate can require `evidence_coverage.verdict == "COMPLETE"` in addition to `governance_outcome == "ALLOW"`.
 
 ### 3.5 Human-in-the-Loop Logic Audit, Criticality Tiers, Financial Audit & Base Rulebook (`v1.9.9`)
 ```bash

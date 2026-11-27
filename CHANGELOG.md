@@ -4,7 +4,17 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 
 ## [Unreleased]
 
+### Added
+- `evidence_coverage` in `garuda check --json` and `garuda talon guard --json` (diff mode): how many changed files were analyzed, which were not and why, policy decision counts, and a `COMPLETE` / `PARTIAL` / `INCONCLUSIVE` verdict. The terminal output shows it as a `Coverage:` line. See docs/CLI_DECISION_GUIDE.md. Additive: existing keys are unchanged, and contract tests now pin the keys of both JSON outputs.
+- Database migrations are embedded in the binary. Before, an install that put the SQL files somewhere other than `./migrations` (for example Homebrew) silently applied no migrations and then failed on missing tables. Files on disk are still preferred when present, and finding none at all is now an error.
+- Unit tests for `internal/impact`, `internal/graph`, `internal/runtime`, `internal/knowledge` and `internal/knowledge/markdown`, which had none.
+
 ### Fixed
+- The impact report's `evidence_root` was different on every run for the same change, because findings came out of a map in random order and the hash included the random report ID. Findings are now sorted and the ID is left out of the hash, so the same change always gives the same root.
+- `garuda docs ingest` now reads `.txt` and `.rst` files, which the CLI already listed as supported. DOCX files are now read properly (headings, lists and text from `word/document.xml`) instead of by a byte scan. PDF files are skipped with a clear message instead of being parsed as raw bytes; export them to Markdown, DOCX or text first.
+- ADR rules no longer match modal words inside other words: "requirement" no longer counts as "require" and "shallow" no longer counts as "shall".
+- Runtime correlation no longer reports confidence 1.0 for a span that has a function name but no namespace; it falls back to the 0.85 name-only match. Receiver forms such as `(*Server).Handle` are matched as `Handle`.
+- `garuda check --diff` reported every entity in the workspace as affected when the diff touched no indexed symbols. It now reports 0, and `evidence_coverage` explains why.
 - `garuda audit logic|data-logic|criticality` and `garuda rulebook generate` no longer fall back to built-in insurance/search sample data. That data was shown as if it were workspace findings and was written into the workspace tables. Samples now require `--include-fixtures` and are never persisted; otherwise the commands say there is not enough indexed data. `audit data-logic` now requires `--team-a-cr/--team-b-cr` and no longer asserts a fixed root cause.
 - Skill descriptions (`skills/*/SKILL.md`) expanded to 100-110 words each; `check_marketplace_manifests.py` now enforces 60-120 words.
 

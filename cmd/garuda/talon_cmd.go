@@ -373,6 +373,13 @@ var talonGuardCmd = &cobra.Command{
 				len(verdict.TouchedFiles), len(verdict.TouchedSymbols))
 			fmt.Printf("  Blast Radius:%d affected entities (CRITICAL=%d, HIGH=%d)\n",
 				verdict.BlastRadiusAffected, verdict.BySeverity["CRITICAL"], verdict.BySeverity["HIGH"])
+			for i, line := range verdict.EvidenceCoverage.SummaryLines() {
+				if i == 0 {
+					fmt.Printf("  Coverage:    %s\n", line)
+				} else {
+					fmt.Printf("               • %s\n", line)
+				}
+			}
 			fmt.Printf("  Violations:  Net-New=%d  |  Baseline=%d  |  ADR Contradictions=%d\n",
 				verdict.NetNewViolationsCount, verdict.BaselineViolationsCount, verdict.ADRContradictionsCount)
 			if verdict.MerkleBlockHeight != nil {
