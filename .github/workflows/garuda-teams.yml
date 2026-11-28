@@ -1,0 +1,124 @@
+# Added by Garuda Teams.
+#
+# On every pull request this workflow runs the open-source Garuda engine
+# (https://github.com/myshra777-ai/garuda) inside this repository's CI, then
+# sends Garuda Teams the metadata built in the "Build the brief payload" step:
+# verdict, counts, file paths, symbol names, rule results and coverage.
+# No source code leaves CI. Read that step to see every field that is sent.
+#
+# To stop Garuda Teams, delete this file or uninstall the GitHub App.
+name: Garuda Teams
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  id-token: write # lets the run prove to Garuda Teams which repository it belongs to
+
+concurrency:
+  group: garuda-teams-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  brief:
+    name: Change brief
+    # Pull requests from forks get no identity token, so they are skipped.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        # A throwaway database that only exists for this job, so it needs no password.
+        env:
+          POSTGRES_USER: garuda
+          POSTGRES_DB: garuda
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GARUDA_VERSION: "v1.9.13"
+      GARUDA_TEAMS_URL: "https://bobsled-pummel-obedience.ngrok-free.dev"
+      GARUDA_TEAMS_AUDIENCE: "https://bobsled-pummel-obedience.ngrok-free.dev"
+      DATABASE_URL: postgres://garuda@localhost:5432/garuda?sslmode=disable
+      GARUDA_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Install the Garuda engine
+        run: |
+          set -euo pipefail
+          name="garuda-${GARUDA_VERSION}-linux-amd64"
+          curl -fsSL -o /tmp/garuda.tgz \
+            "https://github.com/myshra777-ai/garuda/releases/download/${GARUDA_VERSION}/${name}.tar.gz"
+          tar -xzf /tmp/garuda.tgz -C /tmp
+          sudo install -m 0755 "/tmp/${name}/bin/garuda" /usr/local/bin/garuda
+          garuda --version
+
+      - name: Index the code and check the change
+        run: |
+          set -euo pipefail
+          # If indexing fails, the check still runs and the brief reports what could not be analyzed.
+          garuda analyze . --workspace ci --save > /dev/null \
+            || echo "::warning::garuda analyze failed; the brief will show the change as not analyzed."
+          set +e
+          garuda check . --workspace ci --diff "${BASE_SHA}...${HEAD_SHA}" --json > /tmp/garuda-check.json
+          status=$?
+          set -e
+          if ! jq -e 'type == "object" and has("governance_outcome")' /tmp/garuda-check.json > /dev/null; then
+            echo "::error::garuda check did not produce a decision (exit ${status})."
+            exit 1
+          fi
+
+      - name: Build the brief payload
+        # This is everything Garuda Teams receives.
+        run: |
+          set -euo pipefail
+          jq --arg pr "$PR_NUMBER" --arg head "$HEAD_SHA" --arg base "$BASE_REF" --arg ver "$GARUDA_VERSION" '{
+            schema_version: 1,
+            pull_request: {number: ($pr | tonumber), head_sha: $head, base_ref: $base},
+            engine: {version: $ver},
+            check: {
+              governance_outcome: .governance_outcome,
+              affected_entities: (.affected_entities // 0),
+              by_severity: (.by_severity // {}),
+              policies_evaluated: (.policies_evaluated // 0),
+              net_new_violations: (.net_new_violations // 0),
+              baseline_violations: (.baseline_violations // 0),
+              adr_contradictions: (.adr_contradictions // 0),
+              violations: (.violations // []),
+              touched_files: (.touched_files // []),
+              touched_symbols: (.touched_symbols // []),
+              evidence_coverage: .evidence_coverage,
+              impacted_entities: (.impacted_entities // []),
+              impacted_entities_truncated: (.impacted_entities_truncated // false),
+              receipt_hash: (.build_context.receipt_hash // ""),
+              duration_ms: (.duration_ms // 0)
+            }
+          }' /tmp/garuda-check.json > /tmp/garuda-brief.json
+
+      - name: Send the brief to Garuda Teams
+        run: |
+          set -uo pipefail
+          token=$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${GARUDA_TEAMS_AUDIENCE}" | jq -r '.value')
+          echo "::add-mask::${token}"
+          if ! curl -fsS -X POST "${GARUDA_TEAMS_URL}/api/v1/briefs" \
+              -H "Authorization: Bearer ${token}" \
+              -H "Content-Type: application/json" \
+              --data @/tmp/garuda-brief.json; then
+            echo "::warning::Garuda Teams could not be reached; the brief was not posted. This does not fail the pull request."
+          fi
