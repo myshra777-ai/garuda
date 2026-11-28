@@ -359,3 +359,29 @@ func TestSortImpactedEntities(t *testing.T) {
 		t.Fatalf("order = %v, want %v", got, want)
 	}
 }
+
+// TestBlastRadius_ConsumerFilePathSurvivesEdgeOrder guards the bug where an
+// impacted entity's file path depended on which database row was read last:
+// an edge that did not carry the path wiped the one another edge had set.
+func TestBlastRadius_ConsumerFilePathSurvivesEdgeOrder(t *testing.T) {
+	target := ent("Target", "function")
+	caller := ent("Caller", "function") // FilePath "Caller.go"
+	bare := caller
+	bare.FilePath = ""
+	other := ent("Other", "function")
+
+	for name, order := range map[string][2]store.EntityMetadata{
+		"path first": {caller, bare},
+		"path last":  {bare, caller},
+	} {
+		t.Run(name, func(t *testing.T) {
+			idx := newIndex()
+			consumes(idx, order[0], target, "CALLS", 0.9)
+			consumes(idx, order[1], other, "CALLS", 0.9)
+			got := affected(t, ComputeBlastRadius(idx, "Target", BlastRadiusConfig{}))
+			if got["Caller"].FilePath != "Caller.go" {
+				t.Fatalf("caller file path = %q, want Caller.go", got["Caller"].FilePath)
+			}
+		})
+	}
+}

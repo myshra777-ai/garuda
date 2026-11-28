@@ -81,8 +81,8 @@ func (idx *ImpactIndex) AddEdge(source EntityMetadata, target EntityMetadata, cl
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
-	idx.entityLookup[source.ID] = source
-	idx.entityLookup[target.ID] = target
+	idx.entityLookup[source.ID] = mergeEntityMetadata(idx.entityLookup[source.ID], source)
+	idx.entityLookup[target.ID] = mergeEntityMetadata(idx.entityLookup[target.ID], target)
 
 	// Inbound link: target is consumed by source
 	idx.consumers[target.ID] = append(idx.consumers[target.ID], ConsumerEdge{
@@ -101,6 +101,32 @@ func (idx *ImpactIndex) AddEdge(source EntityMetadata, target EntityMetadata, cl
 		Confidence:        conf,
 		Evidence:          ev,
 	})
+}
+
+// mergeEntityMetadata keeps what is already known about an entity and fills
+// in fields that were empty. An entity appears on many edges; without this,
+// whichever row came last decided its metadata, so a file path seen on one
+// edge could be wiped by another edge that did not carry it.
+func mergeEntityMetadata(prev, next EntityMetadata) EntityMetadata {
+	if prev.ID == "" {
+		return next
+	}
+	if prev.Name == "" {
+		prev.Name = next.Name
+	}
+	if prev.Package == "" {
+		prev.Package = next.Package
+	}
+	if prev.Kind == "" {
+		prev.Kind = next.Kind
+	}
+	if prev.FilePath == "" {
+		prev.FilePath = next.FilePath
+	}
+	if prev.RepositoryID == uuid.Nil {
+		prev.RepositoryID = next.RepositoryID
+	}
+	return prev
 }
 
 // GetConsumers returns all upstream callers/consumers of a given entity ID.
@@ -130,6 +156,7 @@ func (s *PostgresStore) BuildImpactIndex(ctx context.Context, workspaceID uuid.U
 			se.kind as source_kind, 
 			se.package as source_package, 
 			se.repository_id as source_repo,
+			COALESCE(se.file_path, '') as source_file,
 			c.to_entity_id, 
 			te.name as target_name, 
 			te.kind as target_kind, 
@@ -137,7 +164,7 @@ func (s *PostgresStore) BuildImpactIndex(ctx context.Context, workspaceID uuid.U
 			te.repository_id as target_repo,
 			c.claim_type, 
 			c.confidence,
-			te.file_path,
+			COALESCE(te.file_path, '') as target_file,
 			te.commit_sha
 		FROM claims c
 		JOIN entities se ON c.from_entity_id = se.id
@@ -157,6 +184,7 @@ func (s *PostgresStore) BuildImpactIndex(ctx context.Context, workspaceID uuid.U
 			srcKind, tgtKind string
 			srcPkg, tgtPkg   string
 			srcRepo, tgtRepo uuid.UUID
+			srcFile          string
 			claimType        string
 			confidence       float64
 			filePath         string
@@ -164,7 +192,7 @@ func (s *PostgresStore) BuildImpactIndex(ctx context.Context, workspaceID uuid.U
 		)
 
 		if err := rows.Scan(
-			&srcID, &srcName, &srcKind, &srcPkg, &srcRepo,
+			&srcID, &srcName, &srcKind, &srcPkg, &srcRepo, &srcFile,
 			&tgtID, &tgtName, &tgtKind, &tgtPkg, &tgtRepo,
 			&claimType, &confidence,
 			&filePath, &commitSHA,
@@ -195,7 +223,7 @@ func (s *PostgresStore) BuildImpactIndex(ctx context.Context, workspaceID uuid.U
 			Name:         srcName,
 			Package:      srcPkg,
 			Kind:         srcKind,
-			FilePath:     "",
+			FilePath:     srcFile,
 			RepositoryID: srcRepo,
 		}
 

@@ -4,6 +4,9 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 
 ## [Unreleased]
 
+### Fixed
+- `impacted_entities` in `garuda check --json` often had an empty `file` for the affected callers. The impact index did not load the caller's file path, and an entity's details came from whichever database row was read last, so a path set by one edge could be wiped by another. Callers now carry their file path, details from different edges are merged instead of overwritten, and a missing file path in the database no longer risks a scan error.
+
 ## [v1.9.13] - 2026-11-28 — Never apply a repository's own migrations to Garuda's database
 
 See [RELEASE_NOTES.md](RELEASE_NOTES.md).
