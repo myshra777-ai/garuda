@@ -23,13 +23,15 @@ type migrationFile struct {
 // It is a variable so tests can substitute a small fixture.
 var embeddedMigrations fs.FS = migrations.FS
 
+// MigrationsDirEnv names the environment variable that points Migrate at a
+// directory of .sql files instead of the embedded migrations.
+const MigrationsDirEnv = "GARUDA_MIGRATIONS_DIR"
+
 // loadMigrationFiles returns the migrations to apply, sorted by name.
 //
-// A migrations directory on disk wins when it contains .sql files, so a
-// source checkout always runs the files you are editing. When there is no
-// such directory, which is the normal case for an installed binary, the
-// migrations embedded at build time are used. The second return value says
-// which source was used, for log messages.
+// With dir empty, the migrations embedded at build time are used. That is
+// the normal case. A non-empty dir is an explicit override and must contain
+// .sql files. The second return value says which source was used.
 func loadMigrationFiles(dir string) ([]migrationFile, string, error) {
 	if dir != "" {
 		paths, err := filepath.Glob(filepath.Join(dir, "*.sql"))
@@ -48,6 +50,7 @@ func loadMigrationFiles(dir string) ([]migrationFile, string, error) {
 			}
 			return files, dir, nil
 		}
+		return nil, "", fmt.Errorf("%s=%q has no .sql files", MigrationsDirEnv, dir)
 	}
 
 	names, err := fs.Glob(embeddedMigrations, "*.sql")

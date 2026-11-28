@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -24,30 +23,6 @@ func splitGooseUp(content []byte) []byte {
 		return content[:idx]
 	}
 	return content
-}
-
-// ResolveMigrationsDir locates the migrations directory relative to the
-// current working directory or the running binary.
-func ResolveMigrationsDir(preferred string) string {
-	if preferred != "" {
-		if info, err := os.Stat(preferred); err == nil && info.IsDir() {
-			return preferred
-		}
-	}
-	candidates := []string{"migrations", "../migrations"}
-	if exe, err := os.Executable(); err == nil {
-		exeDir := filepath.Dir(exe)
-		candidates = append(candidates,
-			filepath.Join(exeDir, "migrations"),
-			filepath.Join(exeDir, "..", "migrations"),
-		)
-	}
-	for _, c := range candidates {
-		if info, err := os.Stat(c); err == nil && info.IsDir() {
-			return c
-		}
-	}
-	return preferred
 }
 
 // isAlreadyAppliedPgError returns true when a migration error indicates
@@ -73,10 +48,17 @@ func isAlreadyAppliedPgError(err error) bool {
 		strings.Contains(msg, "multiple primary keys")
 }
 
-// Migrate runs all SQL migration files in the migrations directory in sorted order.
+// Migrate applies Garuda's schema migrations in sorted order.
+//
+// The migrations compiled into the binary are always used. The
+// migrationsDir argument is ignored and kept only for compatibility: a
+// "migrations" folder in the current directory usually belongs to the
+// repository being analyzed, not to Garuda, and must never be run against
+// Garuda's database. Set GARUDA_MIGRATIONS_DIR to apply files from disk
+// instead (for example while writing a new migration without rebuilding).
 func Migrate(connString string, migrationsDir string) error {
+	_ = migrationsDir
 	ctx := context.Background()
-	migrationsDir = ResolveMigrationsDir(migrationsDir)
 
 	pool, err := pgxpool.New(ctx, connString)
 	if err != nil {
@@ -95,12 +77,12 @@ func Migrate(connString string, migrationsDir string) error {
 		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
-	files, _, err := loadMigrationFiles(migrationsDir)
+	files, _, err := loadMigrationFiles(os.Getenv(MigrationsDirEnv))
 	if err != nil {
 		return err
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("no migrations found in %q or embedded in this binary", migrationsDir)
+		return fmt.Errorf("no migrations embedded in this binary")
 	}
 
 	for _, mf := range files {
