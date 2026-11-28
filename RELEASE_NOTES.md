@@ -1,35 +1,31 @@
-# Garuda v1.9.12
+# Garuda v1.9.13
 
 **Release date:** 2026-11-28 · **License:** Apache-2.0 · [Full changelog](CHANGELOG.md) · [Install guide](INSTALL.md)
 
-v1.9.12 makes `garuda check` say how much of a change it actually analyzed and which code the change can affect, and fixes bugs found while adding unit tests to packages that had none.
+v1.9.13 is a fix release. If you run Garuda inside a repository that has its own `migrations/` folder, upgrade.
 
 ## Highlights
 
-- **Evidence coverage.** In diff mode, `garuda check --json` and `garuda talon guard --json` include `evidence_coverage`: changed files analyzed out of the total, the files that were not analyzed and why, and a `COMPLETE` / `PARTIAL` / `INCONCLUSIVE` verdict. An `ALLOW` on a partly analyzed change is no longer indistinguishable from a fully checked one. The terminal output shows a `Coverage:` line.
-- **Impacted entities.** `garuda check --json` lists what a change can affect, most severe first, with repository-relative file paths (capped at 200), so tools can tell which teams own the affected code.
-- **Migrations embedded in the binary.** Installs that keep the SQL files elsewhere (for example Homebrew) no longer start with an empty schema.
-- **Deterministic impact receipts.** The same change now always produces the same `evidence_root`.
-- **Document ingestion fixed.** `.txt` and `.rst` are read as the CLI promised, DOCX files are parsed properly, and PDFs are skipped with a clear message instead of being read as raw bytes.
-- **Fewer false matches.** ADR rules match modal words only as whole words, and runtime correlation no longer claims full confidence without a namespace.
-- **`check --diff` affected count.** A diff that touches no indexed symbols reports 0 affected entities instead of the whole workspace.
+- **Garuda no longer runs your repository's migrations.** `garuda check`, `analyze` and `talon` used a `migrations/` folder in the current directory before their own schema. In a repository with such a folder they applied its SQL to Garuda's database and then failed with errors like `relation "workspaces" does not exist`. Garuda now always uses the schema compiled into the binary; `GARUDA_MIGRATIONS_DIR` overrides it explicitly. If you ran Garuda in such a repository before, Garuda's database may contain that repository's tables; Garuda does not use them and they can be dropped.
+- **Migration failures are visible.** `check`, `analyze` and `talon` print a warning when the schema cannot be applied, instead of continuing silently.
+- Everything in [v1.9.12](CHANGELOG.md): evidence coverage, impacted entities in `check --json`, embedded migrations and deterministic impact receipts.
 
 ## Downloads
 
-Attached to this release (`<tag>` is `v1.9.12`):
+Attached to this release (`<tag>` is `v1.9.13`):
 
 | Platform | File |
 | :--- | :--- |
 | Windows x64 / ARM64 | `garuda-<tag>-windows-amd64.zip`, `garuda-<tag>-windows-arm64.zip` |
 | macOS Apple Silicon / Intel | `garuda-<tag>-darwin-arm64.tar.gz`, `garuda-<tag>-darwin-amd64.tar.gz` |
-| Linux x64 / ARM64 (and ChromeOS Linux) | `garuda-<tag>-linux-amd64.tar.gz`, `garuda-<tag>-linux-arm64.tar.gz`, `garuda_1.9.12_amd64.deb`, `garuda_1.9.12_arm64.deb` |
+| Linux x64 / ARM64 (and ChromeOS Linux) | `garuda-<tag>-linux-amd64.tar.gz`, `garuda-<tag>-linux-arm64.tar.gz`, `garuda_1.9.13_amd64.deb`, `garuda_1.9.13_arm64.deb` |
 | Android (Termux, ARM64) | `garuda-<tag>-android-arm64-termux.tar.gz` |
 | FreeBSD x64 | `garuda-<tag>-freebsd-amd64.tar.gz` |
 | Source plus installers | `garuda-<tag>-universal-source.tar.gz`, `install.sh`, `install.ps1`, `setup.sh`, `setup.ps1` |
 | Checksums | `SHA256SUMS.txt` |
 | Package-manager manifests with checksums filled in | `packaging/` (Homebrew, AUR, winget, RPM, Chocolatey; templates, not yet published to those repositories) |
 
-Containers: `ghcr.io/myshra777-ai/garuda:v1.9.12` (API and dashboard) and `ghcr.io/myshra777-ai/garuda-mcp:1.9.12` (MCP server over stdio).
+Containers: `ghcr.io/myshra777-ai/garuda:v1.9.13` (API and dashboard) and `ghcr.io/myshra777-ai/garuda-mcp:1.9.13` (MCP server over stdio).
 
 Binaries are static (`CGO_ENABLED=0`) but **not code-signed or notarized**. Verify them against `SHA256SUMS.txt` (see [INSTALL.md](INSTALL.md#prebuilt-release-archives)). Build provenance is attested with GitHub's artifact attestations: `gh attestation verify <file> --repo myshra777-ai/garuda`.
 
