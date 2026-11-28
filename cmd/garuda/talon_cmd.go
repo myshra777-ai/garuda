@@ -69,7 +69,9 @@ var talonInitCmd = &cobra.Command{
 
 		ctx := context.Background()
 		dbURL := getDBURL()
-		_ = store.Migrate(dbURL, "migrations")
+		if err := store.Migrate(dbURL, "migrations"); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: database migration failed: %v\n", err)
+		}
 		st, err := store.NewPostgresStore(dbURL)
 		if err != nil {
 			return fmt.Errorf("connect store: %w", err)
@@ -270,7 +272,9 @@ var talonGuardCmd = &cobra.Command{
 
 		ctx := context.Background()
 		dbURL := getDBURL()
-		_ = store.Migrate(dbURL, "migrations")
+		if err := store.Migrate(dbURL, "migrations"); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: database migration failed: %v\n", err)
+		}
 		st, err := store.NewPostgresStore(dbURL)
 		if err != nil {
 			return err
@@ -417,7 +421,9 @@ var talonRunCmd = &cobra.Command{
 		absRepo, _ := filepath.Abs(".")
 		ctx := context.Background()
 		dbURL := getDBURL()
-		_ = store.Migrate(dbURL, "migrations")
+		if err := store.Migrate(dbURL, "migrations"); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: database migration failed: %v\n", err)
+		}
 		st, err := store.NewPostgresStore(dbURL)
 		if err != nil {
 			return err

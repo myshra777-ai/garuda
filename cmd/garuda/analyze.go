@@ -305,7 +305,9 @@ func handleAnalyze(path string) {
 		persistCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		_ = store.Migrate(dbURL, "migrations")
+		if err := store.Migrate(dbURL, "migrations"); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: database migration failed: %v\n", err)
+		}
 		st, err := store.NewPostgresStore(dbURL)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "❌ Failed to connect to DB: %v\n", err)

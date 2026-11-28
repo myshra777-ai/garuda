@@ -4,6 +4,10 @@ All notable changes to Garuda (`github.com/myshra777-ai/garuda`) are documented 
 
 ## [Unreleased]
 
+### Fixed
+- **Running Garuda inside a repository that has its own `migrations/` folder applied that repository's SQL to Garuda's database.** `garuda check`, `analyze` and `talon` looked for `migrations/*.sql` in the current directory before using their own schema, so in a repository with a `migrations/` folder (common in web services) they ran the repository's migrations against Garuda's database and then failed with errors such as `relation "workspaces" does not exist`. Garuda now always applies the migrations compiled into the binary. `GARUDA_MIGRATIONS_DIR` points it at a directory explicitly when needed. If you ran Garuda in such a repository before, its database may contain tables from that repository; they are not used by Garuda and can be dropped.
+- Migration failures in `check`, `analyze` and `talon` are now printed as warnings instead of being silently ignored.
+
 ## [v1.9.12] - 2026-11-28 — Evidence coverage, impacted entities, embedded migrations, tests for untested packages
 
 See [RELEASE_NOTES.md](RELEASE_NOTES.md).

@@ -11,7 +11,7 @@ import (
 	"testing/fstest"
 )
 
-func TestLoadMigrationFiles_PrefersDirectoryOnDisk(t *testing.T) {
+func TestLoadMigrationFiles_ExplicitDirectory(t *testing.T) {
 	dir := t.TempDir()
 	for name, body := range map[string]string{
 		"002_second.sql": "SELECT 2;",
@@ -44,7 +44,7 @@ func TestLoadMigrationFiles_PrefersDirectoryOnDisk(t *testing.T) {
 	}
 }
 
-func TestLoadMigrationFiles_FallsBackToEmbedded(t *testing.T) {
+func TestLoadMigrationFiles_EmbeddedByDefault(t *testing.T) {
 	saved := embeddedMigrations
 	t.Cleanup(func() { embeddedMigrations = saved })
 	embeddedMigrations = fstest.MapFS{
@@ -52,18 +52,47 @@ func TestLoadMigrationFiles_FallsBackToEmbedded(t *testing.T) {
 		"009_a.sql": {Data: []byte("SELECT 'a';")},
 		"notes.txt": {Data: []byte("ignored")},
 	}
+	files, source, err := loadMigrationFiles("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source != "embedded" || len(files) != 2 || files[0].Name != "009_a.sql" || files[1].Name != "010_b.sql" {
+		t.Fatalf("source %q, files %+v", source, files)
+	}
+}
 
-	for _, dir := range []string{"", filepath.Join(t.TempDir(), "missing"), t.TempDir()} {
-		files, source, err := loadMigrationFiles(dir)
-		if err != nil {
-			t.Fatalf("dir %q: %v", dir, err)
+func TestLoadMigrationFiles_ExplicitDirWithoutSQLIsAnError(t *testing.T) {
+	for _, dir := range []string{filepath.Join(t.TempDir(), "missing"), t.TempDir()} {
+		if _, _, err := loadMigrationFiles(dir); err == nil || !strings.Contains(err.Error(), MigrationsDirEnv) {
+			t.Fatalf("dir %q: expected an error naming %s, got %v", dir, MigrationsDirEnv, err)
 		}
-		if source != "embedded" {
-			t.Fatalf("dir %q: source = %q, want embedded", dir, source)
-		}
-		if len(files) != 2 || files[0].Name != "009_a.sql" || files[1].Name != "010_b.sql" {
-			t.Fatalf("dir %q: unexpected files %+v", dir, files)
-		}
+	}
+}
+
+// TestMigrationsFolderInWorkingDirectoryIsIgnored guards the bug where
+// running garuda inside a repository that has its own migrations/ folder
+// applied that repository's SQL to Garuda's database instead of Garuda's schema.
+func TestMigrationsFolderInWorkingDirectoryIsIgnored(t *testing.T) {
+	saved := embeddedMigrations
+	t.Cleanup(func() { embeddedMigrations = saved })
+	embeddedMigrations = fstest.MapFS{"000_garuda.sql": {Data: []byte("SELECT 'garuda';")}}
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "migrations"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "migrations", "0001_customer.sql"), []byte("CREATE TABLE customer_table (id int);"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(repo)
+	t.Setenv(MigrationsDirEnv, "")
+
+	files, source, err := loadMigrationFiles(os.Getenv(MigrationsDirEnv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source != "embedded" || len(files) != 1 || files[0].Name != "000_garuda.sql" {
+		t.Fatalf("a migrations/ folder in the working directory must be ignored; got source %q, files %+v", source, files)
 	}
 }
 
